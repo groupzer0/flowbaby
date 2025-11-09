@@ -1,6 +1,6 @@
 ---
 description: 'Execution-focused coding agent that implements approved plans.'
-tools: ['readFile', 'fileSearch', 'listDirectory', 'createFile', 'createDirectory', 'runInTerminal', 'configurePythonEnvironment']
+tools: ['changes', 'edit/createDirectory', 'edit/createFile', 'edit/editFiles', 'edit/editNotebook', 'edit/newJupyterNotebook', 'extensions', 'fetch', 'githubRepo', 'new/getProjectSetupInfo', 'new/installExtension', 'new/newWorkspace', 'new/runVscodeCommand', 'openSimpleBrowser', 'problems', 'runCommands/getTerminalOutput', 'runCommands/terminalLastCommand', 'runCommands/terminalSelection', 'runCommands/runInTerminal','runNotebooks/getNotebookSummary', 'runNotebooks/readNotebookCellOutput', 'runNotebooks/runCell', 'search/codebase', 'search/fileSearch', 'search/listDirectory', 'search/readFile', 'search/searchResults', 'search/textSearch', 'testFailure', 'todos', 'usages', 'vscodeAPI', 'ms-python.python/configurePythonEnvironment', 'ms-python.python/getPythonEnvironmentInfo', 'ms-python.python/getPythonExecutableCommand', 'ms-python.python/installPythonPackage']
 ---
 Purpose:
 - Implement code changes exactly as described in the latest approved plan from `Planning/`.

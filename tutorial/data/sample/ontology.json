@@ -1,0 +1,70 @@
+{
+  "entities": [
+    {
+      "name": "Developer",
+      "type": "Person"
+    },
+    {
+      "name": "API",
+      "type": "Technology"
+    },
+    {
+      "name": "Framework",
+      "type": "Technology"
+    },
+    {
+      "name": "Principle",
+      "type": "Concept"
+    },
+    {
+      "name": "Pattern",
+      "type": "Concept"
+    },
+    {
+      "name": "Tool",
+      "type": "Technology"
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Developer",
+      "target": "API",
+      "type": "builds"
+    },
+    {
+      "source": "Developer",
+      "target": "Framework",
+      "type": "uses"
+    },
+    {
+      "source": "Developer",
+      "target": "Principle",
+      "type": "follows"
+    },
+    {
+      "source": "API",
+      "target": "Framework",
+      "type": "builtWith"
+    },
+    {
+      "source": "Framework",
+      "target": "Pattern",
+      "type": "implements"
+    },
+    {
+      "source": "Principle",
+      "target": "Pattern",
+      "type": "guides"
+    },
+    {
+      "source": "Developer",
+      "target": "Tool",
+      "type": "uses"
+    },
+    {
+      "source": "Tool",
+      "target": "API",
+      "type": "tests"
+    }
+  ]
+}

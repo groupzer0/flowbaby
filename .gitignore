@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# Environment
+.env
+
+# Cognee data (workspace-local)
+.cognee/
+
+# Tutorial artifacts (timestamped outputs)
+tutorial/artifacts/*.html
+tutorial/artifacts/*.json
+tutorial/artifacts/*.png
+!tutorial/artifacts/.gitkeep
+!tutorial/artifacts/README.md
+
+# Extension build artifacts
+extension/out/
+extension/dist/
+extension/node_modules/
+extension/*.vsix
+
+# TypeScript
+*.js.map
+*.d.ts.map
+
+# Logs
+*.log

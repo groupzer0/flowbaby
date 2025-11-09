@@ -1,0 +1,81 @@
+# Cognee Project
+
+This repository contains both a **Cognee learning tutorial** and a **VS Code extension** for automatic chat memory integration with GitHub Copilot.
+
+## Contents
+
+### 📚 Tutorial (Learning Materials)
+Interactive examples demonstrating Cognee's knowledge graph capabilities. Perfect for understanding how Cognee works before diving into the extension.
+
+**Location**: [`tutorial/`](tutorial/)  
+**See**: [Tutorial README](tutorial/README.md) for setup and usage
+
+### 🔌 Extension (VS Code Integration)
+A VS Code extension that automatically captures GitHub Copilot chat conversations and retrieves relevant context from Cognee memory.
+
+**Location**: [`extension/`](extension/)  
+**See**: [Extension README](extension/README.md) for installation and configuration  
+**Status**: In Development (see [Plan 002](Planning/002-automatic-context-retrieval.md))
+
+## Prerequisites
+
+- **Python 3.8+** with pip
+- **Node.js 18+** with npm (for extension development)
+- **VS Code 1.85+** (for extension usage)
+- **OpenAI API key** (required for Cognee operations)
+
+## Quick Start
+
+### Option 1: Learn Cognee (Tutorial)
+```bash
+cd tutorial/
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env  # Add your OpenAI API key
+python examples/cognee_walkthrough.py
+```
+
+### Option 2: Use Extension (Coming Soon)
+```bash
+cd extension/
+npm install
+npm run compile
+# Install extension in VS Code via F5 (Run Extension)
+```
+
+## Repository Structure
+
+```
+cognee/
+├── tutorial/              # Cognee learning materials
+│   ├── examples/          # Walkthrough scripts
+│   ├── data/              # Sample data files
+│   ├── artifacts/         # Generated visualizations
+│   └── README.md          # Tutorial documentation
+├── extension/             # VS Code extension (in development)
+│   ├── src/               # TypeScript source code
+│   ├── bridge/            # Python bridge scripts
+│   └── README.md          # Extension documentation
+├── Planning/              # Implementation plans
+└── .github/               # Chatmode definitions
+```
+
+## Development Workflow
+
+1. **Start with Tutorial**: Learn Cognee basics by running `tutorial/examples/cognee_walkthrough.py`
+2. **Review Plan 002**: Read [Planning/002-automatic-context-retrieval.md](Planning/002-automatic-context-retrieval.md) for extension design
+3. **Develop Extension**: Follow extension README for development setup
+4. **Test Integration**: Use extension with real GitHub Copilot chats
+
+## Documentation
+
+- [Tutorial README](tutorial/README.md) - Setup and usage instructions
+- [Extension README](extension/README.md) - Installation and configuration
+- [Plan 001](Planning/001-cognee-walkthrough-implementation.md) - Tutorial implementation plan
+- [Plan 002](Planning/002-automatic-context-retrieval.md) - Extension implementation plan
+- [Official Cognee Docs](https://docs.cognee.ai)
+
+## License
+
+See individual component READMEs for license information.
