@@ -1,0 +1,8 @@
+# Python Bridge Dependencies
+# For TypeScript-Python subprocess communication with Cognee
+
+# Core Cognee dependency
+cognee==0.3.4
+
+# Environment variable management
+python-dotenv>=1.0.0
