@@ -1,0 +1,109 @@
+{
+  "name": "cognee-chat-memory",
+  "displayName": "Cognee Chat Memory",
+  "description": "Automatic memory for GitHub Copilot chat using Cognee knowledge graphs",
+  "version": "0.1.0",
+  "publisher": "cognee",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "cognee",
+    "memory",
+    "chat",
+    "copilot",
+    "knowledge-graph",
+    "context"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "cognee-memory",
+        "name": "cognee-memory",
+        "description": "Chat with automatic context from Cognee memory",
+        "isSticky": true
+      }
+    ],
+    "configuration": {
+      "title": "Cognee Memory",
+      "properties": {
+        "cogneeMemory.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable automatic memory capture and retrieval"
+        },
+        "cogneeMemory.maxContextResults": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum number of memory results to retrieve"
+        },
+        "cogneeMemory.maxContextTokens": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 100,
+          "maximum": 10000,
+          "description": "Maximum token budget for retrieved context"
+        },
+        "cogneeMemory.recencyWeight": {
+          "type": "number",
+          "default": 0.3,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Weight for recency scoring (0-1)"
+        },
+        "cogneeMemory.importanceWeight": {
+          "type": "number",
+          "default": 0.2,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Weight for importance scoring (0-1)"
+        },
+        "cogneeMemory.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "Path to Python interpreter (must have Cognee installed)"
+        },
+        "cogneeMemory.logLevel": {
+          "type": "string",
+          "enum": ["error", "warn", "info", "debug"],
+          "default": "info",
+          "description": "Logging verbosity level"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.24",
+    "@types/vscode": "^1.105.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.19.12",
+    "eslint": "^8.57.1",
+    "typescript": "^5.9.3"
+  },
+  "author": "Cognee Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lsalsich/cognee"
+  }
+}
