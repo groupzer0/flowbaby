@@ -1,0 +1,303 @@
+=== CogneeClient Integration Test ===
+
+Test 1: Initialize Cognee
+
+[2m2025-11-10T18:01:53.757257[0m [[32m[1minfo     [0m] [1mDeleted old log file: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/logs/2025-11-10_12-47-38.log[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:01:54.164083[0m [[32m[1minfo     [0m] [1mLogging initialized           [0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m [36mcognee_version[0m=[35m0.3.4[0m [36mdatabase_path[0m=[35m/home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [36mgraph_database_name[0m=[35m[0m [36mos_info[0m=[35m'Linux 6.14.0-112033-tuxedo (#33~24.04.1tux1 SMP PREEMPT_DYNAMIC Tue Sep 30 19:33:36 UTC 2025)'[0m [36mpython_version[0m=[35m3.12.3[0m [36mrelational_config[0m=[35mcognee_db[0m [36mstructlog_version[0m=[35m25.5.0[0m [36mvector_config[0m=[35mlancedb[0m
+
+[2m2025-11-10T18:01:54.164300[0m [[32m[1minfo     [0m] [1mDatabase storage: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+{
+  "success": true,
+  "dataset_name": "ws_03c215641afab075",
+  "workspace_path": "/tmp/cognee_test_workspace_a",
+  "cognee_dir": "/tmp/cognee_test_workspace_a/.cognee",
+  "ontology_loaded": true,
+  "ontology_entities": 8,
+  "ontology_relationships": 12,
+  "migration_performed": false
+}
+✓ Initialize successful
+  Dataset name: ws_03c215641afab075
+
+Test 2: Ingest test conversation
+
+[2m2025-11-10T18:01:57.576183[0m [[32m[1minfo     [0m] [1mDeleted old log file: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/logs/2025-11-10_12-47-57.log[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:01:57.989463[0m [[32m[1minfo     [0m] [1mLogging initialized           [0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m [36mcognee_version[0m=[35m0.3.4[0m [36mdatabase_path[0m=[35m/home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [36mgraph_database_name[0m=[35m[0m [36mos_info[0m=[35m'Linux 6.14.0-112033-tuxedo (#33~24.04.1tux1 SMP PREEMPT_DYNAMIC Tue Sep 30 19:33:36 UTC 2025)'[0m [36mpython_version[0m=[35m3.12.3[0m [36mrelational_config[0m=[35mcognee_db[0m [36mstructlog_version[0m=[35m25.5.0[0m [36mvector_config[0m=[35mlancedb[0m
+
+[2m2025-11-10T18:01:57.989689[0m [[32m[1minfo     [0m] [1mDatabase storage: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:01:59.227533[0m [[32m[1minfo     [0m] [1mOntology loaded successfully from file: /home/luke/Documents/Github-projects/cognee/extension/bridge/ontology.json[0m [[0m[1m[34mOntologyAdapter[0m][0m
+
+[2m2025-11-10T18:01:59.961083[0m [[32m[1minfo     [0m] [1mModel not found in LiteLLM's model_cost.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[1mEmbeddingRateLimiter initialized: enabled=False, requests_limit=60, interval_seconds=60[0m
+
+[2m2025-11-10T18:02:01.941124[0m [[32m[1minfo     [0m] [1mPipeline run started: `f07b47ea-4fc2-553f-9717-00390e47fb1c`[0m [[0m[1m[34mrun_tasks_with_telemetry()[0m][0m
+
+[2m2025-11-10T18:02:02.123110[0m [[32m[1minfo     [0m] [1mCoroutine task started: `resolve_data_directories`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:02.321459[0m [[32m[1minfo     [0m] [1mCoroutine task started: `ingest_data`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:02.527980[0m [[32m[1minfo     [0m] [1mRegistered loader: pypdf_loader[0m [[0m[1m[34mcognee.infrastructure.loaders.LoaderEngine[0m][0m
+
+[2m2025-11-10T18:02:02.528237[0m [[32m[1minfo     [0m] [1mRegistered loader: text_loader[0m [[0m[1m[34mcognee.infrastructure.loaders.LoaderEngine[0m][0m
+
+[2m2025-11-10T18:02:02.528317[0m [[32m[1minfo     [0m] [1mRegistered loader: image_loader[0m [[0m[1m[34mcognee.infrastructure.loaders.LoaderEngine[0m][0m
+
+[2m2025-11-10T18:02:02.528388[0m [[32m[1minfo     [0m] [1mRegistered loader: audio_loader[0m [[0m[1m[34mcognee.infrastructure.loaders.LoaderEngine[0m][0m
+
+[2m2025-11-10T18:02:02.528458[0m [[32m[1minfo     [0m] [1mRegistered loader: unstructured_loader[0m [[0m[1m[34mcognee.infrastructure.loaders.LoaderEngine[0m][0m
+
+[2m2025-11-10T18:02:02.551382[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `ingest_data`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:02.718214[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `resolve_data_directories`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:02.893092[0m [[32m[1minfo     [0m] [1mPipeline run completed: `f07b47ea-4fc2-553f-9717-00390e47fb1c`[0m [[0m[1m[34mrun_tasks_with_telemetry()[0m][0m
+
+[2m2025-11-10T18:02:03.260300[0m [[32m[1minfo     [0m] [1mJSON extension already installed or not needed: IO exception: Failed to download extension: json at URL extension.kuzudb.com/v0.11.0/linux_amd64/json/libjson.kuzu_extension (ERROR: Could not establish connection)[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:02:03.260832[0m [[32m[1minfo     [0m] [1mJSON extension already loaded or unavailable: Binder exception: Extension: json is an official extension and has not been installed.
+You can install it by: install json.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:02:03.273890[0m [[32m[1minfo     [0m] [1mModel not found in LiteLLM's model_cost.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:02:03.316933[0m [[32m[1minfo     [0m] [1mPipeline run started: `762e0581-b742-5673-9f1f-182075848873`[0m [[0m[1m[34mrun_tasks_with_telemetry()[0m][0m
+
+[2m2025-11-10T18:02:03.499942[0m [[32m[1minfo     [0m] [1mCoroutine task started: `classify_documents`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:03.672587[0m [[32m[1minfo     [0m] [1mCoroutine task started: `check_permissions_on_dataset`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:03.867368[0m [[32m[1minfo     [0m] [1mAsync Generator task started: `extract_chunks_from_documents`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:04.067682[0m [[32m[1minfo     [0m] [1mCoroutine task started: `extract_graph_from_data`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:04.239779[0m [[32m[1minfo     [0m] [1mModel not found in LiteLLM's model_cost.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:02:06.505073[0m [[32m[1minfo     [0m] [1mNo close match found for 'programming language' in category 'classes'[0m [[0m[1m[34mOntologyAdapter[0m][0m
+
+[2m2025-11-10T18:02:06.505362[0m [[32m[1minfo     [0m] [1mNo close match found for 'python' in category 'individuals'[0m [[0m[1m[34mOntologyAdapter[0m][0m
+
+[2m2025-11-10T18:02:14.053253[0m [[32m[1minfo     [0m] [1mCoroutine task started: `summarize_text`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:14.197169[0m [[32m[1minfo     [0m] [1mModel not found in LiteLLM's model_cost.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:02:16.237149[0m [[32m[1minfo     [0m] [1mCoroutine task started: `add_data_points`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:19.340725[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `add_data_points`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:19.523586[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `summarize_text`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:19.686312[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `extract_graph_from_data`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:19.859275[0m [[32m[1minfo     [0m] [1mAsync Generator task completed: `extract_chunks_from_documents`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:20.016853[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `check_permissions_on_dataset`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:20.203142[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `classify_documents`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:02:20.353963[0m [[32m[1minfo     [0m] [1mPipeline run completed: `762e0581-b742-5673-9f1f-182075848873`[0m [[0m[1m[34mrun_tasks_with_telemetry()[0m][0m
+{
+  "success": true,
+  "ingested_chars": 197,
+  "timestamp": "2025-11-10T13:01:59.227704"
+}
+✓ Ingest successful (197 chars)
+
+Waiting for entity extraction to complete (30 seconds)...
+Test 3: Retrieve context
+
+[2m2025-11-10T18:02:53.086510[0m [[32m[1minfo     [0m] [1mDeleted old log file: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/logs/2025-11-10_12-48-23.log[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:02:53.487035[0m [[32m[1minfo     [0m] [1mLogging initialized           [0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m [36mcognee_version[0m=[35m0.3.4[0m [36mdatabase_path[0m=[35m/home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [36mgraph_database_name[0m=[35m[0m [36mos_info[0m=[35m'Linux 6.14.0-112033-tuxedo (#33~24.04.1tux1 SMP PREEMPT_DYNAMIC Tue Sep 30 19:33:36 UTC 2025)'[0m [36mpython_version[0m=[35m3.12.3[0m [36mrelational_config[0m=[35mcognee_db[0m [36mstructlog_version[0m=[35m25.5.0[0m [36mvector_config[0m=[35mlancedb[0m
+
+[2m2025-11-10T18:02:53.487304[0m [[32m[1minfo     [0m] [1mDatabase storage: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:02:55.073369[0m [[32m[1minfo     [0m] [1mJSON extension already installed or not needed: IO exception: Failed to download extension: json at URL extension.kuzudb.com/v0.11.0/linux_amd64/json/libjson.kuzu_extension (ERROR: Could not establish connection)[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:02:55.074114[0m [[32m[1minfo     [0m] [1mJSON extension already loaded or unavailable: Binder exception: Extension: json is an official extension and has not been installed.
+You can install it by: install json.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:02:55.114120[0m [[32m[1minfo     [0m] [1mGraph projection completed: 10 nodes, 11 edges in 0.02s[0m [[0m[1m[34mCogneeGraph[0m][0m
+
+[1mEmbeddingRateLimiter initialized: enabled=False, requests_limit=60, interval_seconds=60[0m
+
+[2m2025-11-10T18:02:56.524214[0m [[32m[1minfo     [0m] [1mVector collection retrieval completed: Retrieved distances from 6 collections in 0.02s[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:02:56.679839[0m [[32m[1minfo     [0m] [1mModel not found in LiteLLM's model_cost.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+{
+  "success": true,
+  "results": [
+    {
+      "text": "Python is a high-level programming language known for its simplicity and readability, and it is recognized for its ease of use.",
+      "score": 0.5,
+      "recency_score": 0.5,
+      "importance_score": 0.0,
+      "tokens": 21
+    }
+  ],
+  "result_count": 1,
+  "total_tokens": 21
+}
+✓ Retrieve successful (1 results, 21 tokens)
+
+=== Test 4: Workspace Isolation ===
+Testing that different workspaces have separate memories...
+
+[2m2025-11-10T18:03:01.193824[0m [[32m[1minfo     [0m] [1mDeleted old log file: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/logs/2025-11-10_12-49-39.log[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:01.725653[0m [[32m[1minfo     [0m] [1mLogging initialized           [0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m [36mcognee_version[0m=[35m0.3.4[0m [36mdatabase_path[0m=[35m/home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [36mgraph_database_name[0m=[35m[0m [36mos_info[0m=[35m'Linux 6.14.0-112033-tuxedo (#33~24.04.1tux1 SMP PREEMPT_DYNAMIC Tue Sep 30 19:33:36 UTC 2025)'[0m [36mpython_version[0m=[35m3.12.3[0m [36mrelational_config[0m=[35mcognee_db[0m [36mstructlog_version[0m=[35m25.5.0[0m [36mvector_config[0m=[35mlancedb[0m
+
+[2m2025-11-10T18:03:01.725876[0m [[32m[1minfo     [0m] [1mDatabase storage: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+✓ Workspace B initialized (dataset: ws_07e4642683c964ab)
+✓ Workspaces have unique dataset names
+
+[2m2025-11-10T18:03:05.255072[0m [[32m[1minfo     [0m] [1mDeleted old log file: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/logs/2025-11-10_12-50-27.log[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:05.658576[0m [[32m[1minfo     [0m] [1mLogging initialized           [0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m [36mcognee_version[0m=[35m0.3.4[0m [36mdatabase_path[0m=[35m/home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [36mgraph_database_name[0m=[35m[0m [36mos_info[0m=[35m'Linux 6.14.0-112033-tuxedo (#33~24.04.1tux1 SMP PREEMPT_DYNAMIC Tue Sep 30 19:33:36 UTC 2025)'[0m [36mpython_version[0m=[35m3.12.3[0m [36mrelational_config[0m=[35mcognee_db[0m [36mstructlog_version[0m=[35m25.5.0[0m [36mvector_config[0m=[35mlancedb[0m
+
+[2m2025-11-10T18:03:05.658799[0m [[32m[1minfo     [0m] [1mDatabase storage: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:06.952102[0m [[32m[1minfo     [0m] [1mOntology loaded successfully from file: /home/luke/Documents/Github-projects/cognee/extension/bridge/ontology.json[0m [[0m[1m[34mOntologyAdapter[0m][0m
+
+[2m2025-11-10T18:03:07.676144[0m [[32m[1minfo     [0m] [1mModel not found in LiteLLM's model_cost.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[1mEmbeddingRateLimiter initialized: enabled=False, requests_limit=60, interval_seconds=60[0m
+
+[2m2025-11-10T18:03:09.516356[0m [[32m[1minfo     [0m] [1mPipeline run started: `2d28e70b-b8c7-5ecd-8eb8-96bee6602a09`[0m [[0m[1m[34mrun_tasks_with_telemetry()[0m][0m
+
+[2m2025-11-10T18:03:09.694950[0m [[32m[1minfo     [0m] [1mCoroutine task started: `resolve_data_directories`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:09.870394[0m [[32m[1minfo     [0m] [1mCoroutine task started: `ingest_data`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:10.059279[0m [[32m[1minfo     [0m] [1mRegistered loader: pypdf_loader[0m [[0m[1m[34mcognee.infrastructure.loaders.LoaderEngine[0m][0m
+
+[2m2025-11-10T18:03:10.059458[0m [[32m[1minfo     [0m] [1mRegistered loader: text_loader[0m [[0m[1m[34mcognee.infrastructure.loaders.LoaderEngine[0m][0m
+
+[2m2025-11-10T18:03:10.059553[0m [[32m[1minfo     [0m] [1mRegistered loader: image_loader[0m [[0m[1m[34mcognee.infrastructure.loaders.LoaderEngine[0m][0m
+
+[2m2025-11-10T18:03:10.059631[0m [[32m[1minfo     [0m] [1mRegistered loader: audio_loader[0m [[0m[1m[34mcognee.infrastructure.loaders.LoaderEngine[0m][0m
+
+[2m2025-11-10T18:03:10.059714[0m [[32m[1minfo     [0m] [1mRegistered loader: unstructured_loader[0m [[0m[1m[34mcognee.infrastructure.loaders.LoaderEngine[0m][0m
+
+[2m2025-11-10T18:03:10.082376[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `ingest_data`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:10.252531[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `resolve_data_directories`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:10.435952[0m [[32m[1minfo     [0m] [1mPipeline run completed: `2d28e70b-b8c7-5ecd-8eb8-96bee6602a09`[0m [[0m[1m[34mrun_tasks_with_telemetry()[0m][0m
+
+[2m2025-11-10T18:03:10.796971[0m [[32m[1minfo     [0m] [1mJSON extension already installed or not needed: IO exception: Failed to download extension: json at URL extension.kuzudb.com/v0.11.0/linux_amd64/json/libjson.kuzu_extension (ERROR: Could not establish connection)[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:10.797468[0m [[32m[1minfo     [0m] [1mJSON extension already loaded or unavailable: Binder exception: Extension: json is an official extension and has not been installed.
+You can install it by: install json.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:10.810182[0m [[32m[1minfo     [0m] [1mModel not found in LiteLLM's model_cost.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:10.863220[0m [[32m[1minfo     [0m] [1mPipeline run started: `e907e2fd-e846-5e0f-a3d2-e663e0f71b90`[0m [[0m[1m[34mrun_tasks_with_telemetry()[0m][0m
+
+[2m2025-11-10T18:03:11.027309[0m [[32m[1minfo     [0m] [1mCoroutine task started: `classify_documents`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:11.199311[0m [[32m[1minfo     [0m] [1mCoroutine task started: `check_permissions_on_dataset`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:11.392961[0m [[32m[1minfo     [0m] [1mAsync Generator task started: `extract_chunks_from_documents`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:11.607726[0m [[32m[1minfo     [0m] [1mCoroutine task started: `extract_graph_from_data`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:11.751532[0m [[32m[1minfo     [0m] [1mModel not found in LiteLLM's model_cost.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:14.634130[0m [[32m[1minfo     [0m] [1mNo close match found for 'programming language' in category 'classes'[0m [[0m[1m[34mOntologyAdapter[0m][0m
+
+[2m2025-11-10T18:03:14.634551[0m [[32m[1minfo     [0m] [1mNo close match found for 'typescript' in category 'individuals'[0m [[0m[1m[34mOntologyAdapter[0m][0m
+
+[2m2025-11-10T18:03:16.389339[0m [[32m[1minfo     [0m] [1mCoroutine task started: `summarize_text`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:16.577371[0m [[32m[1minfo     [0m] [1mModel not found in LiteLLM's model_cost.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:19.164296[0m [[32m[1minfo     [0m] [1mCoroutine task started: `add_data_points`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:21.290648[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `add_data_points`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:21.464457[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `summarize_text`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:21.637941[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `extract_graph_from_data`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:21.796168[0m [[32m[1minfo     [0m] [1mAsync Generator task completed: `extract_chunks_from_documents`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:21.971435[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `check_permissions_on_dataset`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:22.191849[0m [[32m[1minfo     [0m] [1mCoroutine task completed: `classify_documents`[0m [[0m[1m[34mrun_tasks_base[0m][0m
+
+[2m2025-11-10T18:03:22.370285[0m [[32m[1minfo     [0m] [1mPipeline run completed: `e907e2fd-e846-5e0f-a3d2-e663e0f71b90`[0m [[0m[1m[34mrun_tasks_with_telemetry()[0m][0m
+✓ Conversation ingested to workspace B
+Waiting for entity extraction to complete (30 seconds)...
+
+[2m2025-11-10T18:03:54.964647[0m [[32m[1minfo     [0m] [1mDeleted old log file: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/logs/2025-11-10_12-50-31.log[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:55.383520[0m [[32m[1minfo     [0m] [1mLogging initialized           [0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m [36mcognee_version[0m=[35m0.3.4[0m [36mdatabase_path[0m=[35m/home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [36mgraph_database_name[0m=[35m[0m [36mos_info[0m=[35m'Linux 6.14.0-112033-tuxedo (#33~24.04.1tux1 SMP PREEMPT_DYNAMIC Tue Sep 30 19:33:36 UTC 2025)'[0m [36mpython_version[0m=[35m3.12.3[0m [36mrelational_config[0m=[35mcognee_db[0m [36mstructlog_version[0m=[35m25.5.0[0m [36mvector_config[0m=[35mlancedb[0m
+
+[2m2025-11-10T18:03:55.383750[0m [[32m[1minfo     [0m] [1mDatabase storage: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:57.050085[0m [[32m[1minfo     [0m] [1mJSON extension already installed or not needed: IO exception: Failed to download extension: json at URL extension.kuzudb.com/v0.11.0/linux_amd64/json/libjson.kuzu_extension (ERROR: Could not establish connection)[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:57.050736[0m [[32m[1minfo     [0m] [1mJSON extension already loaded or unavailable: Binder exception: Extension: json is an official extension and has not been installed.
+You can install it by: install json.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:57.080877[0m [[32m[1minfo     [0m] [1mGraph projection completed: 13 nodes, 14 edges in 0.02s[0m [[0m[1m[34mCogneeGraph[0m][0m
+
+[1mEmbeddingRateLimiter initialized: enabled=False, requests_limit=60, interval_seconds=60[0m
+
+[2m2025-11-10T18:03:58.434928[0m [[32m[1minfo     [0m] [1mVector collection retrieval completed: Retrieved distances from 6 collections in 0.03s[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:03:58.595200[0m [[32m[1minfo     [0m] [1mModel not found in LiteLLM's model_cost.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+✓ Workspace A isolated (no TypeScript data)
+
+[2m2025-11-10T18:04:03.278327[0m [[32m[1minfo     [0m] [1mDeleted old log file: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/logs/2025-11-10_12-51-25.log[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:04:03.697289[0m [[32m[1minfo     [0m] [1mLogging initialized           [0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m [36mcognee_version[0m=[35m0.3.4[0m [36mdatabase_path[0m=[35m/home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [36mgraph_database_name[0m=[35m[0m [36mos_info[0m=[35m'Linux 6.14.0-112033-tuxedo (#33~24.04.1tux1 SMP PREEMPT_DYNAMIC Tue Sep 30 19:33:36 UTC 2025)'[0m [36mpython_version[0m=[35m3.12.3[0m [36mrelational_config[0m=[35mcognee_db[0m [36mstructlog_version[0m=[35m25.5.0[0m [36mvector_config[0m=[35mlancedb[0m
+
+[2m2025-11-10T18:04:03.697505[0m [[32m[1minfo     [0m] [1mDatabase storage: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:04:05.385024[0m [[32m[1minfo     [0m] [1mJSON extension already installed or not needed: IO exception: Failed to download extension: json at URL extension.kuzudb.com/v0.11.0/linux_amd64/json/libjson.kuzu_extension (ERROR: Could not establish connection)[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:04:05.385776[0m [[32m[1minfo     [0m] [1mJSON extension already loaded or unavailable: Binder exception: Extension: json is an official extension and has not been installed.
+You can install it by: install json.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:04:05.418857[0m [[32m[1minfo     [0m] [1mGraph projection completed: 13 nodes, 14 edges in 0.02s[0m [[0m[1m[34mCogneeGraph[0m][0m
+
+[1mEmbeddingRateLimiter initialized: enabled=False, requests_limit=60, interval_seconds=60[0m
+
+[2m2025-11-10T18:04:09.791729[0m [[32m[1minfo     [0m] [1mVector collection retrieval completed: Retrieved distances from 6 collections in 0.03s[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:04:09.954872[0m [[32m[1minfo     [0m] [1mModel not found in LiteLLM's model_cost.[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+✓ Workspace B isolated (no Python data)
+✓ Marker files exist in both workspaces
+✓ Test 4 passed: Workspace isolation verified
+
+=== Test 5: Ontology Loading ===
+Verifying chat ontology loaded correctly...
+✓ Ontology loaded: true
+✓ Entity count: 8
+✓ Relationship count: 12
+✓ Test 5 passed: Ontology verification complete
+
+=== Test 5b: Re-initialization Safety ===
+Verifying re-initialization does not destroy data...
+
+[2m2025-11-10T18:04:14.968315[0m [[32m[1minfo     [0m] [1mDeleted old log file: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/logs/2025-11-10_12-51-34.log[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+
+[2m2025-11-10T18:04:15.369179[0m [[32m[1minfo     [0m] [1mLogging initialized           [0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m [36mcognee_version[0m=[35m0.3.4[0m [36mdatabase_path[0m=[35m/home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [36mgraph_database_name[0m=[35m[0m [36mos_info[0m=[35m'Linux 6.14.0-112033-tuxedo (#33~24.04.1tux1 SMP PREEMPT_DYNAMIC Tue Sep 30 19:33:36 UTC 2025)'[0m [36mpython_version[0m=[35m3.12.3[0m [36mrelational_config[0m=[35mcognee_db[0m [36mstructlog_version[0m=[35m25.5.0[0m [36mvector_config[0m=[35mlancedb[0m
+
+[2m2025-11-10T18:04:15.369398[0m [[32m[1minfo     [0m] [1mDatabase storage: /home/luke/Documents/Github-projects/cognee/.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases[0m [[0m[1m[34mcognee.shared.logging_utils[0m][0m
+✓ Re-initialization safe: migration_performed=false
+✓ Marker file preserved: .dataset_migration_complete
+✓ Test 5b passed: Re-initialization safety verified
+
+=== All Tests Passed ===
+
+CogneeClient integration validated:
+  - Python bridge scripts work correctly
+  - Dataset-based workspace isolation working
+  - Ontology loaded and scoped per workspace
+  - Re-initialization safe (preserves data)
+  - All scripts return valid JSON

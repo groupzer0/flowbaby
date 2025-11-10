@@ -91,10 +91,25 @@ export class CogneeClient {
             const duration = Date.now() - startTime;
 
             if (result.success) {
+                // NEW: Log dataset-based isolation and ontology information with defensive defaults
                 this.log('INFO', 'Cognee initialized successfully', {
                     duration,
-                    cognee_dir: result.cognee_dir
+                    dataset_name: result.dataset_name,
+                    workspace_path: result.workspace_path,
+                    cognee_dir: result.cognee_dir,
+                    ontology_loaded: result.ontology_loaded ?? false,
+                    ontology_entities: result.ontology_entities ?? 0,
+                    ontology_relationships: result.ontology_relationships ?? 0,
+                    migration_performed: result.migration_performed ?? false
                 });
+
+                // NEW: Verify ontology loaded correctly
+                if (result.ontology_loaded !== true) {
+                    this.log('WARN', 'Ontology loading not confirmed', {
+                        message: 'May be using default or global ontology'
+                    });
+                }
+
                 return true;
             } else {
                 this.log('ERROR', 'Cognee initialization failed', {

@@ -4,11 +4,12 @@ Cognee Context Retrieval Script for VS Code Extension
 
 Usage: python retrieve.py <workspace_path> <query> [max_results] [max_tokens] [recency_weight] [importance_weight]
 
-Retrieves relevant context from Cognee using hybrid graph-vector search with custom scoring:
+Retrieves relevant context from Cognee using hybrid graph-vector search with workspace isolation:
 1. Loads API key from workspace .env
-2. Executes GRAPH_COMPLETION search (hybrid graph + vector)
-3. Calculates weighted scores combining base relevance, recency, and importance
-4. Returns top results respecting max_results AND max_tokens limits
+2. Generates unique dataset name for workspace
+3. Executes GRAPH_COMPLETION search filtered to workspace dataset
+4. Calculates weighted scores combining base relevance, recency, and importance
+5. Returns top results respecting max_results AND max_tokens limits
 
 Returns JSON to stdout:
   Success: {"success": true, "results": [...], "result_count": 2, "total_tokens": 487}
@@ -16,6 +17,7 @@ Returns JSON to stdout:
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -71,7 +73,7 @@ async def retrieve_context(
     importance_weight: float = 0.2
 ) -> dict:
     """
-    Retrieve relevant context from Cognee with hybrid search and custom scoring.
+    Retrieve relevant context from Cognee with hybrid search, dataset isolation, and custom scoring.
     
     Args:
         workspace_path: Absolute path to VS Code workspace root
@@ -85,16 +87,12 @@ async def retrieve_context(
         Dictionary with success status, results array, result_count, total_tokens, or error
     """
     try:
-        # Import required modules
-        import cognee
-        from cognee.modules.search.types import SearchType
-        from dotenv import load_dotenv
-        
         # Load workspace .env file
         workspace_dir = Path(workspace_path)
         env_file = workspace_dir / '.env'
         
         if env_file.exists():
+            from dotenv import load_dotenv
             load_dotenv(env_file)
         
         # Check for API key
@@ -105,15 +103,29 @@ async def retrieve_context(
                 'error': 'OPENAI_API_KEY not found in environment or .env file'
             }
         
-        # Configure Cognee
+        # Import cognee
+        import cognee
+        from cognee.modules.search.types import SearchType
+        
+        # Configure Cognee with API key
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
         
-        # Execute hybrid graph-vector search
+        # 1. Generate same unique dataset name as init.py and ingest.py
+        workspace_path_str = str(workspace_dir.absolute())
+        dataset_hash = hashlib.sha1(workspace_path_str.encode()).hexdigest()[:16]
+        dataset_name = f"ws_{dataset_hash}"
+        
+        # 2. Search within this workspace's dataset only
         search_results = await cognee.search(
-            query,
-            query_type=SearchType.GRAPH_COMPLETION
+            query_type=SearchType.GRAPH_COMPLETION,
+            query_text=query,
+            datasets=[dataset_name],  # Filter to this workspace only
+            top_k=max_results
         )
+        
+        # This ensures search results only contain data from this workspace,
+        # not from other workspaces or tutorial data.
         
         # If no results, return empty
         if not search_results:
