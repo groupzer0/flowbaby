@@ -1,0 +1,54 @@
+# VS Code Extension Package Exclusions
+# Only include production files in VSIX
+
+# Development directories
+.vscode/**
+.vscode-test/**
+src/**
+node_modules/**
+out/test/**
+test/**
+
+# Configuration files
+.gitignore
+.eslintrc.json
+tsconfig.json
+esbuild.js
+
+# Test files
+test-*.js
+test-*.sh
+test-*.txt
+test-output.txt
+
+# Source maps
+*.map
+
+# TypeScript source files
+**/*.ts
+
+# Documentation for developers (not end-users)
+*.md
+!README.md
+!CHANGELOG.md
+!LICENSE
+
+# Git files
+.git/**
+.gitattributes
+
+# Temporary files
+*.log
+*.tmp
+.DS_Store
+
+# Python bytecode
+**/__pycache__/**
+**/*.pyc
+
+# Environment and secret files
+.env
+.env.*
+
+# OS-specific files
+Thumbs.db

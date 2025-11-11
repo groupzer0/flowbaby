@@ -17,13 +17,14 @@ Returns JSON to stdout:
 """
 
 import asyncio
-import hashlib
 import json
 import os
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
+
+from workspace_utils import generate_dataset_name
 
 
 def calculate_recency_score(timestamp_str: str) -> float:
@@ -111,10 +112,8 @@ async def retrieve_context(
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
         
-        # 1. Generate same unique dataset name as init.py and ingest.py
-        workspace_path_str = str(workspace_dir.absolute())
-        dataset_hash = hashlib.sha1(workspace_path_str.encode()).hexdigest()[:16]
-        dataset_name = f"ws_{dataset_hash}"
+        # 1. Generate same unique dataset name as init.py and ingest.py (using canonical path)
+        dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
         
         # 2. Search within this workspace's dataset only
         search_results = await cognee.search(

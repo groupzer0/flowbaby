@@ -24,6 +24,15 @@ extension/out/
 extension/dist/
 extension/node_modules/
 extension/*.vsix
+extension/*.vsix.sha256
+extension/.vscode-test/
+
+# Test/debug files
+extension/test-*.js
+*.backup
+
+# VS Code workspace settings
+.vscode/
 
 # TypeScript
 *.js.map

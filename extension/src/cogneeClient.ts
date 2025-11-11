@@ -50,7 +50,6 @@ export class CogneeClient {
 
         // Load configuration from VS Code settings
         const config = vscode.workspace.getConfiguration('cogneeMemory');
-        this.pythonPath = config.get<string>('pythonPath', 'python3');
         this.maxContextResults = config.get<number>('maxContextResults', 3);
         this.maxContextTokens = config.get<number>('maxContextTokens', 2000);
         this.recencyWeight = config.get<number>('recencyWeight', 0.3);
@@ -66,13 +65,64 @@ export class CogneeClient {
         // Resolve bridge path (extension/bridge relative to dist/)
         this.bridgePath = path.join(__dirname, '..', 'bridge');
 
+        // Detect Python interpreter using auto-detection or explicit config
+        this.pythonPath = this.detectPythonInterpreter();
+
+        // Log detected interpreter with source attribution
+        const configuredPath = config.get<string>('pythonPath', 'python3');
+        const detectionSource = (configuredPath !== 'python3' && configuredPath !== '') 
+            ? 'explicit_config' 
+            : 'auto_detected';
+
         this.log('INFO', 'CogneeClient initialized', {
             workspace: workspacePath,
             pythonPath: this.pythonPath,
+            pythonSource: detectionSource,
             maxContextResults: this.maxContextResults,
             maxContextTokens: this.maxContextTokens,
             bridgePath: this.bridgePath
         });
+    }
+
+    /**
+     * Detect Python interpreter with auto-detection fallback chain
+     * 
+     * Priority order:
+     * 1. Explicit cogneeMemory.pythonPath setting (if not default)
+     * 2. Workspace .venv virtual environment (platform-specific paths)
+     * 3. System python3 fallback
+     * 
+     * @returns string - Path to Python interpreter
+     */
+    private detectPythonInterpreter(): string {
+        const config = vscode.workspace.getConfiguration('cogneeMemory');
+        const configuredPath = config.get<string>('pythonPath', 'python3');
+
+        // Explicit config always wins (user override is sacred)
+        if (configuredPath !== 'python3' && configuredPath !== '') {
+            return configuredPath;
+        }
+
+        // Auto-detect workspace .venv (platform-specific)
+        const isWindows = process.platform === 'win32';
+        const venvPath = isWindows
+            ? path.join(this.workspacePath, '.venv', 'Scripts', 'python.exe')
+            : path.join(this.workspacePath, '.venv', 'bin', 'python');
+
+        try {
+            if (fs.existsSync(venvPath)) {
+                return venvPath;
+            }
+        } catch (error) {
+            // Permission error, missing directory, etc. - fall through to system Python
+            this.log('DEBUG', 'Virtual environment detection failed', {
+                venvPath,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+
+        // Fall back to system Python
+        return 'python3';
     }
 
     /**
@@ -91,19 +141,48 @@ export class CogneeClient {
             const duration = Date.now() - startTime;
 
             if (result.success) {
-                // NEW: Log dataset-based isolation and ontology information with defensive defaults
-                this.log('INFO', 'Cognee initialized successfully', {
+                // Standardized initialization line (required format)
+                const migrationStatus = result.migration_performed ? 'performed' : 'skipped';
+                this.log('INFO', `Initialized workspace [${result.dataset_name}] (migration: ${migrationStatus})`);
+                
+                // Supplemental detail lines for diagnostics
+                this.log('INFO', 'Workspace isolation details', {
                     duration,
                     dataset_name: result.dataset_name,
                     workspace_path: result.workspace_path,
-                    cognee_dir: result.cognee_dir,
+                    cognee_dir: result.cognee_dir
+                });
+                
+                this.log('INFO', 'Ontology configuration', {
                     ontology_loaded: result.ontology_loaded ?? false,
                     ontology_entities: result.ontology_entities ?? 0,
-                    ontology_relationships: result.ontology_relationships ?? 0,
-                    migration_performed: result.migration_performed ?? false
+                    ontology_relationships: result.ontology_relationships ?? 0
                 });
+                
+                // Log migration metadata if available
+                if (result.migration_performed) {
+                    const sizeBefore = result.data_dir_size_before ?? 0;
+                    const sizeAfter = result.data_dir_size_after ?? 0;
+                    const sizeDelta = sizeBefore - sizeAfter;
+                    const sizeMB = (sizeBefore / 1024 / 1024).toFixed(2);
+                    
+                    // Use WARN level if data directory was > 100MB
+                    const logLevel = sizeBefore > 100 * 1024 * 1024 ? 'WARN' : 'INFO';
+                    
+                    this.log(logLevel, 'Migration performed by this workspace', {
+                        global_marker_location: result.global_marker_location,
+                        data_dir_size_before_mb: sizeMB,
+                        data_dir_size_after_mb: (sizeAfter / 1024 / 1024).toFixed(2),
+                        data_removed_mb: (sizeDelta / 1024 / 1024).toFixed(2),
+                        note: 'Untagged legacy data pruned from global Cognee directory'
+                    });
+                } else if (result.global_marker_location) {
+                    this.log('INFO', 'Migration previously completed', {
+                        global_marker_location: result.global_marker_location
+                    });
+                }
 
-                // NEW: Verify ontology loaded correctly
+                // Verify ontology loaded correctly
                 if (result.ontology_loaded !== true) {
                     this.log('WARN', 'Ontology loading not confirmed', {
                         message: 'May be using default or global ontology'
@@ -330,7 +409,8 @@ export class CogneeClient {
     /**
      * Run Python bridge script
      * 
-     * Spawns Python subprocess, collects output, parses JSON response
+     * Spawns Python subprocess from workspace context, collects stdout/stderr, parses JSON response.
+     * Enhanced error surfacing captures structured errors from stdout and sanitizes sensitive data.
      * 
      * @param scriptName Script filename (e.g., 'init.py')
      * @param args Command-line arguments
@@ -351,19 +431,30 @@ export class CogneeClient {
         });
 
         return new Promise((resolve, reject) => {
-            const python = spawn(this.pythonPath, [scriptPath, ...args]);
+            // Spawn Python process with workspace as working directory
+            // This ensures relative paths in scripts resolve from workspace root
+            const python = spawn(this.pythonPath, [scriptPath, ...args], {
+                cwd: this.workspacePath
+            });
             
             let stdout = '';
             let stderr = '';
 
-            // Collect stdout
+            // Collect stdout (with buffer limit to prevent memory bloat)
             python.stdout.on('data', (data) => {
                 stdout += data.toString();
+                // Truncate if exceeding 2KB during collection (streaming truncation)
+                if (stdout.length > 2048) {
+                    stdout = stdout.substring(0, 2048);
+                }
             });
 
-            // Collect stderr
+            // Collect stderr (with buffer limit)
             python.stderr.on('data', (data) => {
                 stderr += data.toString();
+                if (stderr.length > 2048) {
+                    stderr = stderr.substring(0, 2048);
+                }
             });
 
             // Handle process close
@@ -374,23 +465,54 @@ export class CogneeClient {
                 });
 
                 if (code !== 0) {
+                    // Enhanced error surfacing: capture and parse both stdout and stderr
+                    let errorMessage = `Python script exited with code ${code}`;
+                    let structuredError: string | undefined;
+
+                    // Try to parse stdout as JSON to extract structured error
+                    try {
+                        const result = JSON.parse(stdout) as CogneeResult;
+                        if (result.error) {
+                            structuredError = result.error;
+                            errorMessage = structuredError;
+                        }
+                    } catch {
+                        // stdout is not valid JSON - will log as unstructured error
+                    }
+
+                    // Sanitize outputs before logging
+                    const sanitizedStdout = this.sanitizeOutput(stdout);
+                    const sanitizedStderr = this.sanitizeOutput(stderr);
+
+                    // Log comprehensive error details
                     this.log('ERROR', 'Python script failed', {
                         script: scriptName,
                         exit_code: code,
-                        stderr: stderr.substring(0, 500)
+                        structured_error: structuredError,
+                        stderr: sanitizedStderr,
+                        stdout_preview: sanitizedStdout
                     });
-                    reject(new Error(`Python script exited with code ${code}: ${stderr}`));
+
+                    // User-facing error with troubleshooting hint
+                    const troubleshootingHint = structuredError 
+                        ? '' 
+                        : ' Check Output Channel for details. If using virtual environment, configure cogneeMemory.pythonPath setting.';
+                    
+                    reject(new Error(`${errorMessage}${troubleshootingHint}`));
                     return;
                 }
 
-                // Parse JSON output
+                // Parse JSON output (success path)
                 try {
                     const result = JSON.parse(stdout) as CogneeResult;
                     resolve(result);
                 } catch (error) {
+                    // Sanitize before logging parse failure
+                    const sanitizedStdout = this.sanitizeOutput(stdout);
+                    
                     this.log('ERROR', 'JSON parse failed', {
                         script: scriptName,
-                        stdout: stdout.substring(0, 200),
+                        stdout_preview: sanitizedStdout,
                         error: error instanceof Error ? error.message : String(error)
                     });
                     reject(new Error(`Failed to parse JSON output: ${error}`));
@@ -421,6 +543,55 @@ export class CogneeClient {
                 clearTimeout(timeout);
             });
         });
+    }
+
+    /**
+     * Sanitize output to redact sensitive data before logging
+     * 
+     * Redacts common secret patterns and truncates to prevent accidental exposure.
+     * 
+     * @param text Output text to sanitize
+     * @returns string - Sanitized text
+     */
+    private sanitizeOutput(text: string): string {
+        let sanitized = text;
+
+        // Redact OpenAI API keys (environment variable format)
+        sanitized = sanitized.replace(
+            /OPENAI_API_KEY[\s=]+[\w\-]{32,}/gi,
+            'OPENAI_API_KEY=***'
+        );
+
+        // Redact OpenAI-style keys (sk-... format)
+        sanitized = sanitized.replace(
+            /sk-[A-Za-z0-9]{32,}/g,
+            'sk-***'
+        );
+
+        // Redact Bearer tokens
+        sanitized = sanitized.replace(
+            /Bearer\s+[A-Za-z0-9\-_]{32,}/g,
+            'Bearer ***'
+        );
+
+        // Redact AWS secret access keys
+        sanitized = sanitized.replace(
+            /AWS_SECRET_ACCESS_KEY[\s=]+[\w\/\+]{32,}/gi,
+            'AWS_SECRET_ACCESS_KEY=***'
+        );
+
+        // Redact long hex strings (likely tokens)
+        sanitized = sanitized.replace(
+            /\b[0-9a-fA-F]{32,}\b/g,
+            '<redacted_token>'
+        );
+
+        // Truncate to 1KB maximum
+        if (sanitized.length > 1024) {
+            sanitized = sanitized.substring(0, 1024) + '\n... (truncated)';
+        }
+
+        return sanitized;
     }
 
     /**

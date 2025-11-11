@@ -14,17 +14,19 @@ Initializes Cognee for a workspace by:
 Returns JSON to stdout:
   Success: {"success": true, "dataset_name": "ws_abc123...", "cognee_dir": "/path/to/.cognee", 
             "ontology_loaded": true, "ontology_entities": 8, "ontology_relationships": 12,
-            "migration_performed": false}
+            "migration_performed": false, "global_marker_location": "/path/to/marker",
+            "data_dir_size_before": 12345, "data_dir_size_after": 6789}
   Failure: {"success": false, "error": "error message"}
 """
 
 import asyncio
-import hashlib
 import json
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
+
+from workspace_utils import generate_dataset_name
 
 
 async def initialize_cognee(workspace_path: str) -> dict:
@@ -61,43 +63,117 @@ async def initialize_cognee(workspace_path: str) -> dict:
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
         
-        # 1. Generate unique dataset name for this workspace
-        workspace_path_str = str(workspace_dir.absolute())
-        dataset_hash = hashlib.sha1(workspace_path_str.encode()).hexdigest()[:16]
-        dataset_name = f"ws_{dataset_hash}"
+        # 1. Generate unique dataset name for this workspace using canonical path
+        dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
         
-        # 2. Create .cognee directory for marker files (not database storage)
-        cognee_dir = workspace_dir / '.cognee'
+        # 2. Create .cognee directory for local marker files (not database storage)
+        cognee_dir = Path(workspace_path) / '.cognee'
         cognee_dir.mkdir(parents=True, exist_ok=True)
         
-        # 3. Check if this is first-time initialization (one-time migration)
-        migration_marker = cognee_dir / '.dataset_migration_complete'
+        # 3. Determine global data directory for atomic marker coordination
+        try:
+            from cognee.infrastructure.databases.relational import get_relational_config
+            relational_config = get_relational_config()
+            global_data_dir = Path(relational_config.db_path).parent  # .cognee_system directory
+        except (AttributeError, ImportError, Exception):
+            # Fallback to environment variable if API unavailable
+            env_data_dir = os.getenv('COGNEE_DATA_DIR')
+            if not env_data_dir:
+                return {
+                    'success': False,
+                    'error': 'Cannot determine Cognee data directory: unable to get relational config and COGNEE_DATA_DIR not set'
+                }
+            global_data_dir = Path(env_data_dir)
         
-        # CRITICAL: Global prune strategy
-        # - Each workspace checks its LOCAL marker file
-        # - If marker exists: Skip prune (this workspace already did it)
-        # - If marker doesn't exist: Perform ONE global prune
-        # - Risk window: If two workspaces initialize simultaneously, both may prune
-        # - Mitigation: Small risk window (~1 second), acceptable for one-time migration
+        global_data_dir.mkdir(parents=True, exist_ok=True)
+        global_marker_path = global_data_dir / '.migration_v1_complete'
+        local_marker_path = cognee_dir / '.dataset_migration_complete'
         
-        if not migration_marker.exists():
-            # First run for this workspace: Clear any untagged legacy data
-            # This is a GLOBAL operation (clears all untagged data across all workspaces)
-            # Safe because: Previous extension versions didn't use datasets, so only legacy data is untagged
-            await cognee.prune.prune_system()  # Clear graph + vector + metadata
-            
-            # Create marker to prevent this workspace from pruning again
-            migration_marker.write_text(json.dumps({
-                'migrated_at': datetime.now().isoformat(),
-                'dataset_name': dataset_name,
-                'workspace_path': workspace_path_str,
-                'note': 'Global prune performed - all untagged data cleared'
-            }))
-            migration_performed = True
+        # 4. Hybrid marker strategy: global atomic coordination + local acknowledgement
+        migration_performed = False
+        global_marker_location = str(global_marker_path.absolute())
+        data_dir_size_before = 0
+        data_dir_size_after = 0
+        
+        # Check if global migration already completed
+        if not global_marker_path.exists():
+            # Attempt to atomically create global marker (OS-level exclusivity)
+            try:
+                # O_CREAT | O_EXCL ensures only one process can create the file
+                fd = os.open(str(global_marker_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+                
+                # This process won the race - perform global prune
+                try:
+                    # Calculate data directory size before pruning
+                    data_dir_size_before = sum(
+                        f.stat().st_size for f in global_data_dir.rglob('*') if f.is_file()
+                    )
+                    
+                    # Perform global prune (removes only untagged legacy data)
+                    await cognee.prune.prune_system()
+                    migration_performed = True
+                    
+                    # Calculate data directory size after pruning
+                    data_dir_size_after = sum(
+                        f.stat().st_size for f in global_data_dir.rglob('*') if f.is_file()
+                    )
+                    
+                    # Write structured metadata to global marker
+                    marker_metadata = {
+                        'migrated_at': datetime.now().isoformat(),
+                        'workspace_id': dataset_name,
+                        'workspace_path': workspace_path_str,
+                        'data_dir_size_before': data_dir_size_before,
+                        'data_dir_size_after': data_dir_size_after,
+                        'version': 'v1',
+                        'note': 'Global prune of untagged data performed by this process'
+                    }
+                    
+                    # Write to the already-opened file descriptor
+                    os.write(fd, json.dumps(marker_metadata, indent=2).encode())
+                    
+                finally:
+                    os.close(fd)
+                    
+            except FileExistsError:
+                # Another process created the marker - migration already performed
+                migration_performed = False
+                
+                # Read existing marker metadata if available
+                try:
+                    if global_marker_path.exists():
+                        marker_content = global_marker_path.read_text()
+                        marker_data = json.loads(marker_content)
+                        data_dir_size_before = marker_data.get('data_dir_size_before', 0)
+                        data_dir_size_after = marker_data.get('data_dir_size_after', 0)
+                except Exception:
+                    pass  # Non-critical - just for metadata reporting
+                    
+            except (OSError, PermissionError) as e:
+                return {
+                    'success': False,
+                    'error': f'Failed to create global migration marker (permission denied or filesystem error): {e}'
+                }
         else:
-            migration_performed = False
+            # Global marker already exists - read metadata
+            try:
+                marker_content = global_marker_path.read_text()
+                marker_data = json.loads(marker_content)
+                data_dir_size_before = marker_data.get('data_dir_size_before', 0)
+                data_dir_size_after = marker_data.get('data_dir_size_after', 0)
+            except Exception:
+                pass  # Non-critical
         
-        # 4. Load ontology configuration (will be applied during cognify in ingest.py)
+        # 5. Create/update local acknowledgement marker (all processes do this)
+        local_marker_path.write_text(json.dumps({
+            'acknowledged_at': datetime.now().isoformat(),
+            'dataset_name': dataset_name,
+            'workspace_path': workspace_path_str,
+            'migration_performed_by_this_process': migration_performed,
+            'global_marker_location': global_marker_location
+        }, indent=2))
+        
+        # 6. Load ontology configuration (will be applied during cognify in ingest.py)
         ontology_path = Path(__file__).parent / 'ontology.json'
         if not ontology_path.exists():
             return {
@@ -108,7 +184,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
         with open(ontology_path) as f:
             ontology = json.load(f)
         
-        # 5. Return extended success JSON
+        # 7. Return extended success JSON with migration metadata
         return {
             'success': True,
             'dataset_name': dataset_name,
@@ -117,7 +193,10 @@ async def initialize_cognee(workspace_path: str) -> dict:
             'ontology_loaded': True,
             'ontology_entities': len(ontology.get('entities', [])),
             'ontology_relationships': len(ontology.get('relationships', [])),
-            'migration_performed': migration_performed
+            'migration_performed': migration_performed,
+            'global_marker_location': global_marker_location,
+            'data_dir_size_before': data_dir_size_before,
+            'data_dir_size_after': data_dir_size_after
         }
         
     except ImportError as e:

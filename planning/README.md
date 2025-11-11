@@ -15,6 +15,9 @@ Planning documents use sequential numbering with descriptive names:
   - `001-cognee-walkthrough-implementation.md`
   - `002-automatic-context-retrieval.md`
   - `003-fix-workspace-isolation-and-ontology.md`
+  - `004-extension-packaging-and-distribution.md`
+  - `005-fix-data-isolation-and-pruning-bugs.md`
+  - `006-vsix-packaging-and-release.md`
 
 ## Document Structure
 

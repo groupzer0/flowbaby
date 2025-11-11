@@ -15,7 +15,8 @@ A VS Code extension that automatically captures GitHub Copilot chat conversation
 
 **Location**: [`extension/`](extension/)  
 **See**: [Extension README](extension/README.md) for installation and configuration  
-**Status**: In Development (see [Plan 002](Planning/002-automatic-context-retrieval.md))
+**Status**: v0.1.0 Released - [Download VSIX](https://github.com/lsalsich/cognee/releases)  
+**Features**: Automatic memory capture, context retrieval, workspace isolation, hybrid search, custom ontology
 
 ## Prerequisites
 
@@ -36,13 +37,11 @@ cp .env.example .env  # Add your OpenAI API key
 python examples/cognee_walkthrough.py
 ```
 
-### Option 2: Use Extension (Coming Soon)
-```bash
-cd extension/
-npm install
-npm run compile
-# Install extension in VS Code via F5 (Run Extension)
-```
+### Option 2: Install Extension
+1. Download latest `.vsix` from [GitHub Releases](https://github.com/lsalsich/cognee/releases)
+2. Install: `code --install-extension cognee-chat-memory-X.Y.Z.vsix`
+3. Configure API key in VS Code Settings
+4. See [Extension README](extension/README.md) for full setup guide
 
 ## Repository Structure
 
@@ -71,9 +70,11 @@ cognee/
 ## Documentation
 
 - [Tutorial README](tutorial/README.md) - Setup and usage instructions
-- [Extension README](extension/README.md) - Installation and configuration
-- [Plan 001](Planning/001-cognee-walkthrough-implementation.md) - Tutorial implementation plan
-- [Plan 002](Planning/002-automatic-context-retrieval.md) - Extension implementation plan
+- [Extension README](extension/README.md) - Installation and configuration guide
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Development setup and contribution guidelines
+- [Extension CHANGELOG](extension/CHANGELOG.md) - Version history and release notes
+- [Extension Distribution Guide](extension/DISTRIBUTION.md) - Release and packaging process
+- [Planning Documents](planning/) - Implementation plans and architecture decisions
 - [Official Cognee Docs](https://docs.cognee.ai)
 
 ## License

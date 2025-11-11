@@ -17,12 +17,13 @@ Returns JSON to stdout:
 """
 
 import asyncio
-import hashlib
 import json
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
+
+from workspace_utils import generate_dataset_name
 
 
 async def ingest_conversation(
@@ -67,10 +68,8 @@ async def ingest_conversation(
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
         
-        # 1. Generate same unique dataset name as init.py
-        workspace_path_str = str(workspace_dir.absolute())
-        dataset_hash = hashlib.sha1(workspace_path_str.encode()).hexdigest()[:16]
-        dataset_name = f"ws_{dataset_hash}"
+        # 1. Generate same unique dataset name as init.py (using canonical path)
+        dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
         
         # 2. Load ontology configuration independently (ingest.py is subprocess, no shared state)
         ontology_path = Path(__file__).parent / 'ontology.json'
