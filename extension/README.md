@@ -1,16 +1,18 @@
 # Cognee Chat Memory
 
-> Automatic memory for GitHub Copilot chat using Cognee knowledge graphs
+> Memory-augmented chat for VS Code using Cognee knowledge graphs
 
-Cognee Chat Memory is a VS Code extension that automatically captures your GitHub Copilot chat conversations and retrieves relevant context from previous interactions. Each workspace maintains its own isolated memory, creating a personalized knowledge graph that grows with your project.
+Cognee Chat Memory is a VS Code extension that lets you selectively capture important chat conversations and retrieve them as context through the `@cognee-memory` participant. Each workspace maintains its own isolated memory, creating a personalized knowledge graph that grows with your project.
 
 ## Features
 
-- **Automatic Conversation Capture** - No manual commands needed; conversations are captured automatically after each response
-- **Intelligent Context Retrieval** - Retrieves relevant memories before responding, improving response quality
+- **Selective Capture** - Use keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C) to capture valuable conversations worth remembering
+- **@cognee-memory Participant** - Retrieves relevant context and generates informed responses when you explicitly invoke it
+- **Keyboard Shortcut Workflow** - Press Ctrl+Alt+C, paste or type content, instant capture with confirmation
+- **Command Palette Alternative** - Run "Cognee: Capture to Memory" for the same capture workflow
 - **Workspace Isolation** - Each workspace has its own separate memory—no cross-project leakage
 - **Hybrid Graph-Vector Search** - Combines relationship traversal with semantic similarity for superior context relevance
-- **Configurable Behavior** - Tune recency weight, importance scoring, token budget, and result limits
+- **User Control** - You decide what gets captured; explicit memory actions put you in full control
 - **Privacy-First Design** - All data stays on your local machine; no cloud services or telemetry
 
 ## Prerequisites
@@ -83,20 +85,52 @@ If you see errors, check the [Troubleshooting](#troubleshooting) section below.
 
 ## Usage
 
-### Basic Usage
+### Capturing Conversations
 
-1. Open GitHub Copilot Chat (`Ctrl+Alt+I` or click the chat icon)
-2. Start typing your question or request
-3. The extension automatically:
-   - Retrieves relevant context from past conversations
-   - Injects context before Copilot responds
-   - Captures the conversation after the response completes
+**Keyboard Shortcut (Primary Method)**:
+1. View a valuable chat message (from any participant: @workspace, @terminal, GitHub Copilot, etc.)
+2. Press **Ctrl+Alt+C** (or **Cmd+Alt+C** on macOS)
+3. Paste the message content in the input box (or leave empty to use clipboard)
+4. Press Enter to capture
+5. See "✅ Captured to memory" confirmation
 
-### Memory is Automatic
+**Command Palette (Alternative)**:
+1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+2. Type "Cognee: Capture to Memory"
+3. Follow the same workflow as keyboard shortcut
 
-- **No special commands needed** - Memory works transparently in the background
-- **Workspace-specific** - Each workspace has its own isolated memory
-- **Accumulates over time** - Context becomes richer as you use Copilot more
+**What Gets Captured**:
+- Chat conversations from ANY participant (@workspace, @terminal, GitHub Copilot, etc.)
+- Manual notes and observations you type
+- Code explanations and discussions
+- Only content YOU choose to capture (selective, user-controlled)
+
+### Retrieving Context with @cognee-memory
+
+**How to Use**:
+1. Open GitHub Copilot Chat (`Ctrl+Alt+I` or click chat icon)
+2. Type: `@cognee-memory How did I implement caching?`
+3. The participant:
+   - Retrieves relevant memories from your workspace knowledge graph
+   - Shows previews: "📚 Retrieved 3 memories"
+   - Augments your question with retrieved context
+   - Generates a contextually-aware response
+   - Optionally captures the conversation for future retrieval (if enabled via config)
+
+**Example Queries**:
+- `@cognee-memory What problems did we discuss about the authentication system?`
+- `@cognee-memory What solutions did we consider for rate limiting?`
+- `@cognee-memory Summarize our decisions about database architecture`
+
+### Memory Management Commands
+
+**Toggle Memory On/Off**:
+- Command Palette → "Cognee: Toggle Memory"
+- Flips `cogneeMemory.enabled` setting
+
+**Clear Workspace Memory**:
+- Command Palette → "Cognee: Clear Workspace Memory"
+- Deletes all captured conversations for current workspace (requires confirmation)
 
 ## Python Environment
 
@@ -152,10 +186,13 @@ Access settings via **File → Preferences → Settings → Extensions → Cogne
 | `cogneeMemory.maxContextTokens` | Token budget for retrieved context | `2000` |
 | `cogneeMemory.recencyWeight` | Weight for prioritizing recent conversations (0-1) | `0.3` |
 | `cogneeMemory.importanceWeight` | Weight for prioritizing marked conversations (0-1) | `0.2` |
+| `cogneeMemory.autoIngestConversations` | **Experimental**: Auto-capture @cognee-memory conversations (disabled due to Cognee 0.4.0 bug) | `false` |
 | `cogneeMemory.pythonPath` | Path to Python interpreter (must have Cognee installed) | `python3` |
 | `cogneeMemory.logLevel` | Logging verbosity: error, warn, info, debug | `info` |
 
-**Example**: To disable memory temporarily, set `cogneeMemory.enabled` to `false` in settings.
+**Examples**:
+- To disable memory temporarily, set `cogneeMemory.enabled` to `false` in settings
+- To enable experimental auto-capture of @cognee-memory conversations (feedback loop), set `cogneeMemory.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
 
 ## Troubleshooting
 
@@ -202,14 +239,23 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 - Reduce `maxContextResults` to 1-2 for faster retrieval
 - Reduce `maxContextTokens` to 1000 for lighter processing
 
-#### 5. Memory Not Working
+#### 5. Capture or Retrieval Not Working
 
-**Checklist**:
+**Capture Issues**:
+
+1. Verify keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C) is not conflicting with other extensions
+2. Check Command Palette for "Cognee: Capture to Memory" as alternative
+3. Ensure you see confirmation message after capture ("✅ Captured to memory")
+4. Check Output Channel logs for ingestion errors
+
+**Retrieval Issues**:
 
 1. Verify `cogneeMemory.enabled` is `true` in settings
-2. Check Output Channel logs for retrieval attempts
-3. Remember: The first conversation in a new workspace has no context (memory starts empty)
-4. Each workspace has separate memory—switching workspaces means different context
+2. Type `@cognee-memory` in chat to invoke the participant explicitly
+3. Check Output Channel logs for retrieval attempts and timing
+4. Remember: The first conversation in a new workspace has no context (memory starts empty)
+5. Each workspace has separate memory—switching workspaces means different context
+6. If retrieval fails, you'll see "⚠️ Memory retrieval unavailable" but participant continues without context
 
 ### Common Error Patterns
 
@@ -245,11 +291,22 @@ The extension will reinitialize on next activation, creating a fresh knowledge g
 
 **Data Flow**:
 
-1. User asks a question in Copilot Chat
-2. Extension retrieves relevant context from Cognee memory (Python subprocess)
-3. Context is injected into Copilot's prompt
-4. Copilot responds with enhanced context awareness
-5. Extension captures the conversation (question + response) and stores it in Cognee
+**Capture Flow**:
+1. User presses Ctrl+Alt+C (or uses Command Palette)
+2. Extension shows input box for content
+3. User pastes chat message or types manually
+4. Extension calls Python bridge (`ingest.py`) via subprocess
+5. Cognee stores conversation in workspace-specific knowledge graph
+
+**Retrieval Flow**:
+1. User types `@cognee-memory [question]` in chat
+2. Extension calls Python bridge (`retrieve.py`) via subprocess
+3. Cognee searches knowledge graph using hybrid graph-vector search
+4. Extension formats retrieved context with previews
+5. Extension augments user's question with context
+6. Extension sends augmented prompt to language model
+7. Response streams back to user
+8. (Optional) Extension captures Q&A conversation for future retrieval (if `autoIngestConversations` enabled)
 
 ## Privacy and Data Storage
 
@@ -270,9 +327,32 @@ rm -rf .cognee/  # In each workspace
 
 - **Workspace Required** - Extension doesn't work in single-file mode
 - **Python Dependency** - Python and Cognee must be installed separately (not bundled)
+- **Manual Capture** - Keyboard shortcut requires copy-paste workflow; cannot extract message from chat UI directly (VS Code API limitation)
+- **Explicit Participant Invocation** - Must type `@cognee-memory` to trigger retrieval; cannot inject context into other participants (@workspace, GitHub Copilot, etc.)
 - **First Conversation** - The first conversation in a new workspace has no context (memory starts empty)
-- **Chat Only** - Currently captures Copilot chat conversations; inline completions are not captured
+- **Step 6 Auto-Ingestion Disabled by Default** - Automatic capture of @cognee-memory conversations (feedback loop) is experimental due to Cognee 0.4.0 file hashing bug; enable via `cogneeMemory.autoIngestConversations` for testing
 - **Platform Support** - Primarily tested on macOS and Linux; Windows support may require additional configuration
+
+## Known Issues
+
+### Cognee 0.4.0 File Hashing Bug (Auto-Ingestion)
+
+**Issue**: Cognee v0.4.0 has an intermittent file hashing bug that causes ingestion to fail unpredictably when the same conversation is ingested multiple times. This affects automatic capture of @cognee-memory conversations (Step 6 feedback loop).
+
+**Symptoms**:
+- Conversations fail to ingest with hash mismatch errors
+- Intermittent failures (some ingests succeed, others fail for identical content)
+- Errors logged in Output Channel: "File not found" or hash-related issues
+
+**Workaround**:
+- **Default**: `cogneeMemory.autoIngestConversations` is set to `false` (auto-ingestion disabled)
+- **Manual Capture**: Use keyboard shortcut (Ctrl+Alt+C) to capture conversations manually—this does NOT trigger the bug
+- **Experimental Testing**: Set `cogneeMemory.autoIngestConversations` to `true` to test feedback loop (may experience intermittent failures)
+- **Graceful Degradation**: Ingestion failures are logged to Output Channel but do NOT crash the extension or interrupt chat participant functionality
+
+**Status**: Monitoring Cognee updates for bug fix; will enable auto-ingestion by default when resolved.
+
+**Reference**: See implementation documentation in `implementation/008-chat-participant-memory-integration-implementation.md` for detailed validation findings and error logs.
 
 ## Screenshots
 
@@ -304,6 +384,41 @@ We welcome contributions! See [CONTRIBUTING.md](../CONTRIBUTING.md) for:
 - How to run tests
 - Code style guidelines
 - Pull request process
+
+### Debugging
+
+For extension developers:
+
+#### Launch Extension Development Host
+
+1. Open the `extension/` folder in VS Code (not the repository root)
+2. Press **F5** in VS Code
+3. New window opens with extension loaded
+4. Check Debug Console for activation logs (View → Debug Console)
+
+#### Set Breakpoints
+
+- Click left margin in TypeScript files to set breakpoints
+- Breakpoints pause execution in Extension Host
+- Source maps enable debugging original TypeScript code
+
+#### View Logs
+
+The extension outputs logs to different locations:
+
+- **Debug Console**: Extension activation and runtime logs (View → Debug Console)
+- **Output Channel**: CogneeClient bridge operations—select "Cognee Memory" from dropdown (View → Output)
+- **Developer Tools**: Extension Host errors—open with Help → Toggle Developer Tools
+
+#### Test Changes
+
+After modifying code:
+
+- **Rebuild**: Run `npm run compile` in the `extension/` directory
+- **Reload**: Press **Ctrl+R** (or **Cmd+R** on Mac) in the Extension Development Host window
+- **Auto-compile**: The `preLaunchTask` in `.vscode/launch.json` auto-compiles when pressing F5
+
+See [SETUP.md](SETUP.md) for complete development environment setup.
 
 ## License
 

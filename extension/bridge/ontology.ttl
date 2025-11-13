@@ -1,0 +1,123 @@
+@prefix : <http://example.org/cognee-chat#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+# Base class for all chat-related entities
+:ChatEntity a owl:Class ;
+    rdfs:label "Chat Entity" ;
+    rdfs:comment "Base class for all entities extracted from chat conversations" .
+
+# Entity Classes (8 total)
+:User a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "User" ;
+    rdfs:comment "Person asking questions in chat" .
+
+:Question a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "Question" ;
+    rdfs:comment "User's question or request" .
+
+:Answer a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "Answer" ;
+    rdfs:comment "Assistant's response" .
+
+:Topic a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "Topic" ;
+    rdfs:comment "Subject area or theme" .
+
+:Concept a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "Concept" ;
+    rdfs:comment "Technical concept explained" .
+
+:Problem a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "Problem" ;
+    rdfs:comment "Issue or challenge" .
+
+:Solution a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "Solution" ;
+    rdfs:comment "Proposed solution or approach" .
+
+:Decision a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "Decision" ;
+    rdfs:comment "Decision made during conversation" .
+
+# Object Properties (12 total) - Relationships between entities
+:ASKS a owl:ObjectProperty ;
+    rdfs:domain :User ;
+    rdfs:range :Question ;
+    rdfs:label "ASKS" ;
+    rdfs:comment "User poses a question" .
+
+:HAS_TOPIC a owl:ObjectProperty ;
+    rdfs:domain :Question ;
+    rdfs:range :Topic ;
+    rdfs:label "HAS_TOPIC" ;
+    rdfs:comment "Question relates to a topic" .
+
+:MENTIONS a owl:ObjectProperty ;
+    rdfs:domain :Question ;
+    rdfs:range :Concept ;
+    rdfs:label "MENTIONS" ;
+    rdfs:comment "Question references a concept" .
+
+:DESCRIBES a owl:ObjectProperty ;
+    rdfs:domain :Question ;
+    rdfs:range :Problem ;
+    rdfs:label "DESCRIBES" ;
+    rdfs:comment "Question describes a problem" .
+
+:ADDRESSES a owl:ObjectProperty ;
+    rdfs:domain :Answer ;
+    rdfs:range :Question ;
+    rdfs:label "ADDRESSES" ;
+    rdfs:comment "Answer responds to question" .
+
+:PROPOSES a owl:ObjectProperty ;
+    rdfs:domain :Answer ;
+    rdfs:range :Solution ;
+    rdfs:label "PROPOSES" ;
+    rdfs:comment "Answer suggests a solution" .
+
+:EXPLAINS a owl:ObjectProperty ;
+    rdfs:domain :Answer ;
+    rdfs:range :Concept ;
+    rdfs:label "EXPLAINS" ;
+    rdfs:comment "Answer explains a concept" .
+
+:SOLVES a owl:ObjectProperty ;
+    rdfs:domain :Solution ;
+    rdfs:range :Problem ;
+    rdfs:label "SOLVES" ;
+    rdfs:comment "Solution addresses problem" .
+
+:RELATED_TO a owl:ObjectProperty ;
+    rdfs:domain :Topic ;
+    rdfs:range :Topic ;
+    rdfs:label "RELATED_TO" ;
+    rdfs:comment "Topics are related" .
+
+:FOLLOWS_UP a owl:ObjectProperty ;
+    rdfs:domain :Question ;
+    rdfs:range :Question ;
+    rdfs:label "FOLLOWS_UP" ;
+    rdfs:comment "Question continues previous discussion" .
+
+:IMPACTS a owl:ObjectProperty ;
+    rdfs:domain :Decision ;
+    rdfs:range :Topic ;
+    rdfs:label "IMPACTS" ;
+    rdfs:comment "Decision affects a topic area" .
+
+:PREREQUISITE_FOR a owl:ObjectProperty ;
+    rdfs:domain :Concept ;
+    rdfs:range :Concept ;
+    rdfs:label "PREREQUISITE_FOR" ;
+    rdfs:comment "Concept builds on another concept" .

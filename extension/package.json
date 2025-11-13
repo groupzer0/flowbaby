@@ -2,7 +2,7 @@
   "name": "cognee-chat-memory",
   "displayName": "Cognee Chat Memory",
   "description": "Automatic memory for GitHub Copilot chat using Cognee knowledge graphs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "cognee",
   "icon": "media/icon.png",
   "engines": {
@@ -29,6 +29,32 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "cognee.captureMessage",
+        "title": "📥 Capture to Cognee Memory",
+        "category": "Cognee"
+      },
+      {
+        "command": "cognee.toggleMemory",
+        "title": "Toggle Memory",
+        "category": "Cognee"
+      },
+      {
+        "command": "cognee.clearMemory",
+        "title": "Clear Workspace Memory",
+        "category": "Cognee"
+      }
+    ],
+
+    "keybindings": [
+      {
+        "command": "cognee.captureMessage",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c",
+        "when": "editorTextFocus || chatIsVisible"
+      }
+    ],
     "chatParticipants": [
       {
         "id": "cognee-memory",
@@ -72,6 +98,11 @@
           "minimum": 0,
           "maximum": 1,
           "description": "Weight for importance scoring (0-1)"
+        },
+        "cogneeMemory.autoIngestConversations": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "**Experimental**: Automatically capture @cognee-memory conversations for feedback loop. Currently disabled by default due to Cognee 0.4.0 file storage issues. Enable to test self-improving memory (may fail intermittently)."
         },
         "cogneeMemory.pythonPath": {
           "type": "string",

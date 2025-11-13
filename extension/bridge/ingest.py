@@ -71,43 +71,38 @@ async def ingest_conversation(
         # 1. Generate same unique dataset name as init.py (using canonical path)
         dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
         
-        # 2. Load ontology configuration independently (ingest.py is subprocess, no shared state)
-        ontology_path = Path(__file__).parent / 'ontology.json'
-        if not ontology_path.exists():
-            return {
-                'success': False,
-                'error': f'Ontology file not found: {ontology_path}'
-            }
+        # 2. Load ontology file path (OWL/Turtle format)
+        ontology_path = Path(__file__).parent / 'ontology.ttl'
         
-        # IMPORTANT: Each script must independently load the ontology file
-        # No configuration is passed between init.py and ingest.py
-        # This is required because each Python invocation is a separate process
-        
-        # Create Config object with ontology resolver
-        # Based on source code analysis: Use RDFLibOntologyResolver directly
-        from cognee.modules.ontology.ontology_config import Config
-        from cognee.modules.ontology.rdf_xml.RDFLibOntologyResolver import RDFLibOntologyResolver
-        from cognee.modules.ontology.matching_strategies import FuzzyMatchingStrategy
-        
-        ontology_resolver = RDFLibOntologyResolver(
-            ontology_file=str(ontology_path),
-            matching_strategy=FuzzyMatchingStrategy()
-        )
-        
-        config: Config = {
-            "ontology_config": {
-                "ontology_resolver": ontology_resolver
-            }
-        }
+        # Validate ontology exists and is parseable
+        ontology_valid = False
+        if ontology_path.exists():
+            try:
+                # Validate RDFLib can parse the ontology
+                from rdflib import Graph
+                g = Graph()
+                g.parse(str(ontology_path), format='turtle')
+                ontology_valid = True
+                # Log success for debugging
+                print(f"Ontology loaded successfully: {ontology_path}", file=sys.stderr)
+            except Exception as e:
+                # Log warning but continue without ontology (graceful degradation)
+                print(f"Warning: Ontology parse failed, proceeding without ontology grounding: {e}", file=sys.stderr)
+                ontology_valid = False
+        else:
+            print(f"Warning: Ontology file not found at {ontology_path}, proceeding without ontology grounding", file=sys.stderr)
         
         # Generate timestamp
         timestamp = datetime.now().isoformat()
         
-        # Format conversation with embedded metadata
-        # Include metadata in text so Cognee can extract it
-        conversation = f"""[Timestamp: {timestamp}] [Importance: {importance}] [Type: copilot_chat]
-User: {user_message}
-Assistant: {assistant_message}"""
+        # Format conversation with simplified conversational prose format
+        # Analysis Finding 3: Natural language format works best for Cognee's LLM extraction
+        # Avoid bracketed metadata like [Timestamp: ...] which dilutes extraction signals
+        conversation = f"""User asked: {user_message}
+
+Assistant answered: {assistant_message}
+
+Metadata: timestamp={timestamp}, importance={importance}"""
         
         # 3. Add data to this workspace's dataset
         await cognee.add(
@@ -115,11 +110,13 @@ Assistant: {assistant_message}"""
             dataset_name=dataset_name  # Tag with workspace-specific dataset
         )
         
-        # 4. Cognify with ontology, scoped to this workspace's dataset only
-        await cognee.cognify(
-            datasets=[dataset_name],  # Process only this workspace's data
-            config=config  # Apply chat ontology (loaded above)
-        )
+        # 4. Cognify with ontology_file_path parameter (recommended approach per Cognee docs)
+        # Only pass ontology if validation succeeded; otherwise graceful degradation
+        cognify_kwargs = {'datasets': [dataset_name]}
+        if ontology_valid:
+            cognify_kwargs['ontology_file_path'] = str(ontology_path)
+        
+        await cognee.cognify(**cognify_kwargs)
         
         # Note: This ensures the chat ontology is only applied to this workspace's data.
         # Tutorial data (with different dataset_name) remains separate and can use its own ontology.

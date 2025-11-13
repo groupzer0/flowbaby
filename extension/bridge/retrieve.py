@@ -115,7 +115,15 @@ async def retrieve_context(
         # 1. Generate same unique dataset name as init.py and ingest.py (using canonical path)
         dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
         
-        # 2. Search within this workspace's dataset only
+        # 2. Ensure database is set up (handles case where no data has been ingested yet)
+        try:
+            await cognee.prune.prune_data()  # Check if database exists
+        except Exception as e:
+            # If database doesn't exist, call setup() to create it
+            if "database has not been created" in str(e).lower():
+                await cognee.setup()
+        
+        # 3. Search within this workspace's dataset only
         search_results = await cognee.search(
             query_type=SearchType.GRAPH_COMPLETION,
             query_text=query,
@@ -125,6 +133,16 @@ async def retrieve_context(
         
         # This ensures search results only contain data from this workspace,
         # not from other workspaces or tutorial data.
+        
+        # DEBUG: Log search results structure to understand what Cognee returns
+        import sys
+        print(f"DEBUG: search_results type: {type(search_results)}", file=sys.stderr)
+        print(f"DEBUG: search_results length: {len(search_results) if search_results else 0}", file=sys.stderr)
+        if search_results:
+            print(f"DEBUG: first result type: {type(search_results[0])}", file=sys.stderr)
+            print(f"DEBUG: first result: {search_results[0]}", file=sys.stderr)
+            if hasattr(search_results[0], '__dict__'):
+                print(f"DEBUG: first result attributes: {search_results[0].__dict__}", file=sys.stderr)
         
         # If no results, return empty
         if not search_results:

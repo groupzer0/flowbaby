@@ -5,16 +5,48 @@ All notable changes to the Cognee Chat Memory extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - TBD
+## [0.2.0] - 2025-11-13
 
 ### Added
+
+- **Debug Configuration**: VS Code launch.json for F5 Extension Development Host debugging
+- **Visible Build Logging**: esbuild now shows compilation progress and errors (logLevel: 'info')
+- **Developer Documentation**: Enhanced SETUP.md and README.md with debugging workflow and troubleshooting guidance
+
+### Fixed
+
+- **Extension Activation Failure**: Missing .vscode/launch.json prevented Extension Development Host from loading the extension
+- **Silent Build Errors**: Build failures were hidden with logLevel: 'silent', now visible for rapid debugging
+
+### Implementation 008 Features (from v0.1.0 foundation)
+
+#### Added
+
+- **Keyboard Shortcut Capture (Ctrl+Alt+C / Cmd+Alt+C)**: Selective conversation capture via keyboard shortcut + input box workflow
+- **@cognee-memory Chat Participant**: Explicit memory-augmented chat participant for context retrieval and informed responses
+- **Command Palette Capture**: Alternative capture method via "Cognee: Capture to Memory" command
+- **Toggle Memory Command**: Quick on/off toggle via "Cognee: Toggle Memory" command
+- **Clear Memory Command**: Delete workspace memory via "Cognee: Clear Workspace Memory" command (with confirmation)
+- **OWL/Turtle Ontology**: Chat-specific ontology file (`ontology.ttl`) with 8 classes and 12 object properties for grounded entity extraction
+- **Conversational Ingestion Format**: Simplified natural prose format for better LLM extraction quality
+- **Step 6 Feedback Loop (Experimental)**: Optional automatic capture of @cognee-memory conversations (disabled by default due to Cognee 0.4.0 bug)
+- **Graceful Degradation**: Retrieval failures show warning but participant continues without context
+- **Configuration Setting**: `cogneeMemory.autoIngestConversations` for experimental feedback loop control
+
+### Changed
+
+- **User Workflow**: Shifted from automatic global capture to selective, user-controlled keyboard shortcut capture
+- **Participant Model**: `@cognee-memory` requires explicit invocation; no passive injection into other participants
+- **Ontology Integration**: Updated `ingest.py` to use `ontology_file_path` parameter with RDFLib validation and graceful fallback
+- **Ingestion Format**: Changed from bracketed metadata format to conversational prose for improved extraction
+
+### Improved
 
 - **Automatic Python Interpreter Detection**: Extension now auto-detects workspace `.venv` virtual environment, eliminating need for manual `cogneeMemory.pythonPath` configuration in most cases
 - **Enhanced Error Messages**: Python errors (missing packages, API key issues) now visible in Output Channel with actionable troubleshooting hints
 - **Workspace-Relative Execution**: Bridge scripts run from workspace context for reliable path resolution
-
-### Improved
-
+- **Context Display**: Retrieved memories formatted with clear markdown previews ("📚 Retrieved N memories")
+- **Performance Logging**: Retrieval timing logged to Output Channel for monitoring (<1000ms P95 target)
 - Error logs sanitize sensitive data (API keys, tokens) before display
 - Configuration documentation clarifies when manual Python path setting is needed
 - Structured error extraction from Python subprocess stdout
@@ -25,6 +57,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Generic "exit code 1" errors replaced with specific failure reasons
 - Missing `cognee` package now clearly diagnosed instead of silent failure
 - Python interpreter mismatch no longer requires manual configuration for standard `.venv` setups
+- Keyboard shortcut comment typo in code (Ctrl+Shift+M → Ctrl+Alt+C)
+
+### Known Issues
+
+- **Cognee 0.4.0 File Hashing Bug**: Intermittent ingestion failures for repeated identical content affect Step 6 auto-ingestion; workaround via `cogneeMemory.autoIngestConversations=false` (default)
+- **Manual Capture Workflow**: Keyboard shortcut requires copy-paste; cannot extract message from chat UI directly (VS Code API limitation)
+- **Explicit Participant Invocation**: Must type `@cognee-memory`; cannot inject context into other participants (API limitation)
+
+### Technical Implementation
+
+- 6-step participant flow: retrieval → format display → augment prompt → generate response → capture conversation (conditional)
+- RDFLib ontology parsing with graceful fallback to no-ontology mode
+- Asynchronous fire-and-forget ingestion (non-blocking)
+- Comprehensive integration test suite (27 passing tests)
+- VS Code Chat API v1.105+ compatibility
 
 ## [0.1.0] - 2025-11-10
 

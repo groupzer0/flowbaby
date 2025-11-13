@@ -238,12 +238,13 @@ export class CogneeClient {
         });
 
         try {
+            // Use 30-second timeout for ingestion (Cognee setup + processing takes time)
             const result = await this.runPythonScript('ingest.py', [
                 this.workspacePath,
                 userMessage,
                 assistantMessage,
                 importance.toString()
-            ]);
+            ], 30000);
 
             const duration = Date.now() - startTime;
 
@@ -293,6 +294,7 @@ export class CogneeClient {
         });
 
         try {
+            // Use 15-second timeout for retrieval (semantic search can be slow)
             const result = await this.runPythonScript('retrieve.py', [
                 this.workspacePath,
                 query,
@@ -300,7 +302,7 @@ export class CogneeClient {
                 this.maxContextTokens.toString(),
                 this.recencyWeight.toString(),
                 this.importanceWeight.toString()
-            ]);
+            ], 15000);
 
             const duration = Date.now() - startTime;
 
@@ -414,11 +416,13 @@ export class CogneeClient {
      * 
      * @param scriptName Script filename (e.g., 'init.py')
      * @param args Command-line arguments
+     * @param timeoutMs Timeout in milliseconds (default: 10000ms, use 30000ms for ingestion)
      * @returns Promise<CogneeResult> - Parsed JSON result
      */
     private async runPythonScript(
         scriptName: string,
-        args: string[]
+        args: string[],
+        timeoutMs: number = 10000
     ): Promise<CogneeResult> {
         const scriptPath = path.join(this.bridgePath, scriptName);
         const sanitizedArgs = args.map((arg, i) => 
@@ -502,6 +506,15 @@ export class CogneeClient {
                     return;
                 }
 
+                // Log stderr even on success (for debug output)
+                if (stderr && stderr.trim()) {
+                    const sanitizedStderr = this.sanitizeOutput(stderr);
+                    this.log('DEBUG', 'Python script stderr output', {
+                        script: scriptName,
+                        stderr: sanitizedStderr
+                    });
+                }
+
                 // Parse JSON output (success path)
                 try {
                     const result = JSON.parse(stdout) as CogneeResult;
@@ -528,15 +541,15 @@ export class CogneeClient {
                 reject(new Error(`Failed to spawn Python: ${error.message}`));
             });
 
-            // Set 10-second timeout
+            // Set timeout (configurable per operation)
             const timeout = setTimeout(() => {
                 python.kill();
                 this.log('ERROR', 'Python script timeout', {
                     script: scriptName,
-                    timeout: 10000
+                    timeout: timeoutMs
                 });
-                reject(new Error(`Python script timeout after 10 seconds`));
-            }, 10000);
+                reject(new Error(`Python script timeout after ${timeoutMs/1000} seconds`));
+            }, timeoutMs);
 
             // Clear timeout on close
             python.on('close', () => {
@@ -592,6 +605,32 @@ export class CogneeClient {
         }
 
         return sanitized;
+    }
+
+    /**
+     * Clear workspace memory (delete .cognee directory)
+     * 
+     * @returns Promise<boolean> - true if cleared successfully
+     */
+    async clearMemory(): Promise<boolean> {
+        try {
+            const cogneePath = path.join(this.workspacePath, '.cognee');
+            
+            if (fs.existsSync(cogneePath)) {
+                // Recursively delete .cognee directory
+                fs.rmSync(cogneePath, { recursive: true, force: true });
+                this.log('INFO', 'Workspace memory cleared', { path: cogneePath });
+                return true;
+            } else {
+                this.log('WARN', 'No memory to clear', { path: cogneePath });
+                return true;
+            }
+        } catch (error) {
+            this.log('ERROR', 'Failed to clear memory', {
+                error: error instanceof Error ? error.message : String(error)
+            });
+            return false;
+        }
     }
 
     /**
