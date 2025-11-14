@@ -105,10 +105,27 @@ Assistant answered: {assistant_message}
 Metadata: timestamp={timestamp}, importance={importance}"""
         
         # 3. Add data to this workspace's dataset
-        await cognee.add(
-            data=[conversation],
-            dataset_name=dataset_name  # Tag with workspace-specific dataset
-        )
+        # Prefer modern API using 'datasets'; fall back to legacy names if needed.
+        try:
+            await cognee.add(
+                data=[conversation],
+                datasets=[dataset_name]
+            )
+        except TypeError as e:
+            # Retry with legacy kwarg 'dataset_name' or 'dataset'
+            if 'unexpected keyword argument' in str(e):
+                try:
+                    await cognee.add(
+                        data=[conversation],
+                        dataset_name=dataset_name
+                    )
+                except TypeError:
+                    await cognee.add(
+                        data=[conversation],
+                        dataset=dataset_name
+                    )
+            else:
+                raise
         
         # 4. Cognify with ontology_file_path parameter (recommended approach per Cognee docs)
         # Only pass ontology if validation succeeded; otherwise graceful degradation
@@ -116,7 +133,20 @@ Metadata: timestamp={timestamp}, importance={importance}"""
         if ontology_valid:
             cognify_kwargs['ontology_file_path'] = str(ontology_path)
         
-        await cognee.cognify(**cognify_kwargs)
+        # Attempt cognify; if running against an older Cognee that doesn't
+        # support the 'ontology_file_path' kwarg, retry without it.
+        try:
+            await cognee.cognify(**cognify_kwargs)
+        except TypeError as e:
+            # Fallback for older versions: remove unsupported kwarg and retry
+            if 'unexpected keyword argument' in str(e) and 'ontology_file_path' in str(e):
+                if 'ontology_file_path' in cognify_kwargs:
+                    cognify_kwargs.pop('ontology_file_path', None)
+                    print("Info: 'ontology_file_path' not supported by this Cognee version; retrying without ontology.", file=sys.stderr)
+                await cognee.cognify(**cognify_kwargs)
+            else:
+                # Re-raise if it's a different TypeError
+                raise
         
         # Note: This ensures the chat ontology is only applied to this workspace's data.
         # Tutorial data (with different dataset_name) remains separate and can use its own ontology.
