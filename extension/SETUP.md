@@ -60,10 +60,12 @@ pip list | grep cognee
 Create a `.env` file in your **workspace root**:
 
 ```env
-OPENAI_API_KEY=sk-your-key-here
+LLM_API_KEY=sk-your-key-here
 ```
 
 **Important**: The `.env` file should be in the workspace root, NOT in the extension directory.
+
+**Migration Note**: If upgrading from v0.2.0, rename `OPENAI_API_KEY` to `LLM_API_KEY` in your `.env` file.
 
 ---
 
@@ -131,7 +133,7 @@ You must open the `extension/` folder in VS Code, not the repository root. The `
    - File → Open Folder
    - Select a workspace that has:
      - ✅ `.venv/` directory with cognee installed
-     - ✅ `.env` file with OPENAI_API_KEY
+     - ✅ `.env` file with LLM_API_KEY
 
 ### Verify Workspace Setup
 
@@ -172,14 +174,16 @@ If you see errors instead, check the "Common Issues" section below.
 
 ## Common Issues
 
-### "OPENAI_API_KEY not found"
+### "LLM_API_KEY not found"
 
 **Cause**: Missing or incorrectly placed `.env` file
 
 **Solution**: 
 1. Create `.env` file in your **workspace root** (not extension directory)
-2. Add: `OPENAI_API_KEY=sk-your-key-here`
+2. Add: `LLM_API_KEY=sk-your-key-here`
 3. Reload the Extension Development Host window (Ctrl+R or Cmd+R)
+
+**Note**: As of v0.2.1, `OPENAI_API_KEY` is no longer supported. Use `LLM_API_KEY` to align with Cognee 0.4.0.
 
 ### "Failed to import required module: No module named 'cognee'"
 
@@ -341,7 +345,7 @@ Check that:
 **This is expected!** Each workspace needs its own setup. If extension works in workspace A but not workspace B:
 
 1. Ensure workspace B has `.venv/` with cognee installed
-2. Ensure workspace B has `.env` with OPENAI_API_KEY
+2. Ensure workspace B has `.env` with LLM_API_KEY
 3. Check Output Channel in workspace B for specific errors
 
 ### Accidentally Committed .venv to Git
@@ -384,7 +388,7 @@ source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install cognee python-dotenv
 
 # 4. Add API key
-echo "OPENAI_API_KEY=sk-your-key-here" > .env
+echo "LLM_API_KEY=sk-your-key-here" > .env
 
 # 5. Update .gitignore (IMPORTANT - avoids committing 10k+ files!)
 echo ".venv/" >> .gitignore

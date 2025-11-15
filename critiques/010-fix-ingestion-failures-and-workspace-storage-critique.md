@@ -3,17 +3,17 @@
 **Plan**: `planning/010-fix-ingestion-failures-and-workspace-storage.md`  
 **Analysis**: `analysis/010-v0.2.0-storage-and-retrieval-behavior-analysis.md`  
 **Critic Review Date**: 2025-11-14  
-**Status**: Initial Review
+**Status**: Revision 3 - Post-Testing-Infrastructure Update
 
 ---
 
 ## Value Statement Assessment
 
-✅ **PASS** - The value statement is properly formatted and deliverable:
+✅ **PASS** - The value statement is properly formatted and deliverable, and remains valid after the testing-infrastructure update:
 
 - Format: "As a VS Code extension user, I want Cognee Memory v0.2.0 to store and retrieve my relevant information reliably in my workspace, so that the @cognee-memory participant can answer questions with accurate, fast context."
 - Outcome-focused: Yes - focuses on reliable storage/retrieval and accurate context, not implementation details
-- Deliverable by plan: Yes - all 7 tasks directly address the root causes preventing reliable storage/retrieval
+- Deliverable by plan: Yes - Tasks 1–8 now directly support delivering reliable storage/retrieval, including the testing infrastructure needed to verify the behavior.
 
 ## Overview
 
@@ -28,18 +28,18 @@ Plan 010 addresses critical ingestion failures causing 30s timeouts and file-not
 
 ## Architectural Alignment
 
-✅ **STRONG ALIGNMENT** - Plan fits existing architecture well:
+✅ **STRONG ALIGNMENT** - Plan (including testing updates) fits existing architecture well:
 
-1. **Bridge pattern consistency**: Changes confined to Python bridge scripts (`init.py`, `ingest.py`), consistent with extension's architecture where Python handles Cognee interaction
-2. **Workspace isolation pattern**: Leverages existing workspace-scoped approach (dataset names already use canonical paths); extends to storage directories
-3. **Error handling philosophy**: Shift from silent fallbacks to explicit errors aligns with extension's structured logging to Output Channel
-4. **Configuration pattern**: `.env` file usage already established; plan extends to require `LLM_API_KEY` matching Cognee 0.4.0 conventions
+1. **Bridge pattern consistency**: Functional changes remain confined to Python bridge scripts (`init.py`, `ingest.py`) and docs; the new testing work (Task 7) adds a `tests/` subtree and pytest configuration under `extension/bridge`, which is consistent with standard Python-module structure and does not alter runtime architecture.
+2. **Workspace isolation pattern**: Still leverages the workspace-scoped approach for Cognee storage; the testing plan mirrors this by proposing temporary workspace paths (e.g., `WORKSPACE_PATH=/tmp/test-workspace`) so tests exercise the same isolation behavior without polluting real workspaces.
+3. **Error handling philosophy**: The plan continues to favor explicit error surfacing; the new tests explicitly validate error-path behavior and structured logging, which reinforces rather than changes the design.
+4. **Configuration pattern**: `.env` usage remains the primary configuration mechanism. The testing infrastructure introduces `.env.test`/CI env vars, which is a conventional extension of the same pattern.
 
-**No architectural divergence detected.**
+**No architectural divergence detected from adding testing infrastructure.**
 
 ## Scope Assessment
 
-✅ **APPROPRIATE SCOPE** - Plan is focused and complete:
+✅ **APPROPRIATE SCOPE** - Plan remains focused and now more complete:
 
 **In scope (correct)**:
 
@@ -47,20 +47,21 @@ Plan 010 addresses critical ingestion failures causing 30s timeouts and file-not
 - API alignment: correct parameter names for Cognee 0.4.0
 - Error clarity: remove fallbacks, surface TypeErrors
 - Breaking change documentation: CHANGELOG, README, SETUP
+- Testing infrastructure: pytest-based unit tests and manual harness (Task 7) and concrete validation work (Task 8)
 
-**Potential scope gaps addressed**:
+**Potential scope gaps addressed by the update**:
 
-- Task 7 delegates testing to QA agent (correct per planner constraints)
-- Documentation updates included (Task 6)
-- Migration consideration documented in Task 2 (Option A vs B)
+- Original plan depended on QA to validate ingestion behavior but did not specify how the Python bridge would be testable; the new Testing Infrastructure Requirements and Task 7 close this gap without dictating QA’s detailed process.
+- The new `planning/010-testing-infrastructure-update.md` correctly frames the added work as enabling QA, not defining their test cases.
 
 **Edge cases covered**:
 
 - Missing `LLM_API_KEY` handled with clear error messages
 - Ontology configuration via `.env` documented
-- Directory validation question raised in Task 1
+- Directory validation question resolved via logging, plus new tests to exercise failure modes
+- Testability edge case (bridge code being effectively “black box”) addressed by introducing a dedicated test harness.
 
-**No significant scope gaps identified.**
+**No new scope creep**: The testing work directly supports delivering and verifying the original value statement rather than expanding feature scope.
 
 ## Technical Debt Risks
 
@@ -72,17 +73,19 @@ Plan 010 addresses critical ingestion failures causing 30s timeouts and file-not
 
 ### Medium Priority Observations
 
-1. **Directory creation validation** (Task 1 open question):
-   - Plan asks: "Should we add validation that these directories were successfully created?"
-   - **Recommendation**: Trust Cognee's internal validation initially; add validation only if failures occur in practice. Defer to implementer's judgment.
+1. **Directory creation validation** (Task 1)
+   - Status: **RESOLVED / DEFERRED** in plan – the planner explicitly chooses to rely on Cognee’s internal validation and structured logging, and the new tests can be extended later if real-world failures occur.
 
-2. **Migration strategy** (Task 2 concern):
-   - Plan presents Option A (breaking change) vs Option B (one-time migration)
-   - **Recommendation**: Option A is correct - breaking changes are acceptable for v0.2.x, and automatic `.env` modification introduces complexity/risk
+2. **Migration strategy** (Task 2)
+   - Status: **RESOLVED** – the plan locks in Option A (breaking change) and documents it clearly. No change from prior review.
 
-3. **Error logging structure** (Task 5):
-   - Good addition of structured error details
-   - **Minor suggestion**: Consider if `conversation_length` should be character count or message count for clarity
+3. **Error logging structure** (Task 5)
+   - Status: **RESOLVED** – the plan clarifies that `conversation_length` is a character count, and the new testing work calls this out as a validation point.
+
+4. **Testing responsibilities boundary**
+   - Observation: The updated plan introduces quite a bit of detail in “Testing Infrastructure Requirements” and Tasks 7–8, some of which overlaps with QA’s usual domain.
+   - Impact: Moderate – there is a mild tension with planner constraints (which discourage defining test cases/QA processes), but the new content mostly describes infrastructure, file locations, and execution entrypoints rather than QA workflows.
+   - Recommendation: Treat the infrastructure-related portions (pytest dependencies, test directory layout, `npm run test:bridge`) as plan requirements, and consider any step-by-step “Test execution approach” content as guidance that QA can refine in their own artifacts. No blocking changes required.
 
 ### No Critical Technical Debt Risks Identified
 
@@ -100,24 +103,20 @@ The plan actually *reduces* technical debt by:
 
 ### Medium Priority
 
-1. **Code snippets violate planner constraints** - Status: **NEEDS ATTENTION**
-   - Description: Tasks 1-5 contain 30-60 lines of prescriptive Python code (e.g., Task 1 shows exact `cognee.config.system_root_directory()` calls with context comments, Task 3 shows full before/after code blocks)
-   - Impact: Violates planner constraint "DO NOT include implementation code in plans." While the code helps clarify intent, it constrains implementer creativity and creates brittleness if the code isn't exactly right
-   - Planner guidance: "Describe WHAT needs to be implemented, WHERE, and WHY—never prescribe HOW with actual code. Exception: Minimal pseudocode for architectural clarity only, clearly marked as **ILLUSTRATIVE ONLY**"
-   - Recommendation:
-     - **Option 1 (Preferred)**: Remove code blocks and replace with high-level descriptions: "Configure workspace-local storage by calling `cognee.config.system_root_directory()` and `data_root_directory()` with workspace-scoped paths after API key setup"
-     - **Option 2**: Keep minimal code but mark ALL snippets as **"ILLUSTRATIVE ONLY - NOT A REQUIREMENT"** per planner constraints
-     - Current state is a hybrid that falls between planner's constraints
+1. **Code snippets vs. planner constraints** - Status: **RESOLVED (still compliant)**
+   - Description: Previous issue about prescriptive Python snippets remains resolved; the new testing update also avoids concrete code, sticking to file names, dependency lists, and command examples.
+   - Impact: Planner continues to comply with "no implementation code" constraints while giving clear structure.
+   - Recommendation: None.
 
-2. **Open questions have clear answers** - Status: **RESOLVED** (answered in plan)
-   - Description: Plan raises good questions (directory validation, migration strategy, backward compatibility) but then provides clear recommendations
-   - Impact: Minimal - shows thoughtful planning
-   - Recommendation: Keep as-is; demonstrates considered decision-making
+2. **Open questions have clear answers** - Status: **RESOLVED**
+   - Description: The new `planning/010-testing-infrastructure-update.md` cleanly documents testing-related decisions (e.g., using pytest, adding a manual harness) and ties them back into the main plan.
+   - Impact: Positive – clarifies how QA will be unblocked without over-specifying QA’s own process.
+   - Recommendation: Keep as-is.
 
-3. **Test delegation to QA is correct** - Status: **VALIDATED**
-   - Description: Task 7 delegates end-to-end testing to QA agent with clear test steps
-   - Impact: Positive - respects planner constraint "DO NOT define QA processes, test cases, or test requirements"
-   - Recommendation: No change needed; proper handoff to QA
+3. **Test delegation to QA** - Status: **RESOLVED / ACCEPTABLE TENSION**
+   - Description: The expanded Testing Strategy and Task 8 describe high-level test flows and scenarios (Clear → Capture → Retrieve, latency checks, error logging). This flirts with QA territory but remains at the level of “what must be validated” rather than exact test case definitions.
+   - Impact: Acceptable – gives QA strong guidance but should not constrain their implementation.
+   - Recommendation: Future plans can keep this pattern: describe *validation goals and scenarios* but leave detailed test case design to QA artifacts.
 
 ### Low Priority / Observations
 
@@ -138,38 +137,73 @@ The plan actually *reduces* technical debt by:
 
 ## Questions for Planner
 
-1. **Code snippet policy**: Do you prefer to keep implementation code in tasks (with "ILLUSTRATIVE ONLY" markers), or replace with high-level descriptions? Current approach falls between planner constraints and practical clarity.
+All prior questions have been resolved in Revision 2 of the plan:
 
-2. **Task 2 migration decision**: You recommend Option A (breaking change). Do you want to document this as a final decision, or keep both options open for user approval before implementation?
-
-3. **Task 5 error logging**: Should `conversation_length` be character count (current) or message pair count for consistency with "ingested_chars" terminology?
+1. ✅ **Code snippet policy**: RESOLVED - All prescriptive code removed; replaced with high-level WHAT/WHERE/WHY descriptions
+2. ✅ **Task 2 migration decision**: RESOLVED - Finalized as breaking change (Option A) with clear documentation
+3. ✅ **Task 5 error logging**: RESOLVED - Conversation length explicitly defined as character count
 
 ## Recommendations
 
-### High Priority
-
-1. **Address code snippet constraint**: Either remove prescriptive code and use high-level descriptions, OR mark all code as "ILLUSTRATIVE ONLY - NOT A REQUIREMENT" per planner guidelines. Current hybrid approach creates ambiguity about implementer freedom.
-
-### Medium Priority Recommendations
-
-1. **Finalize migration strategy**: Document Task 2's Option A as the final decision in the plan (breaking change with clear docs), or explicitly state this needs user approval before implementation.
-
-2. **Consider adding rollback guidance**: Plan mentions "rollback considerations" in Process Expectations but doesn't provide them. For a breaking change, consider documenting rollback: "Users experiencing issues can revert to v0.2.0 and use `OPENAI_API_KEY` temporarily."
-
-### Low Priority Recommendations
-
-1. **Clarify ontology configuration**: Task 3 mentions "Ontology configuration will be handled via `.env`" but doesn't specify this is optional. Consider adding to Task 6 documentation: "Optional: Set `ontology_file_path=/absolute/path/to/ontology.ttl` in `.env` for custom ontologies."
+All prior recommendations have been addressed in the revised plan. No additional recommendations for this iteration.
 
 ---
 
 ## Overall Assessment
 
 **Plan Quality**: STRONG  
-**Value Delivery**: DIRECT - All tasks contribute to reliable storage/retrieval  
-**Architectural Fit**: EXCELLENT - Aligns with existing patterns  
-**Scope**: APPROPRIATE - Focused on root causes, complete edge case handling  
-**Technical Debt**: REDUCED - Removes error-masking fallbacks  
+**Value Delivery**: DIRECT - All tasks (1–8) contribute to reliable storage/retrieval and its verification  
+**Architectural Fit**: EXCELLENT - Aligns with existing patterns; testing additions are conventional  
+**Scope**: APPROPRIATE - Focused on root causes and the infrastructure needed to validate them  
+**Technical Debt**: REDUCED - Removes error-masking fallbacks and adds guardrail tests  
 
-**Primary Concern**: Code snippets violate planner's "no implementation code" constraint. This is easily resolved by either removing code or marking as "ILLUSTRATIVE ONLY."
+**Primary Concern (previous)**: Code snippets violating planner's "no implementation code" constraint – now resolved and remains compliant after testing update.
 
-**Recommendation**: **APPROVE WITH MINOR REVISIONS** - Address code snippet policy (Question 1), then proceed to implementation. Plan is well-structured, thoroughly researched, and delivers stated value directly.
+**Recommendation**: **APPROVED** - Updated plan (including testing infrastructure) is clear, complete, and architecturally aligned. It is ready for continued implementation and QA.
+
+---
+
+## Revision History
+
+### Revision 1 - 2025-11-14
+- **Plan Changes**: Initial version of Plan 010 with detailed tasks, documentation updates, and explicit test steps.
+- **Findings Addressed**: None (baseline review).
+- **New Findings**: Code snippets violating planner constraints; migration strategy choice; QA/test-plan boundary.
+- **Status Changes**: Status set to Initial Review; primary recommendation set to "APPROVE WITH MINOR REVISIONS".
+
+### Revision 2 - 2025-11-14
+- **Plan Changes**:
+   - Removed prescriptive Python code snippets from Tasks 1-5; replaced with high-level WHAT/WHERE/WHY descriptions only.
+   - Finalized migration strategy as a breaking change documented in Task 2 (Option A) and marked previous options as resolved.
+   - Added a dedicated **Testing Strategy** section that outlines expected test types, coverage expectations, and critical validation scenarios, while explicitly delegating concrete test cases to QA.
+   - Consolidated open questions into a **Resolved Questions** section with explicit decisions, including environment variable migration, directory validation, ontology validation, backward compatibility, and code snippet policy.
+- **Findings Addressed**:
+   - Code snippet constraint: Status changed from NEEDS ATTENTION to RESOLVED.
+   - Open questions: Status confirmed as RESOLVED with explicit "Resolved Questions" section.
+   - QA handoff and test planning boundary: Partially addressed by moving from prescriptive steps to Testing Strategy.
+- **New Findings**: None.
+- **Status Changes**: Overall status updated from "APPROVE WITH MINOR REVISIONS" to "APPROVED"; plan cleared for implementation.
+
+### Revision 3 - 2025-11-14
+- **Plan Changes**:
+   - Added `planning/010-testing-infrastructure-update.md` to document new Task 7 and associated Testing Infrastructure Requirements.
+   - Expanded `planning/010-fix-ingestion-failures-and-workspace-storage.md` with:
+      - Task 7 (pytest-based Python bridge testing infrastructure)
+      - Renumbered Task 8 (end-to-end ingestion validation) with explicit prerequisites and scenarios
+      - Testing Infrastructure Requirements subsection under Testing Strategy
+      - Risk 4 (testing infrastructure complexity)
+      - Updated Success Criteria and Next Steps to reflect Tasks 7–8
+      - New Resolved Question 6 (testing infrastructure decision)
+- **Findings Addressed**:
+   - QA blockage due to missing testing infrastructure: Status **RESOLVED** at planning level (plan now prescribes infrastructure for implementer to create).
+   - Clarified validation path from implementation → tests → QA.
+- **New Findings**:
+   - Mild tension with planner/QA boundary due to detailed validation description; assessed as acceptable and non-blocking.
+- **Status Changes**:
+   - Overall status remains APPROVED, now marked as "Revision 3 - Post-Testing-Infrastructure Update" to signal the plan fully incorporates QA feedback.
+
+### Final Approval - 2025-11-14
+- **User Confirmation**: User confirmed "Plan is sound and ready for implementation"
+- **Status**: APPROVED - Ready for Implementation
+- **Next Step**: Handoff to Implementer agent to execute Tasks 1-6
+- **Validation Gate**: QA agent will validate after implementation via Testing Strategy and Task 7 criteria

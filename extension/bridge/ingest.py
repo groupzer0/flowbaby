@@ -54,11 +54,11 @@ async def ingest_conversation(
             load_dotenv(env_file)
         
         # Check for API key
-        api_key = os.getenv('OPENAI_API_KEY')
+        api_key = os.getenv('LLM_API_KEY')
         if not api_key:
             return {
                 'success': False,
-                'error': 'OPENAI_API_KEY not found in environment or .env file'
+                'error': 'LLM_API_KEY not found in environment or .env file. Set LLM_API_KEY="sk-..." in your workspace .env'
             }
         
         # Import cognee
@@ -104,49 +104,15 @@ Assistant answered: {assistant_message}
 
 Metadata: timestamp={timestamp}, importance={importance}"""
         
-        # 3. Add data to this workspace's dataset
-        # Prefer modern API using 'datasets'; fall back to legacy names if needed.
-        try:
-            await cognee.add(
-                data=[conversation],
-                datasets=[dataset_name]
-            )
-        except TypeError as e:
-            # Retry with legacy kwarg 'dataset_name' or 'dataset'
-            if 'unexpected keyword argument' in str(e):
-                try:
-                    await cognee.add(
-                        data=[conversation],
-                        dataset_name=dataset_name
-                    )
-                except TypeError:
-                    await cognee.add(
-                        data=[conversation],
-                        dataset=dataset_name
-                    )
-            else:
-                raise
+        # 3. Add data to this workspace's dataset (Task 3: using correct parameter names)
+        await cognee.add(
+            data=[conversation],
+            dataset_name=dataset_name
+        )
         
-        # 4. Cognify with ontology_file_path parameter (recommended approach per Cognee docs)
-        # Only pass ontology if validation succeeded; otherwise graceful degradation
-        cognify_kwargs = {'datasets': [dataset_name]}
-        if ontology_valid:
-            cognify_kwargs['ontology_file_path'] = str(ontology_path)
-        
-        # Attempt cognify; if running against an older Cognee that doesn't
-        # support the 'ontology_file_path' kwarg, retry without it.
-        try:
-            await cognee.cognify(**cognify_kwargs)
-        except TypeError as e:
-            # Fallback for older versions: remove unsupported kwarg and retry
-            if 'unexpected keyword argument' in str(e) and 'ontology_file_path' in str(e):
-                if 'ontology_file_path' in cognify_kwargs:
-                    cognify_kwargs.pop('ontology_file_path', None)
-                    print("Info: 'ontology_file_path' not supported by this Cognee version; retrying without ontology.", file=sys.stderr)
-                await cognee.cognify(**cognify_kwargs)
-            else:
-                # Re-raise if it's a different TypeError
-                raise
+        # 4. Cognify with datasets parameter (Task 3: correct parameter, no ontology_file_path kwarg)
+        # Note: Ontology configuration should be set via .env (ontology_file_path=/path/to/file.ttl)
+        await cognee.cognify(datasets=[dataset_name])
         
         # Note: This ensures the chat ontology is only applied to this workspace's data.
         # Tutorial data (with different dataset_name) remains separate and can use its own ontology.
@@ -166,9 +132,18 @@ Metadata: timestamp={timestamp}, importance={importance}"""
             'error': f'Failed to import required module: {str(e)}'
         }
     except Exception as e:
+        # Task 5: Structured error logging with exception metadata
+        error_details = {
+            'exception_type': type(e).__name__,
+            'exception_message': str(e),
+            'dataset_name': dataset_name if 'dataset_name' in locals() else 'unknown',
+            'conversation_length': len(conversation) if 'conversation' in locals() else 0,
+            'ontology_validated': ontology_valid if 'ontology_valid' in locals() else False
+        }
+        print(f"Ingestion error details: {json.dumps(error_details, indent=2)}", file=sys.stderr)
         return {
             'success': False,
-            'error': f'Ingestion failed: {str(e)}'
+            'error': f'Ingestion failed ({type(e).__name__}): {str(e)}'
         }
 
 

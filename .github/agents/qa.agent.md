@@ -12,6 +12,10 @@ handoffs:
     agent: Implementer
     prompt: Implementation has test coverage gaps or test failures. Please address.
     send: false
+  - label: Send for Review
+    agent: Reviewer
+    prompt: Implementation is completed and QA passed. Please review. 
+    send: false
 ---
 Purpose:
 - Act as a dedicated QA specialist responsible for verifying that all code has appropriate test cases and those tests pass

@@ -22,7 +22,7 @@ Before installing the extension, ensure you have:
 - **VS Code** 1.85.0 or higher
 - **Python** 3.8+ installed and available in PATH
 - **Cognee Library** 0.3.4 installed: `pip install cognee==0.3.4`
-- **OpenAI API Key** (or compatible LLM provider) set in your environment or workspace `.env` file
+- **OpenAI API Key** (or compatible LLM provider) set as `LLM_API_KEY` in your workspace `.env` file
 
 ## Installation
 
@@ -61,13 +61,13 @@ pip install cognee==0.3.4
 Create a `.env` file in your workspace root:
 
 ```env
-OPENAI_API_KEY=sk-your-key-here
+LLM_API_KEY=sk-your-key-here
 ```
 
 Or set as an environment variable before launching VS Code:
 
 ```bash
-export OPENAI_API_KEY=sk-your-key-here
+export LLM_API_KEY=sk-your-key-here
 code .
 ```
 
@@ -206,15 +206,17 @@ Access settings via **File → Preferences → Settings → Extensions → Cogne
 
 **Common Issues**:
 
-#### 1. "OPENAI_API_KEY not found"
+#### 1. "LLM_API_KEY not found"
 
 **Solution**: Create a `.env` file in your workspace root with:
 
 ```env
-OPENAI_API_KEY=your_key_here
+LLM_API_KEY=sk-your-key-here
 ```
 
 Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
+
+**Note**: As of v0.2.1, `OPENAI_API_KEY` is no longer supported. Use `LLM_API_KEY` to align with Cognee 0.4.0.
 
 #### 2. "Python not found" or "cognee module not found"
 
@@ -263,7 +265,7 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 |---------|--------------|-------------------|
 | "Python script exited with code 1" (empty stderr) | Interpreter mismatch: `cognee` or `python-dotenv` not installed in detected Python environment | Set `cogneeMemory.pythonPath` in VS Code settings to correct interpreter (Linux/macOS: `.venv/bin/python`, Windows: `.venv\Scripts\python.exe`) |
 | "No module named 'cognee'" | Missing `cognee` package in Python environment | Install with: `pip install cognee==0.3.4` (or activate virtual environment first) |
-| "OPENAI_API_KEY not found" | Missing API key in `.env` file or environment | Create `.env` file in workspace root with valid `OPENAI_API_KEY`, then reload window |
+| "LLM_API_KEY not found" | Missing API key in `.env` file or environment | Create `.env` file in workspace root with valid `LLM_API_KEY`, then reload window |
 | Script timeout (10 seconds) | Network issues, slow LLM provider, or filesystem delay | Check network connectivity, verify LLM provider status, check Output Channel for specific operation that timed out |
 | JSON parse error in logs | Script produced non-JSON output | Report as bug. Check for conflicting print statements in bridge scripts. |
 
@@ -285,8 +287,8 @@ The extension will reinitialize on next activation, creating a fresh knowledge g
 
 - **TypeScript Extension** communicates with Python bridge scripts via subprocess calls
 - **Python Bridge Scripts** use the Cognee library for knowledge graph operations
-- **Workspace Isolation** is achieved through unique dataset identifiers (SHA1 hash of workspace path)
-- **Data Storage** is in Cognee's global database (typically `~/.local/share/cognee`), logically isolated by dataset
+- **Workspace Isolation** is achieved through unique dataset identifiers (SHA1 hash of workspace path) and workspace-local storage directories
+- **Data Storage** is in workspace-local directories (`.cognee_system/` and `.cognee_data/`) created in each workspace root (v0.2.1+)
 - **Ontology** defines chat-specific entities: User, Question, Answer, Topic, Concept, Problem, Solution, Decision
 
 **Data Flow**:
@@ -312,15 +314,14 @@ The extension will reinitialize on next activation, creating a fresh knowledge g
 
 - **Local-Only Operation** - All data stays on your local machine; no cloud services involved
 - **No Telemetry** - The extension does not collect analytics or usage data
-- **Workspace Isolation** - Each workspace has isolated memory; no cross-project data leakage
+- **Workspace Isolation** - Each workspace has isolated memory in its own directories; no cross-project data leakage
 - **API Key Security** - Your API key is never logged or transmitted except to your configured LLM provider
-- **Data Location** - Memory is stored in Cognee's database (typically `~/.local/share/cognee`)
+- **Data Location** - Memory is stored in workspace-local directories: `.cognee_system/` (system data) and `.cognee_data/` (knowledge graph data)
 
-To completely remove all extension data:
+To completely remove all extension data from a workspace:
 
 ```bash
-rm -rf ~/.local/share/cognee
-rm -rf .cognee/  # In each workspace
+rm -rf .cognee/ .cognee_system/ .cognee_data/  # In workspace root
 ```
 
 ## Known Limitations

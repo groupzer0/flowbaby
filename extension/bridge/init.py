@@ -49,11 +49,11 @@ async def initialize_cognee(workspace_path: str) -> dict:
             load_dotenv(env_file)
         
         # Check for API key
-        api_key = os.getenv('OPENAI_API_KEY')
+        api_key = os.getenv('LLM_API_KEY')
         if not api_key:
             return {
                 'success': False,
-                'error': 'OPENAI_API_KEY not found in environment or .env file'
+                'error': 'LLM_API_KEY not found in environment or .env file. Set LLM_API_KEY="sk-..." in your workspace .env'
             }
         
         # Import cognee
@@ -62,6 +62,10 @@ async def initialize_cognee(workspace_path: str) -> dict:
         # Configure Cognee with API key
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
+        
+        # Configure workspace-local storage directories (Task 1)
+        cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
+        cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
         
         # 1. Generate unique dataset name for this workspace using canonical path
         dataset_name, workspace_path_str = generate_dataset_name(workspace_path)

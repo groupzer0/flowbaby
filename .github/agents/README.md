@@ -71,7 +71,7 @@ This repository uses a structured multi-agent workflow system with **9 specializ
 
 ┌─────────────┐         ┌─────────────┐
 │  Architect  │         │ Escalation  │
-│(architecture│         │(escalations)│
+│(architecture)│        │(escalations)│
 └─────────────┘         └─────────────┘
   Invoked for              Invoked when
   architectural            agents reach

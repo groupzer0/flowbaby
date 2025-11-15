@@ -14,7 +14,7 @@ handoffs:
     send: false
   - label: Approve for Implementation
     agent: Implementer
-    prompt: Plan is sound and ready for implementation.
+    prompt: Plan is sound and ready for implementation. Please begin implementation now. 
     send: false
 ---
 Purpose:
