@@ -17,6 +17,7 @@ Returns JSON to stdout:
 """
 
 import asyncio
+import io
 import json
 import os
 import sys
@@ -61,8 +62,21 @@ async def ingest_conversation(
                 'error': 'LLM_API_KEY not found in environment or .env file. Set LLM_API_KEY="sk-..." in your workspace .env'
             }
         
-        # Import cognee
-        import cognee
+        # Redirect stdout to suppress Cognee's print statements
+        # (e.g., "User X has registered") that break JSON parsing
+        old_stdout = sys.stdout
+        sys.stdout = sys.stderr
+        
+        try:
+            # Import cognee (may print registration messages)
+            import cognee
+        finally:
+            # Restore stdout for our JSON response
+            sys.stdout = old_stdout
+        
+        # Configure workspace-local storage directories BEFORE any other cognee operations
+        cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
+        cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
         
         # Configure Cognee with API key
         cognee.config.set_llm_api_key(api_key)

@@ -65,7 +65,7 @@ Verify all tests pass:
 ### Package Extension
 
 ```bash
-vsce package
+npm run package
 ```
 
 Verify:
@@ -74,7 +74,28 @@ Verify:
 - [ ] File size is reasonable (<5 MB)
 - [ ] No warnings during packaging
 
-### Validate VSIX Contents
+### Automated VSIX Verification (NEW - Plan 012)
+
+Run automated verification script:
+
+```bash
+npm run verify:vsix
+```
+
+**This step is critical** - it prevents packaging regressions like the v0.2.1 ontology.ttl issue.
+
+Verify:
+
+- [ ] All required files present and non-empty
+- [ ] No excluded files accidentally included
+- [ ] Package metadata valid (name, version, engines)
+- [ ] Script exits with code 0 (success)
+
+**Rationale**: See `agent-output/planning/012-fix-initialization-regression.md` for context on why this step was added.
+
+### Manual VSIX Contents Check (Optional - verify:vsix should catch issues)
+
+If you want to manually inspect:
 
 ```bash
 unzip -l cognee-chat-memory-X.Y.Z.vsix
@@ -83,8 +104,8 @@ unzip -l cognee-chat-memory-X.Y.Z.vsix
 Confirm these files are included:
 
 - [ ] `extension/dist/extension.js` (production bundle)
-- [ ] `extension/bridge/*.py` (all Python scripts)
-- [ ] `extension/bridge/ontology.json`
+- [ ] `extension/bridge/*.py` (all Python scripts including ontology_provider.py)
+- [ ] `extension/bridge/ontology.ttl` (NOT ontology.json - TTL is canonical format)
 - [ ] `extension/bridge/requirements.txt`
 - [ ] `extension/media/icon.png`
 - [ ] `extension/package.json`
@@ -103,12 +124,19 @@ Confirm these files are **NOT** included:
 
 ## Test Installation
 
-### Clean VS Code Instance
+### Clean VS Code Instance (CRITICAL - Plan 012)
 
-Test in a clean environment:
+Test in a clean environment to catch initialization regressions:
 
 ```bash
 code --disable-extensions
+```
+
+**Before installation, clean up any existing state**:
+
+```bash
+# Remove workspace-local Cognee directories
+rm -rf .cognee/ .cognee_system/ .cognee_data/
 ```
 
 Install from VSIX:
@@ -117,6 +145,11 @@ Install from VSIX:
 - [ ] Select `cognee-chat-memory-X.Y.Z.vsix`
 - [ ] Extension appears in Extensions list
 - [ ] No installation errors
+- [ ] **CRITICAL**: Extension initializes successfully (check Output Channel)
+- [ ] **CRITICAL**: Ontology loads without "file not found" errors
+- [ ] **CRITICAL**: API key guidance references `LLM_API_KEY` (not deprecated `OPENAI_API_KEY`)
+
+**Rationale**: v0.2.1 failed fresh installs due to missing ontology.ttl. This step verifies packaging is correct. See `agent-output/planning/012-fix-initialization-regression.md` for context.
 
 ### Functional Testing
 

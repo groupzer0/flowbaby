@@ -43,9 +43,9 @@ export async function activate(_context: vscode.ExtensionContext) {
             const outputChannel = vscode.window.createOutputChannel('Cognee Memory');
             outputChannel.appendLine('Failed to initialize Cognee. Common issues:');
             outputChannel.appendLine('');
-            outputChannel.appendLine('1. Missing OpenAI API Key:');
+            outputChannel.appendLine('1. Missing LLM API Key:');
             outputChannel.appendLine('   - Create a .env file in your workspace root');
-            outputChannel.appendLine('   - Add: OPENAI_API_KEY=your_key_here');
+            outputChannel.appendLine('   - Add: LLM_API_KEY=your_key_here');
             outputChannel.appendLine('');
             outputChannel.appendLine('2. Missing Python dependencies:');
             outputChannel.appendLine('   - Ensure cognee and python-dotenv are installed');

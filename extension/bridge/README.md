@@ -18,6 +18,57 @@ The extension spawns Python scripts as child processes, passing arguments via co
 
 ## Scripts
 
+### `ontology_provider.py`
+**Purpose**: Load and validate the ontology.ttl file for Cognee knowledge graph configuration
+
+**Usage** (as module):
+```python
+from ontology_provider import load_ontology, OntologyLoadError
+
+try:
+    ontology = load_ontology()
+    print(f"Loaded {len(ontology['entities'])} entities")
+except OntologyLoadError as e:
+    print(f"Failed to load ontology: {e}")
+```
+
+**Usage** (CLI testing):
+```bash
+python ontology_provider.py
+```
+
+**Behavior**:
+1. Locates `ontology.ttl` relative to bridge directory (extension/bridge/ontology.ttl)
+2. Validates file exists, is readable, and non-empty
+3. Parses TTL (Turtle RDF) format using `rdflib.Graph().parse()`
+4. Extracts entity classes (owl:Class instances) and relationships (owl:ObjectProperty)
+5. Validates expected RDF/OWL namespaces are present
+6. Returns structured ontology data
+
+**Returns**:
+```python
+{
+    'entities': ['User', 'Question', 'Answer', 'Topic', ...],
+    'relationships': ['asks', 'answers', 'relatesTo', ...],
+    'triple_count': 124,
+    'raw_graph': <rdflib.Graph object>,
+    'source_file': '/path/to/ontology.ttl'
+}
+```
+
+**Error Handling**:
+Raises `OntologyLoadError` with descriptive messages for:
+- Missing rdflib library
+- File not found
+- Empty file
+- Parse errors (invalid Turtle syntax)
+- Empty graph (no triples)
+- Missing expected namespaces
+
+**Format Note**: As of v0.2.2, `ontology.ttl` (Turtle RDF) is the canonical format. The legacy `ontology.json` format is deprecated and no longer supported. TTL provides better semantic expressiveness and aligns with RDF/OWL standards.
+
+---
+
 ### `init.py`
 **Purpose**: Initialize Cognee for a workspace with API key configuration
 
@@ -31,7 +82,7 @@ python init.py <workspace_path>
 
 **Behavior**:
 1. Loads `.env` from workspace_path/.env
-2. Validates `OPENAI_API_KEY` exists
+2. Validates `LLM_API_KEY` exists (note: `OPENAI_API_KEY` is deprecated as of v0.2.2)
 3. Calls `cognee.config.set_llm_api_key(api_key)`
 4. Creates `.cognee/` directory in workspace_path if it doesn't exist
 
@@ -334,7 +385,11 @@ python bridge/init.py /home/luke/Documents/Github-projects/cognee
 ```
 Expected output:
 ```json
-{"success": false, "error": "OPENAI_API_KEY not found in .env file"}
+```json
+{"success": false, "error_code": "MISSING_API_KEY", "user_message": "LLM_API_KEY not found. Please add it to your workspace .env file.", "remediation": "Create .env in workspace root with: LLM_API_KEY=your_key_here", "error": "LLM_API_KEY environment variable is required but not set"}
+```
+
+All scripts follow these conventions
 ```
 Exit code: 1
 

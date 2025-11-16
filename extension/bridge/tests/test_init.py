@@ -31,8 +31,11 @@ async def test_initialize_missing_llm_api_key(temp_workspace, monkeypatch):
         result = await initialize_cognee(str(temp_workspace))
         
         assert result['success'] is False
-        assert 'LLM_API_KEY not found' in result['error']
-        assert 'Set LLM_API_KEY=' in result['error']
+        # Check for new structured error format
+        assert 'error_code' in result
+        assert result['error_code'] == 'MISSING_API_KEY'
+        # Error message now in 'error' field, not 'user_message'
+        assert 'LLM_API_KEY' in result['error']
 
 
 @pytest.mark.asyncio
@@ -58,13 +61,15 @@ async def test_initialize_workspace_storage_directories(temp_workspace, mock_env
 @pytest.mark.asyncio
 async def test_initialize_success_with_llm_api_key(temp_workspace, mock_env, mock_cognee_module, sample_ontology):
     """Test successful initialization with valid LLM_API_KEY."""
-    # Create ontology.json file in the bridge directory (where init.py expects it)
-    bridge_dir = Path(__file__).parent.parent  # tests/ -> bridge/
-    ontology_path = bridge_dir / 'ontology.json'
-    ontology_path.write_text(json.dumps(sample_ontology))
-    
-    try:
-        with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
+    # Mock load_ontology to return sample ontology data
+    with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
+        with patch('init.load_ontology') as mock_load_ontology:
+            # Return ontology data in the format load_ontology returns
+            mock_load_ontology.return_value = {
+                'entities': ['User', 'Question', 'Answer', 'Topic', 'Concept', 'Problem', 'Solution', 'Decision'],
+                'relationships': ['ASKS', 'MENTIONS', 'HAS_TOPIC', 'RELATED_TO', 'ADDRESSES', 'PROPOSES', 'SOLVES', 'IMPACTS', 'PREREQUISITE_FOR', 'FOLLOWS_UP', 'DESCRIBES', 'EXPLAINS']
+            }
+            
             from init import initialize_cognee
             
             result = await initialize_cognee(str(temp_workspace))
@@ -73,38 +78,29 @@ async def test_initialize_success_with_llm_api_key(temp_workspace, mock_env, moc
             assert 'dataset_name' in result
             assert result['ontology_loaded'] is True
             assert result['ontology_entities'] == 8
-            assert result['ontology_relationships'] == 2
-    finally:
-        # Clean up ontology file
-        if ontology_path.exists():
-            ontology_path.unlink()
+            assert result['ontology_relationships'] == 12  # Actual count from real ontology.ttl
 
 
 @pytest.mark.asyncio
 async def test_initialize_ontology_validation(temp_workspace, mock_env, mock_cognee_module):
     """Test that initialization validates ontology file exists."""
-    # Ensure ontology.json does NOT exist in bridge directory
-    bridge_dir = Path(__file__).parent.parent  # tests/ -> bridge/
-    ontology_path = bridge_dir / 'ontology.json'
-    
-    # Back up existing ontology.json if it exists
-    backup_path = None
-    if ontology_path.exists():
-        backup_path = bridge_dir / 'ontology.json.test_backup'
-        ontology_path.rename(backup_path)
-    
-    try:
-        with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
+    # Mock load_ontology to raise OntologyLoadError
+    with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
+        with patch('init.load_ontology') as mock_load_ontology:
+            from init import OntologyLoadError
+            
+            # Simulate ontology.ttl not found
+            mock_load_ontology.side_effect = OntologyLoadError('ontology.ttl not found')
+            
             from init import initialize_cognee
             
             result = await initialize_cognee(str(temp_workspace))
             
             assert result['success'] is False
-            assert 'Ontology file not found' in result['error']
-    finally:
-        # Restore ontology.json if it was backed up
-        if backup_path and backup_path.exists():
-            backup_path.rename(ontology_path)
+            assert 'error_code' in result
+            assert result['error_code'] == 'ONTOLOGY_LOAD_FAILED'
+            # Error message should mention the failure
+            assert 'ontology' in result['error'].lower()
 
 
 def test_main_missing_workspace_argument(capsys):

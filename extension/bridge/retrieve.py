@@ -97,16 +97,23 @@ async def retrieve_context(
             load_dotenv(env_file)
         
         # Check for API key
-        api_key = os.getenv('OPENAI_API_KEY')
+        api_key = os.getenv('LLM_API_KEY')
         if not api_key:
             return {
                 'success': False,
-                'error': 'OPENAI_API_KEY not found in environment or .env file'
+                'error_code': 'MISSING_API_KEY',
+                'user_message': 'LLM_API_KEY not found. Please add it to your workspace .env file.',
+                'remediation': 'Create .env in workspace root with: LLM_API_KEY=your_key_here',
+                'error': 'LLM_API_KEY environment variable is required but not set'
             }
         
         # Import cognee
         import cognee
         from cognee.modules.search.types import SearchType
+        
+        # Configure workspace-local storage directories BEFORE any other cognee operations
+        cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
+        cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
         
         # Configure Cognee with API key
         cognee.config.set_llm_api_key(api_key)
@@ -115,21 +122,27 @@ async def retrieve_context(
         # 1. Generate same unique dataset name as init.py and ingest.py (using canonical path)
         dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
         
-        # 2. Ensure database is set up (handles case where no data has been ingested yet)
+        # 2. Search within this workspace's dataset only
+        # Note: If no data has been ingested yet, search will return empty results
         try:
-            await cognee.prune.prune_data()  # Check if database exists
-        except Exception as e:
-            # If database doesn't exist, call setup() to create it
-            if "database has not been created" in str(e).lower():
-                await cognee.setup()
-        
-        # 3. Search within this workspace's dataset only
-        search_results = await cognee.search(
-            query_type=SearchType.GRAPH_COMPLETION,
-            query_text=query,
-            datasets=[dataset_name],  # Filter to this workspace only
-            top_k=max_results
-        )
+            search_results = await cognee.search(
+                query_type=SearchType.GRAPH_COMPLETION,
+                query_text=query,
+                datasets=[dataset_name],  # Filter to this workspace only
+                top_k=max_results
+            )
+        except Exception as search_error:
+            # If database doesn't exist yet (no data ingested), return empty results
+            error_msg = str(search_error)
+            if 'DatabaseNotCreatedError' in error_msg or 'database' in error_msg.lower():
+                return {
+                    'success': True,
+                    'results': [],
+                    'result_count': 0,
+                    'message': 'No data has been ingested yet. Start chatting to build memory.'
+                }
+            # Re-raise other errors
+            raise
         
         # This ensures search results only contain data from this workspace,
         # not from other workspaces or tutorial data.

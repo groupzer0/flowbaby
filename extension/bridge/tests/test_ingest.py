@@ -41,7 +41,7 @@ async def test_ingest_missing_llm_api_key(temp_workspace, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_ingest_add_with_correct_parameters(temp_workspace, mock_env, mock_cognee_module, mock_rdflib_graph):
-    """Test that add() is called with data= and dataset_name= parameters."""
+    """Test that add() is called with data= and dataset_name= parameters and storage configured."""
     # Create ontology.ttl file
     ontology_path = temp_workspace.parent / 'ontology.ttl'
     ontology_path.write_text('@prefix : <http://example.org/> .\n:Test a :Class .')
@@ -74,6 +74,12 @@ async def test_ingest_add_with_correct_parameters(temp_workspace, mock_env, mock
             assert 'data' in call_kwargs
             assert isinstance(call_kwargs['data'], list)
             assert 'dataset_name' in call_kwargs
+            
+            # Verify workspace-local storage directories configured
+            expected_system_dir = str(temp_workspace / '.cognee_system')
+            expected_data_dir = str(temp_workspace / '.cognee_data')
+            mock_cognee_module.config.system_root_directory.assert_called_once_with(expected_system_dir)
+            mock_cognee_module.config.data_root_directory.assert_called_once_with(expected_data_dir)
 
 
 @pytest.mark.asyncio

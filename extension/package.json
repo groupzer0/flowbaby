@@ -2,7 +2,7 @@
   "name": "cognee-chat-memory",
   "displayName": "Cognee Chat Memory",
   "description": "Automatic memory for GitHub Copilot chat using Cognee knowledge graphs",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "cognee",
   "icon": "media/icon.png",
   "engines": {
@@ -132,7 +132,9 @@
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
     "test:bridge": "cd bridge && pytest tests/ -v",
-    "test:all": "npm test && npm run test:bridge"
+    "test:all": "npm test && npm run test:bridge",
+    "package": "vsce package",
+    "verify:vsix": "node scripts/verify-vsix.js *.vsix"
   },
   "devDependencies": {
     "@types/chai": "^5.2.3",

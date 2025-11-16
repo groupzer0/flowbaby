@@ -27,6 +27,7 @@ from datetime import datetime
 from pathlib import Path
 
 from workspace_utils import generate_dataset_name
+from ontology_provider import load_ontology, OntologyLoadError
 
 
 async def initialize_cognee(workspace_path: str) -> dict:
@@ -53,7 +54,10 @@ async def initialize_cognee(workspace_path: str) -> dict:
         if not api_key:
             return {
                 'success': False,
-                'error': 'LLM_API_KEY not found in environment or .env file. Set LLM_API_KEY="sk-..." in your workspace .env'
+                'error_code': 'MISSING_API_KEY',
+                'user_message': 'LLM_API_KEY not found. Please add it to your workspace .env file.',
+                'remediation': 'Create .env in workspace root with: LLM_API_KEY=your_key_here',
+                'error': 'LLM_API_KEY environment variable is required but not set'
             }
         
         # Import cognee
@@ -177,16 +181,25 @@ async def initialize_cognee(workspace_path: str) -> dict:
             'global_marker_location': global_marker_location
         }, indent=2))
         
-        # 6. Load ontology configuration (will be applied during cognify in ingest.py)
-        ontology_path = Path(__file__).parent / 'ontology.json'
-        if not ontology_path.exists():
+        # 6. Load ontology configuration using OntologyProvider
+        try:
+            ontology = load_ontology()
+        except OntologyLoadError as e:
             return {
                 'success': False,
-                'error': f'Ontology file not found: {ontology_path}'
+                'error_code': 'ONTOLOGY_LOAD_FAILED',
+                'user_message': 'Failed to load ontology configuration',
+                'remediation': 'Ensure ontology.ttl exists in extension/bridge/ directory and is valid Turtle RDF format',
+                'error': str(e)
             }
-        
-        with open(ontology_path) as f:
-            ontology = json.load(f)
+        except Exception as e:
+            return {
+                'success': False,
+                'error_code': 'ONTOLOGY_LOAD_FAILED',
+                'user_message': 'Unexpected error loading ontology',
+                'remediation': 'Check extension logs for details. File an issue if problem persists.',
+                'error': f'Ontology loading error: {str(e)}'
+            }
         
         # 7. Return extended success JSON with migration metadata
         return {

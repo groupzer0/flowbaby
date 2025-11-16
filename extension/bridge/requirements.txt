@@ -7,6 +7,9 @@ cognee==0.3.4
 # Environment variable management
 python-dotenv>=1.0.0
 
+# Ontology parsing (TTL/RDF)
+rdflib>=7.0.0
+
 # Testing dependencies
 pytest>=7.4.0
 pytest-asyncio>=0.21.0

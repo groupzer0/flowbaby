@@ -569,7 +569,13 @@ export class CogneeClient {
     private sanitizeOutput(text: string): string {
         let sanitized = text;
 
-        // Redact OpenAI API keys (environment variable format)
+        // Redact LLM API keys (environment variable format - current)
+        sanitized = sanitized.replace(
+            /LLM_API_KEY[\s=]+[\w\-]{32,}/gi,
+            'LLM_API_KEY=***'
+        );
+
+        // Redact OpenAI API keys (environment variable format - legacy, for backwards compatibility)
         sanitized = sanitized.replace(
             /OPENAI_API_KEY[\s=]+[\w\-]{32,}/gi,
             'OPENAI_API_KEY=***'

@@ -216,7 +216,15 @@ suite('CogneeClient Test Suite', () => {
             client = new CogneeClient(testWorkspacePath);
         });
 
-        test('Redacts OPENAI_API_KEY environment variable format', () => {
+        test('Redacts LLM_API_KEY environment variable format (current)', () => {
+            const input = 'Error: LLM_API_KEY=sk-proj-abc123def456ghi789jkl012mno345pqr678stu901vwx234';
+            const output = client['sanitizeOutput'](input);
+            
+            assert.ok(output.includes('LLM_API_KEY=***'));
+            assert.ok(!output.includes('sk-proj-abc123'));
+        });
+
+        test('Redacts OPENAI_API_KEY environment variable format (legacy)', () => {
             const input = 'Error: OPENAI_API_KEY=sk-proj-abc123def456ghi789jkl012mno345pqr678stu901vwx234';
             const output = client['sanitizeOutput'](input);
             
@@ -281,15 +289,18 @@ suite('CogneeClient Test Suite', () => {
 
         test('Handles multiple secret patterns in same text', () => {
             const input = `
+                LLM_API_KEY=sk-test-abc123def456ghi789jkl012mno345pqr678stu901vwx
                 OPENAI_API_KEY=sk-proj-abc123def456ghi789jkl012mno345pqr678stu901vwx
                 AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
                 Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9eyJzdWIiOiIxMjM0NTY3ODkwIn0
             `;
             const output = client['sanitizeOutput'](input);
             
+            assert.ok(output.includes('LLM_API_KEY=***'));
             assert.ok(output.includes('OPENAI_API_KEY=***'));
             assert.ok(output.includes('AWS_SECRET_ACCESS_KEY=***'));
             assert.ok(output.includes('Bearer ***'));
+            assert.ok(!output.includes('sk-test-abc123'));
             assert.ok(!output.includes('sk-proj-abc123'));
             assert.ok(!output.includes('wJalrXUtnFEMI'));
             assert.ok(!output.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'));
