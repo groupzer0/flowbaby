@@ -145,6 +145,36 @@ This agent is part of a structured workflow with eight other specialized agents:
 - **May escalate to escalation agent**: If blocking issues arise that cannot be resolved through normal workflow (conflicting guidance, technical constraints, resource limitations), invoke escalation for go/no-go decision.
 - **Not involved in**: Creating plans (planner's role), conducting initial research (analyst's role), reviewing plans (critic's role), conducting quality validation (qa and reviewer roles), or making retrospective assessments (retrospective's role).
 
+Assumption Documentation:
+When implementing plans with open questions or unverified assumptions (especially when analyst research was marked "OPTIONAL" or skipped), document your assumptions in the implementation document under a dedicated section.
+
+**Add "Implementation Assumptions" section to your document**:
+
+```markdown
+## Implementation Assumptions
+
+### Assumption 1: [Brief description]
+- **Rationale**: [Why this assumption is reasonable]
+- **Risk if incorrect**: [Impact if assumption proves wrong]
+- **Validation approach**: [How QA/UAT will verify]
+- **Escalation trigger**: [Evidence that would require revisiting this assumption]
+
+### Assumption 2: ...
+```
+
+**When to document assumptions**:
+- Technical approach chosen from multiple viable options
+- Performance characteristics (buffer sizes, timeout values, batch sizes)
+- API behavior not explicitly documented
+- Edge case handling decisions
+- Scope boundaries (what's explicitly excluded)
+- Optional milestone deferral decisions
+
+**Escalation triggers**: If QA testing or user feedback reveals an assumption was incorrect:
+1. **Minor impact**: Implementer adjusts implementation directly
+2. **Moderate impact**: Implementer adjusts with qa validation cycle
+3. **Major impact**: Escalate to planner for re-planning (fundamental approach wrong)
+
 Escalation:
 - If the plan conflicts with repository constraints or produces failing validations, stop, report evidence, and request updated instructions from planner.
 - If implementation encounters unforeseen technical unknowns requiring deep investigation, invoke analyst chatmode rather than making assumptions.

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository uses a structured multi-agent workflow system with **10 specialized agents** that collaborate to deliver high-quality software changes. Each agent has a specific domain of expertise and produces artifacts in dedicated directories.
+This repository uses a structured multi-agent workflow system with **11 specialized agents** that collaborate to deliver high-quality software changes. Each agent has a specific domain of expertise and produces artifacts in dedicated directories.
 
 ## Agent Roster
 
@@ -18,6 +18,7 @@ This repository uses a structured multi-agent workflow system with **10 speciali
 | **DevOps** | Packaging & deployment | `deployment/` | Claude Sonnet 4.5 |
 | **Escalation** | Go/no-go decisions | `escalations/` | GPT-5.1 |
 | **Retrospective** | Lessons learned | `retrospectives/` | Claude Sonnet 4.5 |
+| **Process Improvement** | Workflow optimization | `process-improvement/` | Claude Sonnet 4.5 |
 
 ## Standard Workflow
 
@@ -73,7 +74,21 @@ This repository uses a structured multi-agent workflow system with **10 speciali
 │Retrospective│
 │(retrospec-  │
 │   tives)    │
-└─────────────┘
+└──────┬──────┘
+       │ Lessons Learned
+       │ Captured
+       ↓
+┌─────────────┐
+│  Process    │
+│Improvement  │
+│    (pi)     │
+└──────┬──────┘
+       │ Analyzes retrospective,
+       │ validates against workflow,
+       │ updates agent instructions
+       │ (requires user approval)
+       ↓
+     User
 
          Cross-Cutting Agents
          ═══════════════════
@@ -161,11 +176,24 @@ This repository uses a structured multi-agent workflow system with **10 speciali
 - **Tools**: search, fetch, githubRepo, usages, changes, problems, edit (escalations only)
 
 ### **Retrospective** (Lessons Learned)
-- Captures insights AFTER both QA Complete and UAT Complete
-- Reviews entire workflow from analysis through UAT
-- Identifies patterns, process improvements, technical debt
+- Captures insights AFTER deployment completes (success or failure)
+- Reviews entire workflow from planning through deployment
+- Focuses on repeatable process improvements (not one-off technical details)
+- Identifies patterns, workflow refinements, quality gate effectiveness
 - Creates retrospective documents for knowledge building
+- Hands off to Process Improvement agent after retrospective complete
 - **Tools**: search, usages, changes, fetch, githubRepo, edit (retrospectives only)
+
+### **Process Improvement** (Workflow Optimization)
+- Analyzes retrospective recommendations for workflow improvements
+- Compares recommendations to current agent instructions and workflow
+- Identifies conflicts, logical challenges, and risks
+- Proposes solutions and creates implementation templates
+- **REQUIRES user approval** before updating agent instructions
+- Updates .agent.md files and README.md to implement approved changes
+- Creates analysis and update documents in `retrospectives/` directory
+- Validates changes with next plan implementation
+- **Tools**: read_file, replace_string_in_file, multi_replace_string_in_file, grep_search, semantic_search, file_search, list_dir, create_file
 
 ## Friction Points (Healthy Tensions)
 
@@ -187,6 +215,8 @@ Implementation must pass **sequential quality gates**:
 4. **Release Decision** - Reviewer synthesizes QA + UAT into APPROVED FOR RELEASE
 5. **User Confirmation** - DevOps presents release summary and waits for explicit user approval
 6. **Deployment Complete** - DevOps executes release and verifies publication
+7. **Retrospective Complete** - Lessons learned captured for process improvement
+8. **Process Improvement Analysis** - Recommendations validated and agent instructions updated (requires user approval)
 
 ## Artifact Directories
 
@@ -202,6 +232,7 @@ Implementation must pass **sequential quality gates**:
 | `deployment/` | DevOps | Deployment reports (vX.Y.Z-deployment.md) |
 | `escalations/` | Escalation | Go/no-go decision records (NNN-issue-title.md) |
 | `retrospectives/` | Retrospective | Lessons learned (NNN-feature-name-retrospective.md) |
+| `process-improvement/` | Process Improvement | Process analysis (NNN-process-improvement-analysis.md), agent updates (NNN-agent-instruction-updates.md) |
 
 ## Naming Conventions
 
@@ -214,6 +245,8 @@ All artifacts use consistent numbering:
 - UAT: `uat/003-feature-name-uat.md`
 - Deployment: `deployment/v0.2.2-deployment.md` (version-based)
 - Retrospective: `retrospectives/003-feature-name-retrospective.md`
+- Process Improvement Analysis: `process-improvement/003-process-improvement-analysis.md`
+- Agent Instruction Updates: `process-improvement/003-agent-instruction-updates.md`
 
 ## Value-First Approach
 
@@ -226,6 +259,41 @@ As a [user/customer/agent], I want to [objective], so that [value].
 ```
 
 This prevents solution-first thinking and keeps work focused on actual outcomes.
+
+## Key Workflow Patterns
+
+### Optional Milestone Pattern
+Plans may include optional milestones for speculative or nice-to-have work that is not required for core value delivery. These milestones are clearly labeled with deferral criteria and enable implementers to make risk-informed decisions about scope without blocking delivery.
+
+**Example**:
+```markdown
+### Milestone 3: (Optional) Increase Buffer Limit
+**Conditional on**: Evidence that 2KB buffer is insufficient for typical usage
+**Deferral Criteria**: Defer if testing confirms 2KB sufficient
+```
+
+### Handoff Acknowledgments
+When agents receive work from prior workflow stages, they acknowledge the handoff with a brief 2-3 sentence confirmation:
+- Which plan they're working on (Plan ID)
+- Core objective or scope in their own words
+- Any stage-specific focus areas or concerns
+
+This creates an audit trail and ensures shared understanding at each transition.
+
+### Assumption Documentation
+When implementers proceed with reasonable assumptions (especially when analyst research was marked optional or skipped), they document assumptions in their implementation report under a dedicated section:
+- **Rationale**: Why this assumption is reasonable
+- **Risk if incorrect**: Impact if assumption proves wrong
+- **Validation approach**: How QA/UAT will verify
+- **Escalation trigger**: Evidence that would require revisiting
+
+This enables informed deferral of research while maintaining traceability.
+
+### Plan Scope Guidelines
+Plans prefer small, focused scopes (<10 files, <3 days, single epic alignment) that deliver value quickly and reduce risk. When larger scope is legitimately required (architectural refactors, coordinated changes), justify explicitly and have Critic approve during review.
+
+### Measurable Success Criteria
+When possible, value statements include quantifiable metrics (e.g., "see at least 1000 characters", "reduce time from 10 min to <2 min") that enable objective UAT validation. Qualitative values remain valid when quantification would be forced or meaningless.
 
 ## Escalation Paths
 

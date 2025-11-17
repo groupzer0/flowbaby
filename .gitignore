@@ -11,6 +11,10 @@ ENV/
 
 # Cognee data (workspace-local)
 .cognee/
+.cognee_data/
+.cognee_system/
+cognee_db
+cognee_graph_kuzu
 
 # Tutorial artifacts (timestamped outputs)
 tutorial/artifacts/*.html
