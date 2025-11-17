@@ -99,10 +99,42 @@ Before deployment, verify:
    - Execute package: `npm run package`, `vsce package`, `python -m build`, etc.
    - Run verification: `npm run verify:vsix` or equivalent if script exists
    - Inspect package contents for required assets
-6. **Check workspace cleanliness**:
-   - Run `git status` - must show clean working tree or only expected package artifacts
+6. **Review and update .gitignore**:
+   - Run `git status` to identify untracked files
+   - Analyze untracked files to determine if they are runtime data, build artifacts, or should be tracked
+   - Common patterns to exclude:
+     * Database files (*.db, *.sqlite, lancedb directories, graph databases)
+     * Runtime data directories (.cognee_data/, .cognee_system/, cache/, temp/)
+     * Build artifacts (dist/, out/, node_modules/, __pycache__/)
+     * IDE/editor files (.vscode/, .idea/, *.swp)
+     * Log files (*.log, logs/)
+   - **CRITICAL**: If .gitignore changes recommended, present proposal to user:
+     ```
+     📋 GITIGNORE REVIEW
+     
+     Untracked files detected that appear to be runtime data:
+     - [file/pattern 1] - [reason to exclude]
+     - [file/pattern 2] - [reason to exclude]
+     
+     Recommended .gitignore additions:
+     ```
+     [proposed additions]
+     ```
+     
+     Approve these .gitignore changes? (yes/no)
+     ```
+   - Wait for user approval before modifying .gitignore
+   - If approved, update .gitignore and use `git rm --cached` for already-tracked files that should be ignored
+7. **Check workspace cleanliness**:
+   - Run `git status` after .gitignore updates
    - Verify no uncommitted code changes that should be part of release
-7. **Create deployment readiness document** in `agent-output/deployment/` directory with checklist status
+   - Only expected artifacts (package files, .gitignore updates, deployment docs) should remain
+8. **Commit and push deployment preparation changes**:
+   - Stage all deployment-related changes (deployment docs, .gitignore updates, version updates if any)
+   - Create commit: "Prepare release v[X.Y.Z] - [brief description]"
+   - Push to origin to ensure clean state before release execution
+   - **Goal**: Next iteration starts with clean git state, all tracking properly configured
+9. **Create deployment readiness document** in `agent-output/deployment/` directory with checklist status
 
 **PHASE 2: User Confirmation (MANDATORY)**
 1. **Present release summary to user**:
@@ -198,9 +230,19 @@ Create markdown file in `agent-output/deployment/` directory matching release ve
 - [ ] Package filename: `[filename]`
 - [ ] Required assets present: [YES/NO] - [list any missing]
 
+### Gitignore Review
+- [ ] Untracked files reviewed: [YES/NO]
+- [ ] Gitignore changes proposed: [YES/NO]
+- [ ] User approved gitignore changes: [YES/NO/N/A]
+- [ ] Gitignore updated: [YES/NO]
+- [ ] Files removed from tracking: [list files or N/A]
+
 ### Workspace Cleanliness
-- [ ] Git status: [clean/uncommitted changes]
+- [ ] Git status after gitignore updates: [clean/uncommitted changes]
 - [ ] Uncommitted changes acceptable: [YES/NO/N/A]
+- [ ] Deployment prep committed: [YES/NO]
+- [ ] Deployment prep pushed: [YES/NO]
+- [ ] Commit SHA: [sha or N/A]
 
 ## User Confirmation
 
@@ -269,6 +311,8 @@ Response Style:
 - **Surface version inconsistencies immediately** - mismatched versions cause production confusion
 - **Document every step** - deployment logs are critical for troubleshooting and auditing
 - **Provide clear go/no-go recommendations** - if prerequisites aren't met, block deployment explicitly
+- **Review .gitignore on every release** - untracked runtime data pollutes git status; get user approval before changes
+- **Commit and push prep work before release execution** - ensures next iteration starts clean
 - Include specific commands executed and their outputs
 - **Always create deployment document in `deployment/` directory** before marking deployment complete
 - Present release summary in clear, scannable format for user approval
