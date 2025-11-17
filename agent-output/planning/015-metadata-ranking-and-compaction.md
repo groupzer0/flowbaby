@@ -36,6 +36,10 @@ Implement the **DataPoint migration, metadata infrastructure, recency-aware rank
 - Automated compaction triggers (manual compaction only in this plan).
 - Cross-workspace context sharing (deferred to future roadmap epics).
 
+**Future Enhancements (for consideration in Plan 015 or later)**:
+
+- **Smart session boundary detection**: Automatic detection of conversation segments based on time gaps (>1 hour between turns), topic shifts (embedding similarity analysis), or explicit markers ("let's move on to...", "switching to..."). Would enable semantic scope selection instead of fixed turn counts - user could say "summarize segment 2" to target a specific conversation thread within a long session. This builds on Plan 014's fixed 15-turn default with user override, providing intelligent segmentation for multi-topic or multi-day sessions.
+
 ---
 
 ## Assumptions

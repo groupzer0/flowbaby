@@ -35,6 +35,7 @@ Implement the **creation, ingestion, and retrieval** of structured conversation 
 - **DataPoint-based ingestion** with Pydantic models and `metadata.index_fields`
 - **Compaction behavior** (manual or automated triggers, topic grouping, LLM-based summarization of DecisionRecords)
 - **Status-aware retrieval logic** (`Superseded` filtering, DecisionRecord prioritization)
+- **Smart session boundary detection** - automatic detection of conversation segments based on time gaps, topic shifts, or explicit markers; enables semantic scope selection ("summarize segment 2") instead of turn counts
 
 ---
 
@@ -103,11 +104,13 @@ Implement the **creation, ingestion, and retrieval** of structured conversation 
 
 1. **Implement Summary Generation Command** (`extension/src/chatParticipant.ts`)
    - Add detection for user prompts like "summarize this conversation", "remember this session", or "create summary".
-   - Extract recent chat turns from `request.history` (default: last 10-20 turns).
-   - Send a prompt to the LLM asking it to generate a summary in the Plan 014 schema format.
+   - Extract recent chat turns from `request.history` (default: last 15 turns).
+   - Display scope preview to user: "I'll summarize the last 15 turns (from [time ago]). Type a number to adjust (e.g., '30'), or say 'confirm' to proceed."
+   - If user provides a number, adjust turn count; if user confirms, proceed with default.
+   - Send a prompt to the LLM asking it to generate a summary in the Plan 014 schema format using the selected turn count.
    - Parse the LLM's response using `summaryParser.parseSummaryFromText`.
    - Display the summary to the user via `stream.markdown` and ask: "Should I store this summary in Cognee memory?"
-   - **Acceptance**: User can trigger summary generation; LLM produces valid schema; summary is displayed for confirmation.
+   - **Acceptance**: User can trigger summary generation; sees turn count preview; can override turn count; LLM produces valid schema; summary is displayed for confirmation.
 
 2. **Handle User Confirmation** (`extension/src/chatParticipant.ts`)
    - If user confirms (e.g., replies "yes", "store it", "save"), call `CogneeClient.ingestSummary(summary)`.
@@ -345,8 +348,8 @@ If summary ingestion or retrieval introduces breaking changes:
 
 ### Open Questions
 
-1. **OPEN QUESTION**: How should the chat participant handle very long conversations (>50 turns)?
-   - **Recommendation**: Limit summary generation to last 20 turns; user can manually segment longer conversations.
+1. **RESOLVED**: How should the chat participant handle very long conversations (>50 turns)?
+   - **Decision**: Default to last 15 turns (fixed). Show user preview: "I'll summarize the last 15 turns (from [time ago])." User can override by typing a number (e.g., "30") before confirming. If session has large time gap (oldest turn >24 hours ago), warn user to consider narrowing scope. This balances simplicity (fixed default) with flexibility (user override).
 
 ---
 
