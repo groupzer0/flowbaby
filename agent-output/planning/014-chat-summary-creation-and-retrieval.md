@@ -106,11 +106,15 @@ Implement the **creation, ingestion, and retrieval** of structured conversation 
    - Add detection for user prompts like "summarize this conversation", "remember this session", or "create summary".
    - Extract recent chat turns from `request.history` (default: last 15 turns).
    - Display scope preview to user: "I'll summarize the last 15 turns (from [time ago]). Type a number to adjust (e.g., '30'), or say 'confirm' to proceed."
-   - If user provides a number, adjust turn count; if user confirms, proceed with default.
+   - If user provides a number:
+     - Adjust turn count to the provided number.
+     - Display updated preview: "I'll summarize the last [N] turns (from [updated time ago]). Type a number to adjust (e.g., '20'), or say 'confirm' to proceed."
+     - Allow iterative adjustment until user says "confirm".
+   - If user confirms, proceed with the current turn count (default or adjusted).
    - Send a prompt to the LLM asking it to generate a summary in the Plan 014 schema format using the selected turn count.
    - Parse the LLM's response using `summaryParser.parseSummaryFromText`.
    - Display the summary to the user via `stream.markdown` and ask: "Should I store this summary in Cognee memory?"
-   - **Acceptance**: User can trigger summary generation; sees turn count preview; can override turn count; LLM produces valid schema; summary is displayed for confirmation.
+   - **Acceptance**: User can trigger summary generation; sees turn count preview; can iteratively adjust turn count; must explicitly confirm before summary generation; LLM produces valid schema; summary is displayed for confirmation.
 
 2. **Handle User Confirmation** (`extension/src/chatParticipant.ts`)
    - If user confirms (e.g., replies "yes", "store it", "save"), call `CogneeClient.ingestSummary(summary)`.
