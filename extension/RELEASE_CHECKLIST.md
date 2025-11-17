@@ -15,6 +15,10 @@ Use this checklist when preparing and publishing a new release of the Cognee Cha
 
 ### Version Management
 
+- [ ] **CRITICAL**: Version in `package.json` uses 3-part semver (X.Y.Z) - VS Code rejects 4-part versions
+  - ✅ Valid: 0.2.3, 1.0.0, 2.1.5
+  - ❌ Invalid: 0.2.2.1, 1.0.0.0 (will fail with "Invalid extension version")
+  - Run pre-flight check: `node -e "const v = require('./package.json').version; if(!/^\d+\.\d+\.\d+$/.test(v)) throw new Error('VS Code requires 3-part semver: ' + v)"`
 - [ ] Version bumped in `package.json` (follow semver)
 - [ ] `CHANGELOG.md` updated with new version section
 - [ ] All user-facing changes documented in CHANGELOG

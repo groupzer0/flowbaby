@@ -225,7 +225,29 @@ The `014-bridge-focused-addendum-analysis` file is the canonical reference for t
 - **Permission & Labeling Model**: TypeScript layer must display source workspace metadata and allow revocation, implying persistent mappings stored in `.cognee/metadata.json`. Need architectural decision on how to prevent accidental leakage (e.g., require explicit user confirmation per workspace pair).
 - **Scalability Considerations**: cross-workspace queries will increase dataset size; plan for pagination, caching, and potential background jobs to maintain indexes. Document thresholds and fallback strategies (e.g., disable cross-workspace retrieval when dataset exceeds configured size) ahead of implementation.
 
-## 11. Recommendations
+## 11. Deployment Platform Constraints
+
+**VS Code Marketplace Requirements**:
+
+- **Version Format**: Requires exactly 3-part semantic versioning (X.Y.Z)
+  - Valid: 0.2.3, 1.0.0, 2.1.5
+  - Invalid: 0.2.2.1, 1.0.0.0 (rejected with "Invalid extension version" error)
+  - Constraint discovered during Plan 013.1 deployment (2025-11-17)
+- **VSIX Packaging**: All assets (bridge scripts, ontology files, media) must be included in package
+- **Extension Manifest**: `package.json` must conform to VS Code extension schema
+
+**NPM Package Differences**:
+
+- NPM supports 4-part semantic versioning (X.Y.Z.W) for pre-release/build metadata
+- This creates a trap when developing VS Code extensions that also use NPM tooling
+- Always verify version format during planning for VS Code extension releases
+
+**Git Tagging**:
+
+- No version format restrictions for git tags
+- Recommended: Match git tag to published package version for traceability
+
+## 12. Recommendations
 
 1. **Codify Ontology Asset Strategy** – add dated decision entry once format/loader approach selected for Epic 0.2.2.1.
 2. **Establish Packaging Verification Tooling** – define required artifacts and smoke tests, log decision + implementation guidance here.

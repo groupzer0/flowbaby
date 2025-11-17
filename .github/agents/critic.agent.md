@@ -72,6 +72,10 @@ Review Method:
    - MUST use outcome-focused user story format: "As a [user, customer, agent, etc], I want to [objective], so that [value]"
    - MUST NOT be solution-oriented (no code references, no implementation details)
    - MUST NOT defer core value to future phases - the plan must deliver the stated value directly
+5. **Validate version format for platform constraints**:
+   - **VS Code extensions**: If plan targets `extension/package.json`, verify version is 3-part semver (X.Y.Z) - NOT 4-part (X.Y.Z.W)
+   - Flag any version like "0.2.2.1" for VS Code extensions - must be "0.2.3" or similar
+   - Confirm planner acknowledged platform versioning constraint in version management milestone
 5. **Survey codebase context**: Examine relevant existing modules, architectural patterns, and recent changes to understand how the plan fits into the larger system.
 6. Summarize the plan's stated value statement and key deliverables.
 7. **Evaluate value delivery alignment**:

@@ -71,12 +71,27 @@ Constraints:
 
 Deployment Workflow:
 
-**PHASE 1: Pre-Release Verification**
+## Handoff Protocol
+
+When receiving work from uat agent, begin by acknowledging the handoff with a brief 2-3 sentence confirmation:
+- Which plan you're deploying (Plan ID and version)
+- UAT decision (Ready for DevOps)
+- Deployment target (local/staging/production, marketplace/git/etc)
+
+Example: "Acknowledged - deploying Plan 013 v0.2.2. UAT confirms value statement delivered, all tests passing. Deployment target: local installation + git release (v0.2.2 tag), marketplace publication deferred."
+
+## Phase 1: Pre-Release Verification (MANDATORY - Do NOT skip)
+
+Before deployment, verify:
 1. **Confirm UAT approval** - read `agent-output/uat/[plan]-uat.md` and verify status is "UAT Complete" with "APPROVED FOR RELEASE" decision
 2. **Confirm QA approval** - read `agent-output/qa/[plan]-qa.md` and verify status is "QA Complete"
 3. **Read roadmap** - verify release version matches roadmap target (e.g., Epic 0.2.2.x → v0.2.2)
-4. **Check version consistency**:
+4. **Check version consistency AND platform constraints**:
    - Run `grep -r "version" package.json pyproject.toml setup.py` (language-appropriate)
+   - **VS Code extensions**: Verify version in `package.json` is 3-part semver (X.Y.Z) - NOT 4-part (X.Y.Z.W)
+   - If version constraint violation detected (e.g., 0.2.2.1 for VS Code), **STOP and present options to user**:
+     * "VS Code requires 3-part semver. Detected [invalid version]. Options: (a) [next patch] (b) [next minor]. Recommend [option] for [reason]. Proceed?"
+     * Wait for user approval before adjusting version
    - Verify `CHANGELOG.md` has release section with correct version and date
    - Check README/documentation for version references
 5. **Validate packaging**:
