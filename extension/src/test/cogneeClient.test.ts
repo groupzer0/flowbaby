@@ -306,4 +306,93 @@ suite('CogneeClient Test Suite', () => {
             assert.ok(!output.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'));
         });
     });
+
+    suite('retrieve logging previews', () => {
+        const workspacePath = '/tmp/test-workspace-logging';
+        let sandbox: sinon.SinonSandbox;
+
+        function stubSharedDependencies() {
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: (_key: string, defaultValue?: any) => defaultValue
+            } as vscode.WorkspaceConfiguration);
+            sandbox.stub(vscode.window, 'createOutputChannel').returns({
+                name: 'Cognee Memory',
+                appendLine: () => void 0,
+                append: () => void 0,
+                replace: () => void 0,
+                clear: () => void 0,
+                dispose: () => void 0,
+                hide: () => void 0,
+                show: () => void 0
+            } as unknown as vscode.LogOutputChannel);
+        }
+
+        setup(() => {
+            sandbox = sinon.createSandbox();
+        });
+
+        teardown(() => {
+            sandbox.restore();
+        });
+
+        test('logs truncated query preview with total length when query exceeds 200 chars', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+            sandbox.stub(client as any, 'runPythonScript').resolves({
+                success: true,
+                results: [],
+                result_count: 0,
+                total_tokens: 0
+            });
+
+            const realNow = Date.now;
+            let callCount = 0;
+            sandbox.stub(Date, 'now').callsFake(() => {
+                if (callCount === 0) {
+                    callCount++;
+                    return 0;
+                }
+                if (callCount === 1) {
+                    callCount++;
+                    return 1500; // Force latency warning
+                }
+                return realNow();
+            });
+
+            const longQuery = 'Q'.repeat(250);
+            await client.retrieve(longQuery);
+
+            const debugCall = logStub.getCalls().find((call) => call.args[1] === 'Retrieving context');
+            assert.ok(debugCall, 'Debug log for retrieval not emitted');
+            const preview = debugCall!.args[2].query_preview as string;
+            assert.ok(preview.startsWith('Q'.repeat(200)));
+            assert.ok(preview.endsWith('... (250 chars total)'));
+
+            const warnCall = logStub.getCalls().find((call) => call.args[1] === 'Retrieval latency exceeded target');
+            assert.ok(warnCall, 'Latency warning not emitted');
+            const warnPreview = warnCall!.args[2].query_preview as string;
+            assert.ok(warnPreview.endsWith('... (250 chars total)'), 'Warning log should include truncated preview metadata');
+        });
+
+        test('logs full query when length is 200 chars or less', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+            sandbox.stub(client as any, 'runPythonScript').resolves({
+                success: true,
+                results: [],
+                result_count: 0,
+                total_tokens: 0
+            });
+
+            const query = 'Explain migrations';
+            await client.retrieve(query);
+
+            const debugCall = logStub.getCalls().find((call) => call.args[1] === 'Retrieving context');
+            assert.ok(debugCall, 'Debug log missing for short query');
+            const preview = debugCall!.args[2].query_preview as string;
+            assert.strictEqual(preview, query);
+        });
+    });
 });

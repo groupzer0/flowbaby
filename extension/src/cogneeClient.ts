@@ -286,7 +286,7 @@ export class CogneeClient {
 
         this.log('DEBUG', 'Retrieving context', {
             query_length: query.length,
-            query_preview: query.substring(0, 50),
+            query_preview: query.length > 200 ? query.substring(0, 200) + `... (${query.length} chars total)` : query,
             max_results: this.maxContextResults,
             max_tokens: this.maxContextTokens,
             recency_weight: this.recencyWeight,
@@ -321,7 +321,7 @@ export class CogneeClient {
                     this.log('WARN', 'Retrieval latency exceeded target', {
                         duration,
                         target: 1000,
-                        query_preview: query.substring(0, 50)
+                        query_preview: query.length > 200 ? query.substring(0, 200) + `... (${query.length} chars total)` : query
                     });
                 } else if (duration > 500) {
                     this.log('INFO', 'Retrieval latency above stretch goal', {

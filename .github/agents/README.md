@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository uses a structured multi-agent workflow system with **9 specialized agents** that collaborate to deliver high-quality software changes. Each agent has a specific domain of expertise and produces artifacts in dedicated directories.
+This repository uses a structured multi-agent workflow system with **10 specialized agents** that collaborate to deliver high-quality software changes. Each agent has a specific domain of expertise and produces artifacts in dedicated directories.
 
 ## Agent Roster
 
@@ -15,6 +15,7 @@ This repository uses a structured multi-agent workflow system with **9 specializ
 | **Implementer** | Code execution | `implementation/` | Claude Sonnet 4.5 |
 | **QA** | Technical quality | `qa/` | GPT-5.1 |
 | **Reviewer** | Value delivery & release | `uat/` | Claude Sonnet 4.5 |
+| **DevOps** | Packaging & deployment | `deployment/` | Claude Sonnet 4.5 |
 | **Escalation** | Go/no-go decisions | `escalations/` | GPT-5.1 |
 | **Retrospective** | Lessons learned | `retrospectives/` | Claude Sonnet 4.5 |
 
@@ -59,6 +60,14 @@ This repository uses a structured multi-agent workflow system with **9 specializ
 └──────┬──────┘            Back to Implementer
        │ UAT Complete             if value gaps
        │ + Release Decision
+       ↓
+┌─────────────┐
+│   DevOps    │ ← ← ← Fixes → → →
+│(deployment) │                  ↓
+└──────┬──────┘            Back to Implementer
+       │ Requires User           if packaging issues
+       │ Confirmation
+       │ for Release
        ↓
 ┌─────────────┐
 │Retrospective│
@@ -131,8 +140,17 @@ This repository uses a structured multi-agent workflow system with **9 specializ
 - References QA findings to ensure technical quality resolved
 - **Synthesizes final release decision**: APPROVED FOR RELEASE or NOT APPROVED
 - Recommends versioning (patch/minor/major) and changelog items
-- Hands off to Retrospective after UAT Complete
+- Hands off to DevOps after UAT Complete with APPROVED status
 - **Tools**: search, changes, problems, testFailure, runCommands, edit, fetch
+
+### **DevOps** (Packaging & Deployment)
+- Verifies version consistency across all artifacts (package.json, CHANGELOG, docs, configs)
+- Validates packaging integrity (builds, assets, verification scripts)
+- **NEVER releases without explicit user confirmation** of target environment and release scope
+- Executes release process systematically (git tags, registry publication, verification)
+- Documents deployment in `deployment/` directory with pre-release checklist and execution log
+- Hands off to Retrospective after deployment complete (success or failure)
+- **Tools**: search, changes, problems, runCommands, edit
 
 ### **Escalation** (Go/No-Go Decisions)
 - Makes authoritative decisions when agents reach impasses
@@ -167,6 +185,8 @@ Implementation must pass **sequential quality gates**:
 2. **QA Complete** - Technical quality validated (tests pass, coverage adequate)
 3. **UAT Complete** - Business value delivered (Reviewer approval)
 4. **Release Decision** - Reviewer synthesizes QA + UAT into APPROVED FOR RELEASE
+5. **User Confirmation** - DevOps presents release summary and waits for explicit user approval
+6. **Deployment Complete** - DevOps executes release and verifies publication
 
 ## Artifact Directories
 
@@ -179,6 +199,7 @@ Implementation must pass **sequential quality gates**:
 | `implementation/` | Implementer | Implementation reports (NNN-feature-name-implementation.md) |
 | `qa/` | QA | Test strategy & execution reports (NNN-feature-name-qa.md) |
 | `uat/` | Reviewer | User Acceptance Test reports (NNN-feature-name-uat.md) |
+| `deployment/` | DevOps | Deployment reports (vX.Y.Z-deployment.md) |
 | `escalations/` | Escalation | Go/no-go decision records (NNN-issue-title.md) |
 | `retrospectives/` | Retrospective | Lessons learned (NNN-feature-name-retrospective.md) |
 
@@ -191,6 +212,7 @@ All artifacts use consistent numbering:
 - Implementation: `implementation/003-feature-name-implementation.md`
 - QA: `qa/003-feature-name-qa.md`
 - UAT: `uat/003-feature-name-uat.md`
+- Deployment: `deployment/v0.2.2-deployment.md` (version-based)
 - Retrospective: `retrospectives/003-feature-name-retrospective.md`
 
 ## Value-First Approach
@@ -228,8 +250,9 @@ This prevents solution-first thinking and keeps work focused on actual outcomes.
 5. **Edit tools are scoped** - Each agent's edit capability is limited to their artifact directory
 6. **QA creates tests proactively** - Don't wait for Implementer; QA can write comprehensive test scaffolding
 7. **Implementer flags conflicts** - If plan and QA strategy conflict, pause and escalate (don't guess)
-8. **Reviewer synthesizes release decision** - After QA + UAT complete, explicit APPROVED FOR RELEASE decision
-9. **Retrospective captures learning** - After release decision, document lessons learned for future work
+7. **Reviewer synthesizes release decision** - After QA + UAT complete, explicit APPROVED FOR RELEASE decision
+8. **DevOps requires user confirmation** - Presents release summary and waits for explicit approval before deploying
+9. **Retrospective captures learning** - After deployment, document lessons learned for future work
 
 ## Process Improvements
 
@@ -246,8 +269,9 @@ The agent system continuously improves through:
 3. **Critic reviews plan** - Validates quality, flags issues, approves or requests revision
 4. **Implementer executes** - Writes code following approved plan
 5. **QA validates quality** - Tests coverage and execution
-6. **Reviewer validates value** - Confirms business objective achieved
-7. **Retrospective captures lessons** - Documents insights for future work
+6. **Reviewer validates value** - Confirms business objective achieved, issues APPROVED FOR RELEASE
+7. **DevOps prepares release** - Verifies packaging, requests user confirmation, executes deployment
+8. **Retrospective captures lessons** - Documents insights for future work
 
 ---
 

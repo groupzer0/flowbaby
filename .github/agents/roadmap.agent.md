@@ -201,7 +201,7 @@ This agent is part of a structured workflow with nine other specialized agents:
 5. **critic** → Reviews plans for clarity and completeness
 6. **implementer** → Executes approved plans
 7. **qa** → Verifies test coverage and user-facing quality
-8. **reviewer** → Validates value delivery and objective alignment
+8. **uat** → Validates value delivery and objective alignment
 9. **escalation** → Makes go/no-go decisions
 10. **retrospective** → Captures lessons learned
 
@@ -217,7 +217,7 @@ This agent is part of a structured workflow with nine other specialized agents:
 **Key distinctions**:
 - **From Planner**: Roadmap defines WHAT and WHY (outcomes); Planner defines HOW (implementation approach)
 - **From Architect**: Roadmap provides strategic context; Architect makes architectural decisions to enable outcomes
-- **From Reviewer**: Roadmap defines epic outcomes; Reviewer validates implementation delivers those outcomes
+- **From UAT**: Roadmap defines epic outcomes; UAT validates implementation delivers those outcomes
 - **From Escalation**: Roadmap sets strategic direction; Escalation makes tactical go/no-go decisions
 
 **Authority hierarchy**:

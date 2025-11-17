@@ -160,6 +160,30 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
     assert.ok((result!.metadata as any).responseLength > 0);
     });
 
+    test('Memory previews include character counts and truncation indicator when exceeding 2000 chars', async () => {
+        const longMemory = 'A'.repeat(2500);
+        retrieveStub.resolves([longMemory]);
+
+        const { req, stream, token, outputs } = makeInvocation('Show long memory sample');
+        await handler!(req, {} as any, stream, token);
+
+        const joined = outputs.join('\n');
+        assert.ok(/Memory 1 \(2500 chars\)/.test(joined), 'Should display character count for long memory');
+        assert.ok(joined.includes('showing 2000 of 2500 chars'), 'Should indicate truncation boundary');
+    });
+
+    test('Memory previews include character counts without truncation when under 2000 chars', async () => {
+        const mediumMemory = 'B'.repeat(500);
+        retrieveStub.resolves([mediumMemory]);
+
+        const { req, stream, token, outputs } = makeInvocation('Show medium memory');
+        await handler!(req, {} as any, stream, token);
+
+        const joined = outputs.join('\n');
+        assert.ok(/Memory 1 \(500 chars\)/.test(joined), 'Should show length indicator for >100 chars');
+        assert.ok(!joined.includes('showing 2000'), 'Should not include truncation message when below limit');
+    });
+
     test('Step 6 auto-ingest: gated by configuration flag', async () => {
         // Enable auto-ingest for this test only
         configState.enabled = true;

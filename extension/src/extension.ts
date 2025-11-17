@@ -263,12 +263,14 @@ function registerCogneeMemoryParticipant(
                 if (!retrievalFailed && retrievedMemories.length > 0) {
                     stream.markdown(`📚 **Retrieved ${retrievedMemories.length} ${retrievedMemories.length === 1 ? 'memory' : 'memories'}**\n\n`);
                     
-                    // Show preview of retrieved memories
+                    // Show preview of retrieved memories (up to 2000 chars for transparency)
                     retrievedMemories.forEach((memory, index) => {
-                        const preview = memory.length > 150 
-                            ? memory.substring(0, 150) + '...' 
+                        const maxPreviewLength = 2000;
+                        const preview = memory.length > maxPreviewLength
+                            ? memory.substring(0, maxPreviewLength) + `... (showing ${maxPreviewLength} of ${memory.length} chars)` 
                             : memory;
-                        stream.markdown(`**Memory ${index + 1}:**\n> ${preview}\n\n`);
+                        const lengthIndicator = memory.length > 100 ? ` (${memory.length} chars)` : '';
+                        stream.markdown(`**Memory ${index + 1}${lengthIndicator}:**\n> ${preview}\n\n`);
                     });
 
                     stream.markdown('---\n\n');

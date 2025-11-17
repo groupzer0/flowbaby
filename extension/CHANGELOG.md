@@ -5,6 +5,19 @@ All notable changes to the Cognee Chat Memory extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2025-11-17
+
+### Fixed
+
+- Display truncation in chat participant - users can now see full retrieved memory content (up to 2000 chars)
+- Query logging truncation increased from 50 to 200+ characters for better debugging
+
+### Improved
+
+- Transparent memory display with character count indicators aligns with discoverability goals (Epic 0.2.2.3)
+- Clear truncation indication when memories exceed 2000 chars (shows "showing X of Y chars")
+- Query length now shown in debug logs when queries exceed 200 chars
+
 ## [0.2.1] - 2025-11-14
 
 ### Breaking Changes

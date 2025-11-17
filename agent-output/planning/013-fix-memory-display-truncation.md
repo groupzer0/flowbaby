@@ -1,6 +1,7 @@
 # Plan 013: Fix Memory Display Truncation in Chat Participant
 
 **Plan ID**: 013  
+**Target Release**: v0.2.2 (from Roadmap Epic 0.2.2.3)  
 **Epic Reference**: Roadmap Epic 0.2.2.3 (Feature Discoverability and Onboarding UX)  
 **Created**: 2025-11-16  
 **Status**: Proposed  
@@ -166,6 +167,28 @@ When users invoke `@cognee-memory` with a query:
 - Retrieval responses with 5-10 results (up to ~5KB JSON) are not truncated
 - Warning logged if response size exceeds 80% of buffer limit
 - Memory usage remains reasonable (10KB per subprocess call is acceptable)
+
+---
+
+### Milestone 4: Update Version and Release Artifacts
+
+**Objective**: Update extension version to v0.2.2 and document changes for roadmap alignment.
+
+**Steps**:
+
+1. Update version in `extension/package.json` to 0.2.2
+2. Add CHANGELOG entry under v0.2.2 section:
+   - "Fixed: Display truncation in chat participant - users can now see full retrieved memory content (up to 2000 chars)"
+   - "Fixed: Query logging truncation increased from 50 to 200+ characters for better debugging"
+   - "Improved: Transparent memory display aligns with discoverability goals (Epic 0.2.2.3)"
+3. Update README if any user-facing instructions changed
+4. Verify VSIX filename will be `cognee-chat-memory-0.2.2.vsix` during packaging
+5. Commit version changes with message: "Release v0.2.2 - Plan 013: Fix Memory Display Truncation"
+
+**Acceptance Criteria**:
+- Version artifacts updated to 0.2.2
+- CHANGELOG reflects Plan 013 deliverables under v0.2.2
+- Version matches roadmap target (Epic 0.2.2.3)
 
 ---
 

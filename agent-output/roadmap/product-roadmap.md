@@ -1,6 +1,6 @@
 # Cognee Chat Memory - Product Roadmap
 
-**Last Updated**: 2025-11-15 7:44
+**Last Updated**: 2025-11-17 (Roadmap Agent)
 **Roadmap Owner**: roadmap agent
 
 ---
@@ -45,19 +45,25 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 **Strategic Course Correction**: Comprehensive review of Plans 001-011 revealed that technical infrastructure (workspace isolation, Python detection, testing) is solid, but **user-facing experience is critically deficient**. Plans 001-011 were heavily implementation-focused with minimal UX consideration. The roadmap now prioritizes:
 
 - **v0.2.2** (Target: 2025-11-18): Fix initialization regression + ensure reliable packaging
-- **v0.2.3** (Target: 2025-11-25): **NEW** - Add discoverability, error visibility, and automated setup
-- **v0.3.0** (Deferred): Context ranking deferred until users can discover and trust basic workflow
+- **v0.2.3** (Target: 2025-11-25): Add discoverability, error visibility, and automated setup (parallel to v0.3.0)
+- **v0.3.0** (Target: TBD): Context intelligence (unblocked after Plan 013)
 
-**Next Epics Proposed**:
+**Implementation Mapping** (Plans → Epics):
 
-1. **Epic 0.2.2.3** (P0): Feature Discoverability - Users must know extension exists and how to use it
-2. **Epic 0.2.3.1** (P0): Transparent Errors - Replace silent failures with actionable user guidance
-3. **Epic 0.2.3.2** (P1): Automated Python Setup - Eliminate manual environment configuration
+- **Plan 012** (Implemented) → Epic 0.2.2.1 (Installation), Epic 0.2.2.2 (Packaging)
+- **Plan 013** (Proposed) → Epic 0.2.2.3 (Discoverability)
+- **Plan 014** (Proposed) → Epic 0.3.0.2 (Structured Summaries) - prerequisite for Plan 015
+- **Plan 015** (Proposed) → Epic 0.3.0.1 (Ranking and Relevance)
+- **Plan 016** (Proposed) → Epic 0.2.3.1 (Error Transparency) - parallel to v0.3.0
+- **Plan 017** (Proposed) → Epic 0.2.3.2 (Python Auto-Setup) - parallel to v0.3.0
+
+**Strategic Decision**: Plans 012/013 resolve v0.2.x blockers; v0.3.0 work (Plans 014/015) can proceed after Plan 013. Remaining v0.2.3 epics (Plans 016/017) enhance UX but don't block advanced features—proceed in parallel.
 
 ## Change Log
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-17 | Strategic unblocking: Plans 012 (implemented) and 013 (planned) resolve v0.2.x blockers; Epic 0.3.0.1 unblocked after Plan 013; added Epic 0.3.0.2; split error handling (Plan 016) and Python setup (Plan 017) into separate plans | Plans 012/013 address installation stability (0.2.2.1) and discoverability (0.2.2.3), enabling v0.3.0 work to proceed. Remaining v0.2.3 epics (error transparency, auto-setup) are valuable but not blocking—can proceed in parallel. Created focused plan structure: 013 (display fixes), 016 (error taxonomy), 017 (Python auto-setup) for better isolation and parallel development. |
 | 2025-11-16 | Added 3 new epics (0.2.2.3, 0.2.3.1, 0.2.3.2); revised v0.3.0 scope | Comprehensive review of Plans 001-011 revealed critical gaps: UX discoverability, Python environment complexity, and lack of operational monitoring. User cannot discover features after installation even if initialization succeeds. Shifted v0.3.0 focus from ranking (which requires baseline usage) to foundational UX and reliability. |
 | 2025-11-15 | Initial roadmap created | Establishing strategic direction after completing v0.2.0 foundation |
 
@@ -97,6 +103,8 @@ So that I can capture and recall workspace context without setup blockers.
 - Must not break existing users who have v0.2.0/v0.2.1 already installed
 
 **Status Notes**:
+
+- 2025-11-17: **RESOLVED** - Plan 012 implemented (pending QA). Ontology loading fixed, API key messaging updated, packaging verification added.
 - 2025-11-15: Epic created based on Plan 012 analysis findings. Ontology file format mismatch (JSON vs TTL) and outdated error messaging block all new installs.
 
 ---
@@ -164,6 +172,8 @@ So that I can start capturing and retrieving context without reading external do
 - Should respect VS Code's notification guidelines (not spam)
 
 **Status Notes**:
+
+- 2025-11-17: **IN PROGRESS** - Plan 013 proposed and ready for implementation. Will remove 150-char display truncation, improve query logging, enhance transparency.
 - 2025-11-16: Epic created based on Plans 001-011 review. Plans focused heavily on technical infrastructure but delivered minimal user-facing guidance. Even with working capture/retrieval, users don't know the extension exists or how to use it. Plan 008 implemented keyboard shortcut (Ctrl+Alt+C) and participant but provided no in-product discovery mechanism.
 
 ---
@@ -203,6 +213,8 @@ So that I can take corrective action instead of assuming the extension is broken
 - Should not spam notifications for transient issues
 
 **Status Notes**:
+
+- 2025-11-17: **PROPOSED** - Will be addressed by Plan 016 (separate from Plan 013). Requires system-wide error taxonomy design, structured error propagation, status bar indicators.
 - 2025-11-16: Epic created based on Plans 010-011 findings. CHANGELOG notes "Known Issues: Cognee 0.4.0 file hashing bug affects auto-ingestion" but users have no visibility into whether this is affecting them. Plan 010 fixed 30s timeout issues but didn't add user-facing error reporting. Plan 009 fixed silent activation failure, but pattern of silent failures persists.
 
 ---
@@ -238,6 +250,8 @@ So that I can start using memory features without troubleshooting dependency con
 - Should validate Python version compatibility (3.8+ required)
 
 **Status Notes**:
+
+- 2025-11-17: **PROPOSED** - Will be addressed by Plan 017 (separate from Plan 013). Requires platform-specific venv creation, subprocess orchestration, cross-platform testing.
 - 2025-11-16: Epic created based on Plan 007 review. Plan 007 delivered auto-detection of .venv and enhanced error messages, but setup remains manual. SETUP.md requires users to run terminal commands before extension works. This creates multi-step onboarding friction that loses users.
 
 ---
@@ -281,8 +295,51 @@ So that I don't waste time sifting through tangential results.
 - Should work within existing workspace-local storage model
 
 **Status Notes**:
+
+- 2025-11-17: **UNBLOCKED** - Plans 012 (installation stability) and 013 (display transparency) resolve critical v0.2.x blockers. Epic can proceed after Plan 013 completion. Will be implemented by Plan 015 (metadata, ranking, compaction).
 - 2025-11-16: DEFERRED - Review of Plans 001-011 revealed users cannot yet discover or reliably use basic retrieval. Ranking optimization premature until foundational UX and error handling delivered in v0.2.x.
 - 2025-11-15: Epic placeholder. Requires research phase to determine ranking approach.
+
+---
+
+### Epic 0.3.0.2: Structured Conversation Summaries
+
+**Priority**: P1 (High value - prerequisite for Epic 0.3.0.1)
+**Status**: Proposed (Plan 014)
+
+**User Story**:
+As a developer capturing conversation summaries,
+I want summaries structured with metadata (topic, plan, decisions, references),
+So that I can organize, search, and compact context more effectively over time.
+
+**Business Value**:
+
+- **User Impact**: Enables organizing conversation history by topic/plan instead of chronological order only
+- **Strategic Importance**: Foundation for compaction and ranking features; without structured summaries, advanced features cannot deliver value
+- **Measurable Success**: Users create structured summaries with metadata; retrieval benefits from richer context
+
+**Dependencies**:
+
+- Epic 0.2.2.3 (users must discover capture workflow before adding structure)
+- Plan 014 defines and implements this epic
+
+**Acceptance Criteria** (outcome-focused):
+
+- [ ] Users can create conversation summaries with embedded metadata (topic, session, plan IDs, timestamps, status)
+- [ ] Summary schema includes decisions, rationale, open questions, next steps, and references (files, plans, branches, issues)
+- [ ] Manual compaction trigger exposed in UI (backend implemented in Epic 0.3.0.1)
+- [ ] Summaries ingested into Cognee with plain-text format (DataPoint migration in Epic 0.3.0.1)
+- [ ] Documentation explains summary structure and metadata fields
+
+**Constraints**:
+
+- Must maintain backward compatibility with existing raw-text memories
+- Should not require users to change existing capture workflows
+- Metadata extraction should be transparent (no manual field entry)
+
+**Status Notes**:
+
+- 2025-11-17: Epic created to capture Plan 014 scope. Structured summaries are prerequisite for ranking/compaction (Epic 0.3.0.1/Plan 015).
 
 ---
 

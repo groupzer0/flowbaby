@@ -51,9 +51,9 @@ Example appropriate descriptions:
 2. **If unknowns exist** → Analyst researches and documents findings
 3. **Planner creates plan** → References analysis documents if applicable
 4. **Critic reviews plan** → Evaluates clarity, completeness, architectural alignment
-5. **Implementer executes** → Follows plan step-by-step
-6. **If implementation encounters uncertainty** → Analyst researches and documents findings, implementer resumes
-7. **Reviewer validates** → Confirms implementation matches plan
+6. **Implementer executes** → Delivers code matching plan specifications
+7. **UAT validates** → Confirms implementation matches plan
+8. **Escalation resolves** → Makes go/no-go decisions when agents reach impasses
 
 ## Relationship to Analysis
 

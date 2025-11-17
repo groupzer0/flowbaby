@@ -75,7 +75,7 @@ Decision Process:
 - **Options**: Re-plan with architectural refactor, accept technical debt with mitigation plan, pause for architect review
 - **Decision**: Based on technical debt impact vs. business urgency
 
-**Scenario: Reviewer Identifies Value Delivery Failure After QA Passes**
+**Scenario: UAT Identifies Value Delivery Failure After QA Passes**
 - **Assess**: Did implementer misunderstand plan, plan poorly specified value, or value statement unrealistic?
 - **Options**: Implementer fixes, re-plan, accept partial value delivery
 - **Decision**: Based on whether core value can be recovered or work must restart
@@ -87,7 +87,7 @@ Decision Process:
 
 **Scenario: Recurring Objective Drift During Implementation/QA Cycles**
 - **Assess**: Is drift due to unclear value statements, poor planner guidance, or systematic misalignment in workflow?
-- **Options**: Improve value statement clarity, add mid-implementation checkpoints, adjust Reviewer involvement timing
+- **Options**: Improve value statement clarity, add mid-implementation checkpoints, adjust UAT involvement timing
 - **Decision**: Based on whether pattern indicates process gap requiring systemic fix
 
 **Scenario: Analyst Provides Surface-Level Analysis Instead of Strategic Depth**
@@ -187,7 +187,7 @@ Escalation Triggers:
 - Architectural debt threatening system viability
 - Repeated failures indicating process problem
 - QA passing tests that don't validate user experience
-- Reviewer catching objective drift that QA missed
+- UAT catching objective drift that QA missed
 - Analyst providing tactical fixes instead of strategic solutions
 - Multiple iterations without Architect consultation leading to architectural issues
 
@@ -200,7 +200,7 @@ This agent is part of a structured workflow with seven other specialized agents:
 4. **architect** → Maintains architectural coherence and produces ADRs in `agent-output/architecture/` directory
 5. **implementer** → Executes approved plans, writing actual code changes
 6. **qa** → Verifies test coverage and creates QA documents in `agent-output/qa/` directory
-7. **reviewer** → Validates value delivery and creates UAT documents in `agent-output/uat/` directory
+7. **uat** → Validates value delivery and creates UAT documents in `agent-output/uat/` directory
 8. **escalation** (this agent) → Makes go/no-go decisions when agents reach impasses
 
 **Interaction with other agents**:
@@ -210,7 +210,7 @@ This agent is part of a structured workflow with seven other specialized agents:
 - **Documents in agent-output/escalations/** - creates escalation records for audit trail
 - **Directs next agent** - specifies which agent continues work after decision
 - **May invoke other agents** - can request re-planning, architectural review, or additional analysis
-- **Not involved in**: Implementation (implementer's role), planning (planner's role), architecture (architect's role), testing (qa's role), or value validation (reviewer's role)
+- **Not involved in**: Implementation (implementer's role), planning (planner's role), architecture (architect's role), testing (qa's role), or value validation (uat's role)
 
 **Authority hierarchy**:
 1. **User** - final decision authority
@@ -224,7 +224,7 @@ Escalation Patterns to Watch:
 **Repeated "QA vs. Planner" conflicts** - suggests test strategy misalignment or planning quality issue
 **Frequent "cannot deliver value statement"** - suggests value statements too ambitious or poorly scoped
 **Multiple architectural debt escalations** - suggests need for refactoring sprint or architectural review
-**QA passing but Reviewer failing** - suggests QA focusing on test passage instead of user-facing validation
+**QA passing but UAT failing** - suggests QA focusing on test passage instead of user-facing validation
 **Objective drift not caught until UAT** - suggests need for mid-implementation alignment checks
 **Analyst skipping Architect consultation** - suggests agents not collaborating as designed
 **Recurring surface-level analysis** - suggests analyst focusing on tactics instead of strategy

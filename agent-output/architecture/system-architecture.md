@@ -1,6 +1,6 @@
 # Cognee Chat Memory System Architecture
 
-**Last Updated**: 2025-11-15 09:10
+**Last Updated**: 2025-11-16 14:05
 **Owner**: architect agent
 
 ## Change Log
@@ -9,6 +9,8 @@
 |-------------|--------|-----------|-------------------|
 | 2025-11-15 09:10 | Created baseline system architecture document covering Plans 001-011 | Establish single source of truth for planners/critics per updated architect instructions | Plans 001-011 summary |
 | 2025-11-15 09:45 | Added forward-looking architecture mapping for roadmap epics | Provide planners with architecture guidance for v0.2.2, v0.2.3, v0.3.0, v0.4.0 | Roadmap epics 0.2.2.x-0.4.0 |
+| 2025-11-16 12:30 | Incorporated Plan 013/014 analyses (memory display transparency, chat summary schema, compaction pipeline) | Document UX transparency fixes and long-term memory management to guide planning/QA | Plans 013-014 |
+| 2025-11-16 14:05 | Captured Plan 014 bridge addendum (structured ingestion + metadata-aware retrieval requirements) | Ensure planners know bridge migration scope before implementation | Plan 014 bridge addendum |
 
 
 ## 1. Purpose and Scope
@@ -87,6 +89,28 @@ This document captures the end-to-end architecture of Cognee Chat Memory as ship
 3. `retrieve.py` (not shown here but present) performs hybrid search and returns ranked memories.
 4. Participant previews retrieved context, augments prompt, streams LLM response, and optionally re-ingests conversation (feedback loop disabled by default).
 
+**Plan 013 Adjustment (Pending)**: Replace the hardcoded 150-character preview with either full memory text or a configurable limit (≥1000 chars) plus explicit truncation indicator. This preserves user trust and aligns with “Zero Cognitive Overhead”. Update `CogneeClient` logging to either record full queries or clearly flag truncation length.
+
+### 4.4 Plan 014 Bridge Modernization (Pending)
+
+Plan 014’s structured summary + compaction work introduces bridge-specific requirements that must be satisfied before planners can implement ranking or compaction:
+
+1. **Ingestion Path**
+   - Accept Plan-014-formatted summaries (Topic/Context/Decisions/etc.) instead of raw user/assistant pairs.
+   - Attach first-class metadata fields (`topic_id`, `session_id`, `plan_id`, `status`, timestamps) via Cognee DataPoints so they survive `add → cognify → search`.
+   - Maintain a migration or fallback path for legacy raw-text memories until compaction can supersede them.
+
+2. **Retrieval Path**
+   - Consume metadata-rich search results (structured node fields) rather than relying on regex parsing of text bodies.
+   - Compute recency using stored timestamps (e.g., exponential decay) and combine with Cognee similarity in a documented `final_score`.
+   - Honor compaction semantics by preferring `DecisionRecord` entries and down-ranking `status = Superseded` summaries.
+   - Return transparent payloads to TypeScript (`topic_id`, `plan_id`, `status`, `created_at`, `summary_text`, `final_score`) so Plan 013 transparency goals are achievable.
+
+3. **Compaction Hooks**
+   - Expose a bridge command or mode to trigger future compaction tasks and log their effects for QA.
+
+The `014-bridge-focused-addendum-analysis` file is the canonical reference for these expectations; this section tracks them architecturally so Planner/Implementer work does not regress the three-layer contract.
+
 ## 5. Data & Storage Boundaries
 
 - **Workspace-local**: `.cognee_system/` (Cognee internal DB) and `.cognee_data/` (vector/index artifacts) created under workspace root since Plan 010.
@@ -132,6 +156,12 @@ This document captures the end-to-end architecture of Cognee Chat Memory as ship
 7. **Testing Gaps for Packaged Builds**
    - Pytest suite runs on repo files, not packaged VSIX. Release verification lacks "install VSIX → run smoke script" step, allowing packaging drift to slip.
 
+8. **Memory Display Transparency (Plan 013)**
+   - Chat participant truncates retrieved memories to 150 chars and log previews to 50 chars, creating mistrust and violating transparency goals. Requires UX adjustments in TypeScript (`extension.ts`, `cogneeClient.ts`).
+
+9. **Memory Graph Growth / Noise (Plan 014)**
+   - Continuous ingestion of raw conversation summaries risks index bloat and conflicting context. Requires structured summary schema, metadata tagging, and compaction pipeline to maintain signal. Current bridge implementation still ingests plain text and uses regex-based recency scoring, so migrating to metadata-aware ingestion/retrieval is now a tracked dependency (see §4.4).
+
 ## 9. Architectural Decisions
 
 ### Decision: Baseline Three-Layer Architecture (2025-11-15 09:10)
@@ -141,6 +171,34 @@ This document captures the end-to-end architecture of Cognee Chat Memory as ship
 **Alternatives Considered**: (1) Port Cognee features to TypeScript/HTTP, rejected due to loss of local-only privacy and engineering cost. (2) Run a persistent Python daemon, rejected for lifecycle/packaging complexity.
 **Consequences**: (+) Clear ownership boundaries and easier testing. (-) Dual toolchains and subprocess latency remain. Provides stable baseline for future UX and reliability epics.
 **Related**: Plans 002–011, Roadmap Epics 0.2.2.x/0.2.3.x.
+
+### Decision: Memory Transparency & Preview Policy (2025-11-16 12:30)
+
+**Context**: Plan 013 analysis confirmed that truncated chat previews (150 chars) undermine user trust despite the LLM receiving full memory text. Logging also obscures full user queries, making troubleshooting harder.
+**Choice**: Update the retrieval flow so that (a) the chat participant displays full memory content up to a configurable limit (>=1000 chars) with explicit truncation indicators, and (b) `CogneeClient` logs either the full query or clearly annotated previews (length + total). This keeps users aware of context while preserving log usefulness.
+**Alternatives Considered**: (1) Keep short previews but add a “Show more” UI; deferred due to additional UX complexity and uncertain VS Code support. (2) Only adjust logging but leave chat previews short; rejected because transparency issues remain.
+**Consequences**: (+) Aligns with Epic 0.2.2.3 “Zero Cognitive Overhead”; users can audit retrieved context. (-) Larger chat payloads require validation against VS Code performance limits; future work may need pagination. Logging adjustments may increase Output noise but improve diagnostics.
+**Related**: Plan 013 (Fix Memory Display Truncation).
+
+### Decision: Structured Conversation Summaries & Compaction (2025-11-16 12:30)
+
+**Context**: Plan 014 introduced a schema for storing conversation summaries plus agent instructions for ingestion/retrieval. Without structured metadata, Cognee memories will accumulate noise and conflicting history.
+**Choice**: Adopt structured summary chunks with fields (`TopicId`, `SessionId`, `PlanId`, `Status`, `Decisions`, `Rationale`, etc.) and design a compaction pipeline that periodically merges older summaries into `DecisionRecord` DataPoints while marking prior records as `Superseded`. Retrieval pipelines should support recency-aware scoring (semantic + timestamp decay) to prioritize fresh decisions.
+**Alternatives Considered**: (1) Store raw chat transcripts; rejected due to size and low signal. (2) Only rely on plans/ADRs without chat summaries; rejected because many decisions happen in chat and would be lost.
+**Consequences**: (+) Provides predictable retrieval behavior and a pathway to long-term knowledge management. (+) Enables future ranking/feedback features. (-) Requires additional pipeline tasks and metadata discipline; compaction logic must be implemented in Python/Cognee layer before benefits materialize.
+**Related**: Plan 014 analysis, future Epics on context intelligence.
+
+### Decision: Bridge Migration for Structured Summaries (2025-11-16 14:05)
+
+**Context**: Analysis 014 and the new bridge addendum confirmed that `ingest.py`/`retrieve.py` still operate on raw text with inline “Metadata:” strings, and regex-based recency scoring that rarely fires. Plan 014’s architecture assumes structured DataPoints, metadata-aware retrieval, and status-driven compaction.
+
+**Choice**: Prioritize a bridge migration that (a) ingests Plan-014-formatted summaries via DataPoints with indexed metadata fields, (b) returns structured metadata from `retrieve.py` with documented recency-aware scoring, and (c) exposes hooks for future compaction tasks. Legacy raw-text memories remain until compaction supersedes them, but all new storage must follow the structured format.
+
+**Alternatives Considered**: (1) Keep raw-text ingestion and attempt to parse metadata heuristically—rejected due to brittleness and inability to support compaction/status flags. (2) Push metadata logic into the TS layer—rejected because Cognee search needs metadata at ingestion time.
+
+**Consequences**: (+) Enables Plan 014 ranking/transparency goals; (+) aligns with DecisionRecord compaction strategy; (-) requires coordinated updates to bridge scripts, tests, and planner tasks; (-) short-term complexity as legacy and structured memories coexist.
+
+**Related**: Plan 014 bridge addendum, Decision on Structured Conversation Summaries & Compaction.
 
 ## 10. Roadmap Architecture Outlook
 
