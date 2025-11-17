@@ -14,47 +14,48 @@
 ## Value Statement and Business Objective
 
 As a developer with a growing collection of conversation summaries in Cognee Chat Memory,
-I want the system to automatically rank results by relevance and recency, compact redundant summaries into decision records, and prevent memory graph bloat,
+I want the system to automatically rank results by relevance and recency using structured metadata, compact redundant summaries into decision records, and prevent memory graph bloat,
 So that retrieval stays fast, accurate, and high-signal even as my workspace knowledge accumulates over months of work.
 
 ---
 
 ## Objective
 
-Implement the **DataPoint migration, recency-aware ranking algorithms, and compaction behavior evolution** building on Plan 014's metadata foundation. This plan focuses on:
+Implement the **DataPoint migration, metadata infrastructure, recency-aware ranking algorithms, and compaction behavior** building on Plan 014's content-only summaries. This plan focuses on:
 
-1. **DataPoint Migration**: Migrate ingestion from Plan 014's plain-text format to Cognee DataPoints with Pydantic models, using the metadata fields (`topic_id`, `session_id`, `plan_id`, `status`, timestamps) **already defined and implemented in Plan 014**.
-2. **Recency-Aware Ranking Algorithms**: Implement transparent scoring in `retrieve.py` that combines Cognee's semantic similarity with exponential timestamp decay and configurable weights.
-3. **Compaction Behavior Evolution**: Implement the actual compaction logic (LLM-based DecisionRecord creation, status transitions) for the manual trigger **already exposed in Plan 014**; optionally add automation/scheduling.
-4. **Status-Aware Retrieval**: Prefer `DecisionRecord` entries and filter/downrank `Superseded` summaries unless user explicitly requests history.
-5. **Bridge Transparency**: Extend JSON responses from `retrieve.py` to include all metadata (topic, plan, status, created_at, final_score) so the TypeScript layer can display ranking rationale.
+1. **Metadata Introduction**: Define and implement metadata fields (`topic_id`, `session_id`, `plan_id`, `status`, timestamps) using Cognee DataPoints with Pydantic models.
+2. **Migration of Plan 014 Summaries**: Create one-time migration script to convert Plan 014's content-only summaries to DataPoints with generated metadata.
+3. **Recency-Aware Ranking Algorithms**: Implement transparent scoring in `retrieve.py` that combines Cognee's semantic similarity with exponential timestamp decay and configurable weights.
+4. **Compaction Behavior**: Implement compaction logic (LLM-based DecisionRecord creation, status transitions) with manual trigger UI.
+5. **Status-Aware Retrieval**: Prefer `DecisionRecord` entries and filter/downrank `Superseded` summaries unless user explicitly requests history.
+6. **Bridge Transparency**: Extend JSON responses from `retrieve.py` to include all metadata (topic, plan, status, created_at, final_score) so the TypeScript layer can display ranking rationale.
 
 **Out of Scope**:
 
-- Metadata field definition (already done in Plan 014).
-- Initial manual compaction trigger UI (already done in Plan 014; this plan implements the backend behavior).
 - Automated summarization triggers (user-controlled summarization remains from Plan 014).
+- Automated compaction triggers (manual compaction only in this plan).
 - Cross-workspace context sharing (deferred to future roadmap epics).
 
 ---
 
 ## Assumptions
 
-1. **Plan 014 Delivered**: Chat summary creation, ingestion with metadata (topic_id, session_id, plan_id, timestamps), basic retrieval, and manual compaction trigger are functional; users are creating summaries in the Plan 014 schema with embedded metadata.
-2. **Metadata Defined in Plan 014**: This plan **does not define new metadata fields**; it migrates the metadata structure from Plan 014's plain-text format to DataPoints and uses those fields for ranking/compaction.
-3. **Cognee DataPoint Support**: Cognee SDK (v0.4.0 or compatible) supports custom DataPoints with Pydantic models and `metadata.index_fields`; **this will be explicitly verified in Milestone 1**.
+1. **Plan 014 Delivered**: Chat summary creation with content-only schema (Topic, Context, Decisions, etc.), plain-text ingestion, and basic retrieval are functional; users have created summaries in the Plan 014 format.
+2. **Metadata Introduced in This Plan**: This plan **defines and implements** metadata fields (topic_id, session_id, plan_id, status, timestamps) for the first time using Cognee DataPoints.
+3. **Plan 014 Migration Required**: Existing Plan 014 summaries (content-only plain text) must be migrated to DataPoints with generated metadata before ranking/compaction can be used.
+4. **Cognee DataPoint Support**: Cognee SDK (v0.4.0 or compatible) supports custom DataPoints with Pydantic models and `metadata.index_fields`; **this will be explicitly verified in Milestone 1**.
    - **Contingency Path**: If DataPoint API is unsupported or incomplete:
      - Milestone 1 will be blocked; planner must be consulted for re-planning.
-     - Minimal fallback scope (if re-planned): implement ranking on existing metadata (timestamps extracted from text), status-aware retrieval on plain-text status markers, and defer DataPoint migration + compaction to a future plan.
-     - Full DataPoint migration (Milestones 2-5) cannot proceed without verified API support.
-4. **Python-Side Ranking**: Recency-aware scoring is implemented in `retrieve.py` (Python) because it has direct access to Cognee search results and metadata.
-5. **Manual Compaction Trigger Exists**: Plan 014 exposed a manual compaction command/button; this plan implements the actual backend behavior (`compact.py`) that the trigger calls.
-6. **Backward Compatibility**: Legacy raw-text memories from Plans 001-014 remain accessible; compaction only applies to structured summaries.
-7. **Mixed Memory Retrieval**: When both legacy raw-text memories and DataPoint-backed summaries match a query:
+     - Minimal fallback scope (if re-planned): defer DataPoint migration, ranking, and compaction to a future plan when Cognee SDK supports DataPoints.
+     - Full DataPoint migration (Milestones 2-6) cannot proceed without verified API support.
+5. **Python-Side Ranking**: Recency-aware scoring is implemented in `retrieve.py` (Python) because it has direct access to Cognee search results and metadata.
+6. **Manual Compaction UI**: This plan implements both the compaction trigger UI (command/button) and the backend behavior (`compact.py`).
+7. **Backward Compatibility**: Legacy raw-text memories from Plans 001-013 remain accessible; compaction only applies to DataPoint-backed summaries.
+8. **Mixed Memory Retrieval**: When both legacy raw-text memories and DataPoint-backed summaries match a query:
    - Retrieval will prioritize DataPoint-backed summaries/DecisionRecords (they receive full ranking treatment).
-   - Legacy memories will be appended after DataPoint results, sorted by Cognee's default similarity only, and labeled with `[Legacy]` tag in UI.
+   - Legacy memories (Plans 001-013 and pre-migration Plan 014 summaries) will be appended after DataPoint results, sorted by Cognee's default similarity only, and labeled with `[Legacy]` tag in UI.
    - Users can distinguish memory types via metadata presence (DataPoint results include full metadata; legacy results do not).
-8. **Status Semantics Alignment**: Plan 014 summaries (plain-text with embedded metadata) default to `status = "Final"` implicitly. When migrated to DataPoints in this plan, they are explicitly marked `status = "Final"` unless compaction has superseded them. The `Draft` status is reserved for future use; `Superseded` is set only by compaction.
+9. **Status Semantics**: Plan 014 summaries migrated to DataPoints are assigned `status = "Final"` by default. The `Draft` status is reserved for future use; `Superseded` is set only by compaction.
 
 ---
 
@@ -167,7 +168,60 @@ Implement the **DataPoint migration, recency-aware ranking algorithms, and compa
 
 ---
 
-### Milestone 3: Implement Recency-Aware Ranking in Retrieval
+### Milestone 3: Migrate Existing Plan 014 Summaries to DataPoints
+
+**Objective**: Create one-time migration script to convert Plan 014's content-only summaries to DataPoints with generated metadata.
+
+**Tasks**:
+
+1. **Create Migration Script** (`extension/bridge/migrate_summaries.py`)
+   - Accept CLI arguments: `--workspace-path`, `--dry-run` (optional; preview mode).
+   - Query Cognee for all memories matching "Summary:" header pattern (Plan 014 summaries).
+   - For each Plan 014 summary:
+     - Parse structured fields (Topic, Context, Decisions, etc.) from text.
+     - Generate metadata:
+       - `topic_id`: slugify extracted topic (e.g., "Plan 014 Summary" → "plan-014-summary").
+       - `session_id`: generate from inferred timestamp or default to "migrated-{date}".
+       - `plan_id`: extract from References section if present, else `null`.
+       - `status`: default to "Final".
+       - `created_at`: extract from Cognee ingestion timestamp if available, else use migration date.
+       - `updated_at`: same as `created_at`.
+     - Create `ConversationSummary` DataPoint with parsed fields and generated metadata.
+     - If `--dry-run` is false:
+       - Ingest DataPoint via `cognee.add` + `cognee.cognify`.
+       - Mark original Plan 014 summary as migrated (add marker to prevent duplicate migration).
+   - Log migration progress: "Migrated {N} summaries. Dry run: {Y/N}."
+   - **Acceptance**: `migrate_summaries.py` successfully converts Plan 014 summaries to DataPoints; `--dry-run` returns preview without changes.
+
+2. **Add Pytest Tests for Migration** (`extension/bridge/test_migrate.py`)
+   - Mock Cognee SDK with sample Plan 014 summary text.
+   - Verify that migration script correctly parses structured fields and generates metadata.
+   - Validate that `ConversationSummary` DataPoint is created with correct fields.
+   - **Acceptance**: Pytest test passes; migration logic validated.
+
+3. **Document Migration Process** (`extension/bridge/README.md`)
+   - Add section "Migrating Plan 014 Summaries" explaining:
+     - Why migration is needed (metadata introduction).
+     - How to run migration script (`python migrate_summaries.py --workspace-path "/path/to/workspace"`).
+     - Recommendation to run `--dry-run` first to preview changes.
+     - Migration is idempotent (can be run multiple times safely).
+   - **Acceptance**: Migration process documented; users understand how to migrate.
+
+4. **Add Migration Command to Extension** (`extension/src/commands.ts`)
+   - Add VS Code command `cognee.migrateSummaries` that:
+     - Prompts user: "Migrate Plan 014 summaries to DataPoints? This will enable metadata-driven ranking and compaction. [Migrate/Cancel]"
+     - On confirmation, calls `migrate_summaries.py --workspace-path "{workspace}"` (without `--dry-run`).
+     - Shows progress notification during migration.
+     - Shows success notification: "Migrated {N} summaries to DataPoints."
+   - **Acceptance**: Command palette includes "Migrate Cognee Summaries"; users can trigger migration via UI.
+
+**Owner**: Implementer
+**Dependencies**: Milestone 2 (DataPoint ingestion functional)
+**Validation**: Pytest passes; manual test confirms Plan 014 summaries are migrated and queryable with metadata.
+
+---
+
+### Milestone 4: Implement Recency-Aware Ranking in Retrieval
 
 **Objective**: Update `retrieve.py` to compute `final_score` by combining Cognee similarity with exponential timestamp decay.
 
@@ -214,12 +268,12 @@ Implement the **DataPoint migration, recency-aware ranking algorithms, and compa
    - **Acceptance**: Pytest test passes; ranking logic validated.
 
 **Owner**: Implementer
-**Dependencies**: Milestone 2 (metadata-rich DataPoints ingested)
+**Dependencies**: Milestone 3 (Plan 014 summaries migrated; metadata available)
 **Validation**: Pytest passes; manual test confirms recency affects ranking (ingest two summaries with different dates, retrieve, confirm newer is ranked higher).
 
 ---
 
-### Milestone 4: Implement Status-Aware Retrieval
+### Milestone 5: Implement Status-Aware Retrieval
 
 **Objective**: Filter or downrank `Superseded` summaries and prefer `DecisionRecord` entries during retrieval.
 
@@ -244,14 +298,14 @@ Implement the **DataPoint migration, recency-aware ranking algorithms, and compa
    - **Acceptance**: Pytest test passes; status filtering validated.
 
 **Owner**: Implementer
-**Dependencies**: Milestone 3 (ranking functional)
+**Dependencies**: Milestone 4 (ranking functional)
 **Validation**: Pytest passes; manual test confirms superseded summaries are hidden unless requested.
 
 ---
 
-### Milestone 5: Implement Compaction Backend Behavior
+### Milestone 6: Implement Compaction Trigger and Backend Behavior
 
-**Objective**: Create the `compact.py` script that implements the actual compaction logic called by Plan 014's manual compaction trigger.
+**Objective**: Create the compaction UI command and `compact.py` script that implements compaction logic.
 
 **Tasks**:
 
@@ -274,15 +328,15 @@ Implement the **DataPoint migration, recency-aware ranking algorithms, and compa
    - Log compaction action: "Compacted {N} summaries for topic {topic_id} into DecisionRecord. Conflicts detected: {Y/N}."
    - **Acceptance**: `compact.py --topic-id "..."` creates DecisionRecord and marks summaries as superseded; `--preview` returns preview without changes.
 
-2. **Update Plan 014's Compaction Command to Call Actual Logic** (`extension/src/commands.ts`)
-   - Modify the placeholder `cognee.compactMemories` command from Plan 014 to:
-     - Prompt user to enter or select a topic ID.
-     - Call `compact.py --workspace-path "{workspace}" --topic-id "{topic_id}" --preview` to generate preview.
-     - Display preview to user (number of summaries, any detected conflicts, sample aggregated decisions).
-     - Prompt user: "Compact {N} summaries into DecisionRecord? This will mark them as superseded. [Confirm/Cancel]"
-     - On confirmation, call `compact.py --workspace-path "{workspace}" --topic-id "{topic_id}"` (without `--preview`).
-     - Show success notification with result: "Compacted {N} summaries for topic {topic_id}. {Conflict warnings if any}."
-   - **Acceptance**: Existing command now triggers real compaction with preview/confirmation step; users can review before consolidating memories.
+2. **Create Compaction Command** (`extension/src/commands.ts`)
+   - Add VS Code command `cognee.compactMemories` that:
+     - Prompts user to enter or select a topic ID.
+     - Calls `compact.py --workspace-path "{workspace}" --topic-id "{topic_id}" --preview` to generate preview.
+     - Displays preview to user (number of summaries, any detected conflicts, sample aggregated decisions).
+     - Prompts user: "Compact {N} summaries into DecisionRecord? This will mark them as superseded. [Confirm/Cancel]"
+     - On confirmation, calls `compact.py --workspace-path "{workspace}" --topic-id "{topic_id}"` (without `--preview`).
+     - Shows success notification with result: "Compacted {N} summaries for topic {topic_id}. {Conflict warnings if any}."
+   - **Acceptance**: Command palette includes "Compact Cognee Memories"; users can trigger compaction with preview/confirmation step.
 
 3. **Add Pytest Tests for Compaction** (`extension/bridge/test_compact.py`)
    - Mock Cognee SDK with sample `ConversationSummary` records.
@@ -291,12 +345,12 @@ Implement the **DataPoint migration, recency-aware ranking algorithms, and compa
    - **Acceptance**: Pytest test passes; compaction logic validated.
 
 **Owner**: Implementer
-**Dependencies**: Milestones 1-4 (DataPoints, ingestion, retrieval all functional)
+**Dependencies**: Milestones 1-5 (DataPoints, ingestion, migration, retrieval all functional)
 **Validation**: Pytest passes; manual test confirms compaction reduces summary count and retrieval prioritizes DecisionRecord.
 
 ---
 
-### Milestone 6: Enhance TypeScript UI for Ranking Transparency
+### Milestone 7: Enhance TypeScript UI for Ranking Transparency
 
 **Objective**: Display ranking metadata in chat participant and Output channel so users understand why certain summaries are surfaced.
 
@@ -330,12 +384,12 @@ Implement the **DataPoint migration, recency-aware ranking algorithms, and compa
    - **Acceptance**: Users can tune ranking behavior via settings; defaults are sensible and ranges prevent pathological behavior.
 
 **Owner**: Implementer
-**Dependencies**: Milestone 3 (ranking functional)
+**Dependencies**: Milestone 4 (ranking functional)
 **Validation**: Manual test confirms metadata is visible in chat and logs; settings can be adjusted.
 
 ---
 
-### Milestone 7: Documentation and Release Artifacts
+### Milestone 8: Documentation and Release Artifacts
 
 **Objective**: Document metadata infrastructure, ranking, and compaction for users and maintainers.
 
@@ -343,13 +397,16 @@ Implement the **DataPoint migration, recency-aware ranking algorithms, and compa
 
 1. **Update README** (`extension/README.md`)
    - Add section "Metadata and Ranking" explaining:
-     - How summaries are tagged with topic/session/plan IDs (defined in Plan 014, migrated to DataPoints in Plan 015).
+     - How summaries are tagged with topic/session/plan IDs (introduced in Plan 015 via DataPoints).
+     - How to migrate Plan 014 summaries to enable metadata features.
      - How recency-aware scoring works (exponential decay, configurable weights).
      - How compaction consolidates summaries into decision records.
-   - Enhance the "Memory Compaction" section (from Plan 014) with:
-     - Technical details: what happens during compaction (LLM aggregation, status transitions).
-     - Advanced cadence guidance: consider compaction after N summaries or M days, depending on project velocity; optionally explore automated triggers in future.
-   - **Acceptance**: README clearly documents metadata migration, ranking algorithms, and enhanced compaction guidance.
+   - Add section "Memory Compaction" explaining:
+     - What compaction does: consolidates multiple summaries for a topic into a single decision record, marks old summaries as superseded.
+     - Technical details: LLM aggregation, status transitions, conflict detection.
+     - Recommended cadence: Run compaction manually when a topic accumulates 5+ summaries, after completing a major milestone, or weekly/bi-weekly for active projects.
+     - Warning: "Compaction is irreversible; always review summaries before compacting."
+   - **Acceptance**: README clearly documents metadata introduction, migration, ranking algorithms, and compaction guidance.
 
 2. **Update Architecture Document** (`agent-output/architecture/system-architecture.md`)
    - Record Plan 015 in change log.
@@ -363,40 +420,39 @@ Implement the **DataPoint migration, recency-aware ranking algorithms, and compa
    - **Acceptance**: CHANGELOG updated; release notes ready.
 
 **Owner**: Implementer
-**Dependencies**: Milestones 1-6 (all features implemented)
+**Dependencies**: Milestones 1-7 (all features implemented)
 **Validation**: Documentation reviewed; release artifacts ready.
 
 ---
 
-### Milestone 8: Update Version and Release Artifacts
+### Milestone 9: Update Version and Release Artifacts
 
-**Objective**: Update extension version to v0.3.0 and document Plan 015 changes for roadmap alignment.
+**Objective**: Update extension version to v0.4.0 and document Plan 015 changes for roadmap alignment.
 
-**Note**: This plan shares v0.3.0 with Plan 014. If Plan 014 has already updated the version to 0.3.0, this milestone adds to the existing v0.3.0 CHANGELOG section rather than incrementing the version.
+**Note**: Plan 014 delivers v0.3.0 (content-only summaries). Plan 015 introduces metadata infrastructure, so it increments to v0.4.0.
 
 **Steps**:
 
-1. Check current version in `extension/package.json`:
-   - If version is already 0.3.0 (from Plan 014), proceed to step 2 without updating version
-   - If version is not 0.3.0, update `extension/package.json` to 0.3.0
-2. Add/update CHANGELOG entry under v0.3.0 section:
+1. Update version in `extension/package.json` to 0.4.0
+2. Add CHANGELOG entry under v0.4.0 section:
+   - "New: Metadata infrastructure introduced - topic_id, session_id, plan_id, status, timestamps"
    - "New: DataPoint-based ingestion with Pydantic models and structured metadata"
+   - "New: Migration tool for Plan 014 summaries - convert content-only summaries to DataPoints with metadata"
    - "New: Recency-aware ranking algorithm with exponential decay (configurable alpha and halfLifeDays)"
    - "New: Status-aware retrieval - filters Superseded summaries, prioritizes DecisionRecords"
-   - "New: Compaction backend - consolidates summaries into DecisionRecords with LLM aggregation"
+   - "New: Compaction trigger and backend - consolidates summaries into DecisionRecords with LLM aggregation"
    - "New: Ranking transparency - display relevance scores, metadata, and ranking rationale in UI"
    - "New: Configurable ranking settings (cogneeMemory.ranking.alpha, cogneeMemory.ranking.halfLifeDays)"
-   - "Improved: Memory compaction now includes preview/confirmation flow with conflict detection"
-3. Update README with ranking and compaction sections (completed in Milestone 7)
-4. Verify VSIX filename will be `cognee-chat-memory-0.3.0.vsix` during packaging
-5. Commit version changes with message: "Release v0.3.0 - Plan 015: Metadata, Ranking, and Compaction" (or "Update v0.3.0 - Plan 015 additions" if version already set)
+   - "New: Manual compaction command with preview/confirmation flow and conflict detection"
+3. Update README with metadata, ranking, and compaction sections (completed in Milestone 8)
+4. Verify VSIX filename will be `cognee-chat-memory-0.4.0.vsix` during packaging
+5. Commit version changes with message: "Release v0.4.0 - Plan 015: Metadata, Ranking, and Compaction"
 
 **Acceptance Criteria**:
-- Version artifacts updated to 0.3.0 (or confirmed already at 0.3.0)
-- CHANGELOG reflects Plan 015 deliverables under v0.3.0
-- Version matches roadmap target (Epic 0.3.0.1)
+- Version artifacts updated to 0.4.0
+- CHANGELOG reflects Plan 015 deliverables under v0.4.0
 - Extension manifest and package.json versions are consistent
-- Documented coordination with Plan 014 version (both deliver v0.3.0)
+- Plan 014 remains at v0.3.0; Plan 015 increments to v0.4.0 (decoupled releases)
 
 ---
 
@@ -511,7 +567,7 @@ If DataPoint migration introduces breaking changes:
 - **Python Focus**: Most work is in Python (`datapoints.py`, `ingest.py`, `retrieve.py`, `compact.py`); TypeScript changes are UI-focused.
 - **Testing Critical**: Each milestone must have passing pytest tests before moving to next milestone; integration tests prevent regressions.
 - **Manual QA Essential**: Have QA validate each milestone in live VS Code environment with real Cognee SDK; ranking and compaction require end-to-end validation.
-- **Plan 014 Dependency**: Treat `analysis/014-chat-conversation-summaries-and-agent-instructions-analysis.md` and `analysis/014-bridge-focused-addendum-analysis.md` as the single source of truth for metadata shapes and CLI contracts. If Plan 014 implementation deviates from assumed metadata structure (e.g., different field names, missing fields), document deviations in implementation notes and adjust this plan's DataPoint models accordingly before proceeding to Milestone 2.
+- **Plan 014 Dependency**: Plan 014 delivers content-only summaries (no metadata). This plan introduces metadata for the first time. Treat `analysis/014-chat-conversation-summaries-and-agent-instructions-analysis.md` as guidance for summary content structure, but metadata fields are newly defined in this plan.
 
 ---
 
