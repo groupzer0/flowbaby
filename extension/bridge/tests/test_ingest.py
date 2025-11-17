@@ -224,6 +224,67 @@ async def test_ingest_success_returns_metadata(temp_workspace, mock_env, mock_co
             assert isinstance(result['ingested_chars'], int)
             assert result['ingested_chars'] > 0
             assert 'timestamp' in result
+            assert 'ingestion_duration_sec' in result
+            assert isinstance(result['ingestion_duration_sec'], float)
+            assert result['ingestion_duration_sec'] >= 0
+            assert 'ingestion_metrics' in result
+            assert isinstance(result['ingestion_metrics'], dict)
+
+
+@pytest.mark.asyncio
+async def test_ingest_success_includes_step_metrics(temp_workspace, mock_env, mock_cognee_module, mock_rdflib_graph):
+    """Test that ingestion success payload includes detailed step metrics."""
+    ontology_path = temp_workspace.parent / 'ontology.ttl'
+    ontology_path.write_text('@prefix : <http://example.org/> .\n:Test a :Class .')
+
+    with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
+        with patch('ingest.Path') as mock_path_class:
+            mock_ontology = MagicMock()
+            mock_ontology.exists.return_value = True
+
+            def mock_path_side_effect(path_str):
+                if 'ontology.ttl' in str(path_str):
+                    return mock_ontology
+                return Path(path_str)
+
+            mock_path_class.side_effect = mock_path_side_effect
+
+            from ingest import ingest_conversation
+
+            user_msg = 'How do I cache?'
+            assistant_msg = 'Use functools.lru_cache'
+
+            result = await ingest_conversation(
+                str(temp_workspace),
+                user_msg,
+                assistant_msg
+            )
+
+            assert result['success'] is True
+            assert 'ingestion_metrics' in result
+
+            metrics = result['ingestion_metrics']
+            expected_keys = {
+                'load_env_sec',
+                'init_cognee_sec',
+                'config_llm_sec',
+                'dataset_ontology_sec',
+                'add_sec',
+                'cognify_sec',
+                'total_ingest_sec'
+            }
+
+            missing_keys = expected_keys - metrics.keys()
+            assert not missing_keys, f"Missing metric keys: {missing_keys}"
+
+            assert isinstance(metrics['total_ingest_sec'], float)
+            assert metrics['total_ingest_sec'] >= 0
+            assert pytest.approx(metrics['total_ingest_sec'], rel=0.1) == pytest.approx(result['ingestion_duration_sec'], rel=0.1)
+
+            # Step timings should sum to a reasonable bound relative to total duration
+            step_sum = sum(metrics[key] for key in expected_keys if key != 'total_ingest_sec')
+            assert step_sum >= 0
+            assert step_sum <= metrics['total_ingest_sec'] * 2
 
 
 def test_main_missing_arguments(capsys):

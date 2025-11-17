@@ -5,6 +5,26 @@ All notable changes to the Cognee Chat Memory extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2025-11-17
+
+### Fixed
+
+- Display truncation in chat participant - users can now see full retrieved memory content (up to 2000 chars)
+- Query logging truncation increased from 50 to 200+ characters for better debugging
+- Ingestion timeout increased from 30s to 120s to reduce false-positive failures
+- Error messages now distinguish timeout (may still succeed) from true ingestion failure
+- Added comprehensive ingestion performance metrics (Python-side duration, step-level timing)
+- Added process exit vs timeout logging for diagnosing bridge-level latency
+
+### Improved
+
+- Transparent memory display with character count indicators aligns with discoverability goals (Epic 0.2.2.3)
+- Clear truncation indication when memories exceed 2000 chars (shows "showing X of Y chars")
+- Query length now shown in debug logs when queries exceed 200 chars
+- Ingestion timeout errors now explain background processing may still succeed
+- Extension logs include both Node-side and Python-side duration metrics for correlation
+- Step-level metrics (load_env, init_cognee, config_llm, dataset_ontology, add, cognify) enable bottleneck identification
+
 ## [0.2.2] - 2025-11-17
 
 ### Fixed

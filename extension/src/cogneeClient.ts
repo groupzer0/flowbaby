@@ -238,13 +238,14 @@ export class CogneeClient {
         });
 
         try {
-            // Use 30-second timeout for ingestion (Cognee setup + processing takes time)
+            // Use 120-second timeout for ingestion (Cognee setup + LLM processing can take time)
+            // Increased from 30s to reduce false-positive timeout errors when ingestion succeeds but takes >30s
             const result = await this.runPythonScript('ingest.py', [
                 this.workspacePath,
                 userMessage,
                 assistantMessage,
                 importance.toString()
-            ], 30000);
+            ], 120000);
 
             const duration = Date.now() - startTime;
 
@@ -252,8 +253,17 @@ export class CogneeClient {
                 this.log('INFO', 'Conversation ingested', {
                     chars: result.ingested_chars,
                     timestamp: result.timestamp,
-                    duration
+                    duration_ms: duration,
+                    ingestion_duration_sec: result.ingestion_duration_sec
                 });
+                
+                // Log step-level metrics if available
+                if (result.ingestion_metrics) {
+                    this.log('DEBUG', 'Ingestion metrics', {
+                        metrics: result.ingestion_metrics
+                    });
+                }
+                
                 return true;
             } else {
                 this.log('ERROR', 'Ingestion failed', {
@@ -265,10 +275,32 @@ export class CogneeClient {
         } catch (error) {
             const duration = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.log('ERROR', 'Ingestion exception', {
-                duration,
-                error: errorMessage
-            });
+            
+            // Milestone 2: Distinguish timeout vs true failure
+            const isTimeout = /Python script timeout after/i.test(errorMessage);
+            
+            if (isTimeout) {
+                this.log('ERROR', 'Ingestion timeout', {
+                    duration_ms: duration,
+                    error_type: 'timeout',
+                    error: errorMessage,
+                    note: 'Ingestion may still complete in background - check @cognee-memory retrieval'
+                });
+                
+                // User-facing message clarifying background processing
+                vscode.window.showWarningMessage(
+                    'Cognee is still working on ingestion in the background. ' +
+                    'The extension timed out waiting for a response after 120 seconds. ' +
+                    'Your data may still be ingested; you can check by querying @cognee-memory in a moment.'
+                );
+            } else {
+                this.log('ERROR', 'Ingestion exception', {
+                    duration_ms: duration,
+                    error_type: 'failure',
+                    error: errorMessage
+                });
+            }
+            
             return false;
         }
     }
@@ -435,6 +467,11 @@ export class CogneeClient {
         });
 
         return new Promise((resolve, reject) => {
+            // Milestone 5: Track process timing to distinguish timeout vs exit timing
+            let timedOut = false;
+            const requestStart = Date.now();
+            let timeoutFiredAt: number | null = null;
+            
             // Spawn Python process with workspace as working directory
             // This ensures relative paths in scripts resolve from workspace root
             const python = spawn(this.pythonPath, [scriptPath, ...args], {
@@ -463,10 +500,20 @@ export class CogneeClient {
 
             // Handle process close
             python.on('close', (code) => {
+                const closeTime = Date.now();
+                
                 this.log('DEBUG', 'Python script completed', {
                     script: scriptName,
-                    exit_code: code
+                    exit_code: code,
+                    close_duration_ms: closeTime - requestStart,
+                    timed_out: timedOut,
+                    timeout_fired_ms: timeoutFiredAt ? timeoutFiredAt - requestStart : null
                 });
+                
+                // If we already timed out, process completed after promise rejection
+                if (timedOut) {
+                    return;
+                }
 
                 if (code !== 0) {
                     // Enhanced error surfacing: capture and parse both stdout and stderr
@@ -543,17 +590,25 @@ export class CogneeClient {
 
             // Set timeout (configurable per operation)
             const timeout = setTimeout(() => {
+                timedOut = true;
+                timeoutFiredAt = Date.now();
+                
                 python.kill();
+                
                 this.log('ERROR', 'Python script timeout', {
                     script: scriptName,
-                    timeout: timeoutMs
+                    timeout: timeoutMs,
+                    elapsed_ms: timeoutFiredAt - requestStart
                 });
+                
                 reject(new Error(`Python script timeout after ${timeoutMs/1000} seconds`));
             }, timeoutMs);
 
-            // Clear timeout on close
+            // Clear timeout on close (only if not already timed out)
             python.on('close', () => {
-                clearTimeout(timeout);
+                if (!timedOut) {
+                    clearTimeout(timeout);
+                }
             });
         });
     }

@@ -395,4 +395,99 @@ suite('CogneeClient Test Suite', () => {
             assert.strictEqual(preview, query);
         });
     });
+
+    suite('ingest metrics and error handling', () => {
+        const workspacePath = '/tmp/test-workspace-ingest';
+        let sandbox: sinon.SinonSandbox;
+
+        function stubSharedDependencies() {
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: (_key: string, defaultValue?: any) => defaultValue
+            } as vscode.WorkspaceConfiguration);
+            sandbox.stub(vscode.window, 'createOutputChannel').returns({
+                name: 'Cognee Memory',
+                appendLine: () => void 0,
+                append: () => void 0,
+                replace: () => void 0,
+                clear: () => void 0,
+                dispose: () => void 0,
+                hide: () => void 0,
+                show: () => void 0
+            } as unknown as vscode.LogOutputChannel);
+        }
+
+        setup(() => {
+            sandbox = sinon.createSandbox();
+        });
+
+        teardown(() => {
+            sandbox.restore();
+        });
+
+        test('logs ingestion metrics on success and suppresses warning toast', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+            sandbox.stub(client as any, 'runPythonScript').resolves({
+                success: true,
+                ingested_chars: 120,
+                timestamp: '2025-11-17T14:00:00.000Z',
+                ingestion_duration_sec: 1.5,
+                ingestion_metrics: { add_sec: 0.4 }
+            });
+
+            const warningStub = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+
+            const result = await client.ingest('How do I cache?', 'Use functools.lru_cache');
+
+            assert.strictEqual(result, true);
+            assert.ok(warningStub.notCalled, 'Warning message should not show on success');
+
+            const successCall = logStub.getCalls().find((call) => call.args[1] === 'Conversation ingested');
+            assert.ok(successCall, 'Success log missing');
+            assert.strictEqual(successCall!.args[2].ingestion_duration_sec, 1.5);
+
+            const metricsCall = logStub.getCalls().find((call) => call.args[1] === 'Ingestion metrics');
+            assert.ok(metricsCall, 'Detailed metrics log missing');
+            assert.deepStrictEqual(metricsCall!.args[2].metrics, { add_sec: 0.4 });
+        });
+
+        test('handles timeout errors with user-facing guidance', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+            sandbox.stub(client as any, 'runPythonScript').rejects(new Error('Python script timeout after 120 seconds'));
+
+            const warningStub = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+
+            const result = await client.ingest('Question', 'Answer');
+
+            assert.strictEqual(result, false);
+            assert.ok(warningStub.calledOnce, 'Timeout should trigger warning notification');
+
+            const timeoutCall = logStub.getCalls().find((call) => call.args[1] === 'Ingestion timeout');
+            assert.ok(timeoutCall, 'Timeout log missing');
+            assert.strictEqual(timeoutCall!.args[2].error_type, 'timeout');
+            assert.match(timeoutCall!.args[2].error as string, /Python script timeout/);
+        });
+
+        test('handles non-timeout failures without warning toast', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+            sandbox.stub(client as any, 'runPythonScript').rejects(new Error('LLM_API_KEY not found'));
+
+            const warningStub = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+
+            const result = await client.ingest('Question', 'Answer');
+
+            assert.strictEqual(result, false);
+            assert.ok(warningStub.notCalled, 'Failure path should not show timeout guidance');
+
+            const failureCall = logStub.getCalls().find((call) => call.args[1] === 'Ingestion exception');
+            assert.ok(failureCall, 'Failure log missing');
+            assert.strictEqual(failureCall!.args[2].error_type, 'failure');
+            assert.match(failureCall!.args[2].error as string, /LLM_API_KEY/);
+        });
+    });
 });

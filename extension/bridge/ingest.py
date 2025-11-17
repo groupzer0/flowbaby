@@ -23,6 +23,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 
 from workspace_utils import generate_dataset_name
 
@@ -46,7 +47,12 @@ async def ingest_conversation(
         Dictionary with success status, ingested_chars, timestamp, or error
     """
     try:
-        # Load workspace .env file
+        # Milestone 3 & 4: Initialize metrics dictionary and start overall timing
+        metrics = {}
+        overall_start = perf_counter()
+        
+        # Step 1: Load workspace .env file
+        step_start = perf_counter()
         workspace_dir = Path(workspace_path)
         env_file = workspace_dir / '.env'
         
@@ -61,6 +67,11 @@ async def ingest_conversation(
                 'success': False,
                 'error': 'LLM_API_KEY not found in environment or .env file. Set LLM_API_KEY="sk-..." in your workspace .env'
             }
+        
+        metrics['load_env_sec'] = perf_counter() - step_start
+        
+        # Step 2: Import cognee and configure directories
+        step_start = perf_counter()
         
         # Redirect stdout to suppress Cognee's print statements
         # (e.g., "User X has registered") that break JSON parsing
@@ -78,9 +89,19 @@ async def ingest_conversation(
         cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
         cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
         
+        metrics['init_cognee_sec'] = perf_counter() - step_start
+        
+        # Step 3: Configure LLM provider and API key
+        step_start = perf_counter()
+        
         # Configure Cognee with API key
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
+        
+        metrics['config_llm_sec'] = perf_counter() - step_start
+        
+        # Step 4: Generate dataset name and resolve ontology
+        step_start = perf_counter()
         
         # 1. Generate same unique dataset name as init.py (using canonical path)
         dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
@@ -109,6 +130,8 @@ async def ingest_conversation(
         # Generate timestamp
         timestamp = datetime.now().isoformat()
         
+        metrics['dataset_ontology_sec'] = perf_counter() - step_start
+        
         # Format conversation with simplified conversational prose format
         # Analysis Finding 3: Natural language format works best for Cognee's LLM extraction
         # Avoid bracketed metadata like [Timestamp: ...] which dilutes extraction signals
@@ -118,15 +141,26 @@ Assistant answered: {assistant_message}
 
 Metadata: timestamp={timestamp}, importance={importance}"""
         
+        # Step 5: Add data to this workspace's dataset
+        step_start = perf_counter()
+        
         # 3. Add data to this workspace's dataset (Task 3: using correct parameter names)
         await cognee.add(
             data=[conversation],
             dataset_name=dataset_name
         )
         
+        metrics['add_sec'] = perf_counter() - step_start
+        
+        # Step 6: Cognify with datasets parameter
+        step_start = perf_counter()
+        
         # 4. Cognify with datasets parameter (Task 3: correct parameter, no ontology_file_path kwarg)
         # Note: Ontology configuration should be set via .env (ontology_file_path=/path/to/file.ttl)
         await cognee.cognify(datasets=[dataset_name])
+        
+        metrics['cognify_sec'] = perf_counter() - step_start
+        metrics['total_ingest_sec'] = perf_counter() - overall_start
         
         # Note: This ensures the chat ontology is only applied to this workspace's data.
         # Tutorial data (with different dataset_name) remains separate and can use its own ontology.
@@ -134,10 +168,17 @@ Metadata: timestamp={timestamp}, importance={importance}"""
         # Calculate total characters
         ingested_chars = len(conversation)
         
+        # Milestone 3 & 4: Log metrics to stderr for debugging
+        print(f"Ingestion duration: {metrics['total_ingest_sec']:.3f} seconds", file=sys.stderr)
+        print(f"Ingestion metrics: {json.dumps(metrics)}", file=sys.stderr)
+        
+        # Milestone 3 & 4: Return success with duration and step-level metrics
         return {
             'success': True,
             'ingested_chars': ingested_chars,
-            'timestamp': timestamp
+            'timestamp': timestamp,
+            'ingestion_duration_sec': metrics['total_ingest_sec'],
+            'ingestion_metrics': metrics
         }
         
     except ImportError as e:
