@@ -19,6 +19,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, Any
+import pytest
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -45,6 +46,7 @@ def load_env_file(workspace_path: Path) -> Dict[str, str]:
     return env_vars
 
 
+@pytest.mark.manual
 async def test_init(workspace_path: Path) -> Dict[str, Any]:
     """Test initialization action."""
     print(f"\n=== Testing INIT action ===")
@@ -84,6 +86,7 @@ async def test_init(workspace_path: Path) -> Dict[str, Any]:
         return {'success': False, 'elapsed': elapsed, 'error': str(e)}
 
 
+@pytest.mark.manual
 async def test_ingest(workspace_path: Path) -> Dict[str, Any]:
     """Test ingestion action."""
     print(f"\n=== Testing INGEST action ===")
@@ -140,6 +143,7 @@ async def test_ingest(workspace_path: Path) -> Dict[str, Any]:
         return {'success': False, 'elapsed': elapsed, 'error': str(e)}
 
 
+@pytest.mark.manual
 async def test_retrieve(workspace_path: Path) -> Dict[str, Any]:
     """Test retrieval action."""
     print(f"\n=== Testing RETRIEVE action ===")
@@ -175,6 +179,7 @@ async def test_retrieve(workspace_path: Path) -> Dict[str, Any]:
         return {'success': False, 'elapsed': elapsed, 'error': str(e)}
 
 
+@pytest.mark.manual
 async def test_clear(workspace_path: Path) -> Dict[str, Any]:
     """Test clear action."""
     print(f"\n=== Testing CLEAR action ===")

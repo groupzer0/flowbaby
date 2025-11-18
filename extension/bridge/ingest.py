@@ -134,6 +134,21 @@ async def ingest_summary(
         # Section headings must match summaryTemplate.ts and retrieve.py regex patterns exactly
         TEMPLATE_VERSION = "1.0"
         
+        # Validate required timestamp fields (camelCase from TypeScript)
+        created_ts = summary_json.get('createdAt')
+        updated_ts = summary_json.get('updatedAt')
+        
+        if not created_ts:
+            return {
+                'success': False,
+                'error': 'Summary missing required "createdAt" field (ISO 8601 timestamp)'
+            }
+        if not updated_ts:
+            return {
+                'success': False,
+                'error': 'Summary missing required "updatedAt" field (ISO 8601 timestamp)'
+            }
+        
         # Format lists with (none) marker for empty sections
         def format_list(items):
             if not items or len(items) == 0:
@@ -149,8 +164,8 @@ async def ingest_summary(
 - Session ID: {summary_json.get('sessionId') or 'N/A'}
 - Plan ID: {summary_json.get('planId') or 'N/A'}
 - Status: {summary_json.get('status', 'Active')}
-- Created: {summary_json.get('createdAt', summary_json.get('created_at', ''))}
-- Updated: {summary_json.get('updatedAt', summary_json.get('updated_at', ''))}
+- Created: {created_ts}
+- Updated: {updated_ts}
 
 ## Context
 {summary_json['context']}
@@ -162,26 +177,26 @@ async def ingest_summary(
 {format_list(summary_json.get('rationale', []))}
 
 ## Open Questions
-{format_list(summary_json.get('openQuestions', summary_json.get('open_questions', [])))}
+{format_list(summary_json.get('openQuestions', []))}
 
 ## Next Steps
-{format_list(summary_json.get('nextSteps', summary_json.get('next_steps', [])))}
+{format_list(summary_json.get('nextSteps', []))}
 
 ## References
 {format_list(summary_json.get('references', []))}
 
 ## Time Scope
-{summary_json.get('timeScope', summary_json.get('time_scope', '(not specified)'))}
+{summary_json.get('timeScope', '(not specified)')}
 """
         
-        # Store metadata dictionary for response (handle both camelCase and snake_case)
+        # Store metadata dictionary for response (camelCase from TypeScript)
         metadata = {
-            'topic_id': summary_json.get('topicId', summary_json.get('topic_id')),
-            'session_id': summary_json.get('sessionId', summary_json.get('session_id')),
-            'plan_id': summary_json.get('planId', summary_json.get('plan_id')),
+            'topic_id': summary_json.get('topicId'),
+            'session_id': summary_json.get('sessionId'),
+            'plan_id': summary_json.get('planId'),
             'status': summary_json.get('status', 'Active'),
-            'created_at': summary_json.get('createdAt', summary_json.get('created_at')),
-            'updated_at': summary_json.get('updatedAt', summary_json.get('updated_at'))
+            'created_at': created_ts,
+            'updated_at': updated_ts
         }
         
         metrics['create_summary_text_sec'] = perf_counter() - step_start
@@ -211,11 +226,11 @@ async def ingest_summary(
         print(f"Summary ingestion duration: {metrics['total_ingest_sec']:.3f} seconds", file=sys.stderr)
         print(f"Summary ingestion metrics: {json.dumps(metrics)}", file=sys.stderr)
         
-        # Return success with metadata confirmation
+        # Return success with metadata confirmation (use resolved created_ts)
         return {
             'success': True,
             'ingested_chars': ingested_chars,
-            'timestamp': summary_json['created_at'],
+            'timestamp': created_ts,
             'metadata': metadata,
             'ingestion_duration_sec': metrics['total_ingest_sec'],
             'ingestion_metrics': metrics

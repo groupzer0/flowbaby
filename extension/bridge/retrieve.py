@@ -108,15 +108,16 @@ def parse_enriched_summary(text: str) -> dict:
         return lines
     
     # Build structured result per RETRIEVE_CONTRACT.md
+    # Use camelCase to match TypeScript RetrievalResult interface
     return {
         'summary_text': text,
         'topic': topic_match.group(1).strip() if topic_match else None,
-        'topic_id': topic_id_match.group(1) if topic_id_match and topic_id_match.group(1) != 'N/A' else None,
-        'session_id': session_id_match.group(1) if session_id_match and session_id_match.group(1) != 'N/A' else None,
-        'plan_id': plan_id_match.group(1) if plan_id_match and plan_id_match.group(1) != 'N/A' else None,
+        'topicId': topic_id_match.group(1) if topic_id_match and topic_id_match.group(1) != 'N/A' else None,
+        'sessionId': session_id_match.group(1) if session_id_match and session_id_match.group(1) != 'N/A' else None,
+        'planId': plan_id_match.group(1) if plan_id_match and plan_id_match.group(1) != 'N/A' else None,
         'status': status_match.group(1) if status_match and status_match.group(1) != 'N/A' else None,
-        'created_at': created_at_match.group(1) if created_at_match and created_at_match.group(1) != 'N/A' else None,
-        'updated_at': updated_at_match.group(1) if updated_at_match and updated_at_match.group(1) != 'N/A' else None,
+        'createdAt': created_at_match.group(1) if created_at_match and created_at_match.group(1) != 'N/A' else None,
+        'updatedAt': updated_at_match.group(1) if updated_at_match and updated_at_match.group(1) != 'N/A' else None,
         'context': context_match.group(1).strip() if context_match else None,
         'decisions': parse_list_section(decisions_match.group(1)) if decisions_match else [],
         'rationale': parse_list_section(rationale_match.group(1)) if rationale_match else [],
@@ -282,15 +283,16 @@ async def retrieve_context(
                 )
                 
                 # Legacy format per §4.4.1 mixed-mode requirement
+                # Use camelCase to match TypeScript RetrievalResult interface
                 result_dict = {
                     'summary_text': text,
                     'text': text,  # Backward compatibility
                     'topic': None,
-                    'topic_id': None,
-                    'session_id': None,
-                    'plan_id': None,
+                    'topicId': None,
+                    'sessionId': None,
+                    'planId': None,
                     'status': None,
-                    'created_at': timestamp,
+                    'createdAt': timestamp,
                     'score': round(final_score, 3),
                     'recency_score': round(recency_score, 3),
                     'importance_score': round(importance, 3),

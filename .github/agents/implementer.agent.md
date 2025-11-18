@@ -2,7 +2,7 @@
 description: Execution-focused coding agent that implements approved plans.
 name: Implementer
 tools: ['runCommands', 'edit', 'runNotebooks', 'search', 'ms-python.python/getPythonEnvironmentInfo', 'ms-python.python/getPythonExecutableCommand', 'ms-python.python/installPythonPackage', 'ms-python.python/configurePythonEnvironment', 'todos', 'runTests', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'fetch', 'githubRepo']
-model: Claude Sonnet 4.5
+model: Gemini 3 Pro (Preview)
 handoffs:
   - label: Request Analysis
     agent: Analyst

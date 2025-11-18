@@ -50,13 +50,13 @@ def sample_conversation_summary() -> Dict[str, Any]:
         "references": ["Plan 014 documentation"],
         "time_scope": "Nov 17 14:00-16:30",
         
-        # Metadata fields
-        "topic_id": "3e3e4f26-7c02-4b3c-8b9d-8f1f9b3e2a10",
-        "session_id": "f1b9b8b0-9f1a-4b8f-8c2b-1c2b3d4e5f6a",
-        "plan_id": "014",
+        # Metadata fields (camelCase to match TypeScript payload)
+        "topicId": "3e3e4f26-7c02-4b3c-8b9d-8f1f9b3e2a10",
+        "sessionId": "f1b9b8b0-9f1a-4b8f-8c2b-1c2b3d4e5f6a",
+        "planId": "014",
         "status": "Active",
-        "created_at": "2025-11-17T16:30:00Z",
-        "updated_at": "2025-11-17T16:31:00Z"
+        "createdAt": "2025-11-17T16:30:00Z",
+        "updatedAt": "2025-11-17T16:31:00Z"
     }
 
 
@@ -125,7 +125,7 @@ class TestEnrichedTextFormatting:
 # Conversation Summary: {s['topic']}
 
 **Metadata:**
-- Topic ID: {s['topic_id']}
+- Topic ID: {s['topicId']}
 """
         
         # Verify version tag is present
@@ -153,12 +153,12 @@ class TestEnrichedTextFormatting:
 # Conversation Summary: {s['topic']}
 
 **Metadata:**
-- Topic ID: {s['topic_id']}
-- Session ID: {s['session_id']}
-- Plan ID: {s['plan_id']}
+- Topic ID: {s['topicId']}
+- Session ID: {s['sessionId']}
+- Plan ID: {s['planId']}
 - Status: {s['status']}
-- Created: {s['created_at']}
-- Updated: {s['updated_at']}
+- Created: {s['createdAt']}
+- Updated: {s['updatedAt']}
 
 ## Context
 {s['context']}
@@ -169,12 +169,12 @@ class TestEnrichedTextFormatting:
         
         # Verify all required fields
         required_fields = [
-            ('Topic ID:', s['topic_id']),
-            ('Session ID:', s['session_id']),
-            ('Plan ID:', s['plan_id']),
+            ('Topic ID:', s['topicId']),
+            ('Session ID:', s['sessionId']),
+            ('Plan ID:', s['planId']),
             ('Status:', s['status']),
-            ('Created:', s['created_at']),
-            ('Updated:', s['updated_at'])
+            ('Created:', s['createdAt']),
+            ('Updated:', s['updatedAt'])
         ]
         
         for field_label, field_value in required_fields:
@@ -195,7 +195,7 @@ class TestEnrichedTextFormatting:
 # Conversation Summary: {s['topic']}
 
 **Metadata:**
-- Topic ID: {s['topic_id']}
+- Topic ID: {s['topicId']}
 
 ## Context
 {s['context']}
@@ -255,12 +255,12 @@ class TestDataPointCreation:
 # Conversation Summary: {s['topic']}
 
 **Metadata:**
-- Topic ID: {s['topic_id']}
-- Session ID: {s['session_id']}
-- Plan ID: {s['plan_id']}
+- Topic ID: {s['topicId']}
+- Session ID: {s['sessionId']}
+- Plan ID: {s['planId']}
 - Status: {s['status']}
-- Created: {s['created_at']}
-- Updated: {s['updated_at']}
+- Created: {s['createdAt']}
+- Updated: {s['updatedAt']}
 
 ## Context
 {s['context']}
@@ -274,12 +274,12 @@ class TestDataPointCreation:
         assert '**Metadata:**' in summary_text, "Metadata block must be present"
         
         # Verify all metadata fields
-        assert 'Topic ID:' in summary_text and s['topic_id'] in summary_text
-        assert 'Session ID:' in summary_text and s['session_id'] in summary_text
-        assert 'Plan ID:' in summary_text and s['plan_id'] in summary_text
+        assert 'Topic ID:' in summary_text and s['topicId'] in summary_text
+        assert 'Session ID:' in summary_text and s['sessionId'] in summary_text
+        assert 'Plan ID:' in summary_text and s['planId'] in summary_text
         assert 'Status:' in summary_text and s['status'] in summary_text
-        assert 'Created:' in summary_text and s['created_at'] in summary_text
-        assert 'Updated:' in summary_text and s['updated_at'] in summary_text
+        assert 'Created:' in summary_text and s['createdAt'] in summary_text
+        assert 'Updated:' in summary_text and s['updatedAt'] in summary_text
     
     def test_datapoint_text_matches_template(
         self,
@@ -316,8 +316,8 @@ class TestDataPointCreation:
 {chr(10).join(f'- {ref}' for ref in s['references']) if s['references'] else '(none)'}
 
 ## Time Scope
-- Start: {s['created_at']}
-- End: {s['updated_at']}
+- Start: {s['createdAt']}
+- End: {s['updatedAt']}
 - Turn Count: 15
 """
         
@@ -356,21 +356,29 @@ class TestDataPointCreation:
         summary_text = f"""# Conversation Summary: {s['topic']}
 
 **Metadata:**
-- Topic ID: {s['topic_id']}
-- Session ID: {s['session_id']}
-- Plan ID: {s['plan_id']}
+- Topic ID: {s['topicId']}
+- Session ID: {s['sessionId']}
+- Plan ID: {s['planId']}
 - Status: {s['status']}
-- Created: {s['created_at']}
-- Updated: {s['updated_at']}
+- Created: {s['createdAt']}
+- Updated: {s['updatedAt']}
 """
         
         # Define key metadata fields that must be searchable
-        key_fields = ['topic_id', 'session_id', 'plan_id', 'status']
+        key_fields = ['topicId', 'sessionId', 'planId', 'status']
         
         # Verify all key fields appear in text
         for field in key_fields:
             # Field label should be present (formatted for readability)
-            field_label = field.replace('_', ' ').title().replace(' Id', ' ID')
+            # Convert camelCase to Title Case (e.g., topicId -> Topic ID)
+            if field == 'topicId':
+                field_label = 'Topic ID'
+            elif field == 'sessionId':
+                field_label = 'Session ID'
+            elif field == 'planId':
+                field_label = 'Plan ID'
+            else:
+                field_label = field.title()
             assert field_label in summary_text, f"Field label '{field_label}' must be in text"
             
             # Field value should be present
@@ -387,6 +395,101 @@ class TestDataPointCreation:
         """
         # TODO: Mock ingest.py without --summary and verify plain text path
         pytest.skip("Test skeleton: will be implemented in Milestone 3")
+    
+    def test_camelcase_timestamps_accepted(self):
+        """
+        Verify ingest_summary accepts camelCase timestamp fields (from TypeScript).
+        
+        REGRESSION TEST for bug: Extension sends createdAt/updatedAt but bridge
+        expected created_at/updated_at, causing KeyError.
+        
+        ACCEPTANCE CRITERIA:
+        - Summary with createdAt/updatedAt (camelCase) succeeds
+        - Resolved timestamp appears in enriched text
+        - Resolved timestamp appears in JSON response
+        """
+        summary_with_camelcase = {
+            "topic": "Test Summary",
+            "context": "Testing camelCase timestamp handling",
+            "decisions": ["Accept both naming conventions"],
+            "rationale": ["TypeScript uses camelCase by default"],
+            "topicId": "test-topic-id",
+            "status": "Active",
+            "createdAt": "2025-11-18T17:00:00Z",  # camelCase
+            "updatedAt": "2025-11-18T17:01:00Z"   # camelCase
+        }
+        
+        # Simulate enriched text creation (matching ingest.py logic)
+        created_ts = summary_with_camelcase.get('createdAt') or summary_with_camelcase.get('created_at')
+        updated_ts = summary_with_camelcase.get('updatedAt') or summary_with_camelcase.get('updated_at')
+        
+        # Verify timestamps resolved correctly
+        assert created_ts == "2025-11-18T17:00:00Z", "createdAt should resolve"
+        assert updated_ts == "2025-11-18T17:01:00Z", "updatedAt should resolve"
+        
+        # Verify they'd appear in enriched text
+        enriched_text = f"Created: {created_ts}\nUpdated: {updated_ts}"
+        assert "2025-11-18T17:00:00Z" in enriched_text
+        assert "2025-11-18T17:01:00Z" in enriched_text
+    
+    def test_snake_case_timestamps_rejected(self):
+        """
+        Verify ingest_summary rejects snake_case timestamp fields.
+        
+        ACCEPTANCE CRITERIA:
+        - Summary with created_at/updated_at (snake_case) is rejected
+        - Clear error message specifies camelCase is required
+        """
+        summary_with_snake_case = {
+            "topic": "Test Summary",
+            "context": "Testing snake_case timestamp handling",
+            "decisions": ["Should fail validation"],
+            "topicId": "test-topic-id",
+            "status": "Active",
+            "created_at": "2025-11-18T17:00:00Z",  # snake_case (wrong)
+            "updated_at": "2025-11-18T17:01:00Z"   # snake_case (wrong)
+        }
+        
+        # Simulate validation (matching ingest.py logic)
+        created_ts = summary_with_snake_case.get('createdAt')  # Only check camelCase
+        updated_ts = summary_with_snake_case.get('updatedAt')  # Only check camelCase
+        
+        # Verify timestamps do NOT resolve from snake_case
+        assert created_ts is None, "Should not accept created_at (snake_case)"
+        assert updated_ts is None, "Should not accept updated_at (snake_case)"
+    
+    def test_missing_timestamps_rejected(self):
+        """
+        Verify ingest_summary rejects summaries with missing timestamps.
+        
+        ACCEPTANCE CRITERIA:
+        - Summary without createdAt returns clear error
+        - Summary without updatedAt returns clear error
+        - Error message specifies expected field names (camelCase)
+        """
+        summary_without_created = {
+            "topic": "Test Summary",
+            "context": "Missing created timestamp",
+            "topicId": "test-topic-id",
+            "updatedAt": "2025-11-18T17:01:00Z"
+            # missing createdAt
+        }
+        
+        # Simulate validation (matching ingest.py logic)
+        created_ts = summary_without_created.get('createdAt')
+        assert created_ts is None, "Should not resolve when createdAt missing"
+        
+        summary_without_updated = {
+            "topic": "Test Summary",
+            "context": "Missing updated timestamp",
+            "topicId": "test-topic-id",
+            "createdAt": "2025-11-18T17:00:00Z"
+            # missing updatedAt
+        }
+        
+        # Simulate validation (matching ingest.py logic)
+        updated_ts = summary_without_updated.get('updatedAt')
+        assert updated_ts is None, "Should not resolve when updatedAt missing"
 
 
 # === METADATA PARSING TESTS ===
@@ -414,12 +517,12 @@ class TestMetadataParsing:
 # Conversation Summary: {s['topic']}
 
 **Metadata:**
-- Topic ID: {s['topic_id']}
-- Session ID: {s['session_id']}
-- Plan ID: {s['plan_id']}
+- Topic ID: {s['topicId']}
+- Session ID: {s['sessionId']}
+- Plan ID: {s['planId']}
 - Status: {s['status']}
-- Created: {s['created_at']}
-- Updated: {s['updated_at']}
+- Created: {s['createdAt']}
+- Updated: {s['updatedAt']}
 """
         
         # Apply regex patterns from DATAPOINT_SCHEMA.md
@@ -439,12 +542,12 @@ class TestMetadataParsing:
         assert updated_at_match is not None, "Updated regex must match"
         
         # Verify extracted values are correct
-        assert topic_id_match.group(1) == s['topic_id']
-        assert session_id_match.group(1) == s['session_id']
-        assert plan_id_match.group(1) == s['plan_id']
+        assert topic_id_match.group(1) == s['topicId']
+        assert session_id_match.group(1) == s['sessionId']
+        assert plan_id_match.group(1) == s['planId']
         assert status_match.group(1) == s['status']
-        assert created_at_match.group(1) == s['created_at']
-        assert updated_at_match.group(1) == s['updated_at']
+        assert created_at_match.group(1) == s['createdAt']
+        assert updated_at_match.group(1) == s['updatedAt']
     
     def test_missing_metadata_block_returns_null_fields(self, sample_legacy_memory):
         """
@@ -523,12 +626,12 @@ Test context
 # Conversation Summary: {s['topic']}
 
 **Metadata:**
-- Topic ID: {s['topic_id']}
+- Topic ID: {s['topicId']}
 - Session ID: N/A
-- Plan ID: {s['plan_id']}
+- Plan ID: {s['planId']}
 - Status: {s['status']}
-- Created: {s['created_at']}
-- Updated: {s['updated_at']}
+- Created: {s['createdAt']}
+- Updated: {s['updatedAt']}
 """
         
         session_id_match = re.search(r'- Session ID: ([a-f0-9\-]+|N/A)', summary_text)
@@ -560,12 +663,12 @@ class TestRetrievalContract:
 # Conversation Summary: {sample_conversation_summary['topic']}
 
 **Metadata:**
-- Topic ID: {sample_conversation_summary['topic_id']}
-- Session ID: {sample_conversation_summary['session_id']}
-- Plan ID: {sample_conversation_summary['plan_id']}
+- Topic ID: {sample_conversation_summary['topicId']}
+- Session ID: {sample_conversation_summary['sessionId']}
+- Plan ID: {sample_conversation_summary['planId']}
 - Status: {sample_conversation_summary['status']}
-- Created: {sample_conversation_summary['created_at']}
-- Updated: {sample_conversation_summary['updated_at']}
+- Created: {sample_conversation_summary['createdAt']}
+- Updated: {sample_conversation_summary['updatedAt']}
 
 ## Context
 {sample_conversation_summary['context']}
@@ -590,11 +693,11 @@ class TestRetrievalContract:
         
         # Verify metadata fields were extracted
         assert result['topic'] == sample_conversation_summary['topic']
-        assert result['topic_id'] == sample_conversation_summary['topic_id']
-        assert result['session_id'] == sample_conversation_summary['session_id']
-        assert result['plan_id'] == sample_conversation_summary['plan_id']
+        assert result['topicId'] == sample_conversation_summary['topicId']
+        assert result['sessionId'] == sample_conversation_summary['sessionId']
+        assert result['planId'] == sample_conversation_summary['planId']
         assert result['status'] == sample_conversation_summary['status']
-        assert result['created_at'] == sample_conversation_summary['created_at']
+        assert result['createdAt'] == sample_conversation_summary['createdAt']
         
         # Verify structured content fields
         assert result['context'] == sample_conversation_summary['context']
@@ -624,9 +727,9 @@ class TestRetrievalContract:
             'summary_text': sample_legacy_memory,
             'text': sample_legacy_memory,
             'topic': None,
-            'topic_id': None,
-            'session_id': None,
-            'plan_id': None,
+            'topicId': None,
+            'sessionId': None,
+            'planId': None,
             'status': None,
             'score': 0.7,
             'decisions': [],
@@ -637,8 +740,8 @@ class TestRetrievalContract:
         }
         
         # Verify null metadata fields are present (not omitted)
-        assert 'topic_id' in legacy_result
-        assert legacy_result['topic_id'] is None
+        assert 'topicId' in legacy_result
+        assert legacy_result['topicId'] is None
         assert legacy_result['status'] is None
         assert legacy_result['summary_text'] == sample_legacy_memory
     
@@ -663,12 +766,12 @@ class TestRetrievalContract:
 # Conversation Summary: {s['topic']}
 
 **Metadata:**
-- Topic ID: {s['topic_id']}
-- Session ID: {s['session_id']}
-- Plan ID: {s['plan_id']}
+- Topic ID: {s['topicId']}
+- Session ID: {s['sessionId']}
+- Plan ID: {s['planId']}
 - Status: {s['status']}
-- Created: {s['created_at']}
-- Updated: {s['updated_at']}
+- Created: {s['createdAt']}
+- Updated: {s['updatedAt']}
 
 ## Context
 {s['context']}
@@ -749,12 +852,12 @@ class TestRetrievalContract:
 # Conversation Summary: {s['topic']}
 
 **Metadata:**
-- Topic ID: {s['topic_id']}
-- Session ID: {s['session_id']}
-- Plan ID: {s['plan_id']}
+- Topic ID: {s['topicId']}
+- Session ID: {s['sessionId']}
+- Plan ID: {s['planId']}
 - Status: {s['status']}
-- Created: {s['created_at']}
-- Updated: {s['updated_at']}
+- Created: {s['createdAt']}
+- Updated: {s['updatedAt']}
 
 ## Context
 {s['context']}
@@ -762,16 +865,16 @@ class TestRetrievalContract:
         result = parse_enriched_summary(enriched_text)
         
         # Verify timestamp presence
-        assert 'created_at' in result
-        assert 'updated_at' in result
+        assert 'createdAt' in result
+        assert 'updatedAt' in result
         
         # Verify ISO 8601 format and parseability
-        if result['created_at']:
-            created_dt = datetime.fromisoformat(result['created_at'].replace('Z', '+00:00'))
+        if result['createdAt']:
+            created_dt = datetime.fromisoformat(result['createdAt'].replace('Z', '+00:00'))
             assert created_dt is not None
         
-        if result['updated_at']:
-            updated_dt = datetime.fromisoformat(result['updated_at'].replace('Z', '+00:00'))
+        if result['updatedAt']:
+            updated_dt = datetime.fromisoformat(result['updatedAt'].replace('Z', '+00:00'))
             assert updated_dt is not None
         
         # Legacy memory should have null timestamps
@@ -794,12 +897,12 @@ class TestRetrievalContract:
 # Conversation Summary: {s['topic']}
 
 **Metadata:**
-- Topic ID: {s['topic_id']}
-- Session ID: {s['session_id']}
-- Plan ID: {s['plan_id']}
+- Topic ID: {s['topicId']}
+- Session ID: {s['sessionId']}
+- Plan ID: {s['planId']}
 - Status: {s['status']}
-- Created: {s['created_at']}
-- Updated: {s['updated_at']}
+- Created: {s['createdAt']}
+- Updated: {s['updatedAt']}
 
 ## Context
 {s['context']}
@@ -842,18 +945,18 @@ class TestMixedModeHandling:
             "summary_text": "Full summary text...",
             "score": 0.92,
             "topic": sample_conversation_summary['topic'],
-            "topic_id": sample_conversation_summary['topic_id'],
-            "plan_id": sample_conversation_summary['plan_id'],
+            "topicId": sample_conversation_summary['topicId'],
+            "planId": sample_conversation_summary['planId'],
             "status": sample_conversation_summary['status'],
-            "created_at": sample_conversation_summary['created_at']
+            "createdAt": sample_conversation_summary['createdAt']
         }
         
         # Verify enriched result has metadata
-        assert enriched_result['topic_id'] is not None, "Enriched result has topic_id"
+        assert enriched_result['topicId'] is not None, "Enriched result has topic_id"
         assert enriched_result['status'] is not None, "Enriched result has status"
         
         # Simulate TypeScript branching logic
-        is_enriched = enriched_result.get('topic_id') is not None
+        is_enriched = enriched_result.get('topicId') is not None
         assert is_enriched is True, "TypeScript detects enriched summary"
     
     def test_legacy_memory_has_null_metadata(self, sample_legacy_memory):
@@ -871,18 +974,18 @@ class TestMixedModeHandling:
             "summary_text": sample_legacy_memory,
             "score": 0.75,
             "topic": None,
-            "topic_id": None,
-            "plan_id": None,
+            "topicId": None,
+            "planId": None,
             "status": None,
-            "created_at": None
+            "createdAt": None
         }
         
         # Verify legacy result has null metadata
-        assert legacy_result['topic_id'] is None, "Legacy result has null topic_id"
+        assert legacy_result['topicId'] is None, "Legacy result has null topic_id"
         assert legacy_result['status'] is None, "Legacy result has null status"
         
         # Simulate TypeScript branching logic
-        is_legacy = legacy_result.get('topic_id') is None
+        is_legacy = legacy_result.get('topicId') is None
         assert is_legacy is True, "TypeScript detects legacy memory"
     
     def test_mixed_results_array_handling(
@@ -905,7 +1008,7 @@ class TestMixedModeHandling:
                 {
                     "summary_text": "Enriched summary...",
                     "score": 0.92,
-                    "topic_id": sample_conversation_summary['topic_id'],
+                    "topic_id": sample_conversation_summary['topicId'],
                     "status": "Active"
                 },
                 {

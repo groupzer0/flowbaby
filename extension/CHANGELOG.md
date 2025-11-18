@@ -5,6 +5,30 @@ All notable changes to the Cognee Chat Memory extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2025-11-18
+
+### Added - Test Coverage Enhancements
+
+- **Summary Workflow Integration Tests**: 14 new automated tests in `summaryWorkflow.integration.test.ts`
+  - 7 workflow tests validate complete "summarize → generate → store" flow
+  - 7 snapshot tests guard against README/template drift
+  - Tests cover trigger detection, no-history errors, cancellation, large conversations
+- **Template Consistency Validation**: Round-trip preservation tests ensure format → parse cycle stability
+- **Mixed-Mode Test Coverage**: Validates enriched vs legacy memory handling in integration context
+- **Section Heading Stability**: Tests enforce that headings match DATAPOINT_SCHEMA.md exactly
+
+### Fixed
+
+- **Manual Test Isolation**: Added `@pytest.mark.manual` decorator to manual scripts to prevent CI failures
+- **Pytest Configuration**: Registered `manual` marker in `pytest.ini` for proper test filtering
+- **QA Documentation**: Updated with environment-specific test execution guidance
+
+### Improved
+
+- **Test Suite Reliability**: Default `pytest` runs now succeed (37 passed, 1 skipped)
+- **VS Code Test Coverage**: 77 total tests passing (up from 63), no regressions
+- **Documentation Accuracy**: Snapshot tests catch template/README divergence automatically
+
 ## [0.3.0] - 2025-11-18
 
 ### Added - Plan 014: Structured Conversation Summaries

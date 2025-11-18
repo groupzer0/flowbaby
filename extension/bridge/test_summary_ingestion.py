@@ -14,8 +14,10 @@ import subprocess
 import sys
 from pathlib import Path
 from datetime import datetime
+import pytest
 
 
+@pytest.mark.manual
 def test_summary_ingestion(workspace_path: str) -> bool:
     """
     Test ingest.py --summary mode with a sample summary.
