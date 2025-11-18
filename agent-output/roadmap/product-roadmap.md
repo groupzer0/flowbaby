@@ -15,7 +15,7 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 
 **As a developer working in VS Code,**
 **I want to maintain perfect context across coding sessions by automatically capturing and intelligently retrieving workspace-specific knowledge through natural language,**
-**So that I eliminate the cognitive overhead of context reconstruction and can focus on solving problems instead of remembering what I learned.**
+**So that I eliminate the repeated need to reconstruct context for the AI agents and so that the AI agent can focus on solving that are properly contextualized.**
 
 ### Core Principles
 
@@ -35,34 +35,37 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 
 ## Executive Summary
 
-**Current State (v0.2.1)**: Extension has functional chat capture (Ctrl+Alt+C) and @cognee-memory participant retrieval, but critical gaps prevent user adoption:
+**Current State (v0.2.3)**: Extension has functional chat capture (Ctrl+Alt+C) and @cognee-memory participant retrieval with improved discoverability and transparency:
 
-1. **Installation Failure**: v0.2.1 regression blocks all new installs (ontology file mismatch)
-2. **Feature Invisibility**: Even successful installs provide no onboarding or feature discovery
-3. **Silent Failures**: Errors manifest as non-operation without user-facing explanations
-4. **Setup Friction**: Manual Python environment setup required before any functionality works
+1. ✅ **Installation Stability**: v0.2.2 resolved initialization regression (ontology file mismatch)
+2. ✅ **Feature Discoverability**: Plans 013/013.1 delivered display transparency, ingestion metrics, and timeout handling
+3. **Silent Failures**: Still needs comprehensive error taxonomy and status indicators (Plan 016)
+4. **Setup Friction**: Manual Python environment setup required before any functionality works (Plan 017)
 
 **Strategic Course Correction**: Comprehensive review of Plans 001-011 revealed that technical infrastructure (workspace isolation, Python detection, testing) is solid, but **user-facing experience is critically deficient**. Plans 001-011 were heavily implementation-focused with minimal UX consideration. The roadmap now prioritizes:
 
-- **v0.2.2** (Target: 2025-11-18): Fix initialization regression + ensure reliable packaging
-- **v0.2.3** (Target: 2025-11-25): Add discoverability, error visibility, and automated setup (parallel to v0.3.0)
-- **v0.3.0** (Target: TBD): Context intelligence (unblocked after Plan 013)
+- **v0.2.2** ✅ COMPLETE (2025-11-17): Fix initialization regression + ensure reliable packaging
+- **v0.2.3** ✅ PARTIALLY COMPLETE (2025-11-17): Display transparency and ingestion reliability delivered (Plans 013/013.1)
+- **v0.3.0** (Target: TBD): Context intelligence (UNBLOCKED - ready to proceed)
+- **v0.2.4** (Target: TBD): Comprehensive error handling and Python auto-setup (Plans 016/017)
 
 **Implementation Mapping** (Plans → Epics):
 
-- **Plan 012** (Implemented) → Epic 0.2.2.1 (Installation), Epic 0.2.2.2 (Packaging)
-- **Plan 013** (Proposed) → Epic 0.2.2.3 (Discoverability)
+- **Plan 012** ✅ Complete → Epic 0.2.2.1 (Installation), Epic 0.2.2.2 (Packaging)
+- **Plan 013** ✅ Complete → Epic 0.2.2.3 (Discoverability)
+- **Plan 013.1** ✅ Complete → Epic 0.2.2.3 (Discoverability - ingestion reliability)
 - **Plan 014** (Proposed) → Epic 0.3.0.2 (Structured Summaries) - prerequisite for Plan 015
 - **Plan 015** (Proposed) → Epic 0.3.0.1 (Ranking and Relevance)
 - **Plan 016** (Proposed) → Epic 0.2.3.1 (Error Transparency) - parallel to v0.3.0
 - **Plan 017** (Proposed) → Epic 0.2.3.2 (Python Auto-Setup) - parallel to v0.3.0
 
-**Strategic Decision**: Plans 012/013 resolve v0.2.x blockers; v0.3.0 work (Plans 014/015) can proceed after Plan 013. Remaining v0.2.3 epics (Plans 016/017) enhance UX but don't block advanced features—proceed in parallel.
+**Strategic Decision**: Plans 012/013/013.1 resolve v0.2.x blockers; v0.3.0 work (Plans 014/015) can now proceed. Remaining v0.2.x epics (Plans 016/017) enhance UX but don't block advanced features—proceed in parallel.
 
 ## Change Log
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-17 | Plans 013 and 013.1 completed: display transparency (removed 150-char truncation), ingestion metrics (token count, chunk count, duration), timeout handling (30s → 300s configurable), streaming progress indicators | Delivered Epic 0.2.2.3 (Feature Discoverability) - users now see full memory content, ingestion feedback, and reliable operation. Unblocks v0.3.0 work (Plans 014/015). |
 | 2025-11-17 | Strategic unblocking: Plans 012 (implemented) and 013 (planned) resolve v0.2.x blockers; Epic 0.3.0.1 unblocked after Plan 013; added Epic 0.3.0.2; split error handling (Plan 016) and Python setup (Plan 017) into separate plans | Plans 012/013 address installation stability (0.2.2.1) and discoverability (0.2.2.3), enabling v0.3.0 work to proceed. Remaining v0.2.3 epics (error transparency, auto-setup) are valuable but not blocking—can proceed in parallel. Created focused plan structure: 013 (display fixes), 016 (error taxonomy), 017 (Python auto-setup) for better isolation and parallel development. |
 | 2025-11-16 | Added 3 new epics (0.2.2.3, 0.2.3.1, 0.2.3.2); revised v0.3.0 scope | Comprehensive review of Plans 001-011 revealed critical gaps: UX discoverability, Python environment complexity, and lack of operational monitoring. User cannot discover features after installation even if initialization succeeds. Shifted v0.3.0 focus from ranking (which requires baseline usage) to foundational UX and reliability. |
 | 2025-11-15 | Initial roadmap created | Establishing strategic direction after completing v0.2.0 foundation |
@@ -145,7 +148,7 @@ So that users never encounter missing-file errors or outdated guidance.
 ### Epic 0.2.2.3: Feature Discoverability and Onboarding UX
 
 **Priority**: P0 (Critical - users cannot discover core features)
-**Status**: Planned
+**Status**: ✅ Delivered (Plans 013/013.1)
 
 **User Story**:
 As a new extension user,
@@ -161,11 +164,13 @@ So that I can start capturing and retrieving context without reading external do
 - Epic 0.2.2.1 (users must be able to initialize before discovering features)
 
 **Acceptance Criteria** (outcome-focused):
-- [ ] First successful initialization shows welcome message with quick-start actions
-- [ ] Status bar shows extension state (active, capturing enabled/disabled) and keyboard shortcut hint
-- [ ] @cognee-memory participant shows help text when invoked without query
-- [ ] Command palette entries have clear descriptions ("Capture Current Chat to Memory", not "Cognee: Capture")
-- [ ] README walkthrough validated with fresh user (someone who didn't build the extension)
+- [x] ✅ Display transparency: Removed 150-char truncation, users see full memory content (Plan 013)
+- [x] ✅ Ingestion metrics: Token count, chunk count, duration displayed after capture (Plan 013.1)
+- [x] ✅ Timeout handling: Configurable timeout (30s → 300s) with streaming progress (Plan 013.1)
+- [x] ✅ Query transparency: Improved logging shows what memories are retrieved (Plan 013)
+- [ ] ⏳ First-run welcome message with quick-start actions (deferred to Plan 016)
+- [ ] ⏳ Status bar indicators for extension state (deferred to Plan 016)
+- [ ] ⏳ @cognee-memory participant help text (deferred to future enhancement)
 
 **Constraints**:
 - Must not be intrusive or annoying to existing users
@@ -173,7 +178,11 @@ So that I can start capturing and retrieving context without reading external do
 
 **Status Notes**:
 
-- 2025-11-17: **IN PROGRESS** - Plan 013 proposed and ready for implementation. Will remove 150-char display truncation, improve query logging, enhance transparency.
+- 2025-11-17: **✅ DELIVERED** - Plans 013 and 013.1 completed:
+  - **Plan 013**: Removed 150-char display truncation, improved query logging, enhanced retrieval transparency
+  - **Plan 013.1**: Added ingestion metrics (tokens, chunks, duration), timeout handling (300s configurable), streaming progress indicators
+  - **Outcome**: Users now see full memory content, understand what's being captured, and get feedback on ingestion success
+  - **Remaining**: First-run onboarding, status bar indicators, and comprehensive error taxonomy deferred to Plans 016/017
 - 2025-11-16: Epic created based on Plans 001-011 review. Plans focused heavily on technical infrastructure but delivered minimal user-facing guidance. Even with working capture/retrieval, users don't know the extension exists or how to use it. Plan 008 implemented keyboard shortcut (Ctrl+Alt+C) and participant but provided no in-product discovery mechanism.
 
 ---
@@ -281,22 +290,25 @@ So that I don't waste time sifting through tangential results.
 **Dependencies**:
 - **BLOCKER**: Epic 0.2.2.3 (users must discover retrieval workflow before ranking matters)
 - **BLOCKER**: Epic 0.2.3.1 (must have operational reliability before optimizing results)
+- **PREREQUISITE**: Epic 0.3.0.2 (must have structured summaries before adding metadata and ranking)
 - Requires stable v0.2.x foundation with real usage data to inform ranking approach
-- May require embeddings/similarity research (Analyst + Architect collaboration)
 
 **Acceptance Criteria** (outcome-focused):
-- [ ] Retrieval results ranked by relevance to query
-- [ ] Recent context weighted appropriately (balance recency vs relevance)
-- [ ] Cross-file connections surfaced when semantically related
-- [ ] User can provide feedback on result quality (thumbs up/down)
+- [ ] Metadata infrastructure introduced (topic_id, session_id, plan_id, status, timestamps) via Cognee DataPoints
+- [ ] Plan 014 summaries migrated to DataPoints with generated metadata (one-time migration script)
+- [ ] Retrieval results ranked by recency-aware scoring (exponential decay, configurable alpha and halfLifeDays)
+- [ ] Status-aware retrieval filters Superseded summaries, prioritizes DecisionRecords
+- [ ] Compaction trigger creates DecisionRecords from multiple summaries with conflict detection
+- [ ] Ranking transparency displays relevance scores and metadata in UI
 
 **Constraints**:
 - Must maintain <2s retrieval performance target
 - Should work within existing workspace-local storage model
+- Must support migration of Plan 014 content-only summaries without data loss
 
 **Status Notes**:
 
-- 2025-11-17: **UNBLOCKED** - Plans 012 (installation stability) and 013 (display transparency) resolve critical v0.2.x blockers. Epic can proceed after Plan 013 completion. Will be implemented by Plan 015 (metadata, ranking, compaction).
+- 2025-11-17: **✅ UNBLOCKED - READY TO PROCEED** - Plans 012 (installation stability) and 013/013.1 (display transparency, ingestion reliability) completed. All v0.2.x blockers resolved. Epic can now proceed with Plan 015 implementation (metadata infrastructure, ranking algorithms, compaction backend). Epic 0.3.0.2 (Plan 014) delivers content structure prerequisite.
 - 2025-11-16: DEFERRED - Review of Plans 001-011 revealed users cannot yet discover or reliably use basic retrieval. Ranking optimization premature until foundational UX and error handling delivered in v0.2.x.
 - 2025-11-15: Epic placeholder. Requires research phase to determine ranking approach.
 
@@ -309,14 +321,14 @@ So that I don't waste time sifting through tangential results.
 
 **User Story**:
 As a developer capturing conversation summaries,
-I want summaries structured with metadata (topic, plan, decisions, references),
-So that I can organize, search, and compact context more effectively over time.
+I want summaries structured with semantic content sections (decisions, rationale, references),
+So that future sessions can retrieve organized context instead of raw chronological chat logs.
 
 **Business Value**:
 
-- **User Impact**: Enables organizing conversation history by topic/plan instead of chronological order only
-- **Strategic Importance**: Foundation for compaction and ranking features; without structured summaries, advanced features cannot deliver value
-- **Measurable Success**: Users create structured summaries with metadata; retrieval benefits from richer context
+- **User Impact**: Enables capturing conversation essence in queryable structured format instead of raw text
+- **Strategic Importance**: Foundation for metadata and ranking features (Epic 0.3.0.1); structured content is prerequisite for effective retrieval
+- **Measurable Success**: Users create structured summaries on demand; retrieval surfaces semantic sections (decisions, rationale) transparently
 
 **Dependencies**:
 
@@ -325,21 +337,21 @@ So that I can organize, search, and compact context more effectively over time.
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] Users can create conversation summaries with embedded metadata (topic, session, plan IDs, timestamps, status)
-- [ ] Summary schema includes decisions, rationale, open questions, next steps, and references (files, plans, branches, issues)
-- [ ] Manual compaction trigger exposed in UI (backend implemented in Epic 0.3.0.1)
-- [ ] Summaries ingested into Cognee with plain-text format (DataPoint migration in Epic 0.3.0.1)
-- [ ] Documentation explains summary structure and metadata fields
+- [ ] Users can create conversation summaries with structured schema (Topic, Context, Decisions, Rationale, Open Questions, Next Steps, References, Time Scope)
+- [ ] Summary generation triggered via `@cognee-memory` with iterative scope adjustment (default 15 turns, user can override)
+- [ ] Summaries ingested into Cognee with content-only plain-text format (metadata deferred to Epic 0.3.0.1)
+- [ ] Retrieval displays summaries in structured, readable format with transparency (Plan 013 policy)
+- [ ] Documentation explains summary structure and when to create summaries
 
 **Constraints**:
 
 - Must maintain backward compatibility with existing raw-text memories
 - Should not require users to change existing capture workflows
-- Metadata extraction should be transparent (no manual field entry)
+- Content-only in this epic; metadata (topic_id, session_id, plan_id, timestamps, status) introduced in Epic 0.3.0.1
 
 **Status Notes**:
 
-- 2025-11-17: Epic created to capture Plan 014 scope. Structured summaries are prerequisite for ranking/compaction (Epic 0.3.0.1/Plan 015).
+- 2025-11-17: Epic updated to reflect Plan 014 scope accurately. Plan 014 delivers content structure (schema), Plan 015 delivers metadata infrastructure. Epic 0.3.0.2 focuses on content organization, Epic 0.3.0.1 adds intelligence layer (metadata, ranking, compaction).
 
 ---
 

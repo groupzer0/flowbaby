@@ -3,10 +3,11 @@
 **Plan ID**: 014
 **Target Release**: v0.3.0 (from Roadmap Epic 0.3.0.2)  
 **Created**: 2025-11-16
+**Last Updated**: 2025-11-18
 **Status**: Draft
 **Epic Alignment**: Epic 0.3.0.2 - Structured Conversation Summaries  
 **Related Analysis**: `analysis/014-chat-conversation-summaries-and-agent-instructions-analysis.md`, `analysis/014-bridge-focused-addendum-analysis.md`
-**Architectural References**: `architecture/system-architecture.md` §4.4, §9 (Bridge Migration for Structured Summaries)
+**Architectural References**: `architecture/system-architecture.md` §4.4, §4.4.1 (Enriched Text Metadata Fallback), §9 (Bridge Migration for Structured Summaries, Enriched Text Metadata Fallback decision)
 
 ---
 
@@ -20,21 +21,20 @@ So that future chat sessions can automatically rediscover relevant context, deci
 
 ## Objective
 
-Implement the **creation, ingestion, and retrieval** of structured conversation summaries in the Cognee Chat Memory extension. This plan focuses on:
+Implement the **creation, ingestion, and retrieval** of structured conversation summaries in the Cognee Chat Memory extension with DataPoint-based storage and structured metadata. This plan focuses on:
 
-1. Defining and storing chat summaries using the Plan 014 schema (Topic, Context, Decisions, Rationale, OpenQuestions, NextSteps, References, TimeScope).
+1. Defining and storing chat summaries using the Plan 014 schema (Topic, Context, Decisions, Rationale, OpenQuestions, NextSteps, References, TimeScope) **with metadata fields** (topic_id, session_id, plan_id, timestamps, status).
 2. Updating the `@cognee-memory` chat participant to generate summaries on demand.
-3. Updating `ingest.py` to accept and store structured summaries as plain text (content only).
-4. Ensuring `retrieve.py` can return stored summaries **without introducing any new ranking logic** (relies on Cognee's existing similarity-based ranking).
-5. Ensuring transparency in the TypeScript layer so users can inspect what is stored and retrieved.
+3. Migrating `ingest.py` to store summaries as **Cognee DataPoints with indexed metadata fields** so downstream consumers can reason about freshness, provenance, and status.
+4. Updating `retrieve.py` to return **structured JSON payloads** including metadata (`topic_id`, `plan_id`, `status`, `created_at`, `summary_text`, `score`) instead of raw text.
+5. Documenting and testing the bridge contract (`RETRIEVE_CONTRACT.md`) so Plan 016 and future consumers have a stable schema.
+6. Ensuring transparency in the TypeScript layer so users can inspect metadata, status, and timestamps.
 
 **Out of Scope (deferred to Plan 015)**:
 
-- **Metadata fields** (topic_id, session_id, plan_id, timestamps, status) - will be introduced with DataPoint migration
-- **Recency-aware ranking algorithms** (exponential decay, configurable weights)
-- **DataPoint-based ingestion** with Pydantic models and `metadata.index_fields`
-- **Compaction behavior** (manual or automated triggers, topic grouping, LLM-based summarization of DecisionRecords)
-- **Status-aware retrieval logic** (`Superseded` filtering, DecisionRecord prioritization)
+- **Recency-aware ranking algorithms** (exponential decay, configurable weights) - Plan 015 will add custom scoring logic on top of the metadata foundation
+- **Compaction behavior** (manual or automated triggers, topic grouping, LLM-based summarization of DecisionRecords) - Plan 015 will implement compaction workflows
+- **Status-aware retrieval filtering** (`Superseded` down-ranking, DecisionRecord prioritization) - Plan 015 will add status-based ranking adjustments
 - **Smart session boundary detection** - automatic detection of conversation segments based on time gaps, topic shifts, or explicit markers; enables semantic scope selection ("summarize segment 2") instead of turn counts
 
 ---
@@ -42,16 +42,76 @@ Implement the **creation, ingestion, and retrieval** of structured conversation 
 ## Assumptions
 
 1. **User Workflow**: Users will explicitly invoke summary creation via `@cognee-memory` commands or by asking "summarize this conversation."
-2. **Schema Adoption**: The Plan 014 summary schema (Topic/Context/Decisions/etc.) is sufficient for capturing conversation essence as structured text without metadata.
-3. **No Metadata in This Plan**: This plan stores content-only summaries; metadata fields (topic_id, session_id, plan_id, timestamps, status) are deferred to Plan 015 when DataPoints are introduced.
-4. **Backward Compatibility**: Legacy raw-text memories from Plans 001-011 remain accessible; new summaries coexist with old ingestion format.
-5. **No New Ranking Logic**: Retrieval will return Cognee's native similarity-based results **without any changes to ranking algorithms**; recency-aware ranking is exclusively Plan 015's responsibility.
-6. **Clean Migration Path**: Plain-text summaries (this plan) will be migrated to DataPoints with metadata in Plan 015 via one-time migration script.
-7. **TypeScript Transparency**: All summary text is surfaced to the user via chat participant markdown and Output channel logs.
+2. **Schema Adoption**: The Plan 014 summary schema (Topic/Context/Decisions/etc.) plus metadata fields (topic_id, session_id, plan_id, timestamps, status) are sufficient for capturing conversation essence and supporting future ranking/compaction.
+3. **Enriched Text Storage**: Summaries are stored as enriched text with embedded metadata (Cognee 0.3.4 constraint per §4.4.1). Metadata fields are included in the text content as structured markdown with deterministic section headings, making them searchable via semantic embeddings. Template versioning is REQUIRED—any changes to section headers or metadata format must be synchronized across `summaryTemplate.ts`, `ingest.py`, and `retrieve.py` to prevent parsing failures. Future Cognee versions may expose explicit DataPoint APIs with separate metadata dicts.
+4. **Backward Compatibility**: Legacy raw-text memories from Plans 001-011 remain accessible; `retrieve.py` must handle both enriched summaries and legacy text gracefully. Mixed-mode support is mandatory per §4.4.1: TypeScript consumers must branch on `topicId`/`status` availability.
+5. **Baseline Ranking Only**: This plan relies on Cognee's native similarity-based ranking; Plan 015 will add recency-aware scoring and status filtering on top of the metadata foundation delivered here.
+6. **Structured Bridge Contract**: `retrieve.py` will return JSON with structured fields; TypeScript consumers (participant, future `CogneeContextProvider`) will consume this contract instead of parsing text.
+7. **TypeScript Transparency**: All summary content AND metadata (topic, status, timestamps) are surfaced to the user via chat participant markdown and Output channel logs.
 
 ---
 
 ## Plan
+
+### Milestone 0: Define and Validate Bridge Contract (Precondition)
+
+**Objective**: Define the DataPoint schema and structured retrieval contract before any implementation begins, ensuring Plan 016 and future consumers have a stable foundation. Validate that this schema has been smoke tested against actual calls before marking finalized.
+
+**Tasks**:
+
+1. **Define DataPoint Schema for Summaries** (`extension/bridge/DATAPOINT_SCHEMA.md`)
+   - Document the enriched-text fallback structure per §4.4.1 (since Cognee 0.3.4 lacks DataPoint API):
+     - **Content fields**: `topic`, `context`, `decisions`, `rationale`, `open_questions`, `next_steps`, `references`, `time_scope` (all text/list fields)
+     - **Metadata fields**: `topic_id` (UUID), `session_id` (UUID or null), `plan_id` (string or null), `status` (enum: "Active", "Superseded"), `created_at` (ISO timestamp), `updated_at` (ISO timestamp)
+   - Define deterministic markdown template with `**Metadata:**` block and section headings that will be parsed via regex.
+   - Include template version identifier (e.g., `<!-- Template: v1.0 -->`) in generated markdown to enable future format migrations.
+   - Document regex patterns used by `retrieve.py` for metadata extraction and mandate synchronized updates.
+   - Include example enriched-text markdown showing structure.
+   - **Acceptance**: Schema documented with versioning strategy; architect reviews and approves structure.
+
+2. **Define Retrieval Contract** (`extension/bridge/RETRIEVE_CONTRACT.md`)
+   - Document the JSON response structure returned by `retrieve.py`:
+     ```json
+     {
+       "results": [
+         {
+           "summary_text": "string (full formatted summary)",
+           "topic": "string",
+           "topic_id": "uuid",
+           "plan_id": "string | null",
+           "session_id": "uuid | null",
+           "status": "Active | Superseded",
+           "created_at": "ISO8601 timestamp",
+           "score": "float (Cognee similarity score)",
+           "decisions": ["string"],
+           "rationale": ["string"],
+           "open_questions": ["string"],
+           "next_steps": ["string"],
+           "references": ["string"]
+         }
+       ],
+       "total_results": "int"
+     }
+     ```
+   - Specify handling of legacy raw-text memories (returned with `topic_id: null`, `status: null`).
+   - **Acceptance**: Contract documented; Plan 016 planner confirms schema meets `CogneeContextProvider` requirements.
+
+3. **Create Bridge Contract Tests Skeleton** (`extension/bridge/test_datapoint_contract.py`)
+   - Write pytest test structure (mocks only) that will verify per §4.4.1 testing mandates:
+     - **Enriched-text formatting**: Generated markdown includes `**Metadata:**` block with all required fields (topic_id, session_id, plan_id, status, timestamps).
+     - **Template structure validation**: All content sections (Context, Decisions, Rationale, etc.) present with deterministic headings.
+     - **Metadata parsing**: Regex extraction recovers all metadata fields correctly; malformed summaries fail with actionable error codes.
+     - **Legacy path regression**: `ingest.py` without `--summary` still works (raw-text path unaffected).
+     - **Mixed-mode retrieval**: `retrieve.py` returns JSON matching contract schema for both enriched summaries (full metadata) and legacy memories (null metadata).
+     - **JSON contract validation**: Response structure matches `RETRIEVE_CONTRACT.md` exactly.
+   - Tests will be implemented in Milestone 3 but skeleton ensures contract is testable.
+   - **Acceptance**: Test skeleton exists covering all §4.4.1 requirements; contract is testable before implementation.
+
+**Owner**: Implementer + Architect
+**Dependencies**: None (defines foundation for all subsequent work)
+**Validation**: Schema and contract documents reviewed and approved by architect; Plan 016 confirms compatibility.
+
+---
 
 ### Milestone 1: Define and Validate Summary Schema
 
@@ -62,28 +122,55 @@ Implement the **creation, ingestion, and retrieval** of structured conversation 
 1. **Create Summary Template Module** (`extension/src/summaryTemplate.ts`)
    - Define TypeScript interface `ConversationSummary` with fields:
      - **Content fields**: `topic`, `context`, `decisions`, `rationale`, `openQuestions`, `nextSteps`, `references`, `timeScope`.
-   - Implement function `formatSummaryAsText(summary: ConversationSummary): string` that produces the Plan 014 markdown format:
+     - **Metadata fields**: `topicId` (string, UUID), `sessionId` (string | null), `planId` (string | null), `status` ("Active" | "Superseded"), `createdAt` (Date), `updatedAt` (Date).
+   - Add **template version constant** (e.g., `TEMPLATE_VERSION = "1.0"`) and embed in generated markdown as HTML comment for future migration support.
+   - Implement function `formatSummaryAsText(summary: ConversationSummary): string` that produces the enriched-text markdown format per §4.4.1:
 
      ```markdown
-     Summary: {topic}
-     
-     Topic: {topic}
-     Context: {context}
-     Decisions: {decisions}
-     Rationale: {rationale}
-     Open Questions: {openQuestions}
-     Next Steps: {nextSteps}
-     References: {references}
-     Time Scope: {timeScope}
+     <!-- Template: v1.0 -->
+     # Conversation Summary: {topic}
+
+     **Metadata:**
+     - Topic ID: {topicId}
+     - Session ID: {sessionId}
+     - Plan ID: {planId}
+     - Status: {status}
+     - Created: {createdAt}
+     - Updated: {updatedAt}
+
+     ## Context
+     {context}
+
+     ## Key Decisions
+     {decisions}
+
+     ## Rationale
+     {rationale}
+
+     ## Open Questions
+     {openQuestions}
+
+     ## Next Steps
+     {nextSteps}
+
+     ## References
+     {references}
+
+     ## Time Scope
+     {timeScope}
      ```
 
    - Include validation logic to ensure required fields (`topic`, `context`) are present.
-   - **Acceptance**: Template generates valid markdown; unit test confirms formatting.
+   - **CRITICAL per §4.4.1**: Section headings must match exactly what `retrieve.py` regex patterns expect. Document heading format in `DATAPOINT_SCHEMA.md`.
+   - **Acceptance**: Template generates valid enriched markdown with `**Metadata:**` block; unit test confirms formatting and version tag presence.
 
 2. **Create Summary Parser Module** (`extension/src/summaryParser.ts`)
-   - Implement function `parseSummaryFromText(text: string): ConversationSummary | null` to extract structured fields from markdown summary.
-   - Handle optional fields gracefully (e.g., missing `OpenQuestions` section).
-   - **Acceptance**: Parser correctly round-trips a formatted summary; unit test confirms parsing.
+   - Implement function `parseSummaryFromText(text: string): ConversationSummary | null` to extract structured fields from enriched markdown summary.
+   - Parse `**Metadata:**` block first using regex to extract metadata fields; fall back to null values if block missing (legacy mode per §4.4.1).
+   - Parse content sections using deterministic heading patterns matching `summaryTemplate.ts`.
+   - Handle optional fields gracefully (e.g., missing `Open Questions` section).
+   - Validate template version tag if present; log warning if version mismatch detected.
+   - **Acceptance**: Parser correctly round-trips an enriched summary; handles legacy raw-text gracefully (returns partial object with null metadata); unit tests confirm both modes.
 
 3. **Document Summary Schema in README**
    - Add section to `extension/README.md` explaining the summary schema and when users should create summaries.
@@ -131,48 +218,83 @@ Implement the **creation, ingestion, and retrieval** of structured conversation 
 
 ---
 
-### Milestone 3: Update Python Bridge for Structured Summary Ingestion
+### Milestone 3: Update Python Bridge for Enriched Text Summary Ingestion
 
-**Objective**: Modify `ingest.py` to accept and store structured summaries while preserving backward compatibility with raw-text ingestion.
+**Objective**: Migrate `ingest.py` to store summaries as enriched text with embedded metadata, enabling structured retrieval and future ranking/compaction.
+
+**Implementation Note**: Cognee 0.3.4 does not expose a `DataPoint` class in the public API. This milestone implements the enriched-text fallback per `architecture/system-architecture.md` §4.4.1. Metadata is embedded in structured markdown with deterministic section headings. Template versioning and synchronized updates across `summaryTemplate.ts`, `ingest.py`, and `retrieve.py` are MANDATORY to prevent parsing failures. See `DATAPOINT_SCHEMA.md` for detailed implementation approach and regex patterns.
 
 **Tasks**:
 
-1. **Extend Ingest Script to Accept Summary Format** (`extension/bridge/ingest.py`)
-   - Add new CLI argument `--summary` (boolean flag) to indicate structured summary ingestion vs legacy raw-text.
+1. **Implement DataPoint Ingestion for Summaries** (`extension/bridge/ingest.py`)
+   - Add new CLI arguments for structured summary ingestion:
+     - `--summary` (boolean flag): Indicates DataPoint-based summary vs legacy raw-text.
+     - `--summary-json` (string): JSON payload containing `ConversationSummary` with content + metadata fields.
    - When `--summary` is true:
-     - Expect `user_message` to contain the summary title/topic.
-     - Expect `assistant_message` to contain the full structured summary text (Topic/Context/Decisions/etc.).
-     - Format as a single blob with "Summary:" header:
+     - Parse `--summary-json` to extract content fields (topic, context, decisions, etc.) and metadata fields (topic_id, session_id, plan_id, status, created_at, updated_at).
+     - Create enriched text with embedded metadata following DATAPOINT_SCHEMA.md format:
+       ```python
+       # Create enriched text with embedded metadata (§4.4.1 fallback)
+       # CRITICAL: Section headings must match summaryTemplate.ts and retrieve.py regex patterns
+       summary_text = f"""<!-- Template: v1.0 -->
+# Conversation Summary: {topic}
 
-       ```text
-       Summary: {topic}
-       
-       Topic: {topic}
-       Context: {context}
-       Decisions: {decisions}
-       Rationale: {rationale}
-       Open Questions: {openQuestions}
-       Next Steps: {nextSteps}
-       References: {references}
-       Time Scope: {timeScope}
+**Metadata:**
+- Topic ID: {topic_id}
+- Session ID: {session_id}
+- Plan ID: {plan_id if plan_id else 'N/A'}
+- Status: {status}
+- Created: {created_at}
+- Updated: {updated_at}
+
+## Context
+{context}
+
+## Key Decisions
+{format_list(decisions)}
+
+## Rationale
+{format_dict(rationale)}
+
+## Open Questions
+{format_list(open_questions)}
+
+## Next Steps
+{format_list(next_steps)}
+
+## References
+{format_list(references)}
+
+## Time Scope
+- Start: {time_scope['start']}
+- End: {time_scope['end']}
+- Turn Count: {time_scope['turn_count']}
+"""
        ```
-
+     - Call `cognee.add(data=[summary_text], dataset_name=dataset_name)` and `cognee.cognify()` to ingest into knowledge graph.
+     - Emit success JSON with `topic_id` and metadata confirmation for logging/tracking.
    - When `--summary` is false (default):
-     - Use existing raw-text format (Plan 010 behavior).
-   - **Note**: This content-only format will be migrated to DataPoints with metadata in Plan 015. Code should be structured to ease this migration.
-   - **Acceptance**: `ingest.py --summary` ingests structured summaries as plain text; `ingest.py` without flag preserves legacy behavior.
+     - Use existing raw-text format (Plan 010 behavior) for backward compatibility.
+   - **Acceptance**: `ingest.py --summary --summary-json '{...}'` creates enriched text with embedded metadata; metadata is searchable via semantic embeddings; legacy ingestion unaffected.
 
-2. **Update CogneeClient to Support Summary Ingestion** (`extension/src/cogneeClient.ts`)
-   - Add method `ingestSummary(summary: ConversationSummary): Promise<void>` that:
-     - Calls `formatSummaryAsText(summary)` to get the full markdown text.
-     - Invokes `ingest.py --summary --user-message "{summary.topic}" --assistant-message "{summaryText}" --importance "high"`.
-     - Logs the operation to Output channel with summary topic and timestamp.
-   - **Acceptance**: `CogneeClient.ingestSummary` successfully stores summaries as plain text; logs confirm ingestion.
+2. **Update CogneeClient to Support Enriched Text Ingestion** (`extension/src/cogneeClient.ts`)
+   - Add method `ingestSummary(summary: ConversationSummary): Promise<boolean>` that:
+     - Generates UUID for `topicId` if not provided.
+     - Sets metadata defaults: `status: "active"`, `createdAt: new Date()`, `updatedAt: new Date()`.
+     - Serializes `summary` (content + metadata) to JSON.
+     - Invokes `ingest.py --summary --summary-json '{...}'` with `workspace_path` injected.
+     - Parses response JSON to verify success and extract metadata confirmation.
+     - Logs the operation to Output channel with topic, topic_id, ingestion duration, and timestamp.
+   - **Acceptance**: `CogneeClient.ingestSummary` successfully stores summaries as enriched text; returns success boolean; logs confirm ingestion with metadata.
 
-3. **Add Integration Test for Summary Ingestion** (`extension/bridge/test_ingest.py`)
-   - Write pytest test that mocks Cognee SDK and verifies `ingest.py --summary` formats data correctly and calls `cognee.add` + `cognee.cognify`.
-   - Validate that "Summary:" header is included in formatted text.
-   - **Acceptance**: Pytest test passes; structured summary ingestion path is validated.
+3. **Implement Bridge Contract Tests** (`extension/bridge/test_datapoint_contract.py`)
+   - Implement tests from Milestone 0 skeleton per §4.4.1 testing mandates:
+     - **Test enriched-text formatting**: Verify `ingest.py --summary` generates markdown with `<!-- Template: v1.0 -->` tag, `**Metadata:**` block, and all required metadata fields (topic_id, session_id, plan_id, status, timestamps).
+     - **Test metadata embedding**: Verify metadata fields are embedded in searchable text format with exact heading matches ("## Context", "## Key Decisions", etc.).
+     - **Test template structure validation**: Verify enriched text includes all mandatory content sections; missing sections fail with actionable error codes.
+     - **Test legacy compatibility**: Verify `ingest.py` without `--summary` still works (raw-text path unaffected).
+     - **Test template version handling**: Verify version tag is present and correctly embedded.
+   - **Acceptance**: Pytest tests pass covering all §4.4.1 requirements; enriched text ingestion contract validated; test output logs confirm deterministic behavior.
 
 **Owner**: Implementer
 **Dependencies**: Milestone 2 (summary generation command)
@@ -180,24 +302,60 @@ Implement the **creation, ingestion, and retrieval** of structured conversation 
 
 ---
 
-### Milestone 4: Update Retrieval to Return Structured Summaries
+### Milestone 4: Update Retrieval to Return Structured JSON
 
-**Objective**: Ensure `retrieve.py` can return structured summaries and that the chat participant displays them transparently.
+**Objective**: Migrate `retrieve.py` to return structured JSON payloads with metadata fields, enabling TypeScript consumers to display rich context without text parsing.
 
 **Tasks**:
 
-1. **Verify Retrieval Works with Summaries** (`extension/bridge/retrieve.py`)
-   - No code changes required initially; `retrieve.py` already searches all ingested text.
-   - Confirm via manual test that structured summaries are returned in search results.
-   - **Acceptance**: Retrieval returns summaries when queried with relevant topics/keywords.
+1. **Implement Structured Retrieval Output** (`extension/bridge/retrieve.py`)
+   - Modify `retrieve.py` to return JSON matching contract from Milestone 0 per §4.4.1 regex parsing requirements:
+     - Query Cognee for memories matching search query.
+     - For each result, detect if it contains enriched metadata by checking for "**Metadata:**" section in text:
+       - **Parse metadata fields using regex** (patterns documented in `DATAPOINT_SCHEMA.md`): `topic_id`, `plan_id`, `session_id`, `status`, `created_at`, `updated_at`.
+       - **Parse content sections** using deterministic heading patterns: `topic`, `context`, `decisions`, `rationale`, `open_questions`, `next_steps`, `references`.
+       - Include validation hooks: if regex groups fail to match, log error with malformed text snippet and return structured error payload with actionable error code.
+       - Include Cognee similarity `score`.
+       - Format structured JSON entry.
+     - For legacy raw-text memories (no "**Metadata:**" section) per §4.4.1 mixed-mode requirement:
+       - Include `summary_text` (raw text), set all metadata fields to `null`, `status: null`.
+       - Ensure TypeScript consumers can branch on `topic_id` presence to detect enriched vs legacy.
+     - Return JSON array of structured results with `total_results` count.
+   - **CRITICAL per §4.4.1**: Regex patterns must match `summaryTemplate.ts` section headings exactly. Any template changes require synchronized updates.
+   - **Acceptance**: `retrieve.py` returns JSON matching contract; parses and includes metadata for enriched summaries; handles legacy memories gracefully; malformed summaries fail loudly with error codes; test suite validates regex extraction.
 
-2. **Enhance Chat Participant to Display Summaries Transparently** (`extension/src/chatParticipant.ts`)
-   - When retrieval results include structured summaries (detected by presence of "Summary:" header in text):
-     - Parse the summary sections (Topic, Context, Decisions, etc.) using `summaryParser.parseSummaryFromText`.
-     - Display summary in a readable format via `stream.markdown`:
+2. **Update CogneeClient to Parse Structured Responses** (`extension/src/cogneeClient.ts`)
+   - Modify `CogneeClient.retrieve` to:
+     - Parse JSON response from `retrieve.py`.
+     - Handle error payloads from malformed summaries; log actionable error messages to Output channel.
+     - Return TypeScript array of `RetrievalResult` objects (new interface matching contract):
+       ```typescript
+       interface RetrievalResult {
+         summaryText: string;
+         topic?: string;
+         topicId?: string;
+         planId?: string;
+         sessionId?: string;
+         status?: "active" | "completed" | "archived";
+         createdAt?: Date;
+         score: number;
+         decisions?: string[];
+         rationale?: { [key: string]: string };
+         openQuestions?: string[];
+         nextSteps?: string[];
+         references?: string[];
+       }
+       ```
+     - Handle both enriched text results (full metadata) and legacy results (null metadata) per §4.4.1 mixed-mode requirement.
+     - Branch logic: if `result.topicId` is null, treat as legacy memory; if present, treat as enriched summary.
+   - **Acceptance**: `CogneeClient.retrieve` returns structured objects; TypeScript consumers can access metadata directly; mixed-mode handling tested with both enriched and legacy memories.
 
+3. **Enhance Chat Participant to Display Metadata** (`extension/src/chatParticipant.ts`)
+   - Update participant to consume `RetrievalResult` objects instead of parsing text:
+     - Display summary with metadata badges when available:
        ```markdown
        **Summary: {topic}**
+       📋 Status: {status} | 📅 Created: {createdAt} | 🏷️ Plan: {planId}
        
        **Context**: {context bullets}
        **Decisions**: {decisions bullets}
@@ -206,15 +364,19 @@ Implement the **creation, ingestion, and retrieval** of structured conversation 
        **Next Steps**: {nextSteps}
        **References**: {references}
        ```
+     - For legacy results (no metadata), display plain summary text.
+     - Apply Plan 013 transparency policy: show full summary text up to 1000 characters; if longer, show truncation indicator.
+   - **Acceptance**: Retrieved summaries display metadata when available; users see status, timestamps, plan IDs; legacy memories still work.
 
-   - Apply Plan 013 transparency policy: show full summary text up to 1000 characters; if longer, show truncation indicator and offer "Show more".
-   - **Note**: This text-based detection is **temporary**; Plan 015 will migrate to relying on DataPoint metadata from `retrieve.py` responses instead of text pattern matching.
-   - **Acceptance**: Retrieved summaries are displayed in structured, readable format; users can see full context.
-
-3. **Log Retrieval Results for Summaries** (`extension/src/cogneeClient.ts`)
-   - When `CogneeClient.retrieve` returns results, log summary topics to Output channel.
-   - Include indication if result is a structured summary vs legacy raw text (detected by "Summary:" header).
-   - **Acceptance**: Logs clearly distinguish summaries from raw-text memories.
+4. **Add Retrieval Contract Tests** (`extension/bridge/test_datapoint_contract.py`)
+   - Add tests verifying `retrieve.py` output per §4.4.1 testing mandates:
+     - **Test enriched-text retrieval**: Verify JSON includes all metadata fields parsed from "**Metadata:**" section; validate regex extraction accuracy.
+     - **Test legacy retrieval**: Verify raw-text memories return with null metadata; ensure no parsing failures on plain text.
+     - **Test mixed results**: Verify response handles both enriched and legacy results in same query; TypeScript consumers can branch on `topic_id` presence.
+     - **Test metadata parsing accuracy**: Verify regex correctly extracts topic_id, status, timestamps from text; test edge cases (missing fields, malformed dates).
+     - **Test validation hooks**: Verify malformed summaries (missing sections, invalid metadata format) return error payloads with actionable error codes instead of crashing.
+     - **Test JSON contract compliance**: Verify response structure exactly matches `RETRIEVE_CONTRACT.md` schema.
+   - **Acceptance**: Pytest tests pass covering all §4.4.1 retrieval requirements; retrieval contract validated; malformed summary handling tested.
 
 **Owner**: Implementer
 **Dependencies**: Milestone 3 (summary ingestion working)
@@ -360,18 +522,21 @@ If summary ingestion or retrieval introduces breaking changes:
 ## Dependencies
 
 - **Upstream**: None (Plan 014 is foundational for structured summaries).
-- **Downstream**: Plan 015 will build on this plan to add metadata-driven ranking, compaction, and DataPoint-based ingestion.
-- **Architectural**: Aligns with `system-architecture.md` §4.4 (Plan 014 Bridge Modernization); this plan implements the ingestion/retrieval prerequisites.
+- **Downstream**: Plan 015 will build on this plan's metadata foundation to add recency-aware ranking algorithms, status-based filtering, and compaction workflows. Plan 016 depends on the structured bridge contract (Milestone 0) to implement `CogneeContextProvider`.
+- **Architectural**: Fully aligns with `system-architecture.md` §4.4, §4.4.1 (Enriched Text Metadata Fallback), and §9 (Bridge Migration for Structured Summaries, Enriched Text Metadata Fallback decision). This plan delivers the enriched-text ingestion and structured retrieval contract required by the architecture, with mandatory template versioning and mixed-mode handling per §4.4.1 testing mandates.
 
 ---
 
 ## Handoff Notes for Implementer
 
-- **Start with Milestone 1**: Establish the schema and template module before touching the chat participant or bridge.
-- **TypeScript Focus**: Most of the work is in TypeScript (`summaryTemplate`, `summaryParser`, `chatParticipant`, `cogneeClient`).
-- **Bridge Changes Minimal**: `ingest.py` requires only a `--summary` flag and conditional formatting; no architectural refactor.
-- **Testing First**: Write unit tests for template/parser before integrating into chat participant; this ensures schema is stable.
-- **Manual QA Critical**: Have QA validate the full user workflow (generate → confirm → store → retrieve) in a live VS Code environment with real Cognee SDK.
+- **Start with Milestone 0**: Define and validate bridge contracts before any implementation; ensures architectural alignment and prevents rework.
+- **Template Versioning is MANDATORY per §4.4.1**: Any changes to section headings or metadata format in `summaryTemplate.ts` require synchronized updates to `ingest.py` and `retrieve.py` regex patterns. Document all changes in `DATAPOINT_SCHEMA.md`.
+- **Bridge Focus**: Most critical work is in Python bridge (`ingest.py` enriched-text creation, `retrieve.py` regex-based parsing + structured JSON output). This is an architectural migration with fragile regex dependencies—test coverage is critical.
+- **TypeScript Consumes Contract**: TypeScript work (`cogneeClient`, `chatParticipant`) is straightforward once bridge contract is stable; focus on consuming structured metadata and handling mixed-mode (enriched + legacy) gracefully.
+- **Testing First per §4.4.1**: Implement bridge contract tests in Milestone 0/3 covering enriched-text formatting, metadata parsing, legacy regression, and JSON contract validation before any UI work. This proves the foundation is solid and catches template drift early.
+- **Mixed-Mode Handling Required**: TypeScript and Python layers must branch on `topicId`/`status` presence to distinguish enriched summaries from legacy memories. Test both paths thoroughly.
+- **Plan 016 Coordination**: The bridge contract from Milestone 0 is a dependency for Plan 016; coordinate with Plan 016 implementer to ensure schema meets `CogneeContextProvider` requirements.
+- **Manual QA Critical**: Have QA validate full workflow (generate → confirm → store → retrieve) AND verify metadata display (status badges, timestamps) in live VS Code environment. Test with both enriched summaries and legacy memories.
 
 ---
 

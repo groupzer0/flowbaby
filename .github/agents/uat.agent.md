@@ -16,6 +16,10 @@ handoffs:
     agent: DevOps
     prompt: Implementation complete with release decision. Please manage release steps.
     send: false
+  - label: Update Roadmap
+    agent: Roadmap
+    prompt: Retrospective is closed for this plan. Please update the roadmap accordingly.
+    send: false
 ---
 Purpose:
 - Act as final sanity check ensuring delivered code aligns with original plan objective and value statement

@@ -65,6 +65,68 @@ def estimate_tokens(text: str) -> int:
     return len(text.split())
 
 
+def parse_enriched_summary(text: str) -> dict:
+    """
+    Parse enriched text summary per §4.4.1 to extract structured metadata and content.
+    
+    Detects if text contains enriched summary format (<!-- Template: v1.0 --> + **Metadata:** block).
+    Returns structured dict with metadata fields and content sections, or None for legacy raw text.
+    
+    Args:
+        text: Raw text that may be enriched summary or legacy memory
+        
+    Returns:
+        Dict with structured fields if enriched summary, None if legacy raw text
+    """
+    # Detect enriched text format per §4.4.1
+    if '**Metadata:**' not in text:
+        return None  # Legacy raw-text memory
+    
+    # Extract metadata fields using regex patterns from DATAPOINT_SCHEMA.md
+    topic_match = re.search(r'^# Conversation Summary:\s*(.+)$', text, re.MULTILINE)
+    topic_id_match = re.search(r'- Topic ID:\s*(N/A|[a-zA-Z0-9\-]+)', text)
+    session_id_match = re.search(r'- Session ID:\s*(N/A|[a-zA-Z0-9\-]+)', text)
+    plan_id_match = re.search(r'- Plan ID:\s*(N/A|[\w\-]+)', text)
+    status_match = re.search(r'- Status:\s*(N/A|Active|Superseded|Draft)', text, re.IGNORECASE)
+    created_at_match = re.search(r'- Created:\s*(N/A|[\d\-T:Z.]+)', text, re.IGNORECASE)
+    updated_at_match = re.search(r'- Updated:\s*(N/A|[\d\-T:Z.]+)', text, re.IGNORECASE)
+    
+    # Extract content sections using deterministic headings per §4.4.1
+    context_match = re.search(r'## Context\n([\s\S]+?)(?=\n##|$)', text)
+    decisions_match = re.search(r'## Key Decisions\n([\s\S]+?)(?=\n##|$)', text)
+    rationale_match = re.search(r'## Rationale\n([\s\S]+?)(?=\n##|$)', text)
+    questions_match = re.search(r'## Open Questions\n([\s\S]+?)(?=\n##|$)', text)
+    next_steps_match = re.search(r'## Next Steps\n([\s\S]+?)(?=\n##|$)', text)
+    references_match = re.search(r'## References\n([\s\S]+?)(?=\n##|$)', text)
+    time_scope_match = re.search(r'## Time Scope\n([\s\S]+?)(?=\n##|$)', text)
+    
+    def parse_list_section(content: str) -> list:
+        """Parse list section with '- item' format, handle (none) marker."""
+        if not content or content.strip() == '(none)':
+            return []
+        lines = [line.strip()[2:].strip() for line in content.strip().split('\n') if line.strip().startswith('- ')]
+        return lines
+    
+    # Build structured result per RETRIEVE_CONTRACT.md
+    return {
+        'summary_text': text,
+        'topic': topic_match.group(1).strip() if topic_match else None,
+        'topic_id': topic_id_match.group(1) if topic_id_match and topic_id_match.group(1) != 'N/A' else None,
+        'session_id': session_id_match.group(1) if session_id_match and session_id_match.group(1) != 'N/A' else None,
+        'plan_id': plan_id_match.group(1) if plan_id_match and plan_id_match.group(1) != 'N/A' else None,
+        'status': status_match.group(1) if status_match and status_match.group(1) != 'N/A' else None,
+        'created_at': created_at_match.group(1) if created_at_match and created_at_match.group(1) != 'N/A' else None,
+        'updated_at': updated_at_match.group(1) if updated_at_match and updated_at_match.group(1) != 'N/A' else None,
+        'context': context_match.group(1).strip() if context_match else None,
+        'decisions': parse_list_section(decisions_match.group(1)) if decisions_match else [],
+        'rationale': parse_list_section(rationale_match.group(1)) if rationale_match else [],
+        'open_questions': parse_list_section(questions_match.group(1)) if questions_match else [],
+        'next_steps': parse_list_section(next_steps_match.group(1)) if next_steps_match else [],
+        'references': parse_list_section(references_match.group(1)) if references_match else [],
+        'time_scope': time_scope_match.group(1).strip() if time_scope_match else None
+    }
+
+
 async def retrieve_context(
     workspace_path: str,
     query: str,
@@ -166,7 +228,7 @@ async def retrieve_context(
                 'total_tokens': 0
             }
         
-        # Process results - convert SearchResult objects to dicts
+        # Process results - convert SearchResult objects to dicts with structured parsing per §4.4.1
         processed_results = []
         total_tokens = 0
         
@@ -182,40 +244,72 @@ async def retrieve_context(
                 # Fallback: try to access as object
                 text = str(getattr(result, 'text', str(result)))
             
-            # Extract timestamp and importance from embedded metadata in text
-            timestamp_match = re.search(r'\[Timestamp: ([^\]]+)\]', text)
-            importance_match = re.search(r'\[Importance: ([^\]]+)\]', text)
+            # Try to parse as enriched summary per §4.4.1
+            parsed = parse_enriched_summary(text)
             
-            timestamp = timestamp_match.group(1) if timestamp_match else None
-            importance = float(importance_match.group(1)) if importance_match else 0.0
-            
-            # Calculate scores
-            recency_score = calculate_recency_score(timestamp) if timestamp else 0.5
-            base_score = 0.7  # Default base score since Cognee already ranked these
-            
-            # Calculate weighted final score
-            base_weight = 1.0 - recency_weight - importance_weight
-            final_score = (
-                base_score * base_weight +
-                recency_score * recency_weight +
-                importance * importance_weight
-            )
+            if parsed:
+                # Enriched summary with structured metadata
+                result_dict = parsed
+                result_dict['score'] = 0.7  # Cognee base score
+                
+                # Calculate recency score from created_at if available
+                if parsed.get('created_at'):
+                    recency_score = calculate_recency_score(parsed['created_at'])
+                    # Apply recency weighting
+                    base_weight = 1.0 - recency_weight
+                    result_dict['score'] = round(
+                        0.7 * base_weight + recency_score * recency_weight,
+                        3
+                    )
+            else:
+                # Legacy raw-text memory - extract timestamp/importance if present
+                timestamp_match = re.search(r'\[Timestamp: ([^\]]+)\]', text)
+                importance_match = re.search(r'\[Importance: ([^\]]+)\]', text)
+                
+                timestamp = timestamp_match.group(1) if timestamp_match else None
+                importance = float(importance_match.group(1)) if importance_match else 0.0
+                
+                # Calculate scores
+                recency_score = calculate_recency_score(timestamp) if timestamp else 0.5
+                base_score = 0.7
+                
+                # Calculate weighted final score
+                base_weight = 1.0 - recency_weight - importance_weight
+                final_score = (
+                    base_score * base_weight +
+                    recency_score * recency_weight +
+                    importance * importance_weight
+                )
+                
+                # Legacy format per §4.4.1 mixed-mode requirement
+                result_dict = {
+                    'summary_text': text,
+                    'text': text,  # Backward compatibility
+                    'topic': None,
+                    'topic_id': None,
+                    'session_id': None,
+                    'plan_id': None,
+                    'status': None,
+                    'created_at': timestamp,
+                    'score': round(final_score, 3),
+                    'recency_score': round(recency_score, 3),
+                    'importance_score': round(importance, 3),
+                    'decisions': [],
+                    'rationale': [],
+                    'open_questions': [],
+                    'next_steps': [],
+                    'references': []
+                }
             
             # Estimate tokens
-            result_tokens = estimate_tokens(text)
+            result_tokens = estimate_tokens(result_dict.get('summary_text', result_dict.get('text', '')))
+            result_dict['tokens'] = result_tokens
             
             # Check token limit
             if total_tokens + result_tokens > max_tokens and len(processed_results) > 0:
                 break
             
-            processed_results.append({
-                'text': text,
-                'score': round(final_score, 3),
-                'recency_score': round(recency_score, 3),
-                'importance_score': round(importance, 3),
-                'tokens': result_tokens
-            })
-            
+            processed_results.append(result_dict)
             total_tokens += result_tokens
         
         return {

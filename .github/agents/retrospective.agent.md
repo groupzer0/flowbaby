@@ -12,6 +12,10 @@ handoffs:
     agent: Planner
     prompt: Retrospective identifies process improvements for future planning.
     send: false
+  - label: Update Roadmap
+    agent: Roadmap
+    prompt: Retrospective is closed for this plan. Please update the roadmap accordingly.
+    send: false
 ---
 Purpose:
 - Identify **repeatable process improvements** that apply across multiple iterations, not just this one

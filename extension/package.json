@@ -2,7 +2,7 @@
   "name": "cognee-chat-memory",
   "displayName": "Cognee Chat Memory",
   "description": "Automatic memory for GitHub Copilot chat using Cognee knowledge graphs",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "publisher": "cognee",
   "icon": "media/icon.png",
   "engines": {

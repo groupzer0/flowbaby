@@ -1,0 +1,46 @@
+%% Cognee Chat Memory System Architecture Diagram (updated 2025-11-18)
+graph TD
+  subgraph VS_Code_Extension [VS Code Extension (TypeScript)]
+    activation[extension.ts / activation]
+    cogneeClient[CogneeClient
+(subprocess orchestration)]
+    contextProvider[CogneeContextProvider
+(rate limits + formatting)]
+    participant[@cognee-memory participant]
+    agentCommands[Agent Commands
+(retrieveForAgent, future APIs)]
+    statusUx[Status/Output surfaces]
+    summaryModules[Summary Template & Parser
+  (Plan 014 schema)]
+  end
+
+  subgraph Python_Bridge [Python Bridge Scripts]
+    init[init.py]
+    ingest[ingest.py
+(legacy + enriched summaries)]
+    fallback[Enriched metadata markdown
+(fallback until DataPoints)]
+    retrieve[retrieve.py
+(structured JSON + regex parsing)]
+    future[Compaction / feedback hooks]
+  end
+
+  subgraph Cognee_SDK [Cognee SDK (cognee==0.4.0)]
+    storage[Local graph/vector stores
+(.cognee_system / .cognee_data)]
+    cognition[Cognify + search pipelines]
+  end
+
+  activation --> cogneeClient
+  contextProvider --> cogneeClient
+  contextProvider --> summaryModules
+  summaryModules --> cogneeClient
+  participant --> contextProvider
+  agentCommands --> contextProvider
+  cogneeClient -->|JSON over stdout| ingest
+  cogneeClient -->|JSON over stdout| retrieve
+  ingest --> fallback
+  fallback --> retrieve
+  Python_Bridge -->|Local API / FS| Cognee_SDK
+  statusUx --> activation
+  contextProvider --> statusUx

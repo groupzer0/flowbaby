@@ -1,6 +1,6 @@
 # Cognee Chat Memory System Architecture
 
-**Last Updated**: 2025-11-16 14:05
+**Last Updated**: 2025-11-18 11:05
 **Owner**: architect agent
 
 ## Change Log
@@ -11,6 +11,8 @@
 | 2025-11-15 09:45 | Added forward-looking architecture mapping for roadmap epics | Provide planners with architecture guidance for v0.2.2, v0.2.3, v0.3.0, v0.4.0 | Roadmap epics 0.2.2.x-0.4.0 |
 | 2025-11-16 12:30 | Incorporated Plan 013/014 analyses (memory display transparency, chat summary schema, compaction pipeline) | Document UX transparency fixes and long-term memory management to guide planning/QA | Plans 013-014 |
 | 2025-11-16 14:05 | Captured Plan 014 bridge addendum (structured ingestion + metadata-aware retrieval requirements) | Ensure planners know bridge migration scope before implementation | Plan 014 bridge addendum |
+| 2025-11-17 10:20 | Added Plan 016 agent-integration guardrails and context provider requirements | Preserve privacy/testability before exposing public agent commands | Plan 016 |
+| 2025-11-18 11:05 | Documented Plan 014 enriched-text metadata fallback + regex retrieval parsing | Cognee SDK 0.3.4 lacks DataPoint API; need interim architecture + testing guardrails | Plan 014 |
 
 
 ## 1. Purpose and Scope
@@ -19,11 +21,15 @@ This document captures the end-to-end architecture of Cognee Chat Memory as ship
 
 ## 2. High-Level Architecture
 
+The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirrors the layered view below and is kept in sync with this document whenever structural changes occur.
+
 ```text
 +-------------------------------------------------------------+
 |                    VS Code Extension (TS)                   |
 |  - extension.ts (activation, registrations)                 |
 |  - CogneeClient (subprocess orchestration, logging)         |
+|  - CogneeContextProvider (shared retrieval, rate limits)    |
+|  - Agent commands/API surface (retrieveForAgent, etc.)      |
 |  - UX surfaces (commands, status bar, chat participant)     |
 +---------------------------|---------------------------------+
                             v JSON over stdout/stderr
@@ -52,6 +58,10 @@ This document captures the end-to-end architecture of Cognee Chat Memory as ship
 - Provides user entry points: keyboard capture command, command palette, @cognee-memory chat participant, toggle/clear commands.
 - Streams UX feedback (notifications, Output channel logs, chat participant markdown).
 - Delegates all knowledge operations to Python bridge via `CogneeClient` helper.
+- Hosts the `CogneeContextProvider`, a singleton service that normalizes retrieval responses (structured metadata once Plan 014 migration lands), enforces rate limiting/back-pressure, and feeds both the chat participant and public agent commands.
+- Exposes the `cogneeMemory.retrieveForAgent` command (Plan 016) behind opt-in settings; access defaults to disabled and may rely on capability tokens if VS Code cannot surface caller metadata.
+- Logs every agent-initiated retrieval to the Output channel/status service to satisfy transparency requirements from Plans 013/016.
+- Implements the Plan 014 summary template + parser helpers so TypeScript can (a) render structured markdown with embedded metadata for ingestion and (b) validate/round-trip summaries when Cognee DataPoints are unavailable.
 
 ### 3.2 Bridge Execution Layer (Python)
 
@@ -60,6 +70,7 @@ This document captures the end-to-end architecture of Cognee Chat Memory as ship
 - Maintains ontology assets (currently `ontology.ttl`) and dataset naming strategy.
 - Handles Terraform-style migration markers to coordinate one-time pruning.
 - Emits JSON envelopes for success/error, plus structured stderr for diagnostics.
+- Implements the enriched-text fallback for Plan 014 summaries: `ingest.py` accepts `--summary-json`, renders metadata-rich markdown, and `retrieve.py` parses metadata via regex before producing structured JSON. Bridge unit tests MUST cover both enriched and legacy text paths until Cognee exposes DataPoint APIs.
 
 ### 3.3 Cognee Knowledge Layer
 
@@ -111,6 +122,18 @@ Plan 014’s structured summary + compaction work introduces bridge-specific req
 
 The `014-bridge-focused-addendum-analysis` file is the canonical reference for these expectations; this section tracks them architecturally so Planner/Implementer work does not regress the three-layer contract.
 
+#### 4.4.1 Interim Fallback: Enriched Text Metadata Embedding (2025-11-18)
+
+Cognee SDK 0.3.4 does **not** expose a public `DataPoint` API, so Plan 014 ingestion cannot yet persist metadata separately from text. Until Cognee delivers the API, the bridge must:
+
+- Render summaries as enriched markdown with a `**Metadata:**` block and deterministic section headings so downstream regex parsing is stable.
+- Version both the template and parser modules; changes to section headers require synchronized updates to `ingest.py`, `retrieve.py`, and their tests.
+- Emit structured JSON **only after** parsing enriched text. Retrieval must include validation hooks (regex groups + default values) so malformed summaries fail loudly with actionable error codes.
+- Maintain mixed-mode support: enriched summaries carry metadata, while legacy memories continue to return `null` metadata. TypeScript consumers must be able to branch on `topicId`/`status` availability.
+- Treat this fallback as temporary. As soon as Cognee exposes DataPoints, Planner MUST schedule the migration to native metadata storage and retire regex parsing to reduce brittleness.
+
+Testing Guidance: `extension/bridge/test_datapoint_contract.py` is now mandated to cover (a) enriched-text formatting, (b) metadata parsing, (c) legacy path regression tests, and (d) JSON contract validation so QA can rely on deterministic behavior even without DataPoints.
+
 ## 5. Data & Storage Boundaries
 
 - **Workspace-local**: `.cognee_system/` (Cognee internal DB) and `.cognee_data/` (vector/index artifacts) created under workspace root since Plan 010.
@@ -160,7 +183,8 @@ The `014-bridge-focused-addendum-analysis` file is the canonical reference for t
    - Chat participant truncates retrieved memories to 150 chars and log previews to 50 chars, creating mistrust and violating transparency goals. Requires UX adjustments in TypeScript (`extension.ts`, `cogneeClient.ts`).
 
 9. **Memory Graph Growth / Noise (Plan 014)**
-   - Continuous ingestion of raw conversation summaries risks index bloat and conflicting context. Requires structured summary schema, metadata tagging, and compaction pipeline to maintain signal. Current bridge implementation still ingests plain text and uses regex-based recency scoring, so migrating to metadata-aware ingestion/retrieval is now a tracked dependency (see §4.4).
+   - Continuous ingestion of raw conversation summaries risks index bloat and conflicting context. Requires structured summary schema, metadata tagging, and compaction pipeline to maintain signal.
+   - **Interim risk (2025-11-18)**: Because Cognee lacks DataPoints, metadata lives inside enriched markdown. Regex parsing is brittle; any template drift breaks retrieval. Planner/QA must treat this as high-risk technical debt and prioritize migration once APIs exist.
 
 ## 9. Architectural Decisions
 
@@ -199,6 +223,30 @@ The `014-bridge-focused-addendum-analysis` file is the canonical reference for t
 **Consequences**: (+) Enables Plan 014 ranking/transparency goals; (+) aligns with DecisionRecord compaction strategy; (-) requires coordinated updates to bridge scripts, tests, and planner tasks; (-) short-term complexity as legacy and structured memories coexist.
 
 **Related**: Plan 014 bridge addendum, Decision on Structured Conversation Summaries & Compaction.
+
+### Decision: Agent Integration Guardrails & Context Provider (2025-11-17 10:20)
+
+**Context**: Plan 016 proposes exposing Cognee memories to arbitrary VS Code agents via public commands. Without explicit guardrails, this risks privacy regressions, duplicate LLM pipelines inside the extension host, and uncontrolled subprocess fan-out.
+
+**Choice**: Introduce a TypeScript-level `CogneeContextProvider` as the single retrieval entry point for both the `@cognee-memory` participant and any public agent commands. Access is gated behind workspace settings that default to disabled and must clearly communicate that enabling them grants all extensions in the workspace visibility into the Cognee memory graph. Authorization heuristics such as allow-lists can only ship if we possess verifiable caller identity (capability tokens, signed payloads). Summarization or other LLM-heavy operations remain in the Python bridge to preserve the three-layer architecture. `CogneeContextProvider` must also enforce concurrency/rate limits and log every agent-initiated request for transparency.
+
+**Alternatives Considered**: (1) Allow each TypeScript surface (participant, commands) to call `CogneeClient` directly—rejected because it fragments logging and opens the door to inconsistent privacy checks. (2) Move all new logic into the bridge—rejected because VS Code agents need a lightweight TS façade, but bridge changes remain prerequisites for structured metadata. (3) Keep allow-lists despite lacking caller identity—rejected because it provides false assurances.
+
+**Consequences**: (+) Centralizes retrieval logic and transparency controls; (+) keeps LLM and data processing in the Python layer; (+) lets us expose a documented command surface without regressing privacy. (-) Requires capability-token design if finer-grained authorization is desired; (-) demands precise coordination with Plan 014 bridge migration to ensure structured payloads are available before public APIs ship.
+
+**Related**: Plan 016, Plans 013-015 (transparency + structured summaries), §7 Quality Attributes (privacy, isolation).
+
+### Decision: Enriched Text Metadata Fallback (2025-11-18 11:05)
+
+**Context**: Plan 014 requires DataPoint-based metadata so summaries carry status, topic IDs, and timestamps. Analysis discovered that Cognee SDK 0.3.4 no longer exposes the DataPoint class publicly, blocking the intended ingestion path.
+
+**Choice**: Implement a documented fallback where summaries are rendered as enriched markdown with embedded metadata, ingested via existing `cognee.add` calls, and parsed back into structured JSON via deterministic regex. Require bridge tests + TS summary templates to stay synchronized, and log this as temporary until Cognee restores a metadata API.
+
+**Alternatives Considered**: (1) Delay Plan 014 entirely—rejected because we still need structured retrieval before Plans 015/016. (2) Fork Cognee SDK or reach into internal types—rejected due to maintenance risk and licensing concerns.
+
+**Consequences**: (+) Unblocks Plan 014 deliverables (structured ingestion/retrieval) without waiting for SDK changes. (+) Keeps VS Code + bridge contract consistent for downstream plans. (-) Introduces regex-based fragility; template divergence causes runtime failures. (-) Requires rigorous tests + documentation so QA can detect drift. Migration to real DataPoints becomes a high-priority follow-up once SDK permits.
+
+**Related**: Plan 014, Decision on Structured Conversation Summaries & Compaction, §4.4.1 fallback guidance.
 
 ## 10. Roadmap Architecture Outlook
 

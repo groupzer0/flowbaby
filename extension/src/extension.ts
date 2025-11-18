@@ -1,9 +1,18 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { CogneeClient } from './cogneeClient';
+import { CogneeClient, RetrievalResult } from './cogneeClient';
+import { ConversationSummary, formatSummaryAsText, createDefaultSummary, TEMPLATE_VERSION } from './summaryTemplate';
+import { parseSummaryFromText } from './summaryParser';
 
 // Module-level variable to store client instance
 let cogneeClient: CogneeClient | undefined;
+
+// Module-level storage for pending summary confirmations (Plan 014 Milestone 2)
+interface PendingSummary {
+    summary: ConversationSummary;
+    timestamp: number;
+}
+const pendingSummaries = new Map<string, PendingSummary>();
 
 /**
  * Extension activation entry point
@@ -202,6 +211,212 @@ function registerCaptureCommands(
 }
 
 /**
+ * Handle summary generation request (Plan 014 Milestone 2)
+ * Implements turn count adjustment, LLM-based generation, and user confirmation flow
+ */
+async function handleSummaryGeneration(
+    request: vscode.ChatRequest,
+    chatContext: vscode.ChatContext,
+    stream: vscode.ChatResponseStream,
+    token: vscode.CancellationToken,
+    client: CogneeClient
+): Promise<vscode.ChatResult> {
+    console.log('=== PLAN 014: Handling summary generation request ===');
+    
+    // Default turn count per plan
+    const DEFAULT_TURN_COUNT = 15;
+    let turnCount = DEFAULT_TURN_COUNT;
+    
+    // Extract requested turn count from prompt (e.g., "summarize last 30 turns")
+    const turnCountMatch = request.prompt.match(/(?:last\s+)?(\d+)\s+turns?/i);
+    if (turnCountMatch) {
+        const requestedCount = parseInt(turnCountMatch[1]);
+        if (requestedCount > 0 && requestedCount <= 100) {
+            turnCount = requestedCount;
+        }
+    }
+    
+    // Extract chat history
+    const history = chatContext.history || [];
+    const availableTurns = history.filter(h => h instanceof vscode.ChatRequestTurn || h instanceof vscode.ChatResponseTurn);
+    const actualTurnCount = Math.min(turnCount, availableTurns.length);
+    
+    if (availableTurns.length === 0) {
+        stream.markdown('⚠️ **No conversation history available to summarize**\n\n');
+        stream.markdown('Chat with me first, then ask me to summarize the conversation.');
+        return { metadata: { error: 'no_history' } };
+    }
+    
+    // Calculate time range (use current time as fallback since turn timestamps aren't directly accessible)
+    const oldestTime = new Date(Date.now() - (actualTurnCount * 60000)); // Estimate 1 min per turn
+    const timeAgo = getTimeAgoString(oldestTime);
+    
+    // Show scope preview with adjustment option
+    stream.markdown(`📝 **Summary Scope**\n\n`);
+    stream.markdown(`I'll summarize the last **${actualTurnCount} turns** (from ${timeAgo}).\n\n`);
+    
+    if (availableTurns.length > actualTurnCount) {
+        stream.markdown(`💡 *Tip: You can adjust this by saying "summarize last 30 turns" or any number up to ${availableTurns.length}.*\n\n`);
+    }
+    
+    stream.markdown('Generating summary...\n\n');
+    stream.markdown('---\n\n');
+    
+    // Build conversation context for LLM
+    const recentTurns = availableTurns.slice(-actualTurnCount);
+    const conversationText = recentTurns.map((turn, index) => {
+        if (turn instanceof vscode.ChatRequestTurn) {
+            return `[Turn ${index + 1} - User]: ${turn.prompt}`;
+        } else if (turn instanceof vscode.ChatResponseTurn) {
+            // Extract text from response (may be markdown or plain text)
+            const responseText = turn.response.map(part => {
+                if (part instanceof vscode.ChatResponseMarkdownPart) {
+                    return part.value.value;
+                } else {
+                    return String(part);
+                }
+            }).join('');
+            return `[Turn ${index + 1} - Assistant]: ${responseText.substring(0, 500)}${responseText.length > 500 ? '...' : ''}`;
+        }
+        return '';
+    }).filter(Boolean).join('\n\n');
+    
+    // Generate summary using LLM with Plan 014 schema
+    const summaryPrompt = `You are a helpful assistant that creates structured summaries of conversations.
+
+Analyze the following conversation and create a structured summary following this exact format:
+
+# Conversation Summary: [Short Title]
+
+## Context
+[1-3 sentences summarizing what was being worked on and why]
+
+## Key Decisions
+[List key decisions or conclusions, one per line with "- " prefix, or write "(none)" if no decisions were made]
+
+## Rationale
+[Explain why key decisions were made, one per line with "- " prefix, or write "(none)" if no rationale provided]
+
+## Open Questions
+[List unresolved questions or risks, one per line with "- " prefix, or write "(none)" if no open questions]
+
+## Next Steps
+[List concrete next actions, one per line with "- " prefix, or write "(none)" if no next steps]
+
+## References
+[List relevant files, plan IDs, or links, one per line with "- " prefix, or write "(none)" if no references]
+
+## Time Scope
+[Human-readable time range, e.g., "Nov 18 10:00-11:30" or "Recent session"]
+
+---
+
+**Conversation to summarize (${actualTurnCount} turns):**
+
+${conversationText}
+
+---
+
+Create the summary now, following the format exactly. Use markdown formatting.`;
+    
+    try {
+        const messages = [vscode.LanguageModelChatMessage.User(summaryPrompt)];
+        const chatResponse = await request.model.sendRequest(messages, {}, token);
+        
+        let generatedSummary = '';
+        for await (const fragment of chatResponse.text) {
+            if (token.isCancellationRequested) {
+                return { metadata: { cancelled: true } };
+            }
+            stream.markdown(fragment);
+            generatedSummary += fragment;
+        }
+        
+        stream.markdown('\n\n---\n\n');
+        
+        // Try to parse the generated summary
+        const parsedSummary = parseSummaryFromText(generatedSummary);
+        
+        if (!parsedSummary) {
+            stream.markdown('⚠️ **Failed to parse generated summary**\n\n');
+            stream.markdown('The summary was generated but could not be parsed into the structured format. ');
+            stream.markdown('You can still read it above, but it won\'t be stored in memory.\n\n');
+            return { metadata: { error: 'parse_failed' } };
+        }
+        
+        // Enrich metadata fields for storage
+        parsedSummary.sessionId = null; // Could extract from workspace session if available
+        parsedSummary.planId = extractPlanIdFromConversation(conversationText);
+        parsedSummary.status = 'Active';
+        parsedSummary.createdAt = new Date();
+        parsedSummary.updatedAt = new Date();
+        
+        // Store pending summary for confirmation in next message
+        const summaryKey = `summary-${Date.now()}`;
+        pendingSummaries.set(summaryKey, {
+            summary: parsedSummary,
+            timestamp: Date.now()
+        });
+        
+        // Clean up old pending summaries (>5 minutes)
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        for (const [key, pending] of pendingSummaries.entries()) {
+            if (pending.timestamp < fiveMinutesAgo) {
+                pendingSummaries.delete(key);
+            }
+        }
+        
+        // Ask user for confirmation
+        stream.markdown('✅ **Summary generated successfully!**\n\n');
+        stream.markdown('Should I store this summary in Cognee memory? Reply with:\n');
+        stream.markdown('- `yes` or `store it` to save\n');
+        stream.markdown('- `no` or `cancel` to discard\n\n');
+        stream.markdown('💡 *Stored summaries can be retrieved later when you ask related questions.*');
+        
+        return {
+            metadata: {
+                summaryGenerated: true,
+                turnCount: actualTurnCount,
+                topic: parsedSummary.topic,
+                requiresConfirmation: true,
+                pendingSummaryKey: summaryKey
+            }
+        };
+        
+    } catch (error) {
+        console.error('Summary generation failed:', error);
+        stream.markdown(`\n\n❌ **Summary generation failed:** ${error instanceof Error ? error.message : String(error)}\n\n`);
+        return { metadata: { error: error instanceof Error ? error.message : String(error) } };
+    }
+}
+
+/**
+ * Get human-readable time ago string
+ */
+function getTimeAgoString(date: Date): string {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+}
+
+/**
+ * Extract plan ID from conversation text (e.g., "Plan 014", "plan-015")
+ */
+function extractPlanIdFromConversation(text: string): string | null {
+    const planMatch = text.match(/[Pp]lan[- ]?(\d{3})/);
+    return planMatch ? planMatch[1] : null;
+}
+
+/**
  * Register @cognee-memory chat participant for Milestone 2
  * Implements 6-step flow: retrieval → format display → augment prompt → generate response → capture conversation
  */
@@ -233,6 +448,122 @@ function registerCogneeMemoryParticipant(
                     return { metadata: { disabled: true } };
                 }
 
+                // PLAN 014 MILESTONE 5: Show help text for empty queries or explicit help requests
+                const trimmedPrompt = request.prompt.trim().toLowerCase();
+                const isHelpRequest = trimmedPrompt === '' || 
+                                     trimmedPrompt === 'help' || 
+                                     trimmedPrompt === '?' ||
+                                     trimmedPrompt.includes('how to use') ||
+                                     trimmedPrompt.includes('what can you do');
+
+                if (isHelpRequest) {
+                    stream.markdown('# 📚 Cognee Memory Help\n\n');
+                    stream.markdown('## Query for Context\n\n');
+                    stream.markdown('Ask a question to retrieve relevant memories from your workspace:\n\n');
+                    stream.markdown('- `@cognee-memory How did I implement caching?`\n');
+                    stream.markdown('- `@cognee-memory What did we decide about Plan 013?`\n');
+                    stream.markdown('- `@cognee-memory What are the next steps for authentication?`\n\n');
+                    stream.markdown('## Create Summaries\n\n');
+                    stream.markdown('Capture structured summaries of your conversations:\n\n');
+                    stream.markdown('- `@cognee-memory summarize this conversation` - Create a summary of recent chat history\n');
+                    stream.markdown('- `@cognee-memory remember this session` - Same as above\n\n');
+                    stream.markdown('Summaries include: Topic, Context, Decisions, Rationale, Open Questions, Next Steps, References\n\n');
+                    stream.markdown('## Tips\n\n');
+                    stream.markdown('- **Summaries are optional** - Create them after important discussions or decisions\n');
+                    stream.markdown('- **Adjust scope** - When creating summaries, you can adjust the number of turns to include\n');
+                    stream.markdown('- **Review before storing** - Summaries require explicit confirmation before saving\n\n');
+                    stream.markdown('📖 For more details, see the [extension README](command:markdown.showPreview?%5B%22extension%2FREADME.md%22%5D)\n');
+                    
+                    return { metadata: { help: true } };
+                }
+
+                // PLAN 014: Check for pending summary confirmation first
+                const promptLower = request.prompt.toLowerCase().trim();
+                const isConfirmation = ['yes', 'y', 'store it', 'save', 'save it', 'confirm'].includes(promptLower);
+                const isDeclination = ['no', 'n', 'cancel', 'discard', 'don\'t save', 'dont save'].includes(promptLower);
+                
+                if ((isConfirmation || isDeclination) && pendingSummaries.size > 0) {
+                    // Get most recent pending summary
+                    const entries = Array.from(pendingSummaries.entries());
+                    const mostRecent = entries.sort((a, b) => b[1].timestamp - a[1].timestamp)[0];
+                    
+                    if (mostRecent) {
+                        const [key, pending] = mostRecent;
+                        
+                        if (isConfirmation) {
+                            stream.markdown('📝 **Storing summary...**\n\n');
+                            
+                            try {
+                                const success = await client.ingestSummary(pending.summary);
+                                
+                                if (success) {
+                                    stream.markdown(`✅ **Summary stored successfully!**\n\n`);
+                                    stream.markdown(`Topic: **${pending.summary.topic}**\n\n`);
+                                    stream.markdown('You can retrieve this summary later by asking questions related to this topic.');
+                                    pendingSummaries.delete(key);
+                                    
+                                    return {
+                                        metadata: {
+                                            summaryStored: true,
+                                            topic: pending.summary.topic
+                                        }
+                                    };
+                                } else {
+                                    stream.markdown('⚠️ **Failed to store summary**\n\n');
+                                    stream.markdown('There was an error storing the summary. Check the Output channel (Cognee Memory) for details.\n\n');
+                                    stream.markdown('You can try again by saying "yes" or "store it".');
+                                    
+                                    return {
+                                        metadata: {
+                                            error: 'storage_failed'
+                                        }
+                                    };
+                                }
+                            } catch (error) {
+                                stream.markdown('❌ **Error storing summary**\n\n');
+                                stream.markdown(`${error instanceof Error ? error.message : String(error)}\n\n`);
+                                stream.markdown('You can try again by saying "yes" or "store it".');
+                                
+                                return {
+                                    metadata: {
+                                        error: error instanceof Error ? error.message : String(error)
+                                    }
+                                };
+                            }
+                        } else {
+                            // User declined
+                            stream.markdown('ℹ️ **Summary discarded**\n\n');
+                            stream.markdown('The summary was not stored. You can generate a new summary anytime by asking me to "summarize this conversation".');
+                            pendingSummaries.delete(key);
+                            
+                            return {
+                                metadata: {
+                                    summaryDiscarded: true
+                                }
+                            };
+                        }
+                    }
+                }
+                
+                // PLAN 014: Detect summary generation requests
+                const summaryTriggers = [
+                    'summarize this conversation',
+                    'summarize the conversation',
+                    'remember this session',
+                    'create summary',
+                    'create a summary',
+                    'summarize our discussion'
+                ];
+                
+                const isSummaryRequest = summaryTriggers.some(trigger => 
+                    request.prompt.toLowerCase().includes(trigger)
+                );
+
+                if (isSummaryRequest) {
+                    // PLAN 014 MILESTONE 2: Summary Generation Flow
+                    return await handleSummaryGeneration(request, _chatContext, stream, token, client);
+                }
+
                 // Check cancellation before expensive operations
                 if (token.isCancellationRequested) {
                     return { metadata: { cancelled: true } };
@@ -240,7 +571,7 @@ function registerCogneeMemoryParticipant(
 
                 // STEP 1-2: Retrieve relevant context from Cognee
                 const retrievalStart = Date.now();
-                let retrievedMemories: string[] = [];
+                let retrievedMemories: RetrievalResult[] = [];
                 let retrievalFailed = false;
 
                 try {
@@ -258,26 +589,66 @@ function registerCogneeMemoryParticipant(
                     return { metadata: { cancelled: true } };
                 }
 
-                // STEP 3: Format and display retrieved context
+                // STEP 3: Format and display retrieved context with structured metadata per §4.4.1
                 let augmentedPrompt = request.prompt;
                 if (!retrievalFailed && retrievedMemories.length > 0) {
                     stream.markdown(`📚 **Retrieved ${retrievedMemories.length} ${retrievedMemories.length === 1 ? 'memory' : 'memories'}**\n\n`);
                     
-                    // Show preview of retrieved memories (up to 2000 chars for transparency)
-                    retrievedMemories.forEach((memory, index) => {
+                    // Show preview of retrieved memories with metadata badges when available (up to 2000 chars for transparency)
+                    retrievedMemories.forEach((result, index) => {
+                        const memory = result.summaryText || result.text || '';
                         const maxPreviewLength = 2000;
                         const preview = memory.length > maxPreviewLength
                             ? memory.substring(0, maxPreviewLength) + `... (showing ${maxPreviewLength} of ${memory.length} chars)` 
                             : memory;
                         const lengthIndicator = memory.length > 100 ? ` (${memory.length} chars)` : '';
-                        stream.markdown(`**Memory ${index + 1}${lengthIndicator}:**\n> ${preview}\n\n`);
+                        
+                        // Display structured metadata if available (enriched summaries per §4.4.1)
+                        if (result.topicId) {
+                            stream.markdown(`**Memory ${index + 1}${lengthIndicator}:**\n`);
+                            
+                            // Metadata badges
+                            const badges: string[] = [];
+                            if (result.status) {
+                                badges.push(`📋 Status: ${result.status}`);
+                            }
+                            if (result.createdAt) {
+                                const timeAgo = getTimeAgoString(result.createdAt);
+                                badges.push(`📅 Created: ${timeAgo}`);
+                            }
+                            if (result.planId) {
+                                badges.push(`🏷️ Plan: ${result.planId}`);
+                            }
+                            if (badges.length > 0) {
+                                stream.markdown(`*${badges.join(' | ')}*\n\n`);
+                            }
+                            
+                            // Display structured content sections
+                            if (result.topic) {
+                                stream.markdown(`**Topic:** ${result.topic}\n\n`);
+                            }
+                            if (result.decisions && result.decisions.length > 0) {
+                                stream.markdown(`**Key Decisions:**\n${result.decisions.map(d => `- ${d}`).join('\n')}\n\n`);
+                            }
+                            if (result.openQuestions && result.openQuestions.length > 0) {
+                                stream.markdown(`**Open Questions:**\n${result.openQuestions.map(q => `- ${q}`).join('\n')}\n\n`);
+                            }
+                            if (result.nextSteps && result.nextSteps.length > 0) {
+                                stream.markdown(`**Next Steps:**\n${result.nextSteps.map(s => `- ${s}`).join('\n')}\n\n`);
+                            }
+                            
+                            stream.markdown(`> ${preview}\n\n`);
+                        } else {
+                            // Legacy raw-text memory (no metadata per §4.4.1)
+                            stream.markdown(`**Memory ${index + 1}${lengthIndicator}:**\n> ${preview}\n\n`);
+                        }
                     });
 
                     stream.markdown('---\n\n');
 
                     // STEP 4: Augment prompt with retrieved context
                     const contextSection = retrievedMemories
-                        .map((memory, i) => `### Memory ${i + 1}\n${memory}`)
+                        .map((result, i) => `### Memory ${i + 1}\n${result.summaryText || result.text || ''}`)
                         .join('\n\n');
 
                     augmentedPrompt = `## Relevant Past Conversations\n\n${contextSection}\n\n## Current Question\n\n${request.prompt}`;

@@ -122,6 +122,151 @@ If you see errors, check the [Troubleshooting](#troubleshooting) section below.
 - `@cognee-memory What solutions did we consider for rate limiting?`
 - `@cognee-memory Summarize our decisions about database architecture`
 
+### Creating Conversation Summaries (Plan 014)
+
+**What are Conversation Summaries?**
+
+Conversation summaries are structured records that capture the essence of a chat session, including:
+- Main topic and context
+- Key decisions made
+- Rationale behind decisions
+- Open questions still unresolved
+- Next steps to take
+- References to files, plans, or other resources
+
+Summaries are more valuable than raw chat logs because they're organized, searchable, and focus on what matters most.
+
+**When to Create Summaries**:
+
+Create a summary when you've:
+- Completed a design discussion with important decisions
+- Resolved a complex debugging issue with lessons learned
+- Made architectural choices that should be remembered
+- Discussed tradeoffs between different approaches
+- Reached conclusions about implementation direction
+
+**Summary Schema**:
+
+Each summary follows this structured format:
+
+```markdown
+Summary: [Short title]
+
+Topic: [Main focus of the conversation]
+Context: [1-3 sentences explaining what you were working on and why]
+Decisions:
+- [Key decision 1]
+- [Key decision 2]
+Rationale:
+- [Why decision 1 was made]
+Open Questions:
+- [Unresolved question 1]
+Next Steps:
+- [Action item 1]
+References:
+- [File path, plan ID, or other reference]
+Time Scope: [Time range, e.g., "Nov 17 14:00-16:30"]
+```
+
+**Example Summary**:
+
+```markdown
+Summary: Plan 013 - Memory Display Transparency
+
+Topic: Plan 013 - Memory Display Transparency
+Context: Discussed removing the 150-char truncation in chat participant to improve user trust and align with transparency goals.
+Decisions:
+- Remove hardcoded 150-char limit in participant preview
+- Show full memory content up to 2000 chars with explicit truncation indicator
+- Update logging to show full query or clearly annotate preview length
+Rationale:
+- Users need to see what context the LLM is using to trust the system
+- Truncated previews create mistrust despite LLM receiving full text
+Open Questions:
+- Should we add pagination for very long memories?
+Next Steps:
+- Implement transparency changes in TypeScript layer
+- Update tests to verify full content display
+References:
+- Plan 013 documentation
+- System architecture §4.3
+Time Scope: Nov 16 10:00-12:30
+```
+
+**How to Create a Summary**:
+
+1. **Open GitHub Copilot Chat** (`Ctrl+Alt+I` / `Cmd+Alt+I`)
+2. **Start a conversation with @cognee-memory** and type:
+   - `@cognee-memory summarize this conversation`
+   - Or: `@cognee-memory remember this session`
+   - Or: `@cognee-memory create summary`
+
+3. **Review the scope preview**:
+   - Extension shows: "I'll summarize the last 15 turns (from 5 mins ago)."
+   - Default is last 15 conversation turns
+
+4. **Adjust turn count (optional)**:
+   - Type a number to change scope: `30` → "I'll summarize the last 30 turns..."
+   - Repeat to iteratively adjust: `20` → "I'll summarize the last 20 turns..."
+   - Say `confirm` when ready to proceed
+
+5. **Review the generated summary**:
+   - Extension uses LLM to analyze conversation history
+   - Displays structured summary with all sections (Topic, Context, Decisions, etc.)
+   - Shows metadata: Status, timestamps, plan IDs if detected
+
+6. **Confirm storage**:
+   - Extension asks: "Should I store this summary in Cognee memory?"
+   - Reply `yes`, `store it`, or `save` to confirm
+   - Reply `no` or `cancel` to discard
+   - Summary is only stored after explicit confirmation
+
+**Turn Count Guidance**:
+
+- **Short sessions (5-15 turns)**: Good for focused discussions, bug fixes, quick decisions
+- **Medium sessions (15-30 turns)**: Typical for feature planning, architecture discussions
+- **Long sessions (30-50 turns)**: Complex multi-topic conversations; consider breaking into multiple summaries
+- **Very long (>50 turns)**: May include multiple unrelated topics; review scope carefully
+
+**Best Practices**:
+
+- **Create summaries at natural breakpoints**: After reaching a decision, completing a design, or resolving an issue
+- **Keep summaries focused**: One main topic per summary for better retrieval precision
+- **Review before storing**: Check that LLM correctly identified key points; adjust turn count if summary misses context
+- **Include explicit references**: Mention plan IDs (e.g., "Plan 014"), file paths, or issue numbers in conversation for automatic extraction
+- **Balance detail and brevity**: Aim for 300-600 tokens total; focus on decisions and rationale, not verbatim conversation
+
+### Retrieving Summaries
+
+When you query `@cognee-memory`, the extension searches both raw captured conversations and structured summaries. Summaries display with rich metadata when available.
+
+**What You'll See in Retrieval Results**:
+
+For enriched summaries (created via Plan 014):
+
+- **Metadata badges**: 📋 Status | 📅 Created timestamp | 🏷️ Plan ID
+- **Structured sections**: Topic, Key Decisions, Open Questions, Next Steps
+- **Full transparency**: Up to 2000 characters shown with explicit truncation indicator if longer
+
+For legacy memories (captured before Plan 014):
+
+- **Plain text format**: Raw conversation content as originally captured
+- **No metadata**: Legacy memories don't include structured fields
+
+**Example Retrieval Queries**:
+
+- `@cognee-memory What did we decide about Plan 013?` → Retrieves relevant summaries with decisions highlighted
+- `@cognee-memory What questions are still open about memory transparency?` → Finds Open Questions sections from summaries
+- `@cognee-memory What are the next steps for the authentication system?` → Retrieves Next Steps from related summaries
+- `@cognee-memory Show me the rationale for using enriched text format` → Finds Rationale sections explaining design choices
+
+**Retrieval Benefits**:
+
+- **Faster answers**: Structured summaries surface key points without reading full conversations
+- **Better context**: LLM sees organized decisions/rationale instead of scattered chat logs
+- **Temporal awareness**: Timestamps help distinguish recent vs historical decisions
+- **Status tracking**: Know if decisions are still Active or have been Superseded
+
 ### Memory Management Commands
 
 **Toggle Memory On/Off**:

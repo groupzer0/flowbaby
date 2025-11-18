@@ -5,6 +5,43 @@ All notable changes to the Cognee Chat Memory extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-11-18
+
+### Added - Plan 014: Structured Conversation Summaries
+
+- **Conversation Summary Generation**: Create structured summaries via `@cognee-memory summarize this conversation`
+  - Adjustable turn count scope (default: last 15 turns)
+  - Interactive scope adjustment before generation
+  - LLM-powered summary extraction with Plan 014 schema
+  - User confirmation required before storage
+- **Enriched Summary Schema**: Structured format with Topic, Context, Decisions, Rationale, Open Questions, Next Steps, References, and Time Scope
+- **Metadata-Rich Retrieval**: Summaries include status badges (📋 Status, 📅 Created, 🏷️ Plan ID), structured content sections, and temporal awareness
+- **Mixed-Mode Support**: Seamless handling of both enriched summaries (Plan 014+) and legacy raw-text memories
+- **In-Chat Help**: Type `@cognee-memory help` or invoke with no query to see usage guide
+- **Bridge Contract Documentation**: `DATAPOINT_SCHEMA.md` and `RETRIEVE_CONTRACT.md` define stable schemas for downstream consumers
+
+### Changed
+
+- **Retrieval Display**: Now shows structured metadata badges and organized content sections for enriched summaries
+- **Python Bridge**: `retrieve.py` returns structured JSON with parsed metadata instead of raw text
+- **CogneeClient**: `retrieve()` method returns `RetrievalResult[]` with typed fields (topicId, status, createdAt, decisions, etc.)
+
+### Improved
+
+- **Summary Quality**: Structured format improves retrieval precision by surfacing key decisions and rationale
+- **Temporal Context**: Created timestamps enable recency-aware reasoning (foundation for Plan 015 ranking)
+- **Status Tracking**: Active/Superseded status field enables decision lifecycle tracking (foundation for Plan 015 compaction)
+- **User Control**: Explicit summary creation and confirmation flow ensures intentional memory capture
+- **Backward Compatibility**: All legacy raw-text memories remain accessible; retrieval transparently handles both formats
+
+### Technical
+
+- **Enriched Text Storage**: Summaries stored as markdown with embedded metadata per §4.4.1 (Cognee 0.3.4 constraint)
+- **Template Versioning**: `<!-- Template: v1.0 -->` tag enables future format migrations
+- **Regex-Based Parsing**: Deterministic section heading patterns for metadata extraction
+- **TypeScript Tests**: 59/59 passing with updated RetrievalResult mocks
+- **Python Tests**: 16/16 passing with enriched text formatting and contract validation
+
 ## [0.2.3] - 2025-11-17
 
 ### Fixed

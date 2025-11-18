@@ -136,7 +136,10 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
     });
 
     test('Success path: previews memories, augments prompt, streams response', async () => {
-        retrieveStub.resolves(['First memory content here', 'Second memory snippet']);
+        retrieveStub.resolves([
+            { summaryText: 'First memory content here', text: 'First memory content here', score: 0.9, decisions: [], rationale: [], openQuestions: [], nextSteps: [], references: [] },
+            { summaryText: 'Second memory snippet', text: 'Second memory snippet', score: 0.8, decisions: [], rationale: [], openQuestions: [], nextSteps: [], references: [] }
+        ]);
 
         const { req, stream, token, outputs } = makeInvocation('How did we implement caching?');
         const result = await handler!(req, {} as any, stream, token);
@@ -162,7 +165,16 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
 
     test('Memory previews include character counts and truncation indicator when exceeding 2000 chars', async () => {
         const longMemory = 'A'.repeat(2500);
-        retrieveStub.resolves([longMemory]);
+        retrieveStub.resolves([{
+            summaryText: longMemory,
+            text: longMemory,
+            score: 0.9,
+            decisions: [],
+            rationale: [],
+            openQuestions: [],
+            nextSteps: [],
+            references: []
+        }]);
 
         const { req, stream, token, outputs } = makeInvocation('Show long memory sample');
         await handler!(req, {} as any, stream, token);
@@ -174,7 +186,16 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
 
     test('Memory previews include character counts without truncation when under 2000 chars', async () => {
         const mediumMemory = 'B'.repeat(500);
-        retrieveStub.resolves([mediumMemory]);
+        retrieveStub.resolves([{
+            summaryText: mediumMemory,
+            text: mediumMemory,
+            score: 0.9,
+            decisions: [],
+            rationale: [],
+            openQuestions: [],
+            nextSteps: [],
+            references: []
+        }]);
 
         const { req, stream, token, outputs } = makeInvocation('Show medium memory');
         await handler!(req, {} as any, stream, token);
@@ -189,7 +210,7 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
         configState.enabled = true;
         configState.autoIngest = true;
 
-        retrieveStub.resolves(['memory']);
+        retrieveStub.resolves([{ summaryText: 'memory', text: 'memory', score: 0.9, decisions: [], rationale: [], openQuestions: [], nextSteps: [], references: [] }]);
         const { req, stream, token } = makeInvocation('Question');
         await handler!(req, {} as any, stream, token);
 

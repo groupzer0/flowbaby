@@ -8,6 +8,10 @@ handoffs:
     agent: Roadmap
     prompt: Validate that plan delivers epic outcomes defined in roadmap.
     send: false
+  - label: Validate Architectural Alignment
+    agent: Architect
+    prompt: Please review this plan to ensure it aligns with the architecture.
+    send: false
   - label: Request Analysis
     agent: Analyst
     prompt: I've encountered technical unknowns that require deep investigation. Please analyze.

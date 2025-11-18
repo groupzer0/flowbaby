@@ -490,4 +490,294 @@ suite('CogneeClient Test Suite', () => {
             assert.match(failureCall!.args[2].error as string, /LLM_API_KEY/);
         });
     });
+
+    suite('ingestSummary (Plan 014)', () => {
+        const workspacePath = '/tmp/test-workspace-summary';
+        let sandbox: sinon.SinonSandbox;
+
+        function stubSharedDependencies() {
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: (_key: string, defaultValue?: any) => defaultValue
+            } as vscode.WorkspaceConfiguration);
+            sandbox.stub(vscode.window, 'createOutputChannel').returns({
+                name: 'Cognee Memory',
+                appendLine: () => void 0,
+                append: () => void 0,
+                replace: () => void 0,
+                clear: () => void 0,
+                dispose: () => void 0,
+                hide: () => void 0,
+                show: () => void 0
+            } as unknown as vscode.LogOutputChannel);
+        }
+
+        setup(() => {
+            sandbox = sinon.createSandbox();
+        });
+
+        teardown(() => {
+            sandbox.restore();
+        });
+
+        test('calls ingest.py with --summary and serialized JSON payload', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            sandbox.stub(client as any, 'log');
+            const runPythonStub = sandbox.stub(client as any, 'runPythonScript').resolves({
+                success: true,
+                ingested_chars: 500,
+                timestamp: '2025-11-17T16:30:00.000Z',
+                metadata: { topicId: '12345', status: 'Active' },
+                ingestion_duration_sec: 2.3
+            });
+
+            const summary = {
+                topic: 'Python Environment Detection',
+                context: 'Implementing intelligent interpreter detection',
+                decisions: ['Use .venv first', 'Fall back to python3'],
+                rationale: ['Explicit config wins', 'Workspace isolation'],
+                openQuestions: ['How to handle conda?'],
+                nextSteps: ['Test on Windows'],
+                references: ['Plan 007'],
+                timeScope: '2025-11-17',
+                topicId: '12345',
+                sessionId: null,
+                planId: '007',
+                status: 'Active' as const,
+                createdAt: new Date('2025-11-17T16:30:00Z'),
+                updatedAt: new Date('2025-11-17T16:30:00Z')
+            };
+
+            const result = await client.ingestSummary(summary);
+
+            assert.strictEqual(result, true);
+            assert.ok(runPythonStub.calledOnce);
+            
+            const args = runPythonStub.firstCall.args;
+            assert.strictEqual(args[0], 'ingest.py');
+            assert.deepStrictEqual(args[1], [
+                '--summary',
+                '--summary-json',
+                JSON.stringify({
+                    topic: summary.topic,
+                    context: summary.context,
+                    decisions: summary.decisions,
+                    rationale: summary.rationale,
+                    openQuestions: summary.openQuestions,
+                    nextSteps: summary.nextSteps,
+                    references: summary.references,
+                    timeScope: summary.timeScope,
+                    topicId: summary.topicId,
+                    sessionId: summary.sessionId,
+                    planId: summary.planId,
+                    status: summary.status,
+                    createdAt: '2025-11-17T16:30:00.000Z',
+                    updatedAt: '2025-11-17T16:30:00.000Z',
+                    workspace_path: workspacePath
+                })
+            ]);
+            assert.strictEqual(args[2], 120000); // 120-second timeout
+        });
+
+        test('logs summary ingestion metrics on success', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+            sandbox.stub(client as any, 'runPythonScript').resolves({
+                success: true,
+                ingested_chars: 500,
+                timestamp: '2025-11-17T16:30:00.000Z',
+                metadata: { topicId: '12345', status: 'Active' },
+                ingestion_duration_sec: 2.3,
+                ingestion_metrics: { add_sec: 0.8, cognify_sec: 1.5 }
+            });
+
+            const summary = {
+                topic: 'Test Summary',
+                context: 'Test context',
+                decisions: [],
+                rationale: [],
+                openQuestions: [],
+                nextSteps: [],
+                references: [],
+                timeScope: '2025-11-17',
+                topicId: '12345',
+                sessionId: null,
+                planId: null,
+                status: 'Active' as const,
+                createdAt: new Date('2025-11-17T16:30:00Z'),
+                updatedAt: null
+            };
+
+            await client.ingestSummary(summary);
+
+            const successCall = logStub.getCalls().find((call) => call.args[1] === 'Summary ingested');
+            assert.ok(successCall, 'Success log missing');
+            assert.strictEqual(successCall!.args[2].topic, 'Test Summary');
+            assert.strictEqual(successCall!.args[2].topicId, '12345');
+            assert.strictEqual(successCall!.args[2].chars, 500);
+            assert.strictEqual(successCall!.args[2].ingestion_duration_sec, 2.3);
+
+            const metricsCall = logStub.getCalls().find((call) => call.args[1] === 'Summary ingestion metrics');
+            assert.ok(metricsCall, 'Metrics log missing');
+            assert.deepStrictEqual(metricsCall!.args[2].metrics, { add_sec: 0.8, cognify_sec: 1.5 });
+        });
+
+        test('handles timeout with warning notification', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+            sandbox.stub(client as any, 'runPythonScript').rejects(
+                new Error('Python script timeout after 120 seconds')
+            );
+
+            const warningStub = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+
+            const summary = {
+                topic: 'Long Summary',
+                context: 'A'.repeat(10000),
+                decisions: [],
+                rationale: [],
+                openQuestions: [],
+                nextSteps: [],
+                references: [],
+                timeScope: '2025-11-17',
+                topicId: '12345',
+                sessionId: null,
+                planId: null,
+                status: 'Active' as const,
+                createdAt: new Date(),
+                updatedAt: null
+            };
+
+            const result = await client.ingestSummary(summary);
+
+            assert.strictEqual(result, false);
+            assert.ok(warningStub.calledOnce, 'Timeout should trigger warning notification');
+            assert.match(
+                warningStub.firstCall.args[0] as string,
+                /still working on summary ingestion in the background/
+            );
+
+            const timeoutCall = logStub.getCalls().find((call) => call.args[1] === 'Summary ingestion timeout');
+            assert.ok(timeoutCall, 'Timeout log missing');
+            assert.strictEqual(timeoutCall!.args[2].topic, 'Long Summary');
+            assert.strictEqual(timeoutCall!.args[2].error_type, 'timeout');
+            assert.match(timeoutCall!.args[2].error as string, /Python script timeout/);
+        });
+
+        test('handles non-timeout failures without warning toast', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+            sandbox.stub(client as any, 'runPythonScript').rejects(new Error('LLM_API_KEY not configured'));
+
+            const warningStub = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+
+            const summary = {
+                topic: 'Failed Summary',
+                context: 'Test',
+                decisions: [],
+                rationale: [],
+                openQuestions: [],
+                nextSteps: [],
+                references: [],
+                timeScope: '2025-11-17',
+                topicId: null,
+                sessionId: null,
+                planId: null,
+                status: null,
+                createdAt: null,
+                updatedAt: null
+            };
+
+            const result = await client.ingestSummary(summary);
+
+            assert.strictEqual(result, false);
+            assert.ok(warningStub.notCalled, 'Non-timeout failure should not show warning toast');
+
+            const failureCall = logStub.getCalls().find((call) => call.args[1] === 'Summary ingestion exception');
+            assert.ok(failureCall, 'Failure log missing');
+            assert.strictEqual(failureCall!.args[2].topic, 'Failed Summary');
+            assert.strictEqual(failureCall!.args[2].error_type, 'failure');
+            assert.match(failureCall!.args[2].error as string, /LLM_API_KEY/);
+        });
+
+        test('handles null metadata fields gracefully', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            sandbox.stub(client as any, 'log');
+            const runPythonStub = sandbox.stub(client as any, 'runPythonScript').resolves({
+                success: true,
+                ingested_chars: 300,
+                timestamp: '2025-11-17T16:30:00.000Z',
+                ingestion_duration_sec: 1.2
+            });
+
+            const summary = {
+                topic: 'Minimal Summary',
+                context: 'Test',
+                decisions: [],
+                rationale: [],
+                openQuestions: [],
+                nextSteps: [],
+                references: [],
+                timeScope: '2025-11-17',
+                topicId: null,
+                sessionId: null,
+                planId: null,
+                status: null,
+                createdAt: null,
+                updatedAt: null
+            };
+
+            const result = await client.ingestSummary(summary);
+
+            assert.strictEqual(result, true);
+            
+            const payload = JSON.parse(runPythonStub.firstCall.args[1][2]);
+            assert.strictEqual(payload.topicId, null);
+            assert.strictEqual(payload.sessionId, null);
+            assert.strictEqual(payload.planId, null);
+            assert.strictEqual(payload.status, null);
+            assert.strictEqual(payload.createdAt, null);
+            assert.strictEqual(payload.updatedAt, null);
+        });
+
+        test('handles Python script failure response (success: false)', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+            sandbox.stub(client as any, 'runPythonScript').resolves({
+                success: false,
+                error: 'Failed to parse summary metadata'
+            });
+
+            const summary = {
+                topic: 'Invalid Summary',
+                context: 'Test',
+                decisions: [],
+                rationale: [],
+                openQuestions: [],
+                nextSteps: [],
+                references: [],
+                timeScope: '2025-11-17',
+                topicId: '12345',
+                sessionId: null,
+                planId: null,
+                status: 'Active' as const,
+                createdAt: new Date(),
+                updatedAt: null
+            };
+
+            const result = await client.ingestSummary(summary);
+
+            assert.strictEqual(result, false);
+
+            const failureCall = logStub.getCalls().find((call) => call.args[1] === 'Summary ingestion failed');
+            assert.ok(failureCall, 'Failure log missing');
+            assert.strictEqual(failureCall!.args[2].topic, 'Invalid Summary');
+            assert.match(failureCall!.args[2].error as string, /Failed to parse summary metadata/);
+        });
+    });
 });

@@ -14,6 +14,28 @@ interface CogneeResult {
 }
 
 /**
+ * Retrieval result with structured metadata per RETRIEVE_CONTRACT.md
+ * Supports mixed-mode: enriched summaries (full metadata) and legacy memories (null metadata)
+ */
+export interface RetrievalResult {
+    summaryText: string;
+    text?: string; // Backward compatibility
+    topic?: string;
+    topicId?: string;
+    planId?: string;
+    sessionId?: string;
+    status?: 'Active' | 'Superseded' | null;
+    createdAt?: Date;
+    score: number;
+    decisions?: string[];
+    rationale?: string[];
+    openQuestions?: string[];
+    nextSteps?: string[];
+    references?: string[];
+    tokens?: number;
+}
+
+/**
  * Log level enumeration
  */
 enum LogLevel {
@@ -215,6 +237,127 @@ export class CogneeClient {
     }
 
     /**
+     * Ingest a structured conversation summary (Plan 014 Milestone 3)
+     * @param summary - ConversationSummary object with content and metadata fields
+     * @returns Promise<boolean> - true if ingested, false on error
+     */
+    async ingestSummary(summary: {
+        topic: string;
+        context: string;
+        decisions: string[];
+        rationale: string[];
+        openQuestions: string[];
+        nextSteps: string[];
+        references: string[];
+        timeScope: string;
+        topicId: string | null;
+        sessionId: string | null;
+        planId: string | null;
+        status: 'Active' | 'Superseded' | 'Draft' | null;
+        createdAt: Date | null;
+        updatedAt: Date | null;
+    }): Promise<boolean> {
+        const startTime = Date.now();
+        
+        this.log('DEBUG', 'Ingesting conversation summary', {
+            topic: summary.topic,
+            topicId: summary.topicId,
+            status: summary.status,
+            timeScope: summary.timeScope
+        });
+
+        try {
+            // Convert camelCase to format expected by Python (handles both naming conventions)
+            const summaryPayload = {
+                topic: summary.topic,
+                context: summary.context,
+                decisions: summary.decisions,
+                rationale: summary.rationale,
+                openQuestions: summary.openQuestions,
+                nextSteps: summary.nextSteps,
+                references: summary.references,
+                timeScope: summary.timeScope,
+                topicId: summary.topicId,
+                sessionId: summary.sessionId,
+                planId: summary.planId,
+                status: summary.status,
+                createdAt: summary.createdAt ? summary.createdAt.toISOString() : null,
+                updatedAt: summary.updatedAt ? summary.updatedAt.toISOString() : null,
+                workspace_path: this.workspacePath
+            };
+            const summaryJson = JSON.stringify(summaryPayload);
+            
+            // Use 120-second timeout for summary ingestion (same as conversation)
+            const result = await this.runPythonScript('ingest.py', [
+                '--summary',
+                '--summary-json',
+                summaryJson
+            ], 120000);
+
+            const duration = Date.now() - startTime;
+
+            if (result.success) {
+                this.log('INFO', 'Summary ingested', {
+                    topic: summary.topic,
+                    topicId: summary.topicId,
+                    chars: result.ingested_chars,
+                    timestamp: result.timestamp,
+                    metadata: result.metadata,
+                    duration_ms: duration,
+                    ingestion_duration_sec: result.ingestion_duration_sec
+                });
+                
+                // Log step-level metrics if available
+                if (result.ingestion_metrics) {
+                    this.log('DEBUG', 'Summary ingestion metrics', {
+                        metrics: result.ingestion_metrics
+                    });
+                }
+                
+                return true;
+            } else {
+                this.log('ERROR', 'Summary ingestion failed', {
+                    topic: summary.topic,
+                    duration,
+                    error: result.error
+                });
+                return false;
+            }
+        } catch (error) {
+            const duration = Date.now() - startTime;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            
+            // Distinguish timeout vs true failure
+            const isTimeout = /Python script timeout after/i.test(errorMessage);
+            
+            if (isTimeout) {
+                this.log('ERROR', 'Summary ingestion timeout', {
+                    topic: summary.topic,
+                    duration_ms: duration,
+                    error_type: 'timeout',
+                    error: errorMessage,
+                    note: 'Summary ingestion may still complete in background - check @cognee-memory retrieval'
+                });
+                
+                vscode.window.showWarningMessage(
+                    'Cognee is still working on summary ingestion in the background. ' +
+                    'The extension timed out waiting for a response after 120 seconds. ' +
+                    'Your summary may still be ingested; you can check by querying @cognee-memory in a moment.'
+                );
+            } else {
+                this.log('ERROR', 'Summary ingestion exception', {
+                    topic: summary.topic,
+                    duration_ms: duration,
+                    error_type: 'failure',
+                    error: errorMessage
+                });
+            }
+            
+            return false;
+        }
+    }
+
+    /**
      * Ingest conversation into Cognee
      * 
      * Calls ingest.py to store user/assistant conversation with metadata
@@ -306,14 +449,16 @@ export class CogneeClient {
     }
 
     /**
-     * Retrieve context from Cognee
+     * Retrieve context from Cognee with structured metadata
      * 
-     * Calls retrieve.py to search for relevant context with hybrid graph-vector search
+     * Calls retrieve.py to search for relevant context with hybrid graph-vector search.
+     * Returns structured RetrievalResult objects with metadata per RETRIEVE_CONTRACT.md.
+     * Supports mixed-mode: enriched summaries (full metadata) and legacy memories (null metadata).
      * 
      * @param query User's search query
-     * @returns Promise<string[]> - Array of context texts (empty on error)
+     * @returns Promise<RetrievalResult[]> - Array of retrieval results with metadata (empty on error)
      */
-    async retrieve(query: string): Promise<string[]> {
+    async retrieve(query: string): Promise<RetrievalResult[]> {
         const startTime = Date.now();
 
         this.log('DEBUG', 'Retrieving context', {
@@ -339,11 +484,38 @@ export class CogneeClient {
             const duration = Date.now() - startTime;
 
             if (result.success) {
+                // Parse structured results per RETRIEVE_CONTRACT.md
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const contexts = result.results?.map((r: any) => r.text) || [];
+                const results: RetrievalResult[] = (result.results || []).map((r: any) => {
+                    // Mixed-mode handling per §4.4.1: branch on topic_id presence
+                    const isEnriched = !!r.topic_id;
+                    
+                    return {
+                        summaryText: r.summary_text || r.text || '',
+                        text: r.text, // Backward compatibility
+                        topic: r.topic || undefined,
+                        topicId: r.topic_id || undefined,
+                        planId: r.plan_id || undefined,
+                        sessionId: r.session_id || undefined,
+                        status: r.status || undefined,
+                        createdAt: r.created_at ? new Date(r.created_at) : undefined,
+                        score: r.score || 0,
+                        decisions: r.decisions || [],
+                        rationale: r.rationale || [],
+                        openQuestions: r.open_questions || [],
+                        nextSteps: r.next_steps || [],
+                        references: r.references || [],
+                        tokens: r.tokens
+                    } as RetrievalResult;
+                });
+                
+                const enrichedCount = results.filter(r => r.topicId).length;
+                const legacyCount = results.length - enrichedCount;
                 
                 this.log('INFO', 'Context retrieved', {
                     result_count: result.result_count || 0,
+                    enriched_count: enrichedCount,
+                    legacy_count: legacyCount,
                     total_tokens: result.total_tokens || 0,
                     duration
                 });
@@ -362,7 +534,7 @@ export class CogneeClient {
                     });
                 }
 
-                return contexts;
+                return results;
             } else {
                 this.log('ERROR', 'Retrieval failed', {
                     duration,
