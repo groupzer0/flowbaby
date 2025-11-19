@@ -5,7 +5,43 @@ All notable changes to the Cognee Chat Memory extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.1] - 2025-11-18
+## [0.3.2] - 2025-11-19
+
+### Added - Plan 015: Agent Ingestion Command
+
+- **Agent Ingestion API**: `cogneeMemory.ingestForAgent` command enables GitHub Copilot agents and third-party extensions to store structured summaries in Cognee
+  - TypeScript schema validation with detailed error messages
+  - Workspace-global access model with prominent privacy warnings
+  - Structured JSON request/response with camelCase field naming
+  - Auto-generation of missing IDs (topicId, timestamps)
+  - Fast-fail validation before bridge invocation
+- **Agent Access Control**: New `cogneeMemory.agentAccess.enabled` setting (default: false)
+  - Workspace-global trust model (all extensions granted access when enabled)
+  - Prominent warning in settings UI about privacy implications
+  - Access enforcement at command handler level
+- **Audit Logging**: Comprehensive logging for all agent ingestion attempts
+  - Real-time logs in `Output` > `Cognee Agent Activity` channel
+  - Structured JSON audit log at `.cognee/agent_audit.log`
+  - Privacy-preserving topic digests (8-char SHA-256 hash)
+  - Tracks timestamp, agent name, result, error codes, duration
+- **Agent Integration Documentation**: Complete API guide at `extension/AGENT_INTEGRATION.md`
+  - TypeScript examples (minimal and full payloads)
+  - Error handling patterns with error codes
+  - Security model explanation
+  - Best practices for topic ID generation and ingestion timing
+  - Troubleshooting guide
+- **Bridge Contract Documentation**: `extension/bridge/INGEST_CONTRACT.md` defines stable ingestion schema
+  - JSON payload specification (required/optional fields)
+  - Error codes reference (ACCESS_DISABLED, INVALID_PAYLOAD, etc.)
+  - Example payloads (minimal, full, invalid)
+  - Performance characteristics
+  - Testing instructions
+- **Test Agent Extension**: Reference implementation at `test-agent/`
+  - Validates all ingestion scenarios (valid, invalid, access control)
+  - Automated test suite with pass/fail reporting
+  - Can be used as template for custom agent development
+
+### Added - Test Coverage Enhancements (from previous release)
 
 ### Added - Test Coverage Enhancements
 

@@ -2,7 +2,7 @@
   "name": "cognee-chat-memory",
   "displayName": "Cognee Chat Memory",
   "description": "Automatic memory for GitHub Copilot chat using Cognee knowledge graphs",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "cognee",
   "icon": "media/icon.png",
   "engines": {
@@ -25,7 +25,8 @@
     "context-retrieval"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onLanguageModelTool:cognee.storeMemory"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -44,6 +45,12 @@
         "command": "cognee.clearMemory",
         "title": "Clear Workspace Memory",
         "category": "Cognee"
+      },
+      {
+        "command": "cogneeMemory.ingestForAgent",
+        "title": "Ingest Summary for Agent",
+        "category": "Cognee",
+        "enablement": "cogneeMemory.enabled"
       }
     ],
 
@@ -61,6 +68,47 @@
         "name": "cognee-memory",
         "description": "Chat with automatic context from Cognee memory",
         "isSticky": true
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "cognee_storeMemory",
+        "displayName": "Store Memory in Cognee",
+        "modelDescription": "Use this tool to store structured conversation summaries, decisions, and context in Cognee's knowledge graph for future retrieval. Call this when the user wants to remember important information, decisions, or conversation context. The tool accepts topic (required), context (required), and optional fields for decisions, rationale, and metadata. Access must be enabled via the cogneeMemory.agentAccess.enabled setting.",
+        "userDescription": "Store a conversation summary in Cognee knowledge graph",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "topic": {
+              "type": "string",
+              "description": "Brief topic or title for this memory (e.g., 'Redis caching implementation')"
+            },
+            "context": {
+              "type": "string",
+              "description": "Detailed context, conversation summary, or implementation notes"
+            },
+            "decisions": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "List of decisions made (optional)"
+            },
+            "rationale": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Reasoning behind decisions (optional)"
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "plan_id": {"type": "string"},
+                "status": {"type": "string", "enum": ["Active", "Superseded", "DecisionRecord"]}
+              },
+              "description": "Optional metadata (auto-generated if omitted)"
+            }
+          },
+          "required": ["topic", "context"]
+        },
+        "tags": ["memory", "knowledge-graph", "persistence", "cognee"]
       }
     ],
     "configuration": {
@@ -119,6 +167,11 @@
           ],
           "default": "info",
           "description": "Logging verbosity level"
+        },
+        "cogneeMemory.agentAccess.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "⚠️ **WARNING**: When enabled, ALL extensions in this workspace can write memories to Cognee. VS Code does not identify calling extensions, so per-extension access control is not possible. Only enable if you trust all installed extensions. See [Agent Integration docs](./AGENT_INTEGRATION.md) for details."
         }
       }
     }
@@ -126,12 +179,13 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "node esbuild.js --production",
-    "compile:tests": "tsc -p tsconfig.test.json",
+    "compile:tests": "tsc -p tsconfig.test.json && cp src/test/run-test-agent.js out/test/",
     "pretest": "npm run compile:tests",
     "watch": "node esbuild.js --watch",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
     "test:bridge": "cd bridge && pytest tests/ -v",
+    "test:agent": "npm run compile:tests && node ./out/test/run-test-agent.js",
     "test:all": "npm test && npm run test:bridge",
     "package": "vsce package",
     "verify:vsix": "node scripts/verify-vsix.js *.vsix"
