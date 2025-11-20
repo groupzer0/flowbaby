@@ -18,17 +18,18 @@ The Cognee Chat Memory extension provides commands for GitHub Copilot agents and
 
 ## Security and Privacy
 
-### Workspace-Global Access Model
+### Configure Tools Authorization Model
 
-⚠️ **IMPORTANT**: When you enable agent access (`cogneeMemory.agentAccess.enabled = true`), **ALL extensions in the workspace** can write memories to Cognee.
+⚠️ **IMPORTANT**: Cognee tools are controlled exclusively through VS Code's **Configure Tools** UI. When you enable tools there, they become available to GitHub Copilot and all extensions in the workspace.
 
-**Why workspace-global?**
-- VS Code does not expose extension identity to commands
-- Per-extension allow-lists are technically infeasible
-- Trust model: If you enable agent access, you trust all installed extensions
+**Why Configure Tools?**
+- VS Code native mechanism for tool authorization
+- Users explicitly opt-in via clear UI
+- Tools can be enabled/disabled per workspace
+- Follows VS Code best practices for Language Model Tools
 
 **Recommendations**:
-- ✅ Enable in workspaces with trusted extensions only
+- ✅ Enable tools only in workspaces with trusted extensions
 - ✅ Review installed extensions before enabling
 - ✅ Inspect audit logs regularly (`Output` > `Cognee Agent Activity`)
 - ❌ Do NOT enable in untrusted or public workspaces
@@ -52,19 +53,16 @@ All agent ingestion and retrieval attempts are logged:
 
 ## Configuration
 
-### Required Settings
+### Tool Authorization
 
-Enable agent access in `.vscode/settings.json`:
+Cognee tools are controlled through VS Code's **Configure Tools** UI:
+1. Open Copilot chat → Click "Tools" (⚙️) → "Configure Tools"
+2. Find "Store Memory in Cognee" and "Retrieve Cognee Memory"
+3. Toggle tools on/off (disabled by default)
 
-```json
-{
-  "cogneeMemory.agentAccess.enabled": true
-}
-```
+No workspace settings required for authorization.
 
-**Default**: `false` (disabled for security)
-
-### Optional Settings
+### LLM API Key (Required)
 
 Configure LLM API key in workspace `.env`:
 
@@ -189,17 +187,6 @@ const response = JSON.parse(responseJson);
 
 if (!response.success) {
   switch (response.errorCode) {
-    case 'ACCESS_DISABLED':
-      vscode.window.showWarningMessage(
-        'Cognee agent access is disabled. Enable it in settings to allow memory writes.',
-        'Open Settings'
-      ).then(choice => {
-        if (choice === 'Open Settings') {
-          vscode.commands.executeCommand('workbench.action.openSettings', 'cogneeMemory.agentAccess.enabled');
-        }
-      });
-      break;
-
     case 'INVALID_PAYLOAD':
       console.error('Payload validation failed:', response.error);
       // Fix payload and retry
@@ -226,7 +213,6 @@ if (!response.success) {
 
 | Error Code | Description | Remediation |
 |------------|-------------|-------------|
-| `ACCESS_DISABLED` | Agent access not enabled in settings | Enable `cogneeMemory.agentAccess.enabled` |
 | `INVALID_PAYLOAD` | Payload failed schema validation | Check `response.error` for field details |
 | `MISSING_API_KEY` | `LLM_API_KEY` not in workspace `.env` | Add API key to `.env` file |
 | `INVALID_WORKSPACE_PATH` | Workspace path invalid or inaccessible | Verify workspace exists |
@@ -235,9 +221,266 @@ if (!response.success) {
 
 ---
 
+## Using Cognee Tools with GitHub Copilot and Custom Agents (Plan 016)
+
+### Overview
+
+Cognee Chat Memory provides two **Language Model Tools** that appear in VS Code's "Configure Tools" dialog:
+
+1. **cognee_storeMemory** (`#cogneeStoreSummary`) - Store conversation summaries
+2. **cognee_retrieveMemory** (`#cogneeRetrieveMemory`) - Retrieve relevant memories
+
+These tools allow Copilot and custom agents to autonomously access workspace memory through the standard VS Code tools UI.
+
+### Tool Discovery
+
+**In Configure Tools UI**:
+1. Open any Copilot chat
+2. Click the "Tools" button (⚙️ icon near input box)
+3. Click "Configure Tools"
+4. Find "Cognee Memory" tools in the list
+5. Toggle tools on/off individually
+
+**In Chat (`#` Autocomplete)**:
+- Type `#cognee` in chat to see autocomplete suggestions
+- Select `#cogneeStoreSummary` or `#cogneeRetrieveMemory`
+- Tool description appears in autocomplete preview
+
+**In Custom Agent `.agent.md` Files**:
+
+```markdown
+---
+name: Memory-Aware Code Assistant
+description: Copilot assistant with access to workspace memory
+tools: ['search', 'cogneeStoreSummary', 'cogneeRetrieveMemory']
+---
+
+You are a code assistant with access to workspace-specific memory.
+
+When the user asks about past decisions or implementations:
+1. Use #cogneeRetrieveMemory to search for relevant context
+2. Ground your answer in the retrieved memories
+3. If no memories exist, use your training data but clarify it's not workspace-specific
+
+When the user completes an important implementation or makes a decision:
+1. Offer to store a summary using #cogneeStoreSummary
+2. Include topic, context, and key decisions in the summary
+```
+
+### Store Memory Tool
+
+**Tool Name**: `cognee_storeMemory`  
+**Reference Name**: `cogneeStoreSummary` (for `#` autocomplete and `.agent.md` files)  
+**Icon**: `$(database)`
+
+**Input Schema**:
+```typescript
+{
+  topic: string;           // Required: Summary title
+  context: string;         // Required: Summary description
+  decisions?: string[];    // Optional: Key decisions
+  rationale?: string[];    // Optional: Reasoning
+  metadata?: {             // Optional: Metadata (auto-generated if omitted)
+    plan_id?: string;
+    status?: 'Active' | 'Superseded' | 'DecisionRecord';
+  }
+}
+```
+
+**Example Usage in Chat**:
+```
+User: "Remember that we decided to use Redis for caching"
+Agent: I'll store that decision. #cogneeStoreSummary {
+  "topic": "Redis Caching Decision",
+  "context": "Team decided to use Redis for session caching to improve performance",
+  "decisions": ["Use Redis for session cache", "Deploy as Docker container"],
+  "metadata": {"status": "Active"}
+}
+```
+
+**Tool Response**:
+```json
+{
+  "success": true,
+  "summary_id": "redis-caching-decision",
+  "ingested_chars": 245,
+  "duration_ms": 1234
+}
+```
+
+### Retrieve Memory Tool
+
+**Tool Name**: `cognee_retrieveMemory`  
+**Reference Name**: `cogneeRetrieveMemory` (for `#` autocomplete and `.agent.md` files)  
+**Icon**: `$(search)`
+
+**Input Schema**:
+```typescript
+{
+  query: string;           // Required: Natural language search query
+  maxResults?: number;     // Optional: Max results (default: 3, max: 10)
+}
+```
+
+**Example Usage in Chat**:
+```
+User: "How did we implement caching?"
+Agent: Let me check our memory. #cogneeRetrieveMemory {
+  "query": "caching implementation",
+  "maxResults": 3
+}
+```
+
+**Tool Response** (Structured + Narrative):
+
+The tool returns BOTH a narrative markdown summary AND verbatim JSON:
+
+````markdown
+# Retrieved Memories (1 results)
+
+## 1. Redis Caching Decision
+
+**Context:** Team decided to use Redis for session caching to improve performance
+
+**Decisions:**
+- Use Redis for session cache
+- Deploy as Docker container
+
+**Metadata:**
+- Topic ID: redis-caching-decision
+- Plan: 015
+- Created: 2025-11-19T08:00:00Z
+- Relevance Score: 0.923
+
+---
+
+## Structured Response (JSON)
+
+```json
+{
+  "entries": [
+    {
+      "summaryText": "Team decided to use Redis for session caching...",
+      "topic": "Redis Caching Decision",
+      "topicId": "redis-caching-decision",
+      "planId": "015",
+      "createdAt": "2025-11-19T08:00:00Z",
+      "score": 0.923,
+      "decisions": ["Use Redis for session cache", "Deploy as Docker container"]
+    }
+  ],
+  "totalResults": 1,
+  "tokensUsed": 142
+}
+```
+````
+
+**Why Both Formats?**
+- **Narrative**: Human-readable, agents can quote directly in responses
+- **JSON**: Structured data for agent parsing, auditing, and further processing
+
+### Tool Lifecycle
+
+Both tools register at extension activation. VS Code manages tool enablement through Configure Tools UI:
+
+**Tools Enabled (via Configure Tools)** → Tools appear in:
+- Configure Tools UI (checkboxes checked)
+- `#` autocomplete in chat
+- Available for agent invocation
+
+**Tools Disabled (via Configure Tools)** → Tools hidden from:
+- `#` autocomplete
+- Agent invocation (VS Code won't route calls)
+- Configure Tools shows checkboxes unchecked
+
+**Implementation Note**: Tools register unconditionally at activation. VS Code's Configure Tools UI is the sole authorization mechanism.
+
+### Transparency Indicators
+
+When agents use Cognee tools, you see:
+
+1. **Output Channel**: `Output` > `Cognee Agent Activity`
+   - Real-time log of all tool invocations
+   - Shows timestamp, tool name, query/topic, and result
+   - Example: `[Tool Invocation] 2025-11-19T08:12:44Z - cognee_retrieveMemory called`
+
+2. **Configure Tools UI**: Visual feedback for tool state
+   - Checkboxes show which tools are enabled/disabled
+   - Clear UI for enabling/disabling per workspace
+
+3. **Confirmation Messages** (optional):
+   - Tools may show confirmation prompts before execution
+   - Depends on user's trust settings for agents
+   - Example: "Store this conversation summary in Cognee knowledge graph?"
+
+---
+
 ## Retrieving Memories for Agents
 
-**Note**: Retrieval is implemented in Plan 016. See Plan 016 documentation for details.
+### Command: `cogneeMemory.retrieveForAgent`
+
+**Signature**: `(requestJson: string) => Promise<string>`
+
+- **Input**: JSON string containing `CogneeContextRequest` payload
+- **Output**: JSON string containing `CogneeContextResponse` or `AgentErrorResponse`
+
+### TypeScript Example
+
+```typescript
+import * as vscode from 'vscode';
+
+// Minimal retrieval request
+const request = {
+  query: "How did we implement caching?",
+  maxResults: 3  // Optional, defaults to 3
+};
+
+try {
+  const responseJson = await vscode.commands.executeCommand<string>(
+    'cogneeMemory.retrieveForAgent',
+    JSON.stringify(request)
+  );
+  
+  const response = JSON.parse(responseJson);
+  
+  // Check for error
+  if ('error' in response) {
+    console.error(`❌ Retrieval failed: ${response.message}`);
+    console.error(`   Error code: ${response.error}`);
+    return;
+  }
+  
+  // Success - process results
+  console.log(`✅ Retrieved ${response.entries.length} memories`);
+  console.log(`   Total tokens: ${response.tokensUsed}`);
+  
+  response.entries.forEach((entry, idx) => {
+    console.log(`\n--- Memory ${idx + 1} ---`);
+    console.log(`Topic: ${entry.topic || 'Untitled'}`);
+    console.log(`Score: ${entry.score.toFixed(3)}`);
+    console.log(`Summary:\n${entry.summaryText.substring(0, 200)}...`);
+    
+    if (entry.decisions && entry.decisions.length > 0) {
+      console.log(`Decisions: ${entry.decisions.length}`);
+    }
+    
+    if (entry.topicId) {
+      console.log(`Topic ID: ${entry.topicId}`);
+    }
+  });
+} catch (error) {
+  console.error('Exception during retrieval:', error);
+}
+```
+
+### Retrieval Error Codes
+
+| Error Code | Description | Remediation |
+|------------|-------------|-------------|
+| `INVALID_REQUEST` | Invalid query or malformed JSON | Check request structure |
+| `RATE_LIMIT_EXCEEDED` | Too many requests per minute | Wait and retry (max 10/min default) |
+| `QUEUE_FULL` | Too many concurrent requests | Wait for in-flight requests to complete |
+| `BRIDGE_TIMEOUT` | Python bridge exceeded timeout | Retry; check bridge logs |
 
 ---
 
@@ -307,13 +550,13 @@ interface CogneeIngestResponse {
 
 ---
 
-## Status Bar Indicator
+## Audit Logging
 
-When agent access is enabled, a status bar item shows:
+All tool invocations are logged for transparency. Check the **Output** channel:
 
-- **Idle**: `Cognee Agent Access: Enabled`
-- **Active**: `Cognee Agent Access: Ingesting...` (with spinner)
-- **Click behavior**: Opens Output channel to show recent activity
+1. Open **View → Output**
+2. Select **"Cognee Agent Activity"** from dropdown
+3. View real-time logs of all tool calls with timestamps and results
 
 ---
 
@@ -381,14 +624,11 @@ const topicId = generateTopicId("Plan 015 Implementation", new Date().toISOStrin
 
 ## Testing Your Integration
 
-### 1. Enable Agent Access
+### 1. Enable Tools via Configure Tools UI
 
-In `.vscode/settings.json`:
-```json
-{
-  "cogneeMemory.agentAccess.enabled": true
-}
-```
+1. Open Copilot chat
+2. Click "Tools" (⚙️) → "Configure Tools"
+3. Enable "Store Memory in Cognee" and "Retrieve Cognee Memory"
 
 ### 2. Create Test Script
 
@@ -458,22 +698,16 @@ if (!extension) {
 await extension.activate();
 ```
 
-### Access denied error
+### Tools not appearing in chat
 
-**Issue**: Error code `ACCESS_DISABLED`
+**Issue**: `#cognee*` commands don't appear in autocomplete
 
-**Solution**: Enable agent access in settings
-```typescript
-// Check if enabled programmatically
-const config = vscode.workspace.getConfiguration('cogneeMemory');
-if (!config.get('agentAccess.enabled')) {
-  vscode.window.showWarningMessage('Agent access disabled', 'Enable').then(choice => {
-    if (choice === 'Enable') {
-      config.update('agentAccess.enabled', true, vscode.ConfigurationTarget.Workspace);
-    }
-  });
-}
-```
+**Solution**: Enable tools via Configure Tools UI
+1. Open Copilot chat
+2. Click "Tools" (⚙️) → "Configure Tools"
+3. Find "Store Memory in Cognee" and "Retrieve Cognee Memory"
+4. Toggle checkboxes to enable
+5. Return to chat and type `#cognee` to verify autocomplete
 
 ### Payload validation fails
 

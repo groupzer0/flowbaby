@@ -151,7 +151,10 @@ async def retrieve_context(
         Dictionary with success status, results array, result_count, total_tokens, or error
     """
     try:
+        print(f"[PROGRESS] Starting retrieval: query='{query[:50]}...', max_results={max_results}", file=sys.stderr, flush=True)
+        
         # Load workspace .env file
+        print("[PROGRESS] Loading .env file", file=sys.stderr, flush=True)
         workspace_dir = Path(workspace_path)
         env_file = workspace_dir / '.env'
         
@@ -162,23 +165,30 @@ async def retrieve_context(
         # Check for API key
         api_key = os.getenv('LLM_API_KEY')
         if not api_key:
-            return {
+            error_payload = {
                 'success': False,
-                'error_code': 'MISSING_API_KEY',
+                'error_code': 'LLM_API_ERROR',
+                'error_type': 'MISSING_API_KEY',
+                'message': 'LLM_API_KEY not found in .env file',
                 'user_message': 'LLM_API_KEY not found. Please add it to your workspace .env file.',
                 'remediation': 'Create .env in workspace root with: LLM_API_KEY=your_key_here',
                 'error': 'LLM_API_KEY environment variable is required but not set'
             }
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+            return error_payload
         
         # Import cognee
+        print("[PROGRESS] Importing cognee SDK", file=sys.stderr, flush=True)
         import cognee
         from cognee.modules.search.types import SearchType
         
         # Configure workspace-local storage directories BEFORE any other cognee operations
+        print("[PROGRESS] Configuring workspace storage directories", file=sys.stderr, flush=True)
         cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
         cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
         
         # Configure Cognee with API key
+        print("[PROGRESS] Configuring LLM provider (OpenAI)", file=sys.stderr, flush=True)
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
         
@@ -187,6 +197,7 @@ async def retrieve_context(
         
         # 2. Search within this workspace's dataset only
         # Note: If no data has been ingested yet, search will return empty results
+        print(f"[PROGRESS] Executing Cognee search: dataset={dataset_name}, top_k={max_results}", file=sys.stderr, flush=True)
         try:
             search_results = await cognee.search(
                 query_type=SearchType.GRAPH_COMPLETION,
@@ -194,9 +205,11 @@ async def retrieve_context(
                 datasets=[dataset_name],  # Filter to this workspace only
                 top_k=max_results
             )
+            print(f"[PROGRESS] Search completed: {len(search_results) if search_results else 0} results", file=sys.stderr, flush=True)
         except Exception as search_error:
             # If database doesn't exist yet (no data ingested), return empty results
             error_msg = str(search_error)
+            print(f"[WARNING] Search error: {error_msg}", file=sys.stderr)
             if 'DatabaseNotCreatedError' in error_msg or 'database' in error_msg.lower():
                 return {
                     'success': True,
@@ -204,14 +217,20 @@ async def retrieve_context(
                     'result_count': 0,
                     'message': 'No data has been ingested yet. Start chatting to build memory.'
                 }
-            # Re-raise other errors
+            # Re-raise other errors with structured payload
+            error_payload = {
+                'error_code': 'COGNEE_SDK_ERROR',
+                'error_type': type(search_error).__name__,
+                'message': str(search_error),
+                'traceback': str(search_error)
+            }
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
             raise
         
         # This ensures search results only contain data from this workspace,
         # not from other workspaces or tutorial data.
         
         # DEBUG: Log search results structure to understand what Cognee returns
-        import sys
         print(f"DEBUG: search_results type: {type(search_results)}", file=sys.stderr)
         print(f"DEBUG: search_results length: {len(search_results) if search_results else 0}", file=sys.stderr)
         if search_results:
@@ -222,6 +241,7 @@ async def retrieve_context(
         
         # If no results, return empty
         if not search_results:
+            print("[PROGRESS] No results found, returning empty", file=sys.stderr, flush=True)
             return {
                 'success': True,
                 'results': [],
@@ -230,6 +250,7 @@ async def retrieve_context(
             }
         
         # Process results - convert SearchResult objects to dicts with structured parsing per §4.4.1
+        print(f"[PROGRESS] Processing {len(search_results)} results", file=sys.stderr, flush=True)
         processed_results = []
         total_tokens = 0
         
@@ -322,15 +343,28 @@ async def retrieve_context(
         }
         
     except ImportError as e:
-        return {
+        error_payload = {
             'success': False,
+            'error_code': 'PYTHON_ENV_ERROR',
+            'error_type': 'ImportError',
+            'message': f'Failed to import required module: {str(e)}',
+            'traceback': str(e),
             'error': f'Failed to import required module: {str(e)}'
         }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
     except Exception as e:
-        return {
+        import traceback
+        error_payload = {
             'success': False,
+            'error_code': 'COGNEE_SDK_ERROR',
+            'error_type': type(e).__name__,
+            'message': str(e),
+            'traceback': traceback.format_exc(),
             'error': f'Retrieval failed: {str(e)}'
         }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
 
 
 def main():

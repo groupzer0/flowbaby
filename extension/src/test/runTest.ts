@@ -11,11 +11,16 @@ async function main() {
 		// Passed to --extensionTestsPath
 		const extensionTestsPath = path.resolve(__dirname, './index');
 
+		// Create test workspace path (parent directory of extension)
+		// This allows workspace configuration updates during testing
+		const testWorkspace = path.resolve(extensionDevelopmentPath, '..');
+
 		// Download VS Code, unzip it and run the integration test
 		await runTests({
 			extensionDevelopmentPath,
 			extensionTestsPath,
 			launchArgs: [
+				testWorkspace, // Open workspace for configuration tests
 				'--disable-extensions', // Disable other extensions during testing
 				'--disable-workspace-trust' // Disable workspace trust dialog
 			]

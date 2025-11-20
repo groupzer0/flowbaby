@@ -2,11 +2,11 @@
   "name": "cognee-chat-memory",
   "displayName": "Cognee Chat Memory",
   "description": "Automatic memory for GitHub Copilot chat using Cognee knowledge graphs",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "publisher": "cognee",
   "icon": "media/icon.png",
   "engines": {
-    "vscode": "^1.105.0"
+    "vscode": "^1.106.0"
   },
   "categories": [
     "AI",
@@ -51,6 +51,12 @@
         "title": "Ingest Summary for Agent",
         "category": "Cognee",
         "enablement": "cogneeMemory.enabled"
+      },
+      {
+        "command": "cogneeMemory.retrieveForAgent",
+        "title": "Retrieve Context for Agent",
+        "category": "Cognee",
+        "enablement": "cogneeMemory.enabled"
       }
     ],
 
@@ -74,7 +80,10 @@
       {
         "name": "cognee_storeMemory",
         "displayName": "Store Memory in Cognee",
-        "modelDescription": "Use this tool to store structured conversation summaries, decisions, and context in Cognee's knowledge graph for future retrieval. Call this when the user wants to remember important information, decisions, or conversation context. The tool accepts topic (required), context (required), and optional fields for decisions, rationale, and metadata. Access must be enabled via the cogneeMemory.agentAccess.enabled setting.",
+        "toolReferenceName": "cogneeStoreSummary",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(database)",
+        "modelDescription": "Use this tool to store structured conversation summaries, decisions, and context in Cognee's knowledge graph for future retrieval. Call this when the user wants to remember important information, decisions, or conversation context. The tool accepts topic (required), context (required), and optional fields for decisions, rationale, and metadata. Workspace-specific and stores data locally.",
         "userDescription": "Store a conversation summary in Cognee knowledge graph",
         "inputSchema": {
           "type": "object",
@@ -109,6 +118,33 @@
           "required": ["topic", "context"]
         },
         "tags": ["memory", "knowledge-graph", "persistence", "cognee"]
+      },
+      {
+        "name": "cognee_retrieveMemory",
+        "displayName": "Retrieve Cognee Memory",
+        "toolReferenceName": "cogneeRetrieveMemory",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(search)",
+        "modelDescription": "Retrieve relevant memories from Cognee knowledge graph based on a query. Returns structured summaries with topic, context, decisions, and metadata from past conversations. Use this when you need context about previous decisions, implementations, or discussions in this workspace. Returns both human-readable markdown and structured JSON for agent parsing.",
+        "userDescription": "Search Cognee knowledge graph for relevant conversation history",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Natural language query to search for relevant memories (e.g., 'How did we implement caching?', 'What was decided about authentication?')"
+            },
+            "maxResults": {
+              "type": "number",
+              "description": "Maximum number of results to return (default: 3, max: 10)",
+              "default": 3,
+              "minimum": 1,
+              "maximum": 10
+            }
+          },
+          "required": ["query"]
+        },
+        "tags": ["memory", "knowledge-graph", "search", "retrieval", "cognee"]
       }
     ],
     "configuration": {
@@ -167,11 +203,6 @@
           ],
           "default": "info",
           "description": "Logging verbosity level"
-        },
-        "cogneeMemory.agentAccess.enabled": {
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "⚠️ **WARNING**: When enabled, ALL extensions in this workspace can write memories to Cognee. VS Code does not identify calling extensions, so per-extension access control is not possible. Only enable if you trust all installed extensions. See [Agent Integration docs](./AGENT_INTEGRATION.md) for details."
         }
       }
     }

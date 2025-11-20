@@ -3,6 +3,7 @@
 **Date**: 2025-11-17 10:20 (initial) / 2025-11-17 11:45 (follow-up)
 **Architect**: GitHub Copilot (GPT-5.1-Codex Preview)
 **Reviewed Artifacts**:
+
 - `agent-output/analysis/016-autonomous-agent-retrieval-and-integration-analysis.md`
 - `agent-output/planning/016-autonomous-agent-retrieval-and-integration.md`
 - `agent-output/architecture/system-architecture.md`
@@ -22,7 +23,7 @@ The analysis correctly identifies the architectural gap (Cognee memories are not
    - **Requirement**: Either (a) replace allow-listing with a capability token or signed hand-shake that agents must include in the request payload, or (b) remove the allow-list setting and communicate clearly that enabling agent access is workspace-global. Do not ship a UI that appears to enforce caller restrictions when it cannot.
 
 3. **Transparency Annotation Depends on Other Agents’ Cooperation**
-   - Milestone 5 assumes Cognee can inject annotations into third-party agent responses. The architecture does not permit this; only the responding agent controls chat output. Without a formal integration API from those agents, Cognee can only log activity (Output channel, status bar). 
+   - Milestone 5 assumes Cognee can inject annotations into third-party agent responses. The architecture does not permit this; only the responding agent controls chat output. Without a formal integration API from those agents, Cognee can only log activity (Output channel, status bar).
    - **Requirement**: Re-scope the transparency milestone so the Cognee extension focuses on its own surfaces (Output channel, status item, notification). Any in-chat annotation must be explicitly negotiated with each agent developer and is outside Cognee’s direct control. Document this constraint to avoid overpromising user-visible indicators.
 
 4. **`summarizeForAgent` Command Violates Layering**
@@ -76,3 +77,16 @@ After the planner updated the objective, milestones, and change log to remove al
 4. **Success criteria** reiterate that implementation is gated on Milestone 0 (bridge schema verification) and do not promise TypeScript-based summarization.
 
 With those corrections, Plan 016 is architecturally sound. Implementation must still begin with Milestone 0 contract tests to confirm Plan 014 bridge outputs before exposing any agent-facing commands.
+
+### 2025-11-19 14:45 – Merged UI-Visible Tools Scope Review
+
+**Reviewed artifact**: `agent-output/planning/016-Agent-retrieval-and ui-visible-extension-tools.md`
+
+**Verdict**: **APPROVED_WITH_NOTES** – Scope consolidation (retrieval + Configure Tools visibility) aligns with Decisions §4.5/§9, provided the following clarifications are incorporated before critic review:
+
+1. **Engine Version Gate** – The plan assumes VS Code 1.106+ (required for `canBeReferencedInPrompt`). Implementation MUST raise `package.json > engines.vscode` to `^1.106.0` (or higher) and call this out in the release plan. Without the gate, Marketplace users on older builds will install the VSIX and encounter unknown contribution properties at runtime.
+2. **Tool Registration Lifecycle** – Both `cogneeStoreSummary` and `cogneeRetrieveMemory` tools must be registered/unregistered together when `cogneeMemory.agentAccess.enabled` changes. The plan states this implicitly in Milestone 5.3, but please add an explicit acceptance test so that disabling the setting immediately removes the tools from Configure Tools, autocomplete, and `languageModelTools.list`.
+3. **Preserve Structured Payloads in Tool Responses** – When `RetrieveMemoryTool.invoke()` formats results for the LLM, include the full structured JSON (e.g., fenced code block containing the `CogneeContextResponse`). This keeps tool output faithful to the underlying command contract, allows agents to quote metadata verbatim, and satisfies transparency requirements from §7. A narrative summary is fine as long as the canonical payload is still present verbatim.
+4. **Shared Provider Enforcement** – All tool invocations must go through the singleton `CogneeContextProvider` instance that already enforces concurrency/rate limits and audit logging. Avoid duplicating queueing logic inside the tool class; any future limit changes must remain centralized.
+
+No additional architectural blockers identified. Once the notes above are reflected in the plan (or supplemental test cases), implementation can proceed after Milestone 0 contract verification.

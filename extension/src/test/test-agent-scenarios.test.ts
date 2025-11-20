@@ -38,20 +38,14 @@ describe('Test-Agent Scenarios', () => {
         console.log('Both extensions activated successfully');
     });
 
-    describe('Access Control Scenarios', () => {
-        afterEach(async () => {
-            // Reset agent access after each test
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', false, vscode.ConfigurationTarget.Global);
-        });
+    describe('Tool Invocation Scenarios', () => {
+        // Note: Tools are now always registered at extension activation
+        // Authorization is handled by VS Code's Configure Tools UI
 
-        it('Scenario 1: Valid minimal payload with access enabled', async function() {
+        it('Scenario 1: Valid minimal payload', async function() {
             this.timeout(60000);
 
-            // Enable agent access
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', true, vscode.ConfigurationTarget.Global);
-
+            // Tools are registered unconditionally; Configure Tools controls enablement
             try {
                 await vscode.commands.executeCommand('testAgent.testValidMinimal');
                 
@@ -67,9 +61,6 @@ describe('Test-Agent Scenarios', () => {
         it('Scenario 2: Valid full payload with all fields', async function() {
             this.timeout(60000);
 
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', true, vscode.ConfigurationTarget.Global);
-
             try {
                 await vscode.commands.executeCommand('testAgent.testValidFull');
                 console.log('Valid full payload test completed');
@@ -81,9 +72,6 @@ describe('Test-Agent Scenarios', () => {
         it('Scenario 3: Invalid payload with missing fields', async function() {
             this.timeout(30000);
 
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', true, vscode.ConfigurationTarget.Global);
-
             try {
                 await vscode.commands.executeCommand('testAgent.testInvalidPayload');
                 console.log('Invalid payload test completed');
@@ -92,28 +80,11 @@ describe('Test-Agent Scenarios', () => {
             }
         });
 
-        it('Scenario 4: Access blocked when disabled', async function() {
-            this.timeout(30000);
-
-            // Ensure agent access is disabled
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', false, vscode.ConfigurationTarget.Global);
-
-            try {
-                await vscode.commands.executeCommand('testAgent.testAccessControl');
-                console.log('Access control test completed');
-            } catch (error) {
-                expect.fail(`Test-agent command failed: ${error}`);
-            }
-        });
     });
 
     describe('Error Handling Scenarios', () => {
         it('handles malformed JSON gracefully', async function() {
             this.timeout(30000);
-
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', true, vscode.ConfigurationTarget.Global);
 
             const malformedJson = '{ topic: "Missing quotes", invalid }';
 
@@ -134,9 +105,6 @@ describe('Test-Agent Scenarios', () => {
 
         it('provides detailed validation errors', async function() {
             this.timeout(30000);
-
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', true, vscode.ConfigurationTarget.Global);
 
             const invalidPayload = {
                 context: 'Missing topic',

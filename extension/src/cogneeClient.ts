@@ -646,8 +646,10 @@ export class CogneeClient {
             
             // Spawn Python process with workspace as working directory
             // This ensures relative paths in scripts resolve from workspace root
+            // Set PYTHONUNBUFFERED=1 to ensure stderr [PROGRESS] markers appear immediately
             const python = spawn(this.pythonPath, [scriptPath, ...args], {
-                cwd: this.workspacePath
+                cwd: this.workspacePath,
+                env: { ...process.env, PYTHONUNBUFFERED: '1' }
             });
             
             let stdout = '';
@@ -725,9 +727,39 @@ export class CogneeClient {
                     return;
                 }
 
-                // Log stderr even on success (for debug output)
+                // Log stderr even on success (parse diagnostic markers from Milestone 2)
                 if (stderr && stderr.trim()) {
                     const sanitizedStderr = this.sanitizeOutput(stderr);
+                    
+                    // Parse stderr for diagnostic markers and log at appropriate levels
+                    const stderrLines = stderr.split('\n');
+                    for (const line of stderrLines) {
+                        if (line.includes('[ERROR]')) {
+                            // Extract and parse JSON error payload if present
+                            const jsonMatch = line.match(/\[ERROR\]\s*(\{.*\})/);
+                            if (jsonMatch) {
+                                try {
+                                    const errorPayload = JSON.parse(jsonMatch[1]);
+                                    this.log('ERROR', 'Bridge script error', {
+                                        script: scriptName,
+                                        error_code: errorPayload.error_code,
+                                        error_type: errorPayload.error_type,
+                                        message: errorPayload.message
+                                    });
+                                } catch {
+                                    this.log('ERROR', 'Bridge script error (unparseable)', { line });
+                                }
+                            } else {
+                                this.log('ERROR', 'Bridge script error', { line });
+                            }
+                        } else if (line.includes('[WARNING]')) {
+                            this.log('WARN', 'Bridge script warning', { line });
+                        } else if (line.includes('[PROGRESS]')) {
+                            this.log('INFO', 'Bridge progress', { line });
+                        }
+                    }
+                    
+                    // Also log full stderr at DEBUG for complete diagnostic context
                     this.log('DEBUG', 'Python script stderr output', {
                         script: scriptName,
                         stderr: sanitizedStderr
@@ -767,11 +799,43 @@ export class CogneeClient {
                 
                 python.kill();
                 
-                this.log('ERROR', 'Python script timeout', {
-                    script: scriptName,
-                    timeout: timeoutMs,
-                    elapsed_ms: timeoutFiredAt - requestStart
-                });
+                // Log any stderr collected before timeout (diagnostic context from Milestone 2)
+                if (stderr && stderr.trim()) {
+                    const stderrLines = stderr.split('\n');
+                    const lastProgressLine = stderrLines.filter(l => l.includes('[PROGRESS]')).pop();
+                    const errorLines = stderrLines.filter(l => l.includes('[ERROR]'));
+                    
+                    this.log('ERROR', 'Python script timeout - partial stderr captured', {
+                        script: scriptName,
+                        timeout: timeoutMs,
+                        elapsed_ms: timeoutFiredAt - requestStart,
+                        last_progress: lastProgressLine || 'none',
+                        error_count: errorLines.length
+                    });
+                    
+                    // Surface any error payloads found
+                    for (const errorLine of errorLines) {
+                        const jsonMatch = errorLine.match(/\[ERROR\]\s*(\{.*\})/);
+                        if (jsonMatch) {
+                            try {
+                                const errorPayload = JSON.parse(jsonMatch[1]);
+                                this.log('ERROR', 'Bridge error before timeout', {
+                                    error_code: errorPayload.error_code,
+                                    error_type: errorPayload.error_type,
+                                    message: errorPayload.message
+                                });
+                            } catch {
+                                // Ignore parse errors
+                            }
+                        }
+                    }
+                } else {
+                    this.log('ERROR', 'Python script timeout', {
+                        script: scriptName,
+                        timeout: timeoutMs,
+                        elapsed_ms: timeoutFiredAt - requestStart
+                    });
+                }
                 
                 reject(new Error(`Python script timeout after ${timeoutMs/1000} seconds`));
             }, timeoutMs);

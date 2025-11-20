@@ -153,9 +153,11 @@ async def test_ingest_structured_error_logging(temp_workspace, mock_env, mock_co
             assert result['success'] is False
             assert 'TypeError' in result['error']
             
-            # Check stderr output includes structured error details
+            # Check stderr output includes structured error JSON
             captured = capsys.readouterr()
-            assert 'Ingestion error details' in captured.err
+            assert '[ERROR]' in captured.err
+            assert 'COGNEE_SDK_ERROR' in captured.err
+            assert 'error_code' in captured.err
             
             # Parse JSON from stderr (multi-line formatted)
             # Find the start of the JSON block after "Ingestion error details: "

@@ -3,9 +3,17 @@ import * as path from 'path';
 import { CogneeClient, RetrievalResult } from './cogneeClient';
 import { ConversationSummary, formatSummaryAsText, createDefaultSummary, TEMPLATE_VERSION } from './summaryTemplate';
 import { parseSummaryFromText } from './summaryParser';
+import { registerIngestForAgentCommand } from './commands/ingestForAgent';
+import { registerRetrieveForAgentCommand } from './commands/retrieveForAgent';
+import { StoreMemoryTool } from './tools/storeMemoryTool';
+import { RetrieveMemoryTool } from './tools/retrieveMemoryTool';
+import { CogneeContextProvider } from './cogneeContextProvider';
 
 // Module-level variable to store client instance
 let cogneeClient: CogneeClient | undefined;
+let cogneeContextProvider: CogneeContextProvider | undefined; // Plan 016 Milestone 1
+let storeMemoryToolDisposable: vscode.Disposable | undefined;
+let retrieveMemoryToolDisposable: vscode.Disposable | undefined; // Plan 016 Milestone 5
 
 // Module-level storage for pending summary confirmations (Plan 014 Milestone 2)
 interface PendingSummary {
@@ -43,8 +51,23 @@ export async function activate(_context: vscode.ExtensionContext) {
             // Register commands for Milestone 1: Context Menu Capture
             registerCaptureCommands(_context, cogneeClient);
             
-            // Milestone 2: Register @cognee-memory chat participant
-            registerCogneeMemoryParticipant(_context, cogneeClient);
+            // Plan 015: Register agent ingestion command
+            const agentOutputChannel = vscode.window.createOutputChannel('Cognee Agent Activity');
+            registerIngestForAgentCommand(_context, cogneeClient, agentOutputChannel);
+            
+            // Plan 016 Milestone 1: Initialize CogneeContextProvider
+            const { CogneeContextProvider } = await import('./cogneeContextProvider');
+            cogneeContextProvider = new CogneeContextProvider(cogneeClient, agentOutputChannel);
+            
+            // Milestone 2: Register @cognee-memory chat participant (Plan 016 Milestone 6: now uses provider)
+            registerCogneeMemoryParticipant(_context, cogneeClient, cogneeContextProvider);
+            console.log('CogneeContextProvider initialized successfully');
+            
+            // Plan 016 Milestone 2: Register agent retrieval command
+            registerRetrieveForAgentCommand(_context, cogneeContextProvider, agentOutputChannel);
+            
+            // Plan 016.1: Register languageModelTools unconditionally (Configure Tools is sole opt-in)
+            registerLanguageModelTool(_context, agentOutputChannel);
         } else {
             console.warn('Cognee client initialization failed (see Output Channel)');
             
@@ -80,12 +103,42 @@ export async function activate(_context: vscode.ExtensionContext) {
 }
 
 /**
+ * Register languageModelTools for Copilot agent integration (Plan 016.1 Milestone 1)
+ * Tools register unconditionally at activation; VS Code's Configure Tools UI is the sole opt-in control
+ * Both tools (storeMemory and retrieveMemory) register atomically
+ */
+function registerLanguageModelTool(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel) {
+    // Register BOTH tools unconditionally (Configure Tools controls enablement)
+    if (cogneeContextProvider) {
+        const storeTool = new StoreMemoryTool(outputChannel);
+        storeMemoryToolDisposable = vscode.lm.registerTool('cognee_storeMemory', storeTool);
+        
+        const retrieveTool = new RetrieveMemoryTool(cogneeContextProvider, outputChannel);
+        retrieveMemoryToolDisposable = vscode.lm.registerTool('cognee_retrieveMemory', retrieveTool);
+        
+        outputChannel.appendLine('=== Plan 016.1: Language Model Tools Registered ===');
+        outputChannel.appendLine('✅ cognee_storeMemory registered - Copilot agents can store memories');
+        outputChannel.appendLine('✅ cognee_retrieveMemory registered - Copilot agents can retrieve memories');
+        outputChannel.appendLine('ℹ️  Enable/disable tools via Configure Tools UI in GitHub Copilot Chat');
+    }
+}
+
+/**
  * Extension deactivation entry point
  * Called when VS Code deactivates the extension
  */
 export function deactivate() {
     console.log('Cognee Chat Memory extension deactivated');
+    if (storeMemoryToolDisposable) {
+        storeMemoryToolDisposable.dispose();
+        storeMemoryToolDisposable = undefined;
+    }
+    if (retrieveMemoryToolDisposable) {
+        retrieveMemoryToolDisposable.dispose();
+        retrieveMemoryToolDisposable = undefined;
+    }
     cogneeClient = undefined;
+    cogneeContextProvider = undefined;
 }
 
 /**
@@ -419,10 +472,12 @@ function extractPlanIdFromConversation(text: string): string | null {
 /**
  * Register @cognee-memory chat participant for Milestone 2
  * Implements 6-step flow: retrieval → format display → augment prompt → generate response → capture conversation
+ * Plan 016 Milestone 6: Refactored to use CogneeContextProvider instead of direct client.retrieve
  */
 function registerCogneeMemoryParticipant(
     context: vscode.ExtensionContext,
-    client: CogneeClient
+    client: CogneeClient,
+    provider: CogneeContextProvider
 ) {
     console.log('=== MILESTONE 2: Registering @cognee-memory Chat Participant ===');
 
@@ -569,15 +624,40 @@ function registerCogneeMemoryParticipant(
                     return { metadata: { cancelled: true } };
                 }
 
-                // STEP 1-2: Retrieve relevant context from Cognee
+                // STEP 1-2: Retrieve relevant context from Cognee using CogneeContextProvider (Plan 016 Milestone 6)
                 const retrievalStart = Date.now();
                 let retrievedMemories: RetrievalResult[] = [];
                 let retrievalFailed = false;
 
                 try {
-                    retrievedMemories = await client.retrieve(request.prompt);
+                    // Use shared CogneeContextProvider for concurrency/rate limiting
+                    const contextResponse = await provider.retrieveContext({
+                        query: request.prompt,
+                        maxResults: config.get<number>('maxContextResults', 3),
+                        maxTokens: config.get<number>('maxContextTokens', 2000)
+                    });
+                    
+                    // Check if response is an error
+                    if ('error' in contextResponse) {
+                        throw new Error(contextResponse.message);
+                    }
+                    
+                    // Convert CogneeContextEntry[] to RetrievalResult[] format for backward compatibility
+                    retrievedMemories = contextResponse.entries.map(entry => ({
+                        text: entry.summaryText,
+                        summaryText: entry.summaryText,
+                        topic: entry.topic,
+                        topicId: entry.topicId || undefined,
+                        planId: entry.planId || undefined,
+                        createdAt: entry.createdAt ? new Date(entry.createdAt) : undefined,
+                        score: entry.score,
+                        decisions: entry.decisions,
+                        rationale: entry.rationale,
+                        tokens: Math.ceil(entry.summaryText.length / 4) // Rough token estimate
+                    } as RetrievalResult));
+                    
                     const retrievalDuration = Date.now() - retrievalStart;
-                    console.log(`Retrieved ${retrievedMemories.length} memories in ${retrievalDuration}ms`);
+                    console.log(`Retrieved ${retrievedMemories.length} memories in ${retrievalDuration}ms (via CogneeContextProvider)`);
                 } catch (error) {
                     retrievalFailed = true;
                     console.error('Retrieval failed:', error);

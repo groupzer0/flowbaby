@@ -31,9 +31,11 @@ async def test_retrieve_missing_llm_api_key(temp_workspace, monkeypatch):
         result = await retrieve_context(str(temp_workspace), "test query")
         
         assert result['success'] is False
-        # Check for structured error format matching init.py pattern
+        # Check for structured error format with new taxonomy
         assert 'error_code' in result
-        assert result['error_code'] == 'MISSING_API_KEY'
+        assert result['error_code'] == 'LLM_API_ERROR'
+        assert 'error_type' in result
+        assert result['error_type'] == 'MISSING_API_KEY'
         assert 'user_message' in result
         assert 'LLM_API_KEY' in result['user_message']
         assert 'remediation' in result

@@ -1,6 +1,6 @@
 # Cognee Chat Memory System Architecture
 
-**Last Updated**: 2025-11-18 11:05
+**Last Updated**: 2025-11-19 14:45
 **Owner**: architect agent
 
 ## Change Log
@@ -13,6 +13,11 @@
 | 2025-11-16 14:05 | Captured Plan 014 bridge addendum (structured ingestion + metadata-aware retrieval requirements) | Ensure planners know bridge migration scope before implementation | Plan 014 bridge addendum |
 | 2025-11-17 10:20 | Added Plan 016 agent-integration guardrails and context provider requirements | Preserve privacy/testability before exposing public agent commands | Plan 016 |
 | 2025-11-18 11:05 | Documented Plan 014 enriched-text metadata fallback + regex retrieval parsing | Cognee SDK 0.3.4 lacks DataPoint API; need interim architecture + testing guardrails | Plan 014 |
+| 2025-11-18 15:40 | Added guidance for agent-driven memory integration (shared provider, agent commands, privacy guardrails) | Roadmap pivot requires agents to call Cognee ingest/retrieve directly while preserving isolation | Epic 0.3.0.3 / Plan 019 TBD |
+| 2025-11-18 17:25 | Clarified headless agent-command model + MCP fallback | Prevent Plan 015/016 from shipping without validated invocation path; document MCP tool contingency if VS Code commands are inaccessible | Plan 019 feasibility |
+| 2025-11-19 09:05 | Adopted languageModelTools surface as primary Copilot integration path | Align agent access with officially supported Copilot tool contract while retaining command/MCP fallback strategy | Plan 014.1 / Epic 0.3.0.3 |
+| 2025-11-19 14:45 | Documented UI-visible Cognee tools (store/retrieve) and transparency guardrails for Plan 016 scope merge; updated diagram | Ensure planners implement workspace-gated tool discovery, shared provider usage, and audit surfaces before implementation | Plan 016 |
+| 2025-11-19 18:05 | Simplified agent-access model to rely solely on VS Code Configure Tools toggles; removed status bar dependency; captured Plan 016.1 bridge-timeout diagnostics guidance | Align architecture with Plan 016.1 hotfix (tool lifecycle + timeout fixes) | Plan 016.1 |
 
 
 ## 1. Purpose and Scope
@@ -30,7 +35,7 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 |  - CogneeClient (subprocess orchestration, logging)         |
 |  - CogneeContextProvider (shared retrieval, rate limits)    |
 |  - Agent commands/API surface (retrieveForAgent, etc.)      |
-|  - UX surfaces (commands, status bar, chat participant)     |
+|  - UX surfaces (commands, Output logs, chat participant)    |
 +---------------------------|---------------------------------+
                             v JSON over stdout/stderr
 +-------------------------------------------------------------+
@@ -57,10 +62,12 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 - Validates workspace context and loads configuration (`cogneeMemory.*` settings).
 - Provides user entry points: keyboard capture command, command palette, @cognee-memory chat participant, toggle/clear commands.
 - Streams UX feedback (notifications, Output channel logs, chat participant markdown).
-- Delegates all knowledge operations to Python bridge via `CogneeClient` helper.
+- Delegates all knowledge operations to Python bridge via `CogneeClient` helper and the shared `CogneeContextProvider` service. The provider centralizes retrieval logic, enforces concurrency/rate limits, and emits telemetry consumed by both UI surfaces and agent commands.
 - Hosts the `CogneeContextProvider`, a singleton service that normalizes retrieval responses (structured metadata once Plan 014 migration lands), enforces rate limiting/back-pressure, and feeds both the chat participant and public agent commands.
-- Exposes the `cogneeMemory.retrieveForAgent` command (Plan 016) behind opt-in settings; access defaults to disabled and may rely on capability tokens if VS Code cannot surface caller metadata.
-- Logs every agent-initiated retrieval to the Output channel/status service to satisfy transparency requirements from Plans 013/016.
+- Contributes VS Code `languageModelTools` metadata for the Cognee Store/Retrieve tools. These definitions surface inside "Configure Tools", drive `#cogneeStoreSummary` / `#cogneeRetrieveMemory` autocomplete, and now rely solely on VS Code's opt-in UI. Tools register at activation; when users disable them in Configure Tools, VS Code hides them automatically and the extension listens for enablement events to keep audit logging/command availability in sync.
+- Exposes the `cogneeMemory.retrieveForAgent` command (Plan 016) without an additional workspace setting; instead, the command consults the same tool-enablement state surfaced via Configure Tools (or fails fast if tools are disabled). Commands are headless: they remain hidden from command palette/menus and exist solely for other extensions or agents to invoke programmatically via `vscode.commands.executeCommand`. The roadmap pivot adds `cogneeMemory.ingestForAgent`, giving Copilot agents parity with @cognee-memory capture flows while keeping ingestion centralized.
+- Provides a unified validation/auditing pipeline: every agent command invocation is logged (timestamp, workspace, caller hint) and rejected unless workspace access is enabled. Future capability tokens can plug into this layer without touching bridge scripts.
+- Logs every agent-initiated retrieval to the Output channel and structured diagnostics to satisfy transparency requirements from Plans 013/016.
 - Implements the Plan 014 summary template + parser helpers so TypeScript can (a) render structured markdown with embedded metadata for ingestion and (b) validate/round-trip summaries when Cognee DataPoints are unavailable.
 
 ### 3.2 Bridge Execution Layer (Python)
@@ -70,7 +77,7 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 - Maintains ontology assets (currently `ontology.ttl`) and dataset naming strategy.
 - Handles Terraform-style migration markers to coordinate one-time pruning.
 - Emits JSON envelopes for success/error, plus structured stderr for diagnostics.
-- Implements the enriched-text fallback for Plan 014 summaries: `ingest.py` accepts `--summary-json`, renders metadata-rich markdown, and `retrieve.py` parses metadata via regex before producing structured JSON. Bridge unit tests MUST cover both enriched and legacy text paths until Cognee exposes DataPoint APIs.
+- Implements the enriched-text fallback for Plan 014 summaries: `ingest.py` accepts `--summary-json`, renders metadata-rich markdown, and `retrieve.py` parses metadata via regex before producing structured JSON. Bridge unit tests MUST cover both enriched and legacy text paths until Cognee exposes DataPoint APIs. These scripts are the only sanctioned entry points for agents; `retrieveForAgent` and `ingestForAgent` commands ultimately call them so ontology wiring and dataset isolation remain consistent.
 
 ### 3.3 Cognee Knowledge Layer
 
@@ -134,6 +141,24 @@ Cognee SDK 0.3.4 does **not** expose a public `DataPoint` API, so Plan 014 inges
 
 Testing Guidance: `extension/bridge/test_datapoint_contract.py` is now mandated to cover (a) enriched-text formatting, (b) metadata parsing, (c) legacy path regression tests, and (d) JSON contract validation so QA can rely on deterministic behavior even without DataPoints.
 
+#### 4.5 Agent-Initiated Retrieval & Ingestion (Epic 0.3.0.3)
+
+1. **Opt-In Control (Configure Tools Only)** – Users enable/disable Cognee access exclusively through VS Code's Configure Tools UI. The extension registers both tools at activation; when a user disables either tool, VS Code hides it immediately and the extension's enablement listener blocks related commands. There is no parallel workspace setting or status bar badge; transparency is provided via Configure Tools state and Output channel logs.
+
+2. **Tool Surface (Primary) + Command Surface (Fallback)** – By default, the Cognee extension contributes two `languageModelTools` definitions (`cogneeStoreSummary`, `cogneeRetrieveMemory`) so Copilot agents can call Cognee without bespoke chat participants.
+   - Each tool is implemented via `vscode.lm.registerTool(...)` with validation logic that mirrors the headless commands, forwards requests into `CogneeContextProvider`, and emits identical audit logs. Tool metadata (display name, descriptions, icons, schema) drives the Configure Tools UI and `#` autocomplete.
+   - Public commands remain the canonical business logic surface and stay headless; tool invocations reuse the same provider + command helpers internally. This preserves support for non-Copilot extensions (direct `executeCommand`) and keeps the MCP fallback viable if tools prove insufficient.
+   - Because the tool contract is the only Copilot-supported channel today, Plan 014.1/016 must validate tool invocation end-to-end (payload shaping, opt-in enforcement, rate limits, transparency logging) instead of relying solely on extension-to-extension command tests.
+
+3. **Concurrency & Throttling** – `CogneeContextProvider` enforces max 2 concurrent bridge calls with a queue size of 5. Excess requests fail fast with `429_AGENT_THROTTLED`, keeping subprocess load predictable even if multiple agents fire simultaneously.
+
+4. **Auditability** – Each command writes a structured log entry `{ timestamp, command, agentName, queryDigest, result }` to the Cognee Output channel and (optionally) `.cognee/agent_audit.log`. This satisfies privacy/transparency requirements and gives QA a deterministic artifact to inspect.
+
+5. **Error Propagation** – Commands emit machine-readable error codes (`AGENT_ACCESS_DISABLED`, `INVALID_PAYLOAD`, `MISSING_BRIDGE_SCHEMA`, etc.) so agents can render user-friendly guidance. If bridge contracts are outdated, commands short-circuit with remediation steps instead of relaying stack traces.
+6. **Tool Lifecycle & Discovery** – Language model tools honor the Configure Tools opt-in. Users toggle availability directly in VS Code, and the extension listens for `onDidChangeEnablement` to synchronize command gating and logging. Tool metadata (name/title/description) continues to drive Copilot discovery; no additional registration/unregistration dance is required beyond reacting to enablement state.
+
+7. **MCP Fallback** – If tool invocation proves insufficient (e.g., other agent platforms lack tool support or require richer auth), Cognee will expose equivalent `retrieve`/`ingest` tools via a local MCP server running inside the extension. Those tools proxy into `CogneeContextProvider`, reuse the same rate limiting and audit logging, and give MCP-aware agents a supported integration path without duplicating business logic. MCP remains a contingency path and should only ship after discovery/auth flows are validated.
+
 ## 5. Data & Storage Boundaries
 
 - **Workspace-local**: `.cognee_system/` (Cognee internal DB) and `.cognee_data/` (vector/index artifacts) created under workspace root since Plan 010.
@@ -168,7 +193,7 @@ Testing Guidance: `extension/bridge/test_datapoint_contract.py` is now mandated 
    - No automated check ensures bridge assets (ontology, requirements) are included in VSIX. QA fixtures created `ontology.json`, hiding missing-file regression.
 
 4. **Silent Failure Modes**
-   - Errors in ingestion/retrieval often only appear in Output channel; no status bar indicator or actionable notification. Users perceive "extension does nothing".
+   - Errors in ingestion/retrieval often only appear in the Output channel; there are still no proactive notifications or inline guidance when operations fail. Users perceive "the extension does nothing" without digging into logs.
 
 5. **Python Environment Friction**
    - Auto-detection (Plan 007) improved logging but still requires manual `.venv` creation and dependency installation. Missing Python yields generic warnings.
@@ -185,6 +210,10 @@ Testing Guidance: `extension/bridge/test_datapoint_contract.py` is now mandated 
 9. **Memory Graph Growth / Noise (Plan 014)**
    - Continuous ingestion of raw conversation summaries risks index bloat and conflicting context. Requires structured summary schema, metadata tagging, and compaction pipeline to maintain signal.
    - **Interim risk (2025-11-18)**: Because Cognee lacks DataPoints, metadata lives inside enriched markdown. Regex parsing is brittle; any template drift breaks retrieval. Planner/QA must treat this as high-risk technical debt and prioritize migration once APIs exist.
+
+10. **Agent Access Privacy (Epic 0.3.0.3)**
+
+Enabling agent access grants every extension in the workspace the ability to read/write Cognee memories because VS Code does not expose caller identity. Without loud warnings and audit logs, users could unintentionally leak context to untrusted extensions. Capability-token research (Plan 019) is required before we can offer finer-grained authorization.
 
 ## 9. Architectural Decisions
 
@@ -248,17 +277,58 @@ Testing Guidance: `extension/bridge/test_datapoint_contract.py` is now mandated 
 
 **Related**: Plan 014, Decision on Structured Conversation Summaries & Compaction, §4.4.1 fallback guidance.
 
+### Decision: Agent-Driven Memory Surface (2025-11-18 15:40)
+
+**Context**: Real-world trials of Plan 014 showed @cognee-memory cannot summarize Copilot agent conversations it never saw (history is participant-scoped), and its retrieval path lets the LLM answer with training data rather than strictly stored memories. Users expect Copilot agents themselves to remember past interactions when routed through Cognee.
+
+**Choice**: Shift from participant-centric summarization to agent-driven commands. Introduce a shared `CogneeContextProvider`, public commands `cogneeMemory.retrieveForAgent` / `cogneeMemory.ingestForAgent`, and a workspace-level opt-in that gates all agent access. Commands always return/accept the same structured contracts as the bridge, enforce concurrency limits, and log every invocation for transparency.
+
+**Alternatives Considered**: (1) Attempt to expand @cognee-memory’s visibility to entire Copilot transcripts—blocked by VS Code API limits. (2) Let agents spawn bridge scripts themselves—rejected to preserve ontology wiring, throttling, and privacy checks. (3) Continue allowing LLM-augmented answers but label them—rejected because it still violates the workspace-only contract and confuses users about what’s actually stored.
+
+**Consequences**: (+) Aligns architecture with roadmap pivot and Master Objective by making agents memory-aware; (+) Maintains privacy guardrails through centralized settings/logging; (-) Requires feasibility analysis (Plan 019) for VS Code command invocation/auth; (-) Introduces UX complexity around opt-in warnings and audit visibility.
+
+**Related**: Roadmap Epic 0.3.0.3, Plan 016 groundwork, §4.5 runtime flow.
+
+### Decision: Copilot Tool Surface vs Direct Commands (2025-11-19 09:05)
+
+**Context**: Plan 014.1 investigation uncovered that validating `vscode.commands.executeCommand` from another extension does not guarantee Copilot agents can invoke Cognee commands. VS Code now provides `languageModelTools` as the supported bridge between extensions and Copilot agents, whereas direct command invocation is undocumented and brittle. Continuing to rely on headless commands alone would delay Epic 0.3.0.3 or force MCP fallback prematurely.
+
+**Choice**: Make `languageModelTools` the primary integration surface for Copilot agents. The Cognee extension contributes a tool (e.g., `cognee.runCommand`) whose entry command validates tool payloads, enforces opt-in settings, and then forwards into the existing headless commands. Direct `executeCommand` usage remains supported for non-Copilot extensions, and MCP stays as a contingency path, but Copilot validation must focus on tool invocation semantics.
+
+**Alternatives Considered**:
+
+- Rely exclusively on direct command invocation. Rejected because Copilot provides no guarantee or capability metadata for arbitrary commands, and prior experimentation shows difficulty ensuring authentication/authorization semantics.
+- Skip tool contribution and move straight to MCP. Rejected for now because MCP lifecycle/discovery adds significant complexity and is unnecessary if language model tools satisfy Copilot scenarios.
+
+**Consequences**:
+
+- (+) Aligns with Copilot's officially supported extension surface, improving reliability and discoverability for both coding and @workspace agents.
+- (+) Maintains current TypeScript/Python layering: tools remain thin proxies on top of `CogneeContextProvider` and bridge scripts.
+- (+) Allows clear opt-in/out by registering or unregistering tool contributions alongside workspace settings.
+- (-) Requires Plan 014.1 to expand scope: implement tool entry command, validate Language Model Tool invocation, and document payload schema + rate limiting.
+- (-) Necessitates additional QA to ensure tool metadata accurately reflects privacy behaviors and that disabling agent access hot-unregisters the tool.
+
+**Related**: Plan 014.1 feasibility study, Plans 015/016 implementation strategy, Epic 0.3.0.3 agent-driven memory integration.
+
+### Decision: Configure Tools as Sole Agent-Access Control (2025-11-19 18:05)
+
+**Context**: Plan 016 QA uncovered UI desynchronization and redundant privacy messaging caused by a dual opt-in model (`cogneeMemory.agentAccess.enabled` + Configure Tools toggles). Users could not trust tool state, and the status bar indicator gave false assurance while actual enablement was managed elsewhere. Plan 016.1 removes the workspace setting and status bar entirely.
+**Choice**: Make VS Code's Configure Tools UI the single source of truth for both tool and command enablement. Tools register at activation and rely on user-managed toggles; the extension listens for enablement events to gate headless commands and maintain audit logs. Status bar indicators tied to the old setting are removed; transparency is now delivered via Configure Tools state plus Output channel diagnostics.
+**Alternatives Considered**: (1) Keep the workspace setting and attempt to refresh Configure Tools manually; rejected because VS Code caches tool metadata and would still mislead users. (2) Introduce a new in-extension toggle; rejected as duplicative and still unable to reflect Configure Tools state. (3) Delay change until VS Code exposes tool-refresh APIs; rejected because hotfix is required for v0.3.2.
+**Consequences**: (+) Eliminates contradictory privacy controls; (+) aligns with VS Code best practices; (+) reduces lifecycle bugs by letting the platform manage tool visibility; (-) removes persistent status bar indicator, so future transparency work must leverage notifications/logs. Commands invoked outside Configure Tools must now check tool enablement and fail fast when disabled.
+**Related**: Plan 016.1 (Fix Tool Lifecycle and Bridge Timeouts), §4.5 runtime flow, Epic 0.3.0.3.
+
 ## 10. Roadmap Architecture Outlook
 
 ### 10.1 v0.2.2 – Stability & Onboarding (Epics 0.2.2.1-0.2.2.3)
 
 - **Ontology Loader Alignment (0.2.2.1)**: replace hardcoded `ontology.json` reference with TTL-aware loader. Preferred approach is to introduce an `OntologyProvider` module inside `extension/bridge` that can read TTL, validate with RDFLib, and emit JSON when needed. Packaging must guarantee `ontology.ttl` co-locates with bridge scripts; add relative path resolution plus checksum verification to catch missing assets during init.
 - **Packaging Verification (0.2.2.2)**: add a Node-based `npm run verify:vsix` task that unpacks the built VSIX, ensures required files (bridge scripts, ontology, requirements, metadata) exist, and runs smoke initialization via `vsce ls`. CI must block releases if verification fails. Release checklist should reference this script; no architectural changes to runtime code, but we must document required artifacts here for planners and QA.
-- **Discoverability UX (0.2.2.3)**: introduce a lightweight status service within TypeScript (e.g., `extension/src/statusService.ts`) that centralizes state (initialized, capturing enabled, Python ready). Welcome notifications, command descriptions, and status bar badges should consume this service rather than querying `CogneeClient` directly. This preserves layering (UX pulls from TS state, TS state updated by bridge results) and prepares the groundwork for later telemetry.
+- **Discoverability UX (0.2.2.3)**: introduce a lightweight status service within TypeScript (e.g., `extension/src/statusService.ts`) that centralizes state (initialized, capturing enabled, Python ready). Welcome notifications, quick actions, and future inline indicators should consume this service rather than querying `CogneeClient` directly. This preserves layering (UX pulls from TS state, TS state updated by bridge results) and prepares the groundwork for later telemetry.
 
 ### 10.2 v0.2.3 – Operational Reliability (Epics 0.2.3.1-0.2.3.2)
 
-- **Error Taxonomy (0.2.3.1)**: modify all bridge scripts to emit structured payloads: `{ success, error_code, user_message, remediation }`. Define canonical codes (e.g., `MISSING_API_KEY`, `PYTHON_DEP_NOT_FOUND`, `COGNEE_TIMEOUT`) and document mappings in this file. TypeScript layer should translate codes into notifications/status bar icons while also logging the raw payload. Introduce a shared `ErrorMapper` module to avoid duplicated switch statements.
+- **Error Taxonomy (0.2.3.1)**: modify all bridge scripts to emit structured payloads: `{ success, error_code, user_message, remediation }`. Define canonical codes (e.g., `MISSING_API_KEY`, `PYTHON_DEP_NOT_FOUND`, `COGNEE_TIMEOUT`) and document mappings in this file. TypeScript layer should translate codes into actionable notifications (toast, inline message, Output log) while also logging the raw payload. Introduce a shared `ErrorMapper` module to avoid duplicated switch statements.
 - **Operational Signals**: extend `CogneeClient` to publish events (success/failure) to the status service. Consider a small circular buffer persisted via VS Code `Memento` storing last N operations for QA verification.
 - **Python Environment Bootstrap (0.2.3.2)**: add a new orchestrator (`extension/src/pythonSetup.ts`) that can (a) detect absence of `.venv`, (b) run `python -m venv` via VS Code terminal, (c) execute `pip install -r requirements.txt`, and (d) update `cogneeMemory.pythonPath`. For automation, introduce a helper bridge script `verify_environment.py` to validate interpreter + dependencies without altering user environments. All automation must operate within workspace directory to avoid privilege escalations.
 

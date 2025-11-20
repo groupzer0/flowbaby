@@ -289,3 +289,102 @@ export interface ValidationResult {
      */
     errors: string[];
 }
+
+/**
+ * Request structure for agent retrieval operations (Plan 016)
+ */
+export interface CogneeContextRequest {
+    /** Natural language query for memory search */
+    query: string;
+    
+    /** Maximum number of results to return (default: 3) */
+    maxResults?: number;
+    
+    /** Token budget limit for results (default: 2000) */
+    maxTokens?: number;
+    
+    /** Contextual hints to help refine search (optional) */
+    contextHints?: string[];
+}
+
+/**
+ * Single memory entry with structured metadata per RETRIEVE_CONTRACT.md (Plan 016)
+ * 
+ * Supports mixed-mode retrieval:
+ * - Enriched summaries have full metadata (topicId, status, timestamps)
+ * - Legacy memories have null metadata fields
+ */
+export interface CogneeContextEntry {
+    /** Full formatted summary text (markdown template) */
+    summaryText: string;
+    
+    /** Key decisions captured in the summary */
+    decisions?: string[];
+    
+    /** Rationale behind decisions */
+    rationale?: string[];
+    
+    /** Short title or topic */
+    topic?: string;
+    
+    /** UUID or stable identifier for the summary's topic */
+    topicId?: string | null;
+    
+    /** Plan number associated with this summary (e.g., "014") */
+    planId?: string | null;
+    
+    /** ISO 8601 timestamp when summary was created */
+    createdAt?: string | null;
+    
+    /** Final relevance score (0.0 to 1.0+) */
+    score: number;
+}
+
+/**
+ * Response structure for agent retrieval operations (Plan 016)
+ */
+export interface CogneeContextResponse {
+    /** Ordered list of memory entries (highest score first) */
+    entries: CogneeContextEntry[];
+    
+    /** Total number of results considered */
+    totalResults: number;
+    
+    /** Approximate token count of all returned results */
+    tokensUsed: number;
+}
+
+/**
+ * Error codes for agent integration operations (Plan 016)
+ * Aligned with Epic 0.2.3.1 global error taxonomy
+ */
+export enum AgentErrorCode {
+    /** Agent access is disabled via settings */
+    ACCESS_DISABLED = 'ACCESS_DISABLED',
+    
+    /** Rate limit exceeded (requests per minute) */
+    RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',
+    
+    /** Concurrency limit exceeded (max in-flight requests) */
+    QUEUE_FULL = 'QUEUE_FULL',
+    
+    /** Bridge operation timed out */
+    BRIDGE_TIMEOUT = 'BRIDGE_TIMEOUT',
+    
+    /** Invalid request payload (malformed JSON, missing fields) */
+    INVALID_REQUEST = 'INVALID_REQUEST'
+}
+
+/**
+ * Structured error response for agent operations (Plan 016)
+ */
+export interface AgentErrorResponse {
+    /** Machine-readable error code */
+    error: AgentErrorCode;
+    
+    /** Human-readable error message */
+    message: string;
+    
+    /** Optional details for debugging */
+    details?: string;
+}

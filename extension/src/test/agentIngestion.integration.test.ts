@@ -21,57 +21,20 @@ suite('Agent Ingestion Integration Tests', () => {
         testWorkspaceFolder = vscode.workspace.workspaceFolders[0];
     });
 
-    teardown(async () => {
-        // Reset agent access setting after each test
-        const config = vscode.workspace.getConfiguration('cogneeMemory');
-        await config.update('agentAccess.enabled', false, vscode.ConfigurationTarget.Workspace);
-    });
+    // Tools are now registered unconditionally at extension activation
+    // Authorization is handled by VS Code Configure Tools UI
 
-    suite('Configuration-Driven Access Control', () => {
-        test('blocks ingestion when agentAccess.enabled is false', async function() {
-            this.timeout(5000);
-
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', false, vscode.ConfigurationTarget.Workspace);
-
-            const payload = {
-                topic: 'Integration Test - Access Disabled',
-                context: 'Testing blocked access',
-                metadata: {
-                    topicId: 'test-integration-disabled',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                }
-            };
-
-            try {
-                const responseJson = await vscode.commands.executeCommand<string>(
-                    'cogneeMemory.ingestForAgent',
-                    JSON.stringify(payload)
-                );
-                const response = JSON.parse(responseJson);
-
-                expect(response.success).to.be.false;
-                expect(response.errorCode).to.equal('ACCESS_DISABLED');
-            } catch (error) {
-                // Command might not be registered in test environment
-                console.warn('Command not available in test environment:', error);
-                this.skip();
-            }
-        });
-
-        test('allows ingestion when agentAccess.enabled is true', async function() {
+    suite('Ingestion Command Integration', () => {
+        test('ingestion command processes valid payload', async function() {
             this.timeout(60000); // Ingestion can take time
-
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', true, vscode.ConfigurationTarget.Workspace);
+            // Tools registered unconditionally; Configure Tools controls enablement
 
             const payload = {
-                topic: 'Integration Test - Access Enabled',
-                context: 'Testing allowed access with valid payload',
-                decisions: ['Enable agent access for test'],
+                topic: 'Integration Test - Command Execution',
+                context: 'Testing command execution with valid payload',
+                decisions: ['Test command flow'],
                 metadata: {
-                    topicId: 'test-integration-enabled',
+                    topicId: 'test-integration-command',
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 },
@@ -85,13 +48,12 @@ suite('Agent Ingestion Integration Tests', () => {
                 );
                 const response = JSON.parse(responseJson);
 
-                // Even if bridge fails (no .env, Python issues), command should respond properly
+                // Verify command responds properly (may succeed or fail due to bridge/env)
                 if (response.success) {
-                    expect(response.metadata.topic_id).to.equal('test-integration-enabled');
+                    expect(response.metadata.topic_id).to.equal('test-integration-command');
                     expect(response.ingested_chars).to.be.greaterThan(0);
                 } else {
-                    // If bridge unavailable, verify error is not ACCESS_DISABLED
-                    expect(response.errorCode).to.not.equal('ACCESS_DISABLED');
+                    // Bridge unavailable is acceptable in test environment
                     console.warn('Bridge unavailable, skipping success validation:', response.error);
                 }
             } catch (error) {
@@ -105,9 +67,6 @@ suite('Agent Ingestion Integration Tests', () => {
         test('creates audit log file on ingestion attempt', async function() {
             this.timeout(5000);
 
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', false, vscode.ConfigurationTarget.Workspace);
-
             const payload = {
                 topic: 'Audit Log Test',
                 context: 'Testing audit log creation',
@@ -119,10 +78,25 @@ suite('Agent Ingestion Integration Tests', () => {
             };
 
             try {
-                await vscode.commands.executeCommand<string>(
-                    'cogneeMemory.ingestForAgent',
-                    JSON.stringify(payload)
-                );
+                // Add 3s timeout to prevent hanging
+                const responseJson = await Promise.race([
+                    vscode.commands.executeCommand<string>(
+                        'cogneeMemory.ingestForAgent',
+                        JSON.stringify(payload)
+                    ),
+                    new Promise<string>((_, reject) => 
+                        setTimeout(() => reject(new Error('Command timeout')), 3000)
+                    )
+                ]);
+                
+                const response = JSON.parse(responseJson);
+                
+                // Skip if bridge unavailable
+                if (!response.success) {
+                    console.warn('Bridge unavailable, skipping audit log test:', response.error);
+                    this.skip();
+                    return;
+                }
 
                 // Check for audit log file
                 const auditLogPath = path.join(testWorkspaceFolder.uri.fsPath, '.cognee', 'agent_audit.log');
@@ -133,7 +107,7 @@ suite('Agent Ingestion Integration Tests', () => {
                 if (fs.existsSync(auditLogPath)) {
                     const logContent = fs.readFileSync(auditLogPath, 'utf8');
                     expect(logContent).to.include('ingestForAgent');
-                    expect(logContent).to.include('blocked');
+                    // Audit log records command execution, not access blocking
                 } else {
                     console.warn('Audit log not created - may indicate command registration issue');
                 }
@@ -147,9 +121,6 @@ suite('Agent Ingestion Integration Tests', () => {
     suite('Schema Validation Error Handling', () => {
         test('returns INVALID_PAYLOAD for missing required fields', async function() {
             this.timeout(5000);
-
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', true, vscode.ConfigurationTarget.Workspace);
 
             const invalidPayload = {
                 context: 'Missing topic field',
@@ -178,9 +149,6 @@ suite('Agent Ingestion Integration Tests', () => {
 
         test('returns INVALID_JSON for malformed JSON', async function() {
             this.timeout(5000);
-
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            await config.update('agentAccess.enabled', true, vscode.ConfigurationTarget.Workspace);
 
             try {
                 const responseJson = await vscode.commands.executeCommand<string>(

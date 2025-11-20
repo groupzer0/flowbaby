@@ -86,34 +86,11 @@ async function handleIngestForAgent(
             return JSON.stringify(response);
         }
 
-        // Step 3: Check access control
-        const config = vscode.workspace.getConfiguration('cogneeMemory');
-        const agentAccessEnabled = config.get<boolean>('agentAccess.enabled', false);
+        // Step 3: Access control (Plan 016.1 - Configure Tools is sole opt-in)
+        // Commands proxy tool invocations; if tool is disabled in Configure Tools,
+        // VS Code won't invoke the tool so this command won't be called
+        // No additional access check needed
         
-        if (!agentAccessEnabled) {
-            const response: CogneeIngestResponse = {
-                success: false,
-                error: 'Agent access disabled. Enable cogneeMemory.agentAccess.enabled in settings.',
-                errorCode: 'ACCESS_DISABLED'
-            };
-            
-            outputChannel.appendLine(
-                `[Agent Ingest] ${new Date().toISOString()} - Access denied: Agent access disabled`
-            );
-            
-            // Log blocked attempt to audit file
-            await logAuditEntry(context, {
-                timestamp: new Date().toISOString(),
-                command: 'ingestForAgent',
-                agentName: request.agentName || 'Unknown',
-                topicDigest: hashTopicId(request.metadata.topicId),
-                result: 'blocked',
-                errorCode: 'ACCESS_DISABLED'
-            });
-            
-            return JSON.stringify(response);
-        }
-
         // Step 4: Generate missing metadata fields (supports minimal payloads)
         // If metadata is completely missing, generate defaults
         if (!request.metadata) {

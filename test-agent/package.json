@@ -1,0 +1,34 @@
+{
+  "name": "cognee-test-agent",
+  "displayName": "Cognee Test Agent",
+  "description": "Test extension for validating Cognee agent ingestion API",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "categories": [
+    "Testing"
+  ],
+  "activationEvents": [
+    "onCommand:cognee-test-agent.testIngestion"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cognee-test-agent.testIngestion",
+        "title": "Test Cognee Agent Ingestion"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.105.0",
+    "typescript": "^5.9.3"
+  }
+}

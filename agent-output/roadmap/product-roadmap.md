@@ -54,10 +54,12 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 - **Plan 012** ✅ Complete → Epic 0.2.2.1 (Installation), Epic 0.2.2.2 (Packaging)
 - **Plan 013** ✅ Complete → Epic 0.2.2.3 (Discoverability)
 - **Plan 013.1** ✅ Complete → Epic 0.2.2.3 (Discoverability - ingestion reliability)
-- **Plan 014** (Proposed) → Epic 0.3.0.2 (Structured Summaries) - prerequisite for Plan 015
-- **Plan 015** (Proposed) → Epic 0.3.0.1 (Ranking and Relevance)
-- **Plan 016** (Proposed) → Epic 0.2.3.1 (Error Transparency) - parallel to v0.3.0
-- **Plan 017** (Proposed) → Epic 0.2.3.2 (Python Auto-Setup) - parallel to v0.3.0
+- **Plan 014** (Proposed) → Epic 0.3.0.2 (Structured Summaries) - prerequisite for Plans 015/016
+- **Plan 014.1** ✅ Complete → Epic 0.3.0.3 (feasibility validation for languageModelTools integration)
+- **Plan 015** (Proposed) → Epic 0.3.0.3 (Agent-Driven Memory Integration - ingestion)
+- **Plan 016** (Ready for Implementation) → Epic 0.3.0.3 (Agent-Driven Memory Integration - retrieval + UI visibility)
+- **Plan 017** (Proposed) → Epic 0.3.0.1 (Ranking and Relevance - metadata infrastructure)
+- **Plans TBD** → Epic 0.2.3.1 (Error Transparency), Epic 0.2.3.2 (Python Auto-Setup)
 
 **Strategic Decision**: Plans 012/013/013.1 resolve v0.2.x blockers; v0.3.0 work (Plans 014/015) can now proceed. Remaining v0.2.x epics (Plans 016/017) enhance UX but don't block advanced features—proceed in parallel.
 
@@ -65,6 +67,9 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-19 | Plan 016 merged scope finalized: Agent retrieval infrastructure + UI-visible extension tools combined into single comprehensive plan targeting v0.3.2 | User clarified that extension tools (not MCP) are the path to Configure Tools UI visibility via `canBeReferencedInPrompt` and `toolReferenceName` flags. Plan 016 now delivers both agent retrieval capabilities (CogneeContextProvider, retrieveForAgent command, structured responses) AND tool UI visibility (`#` autocomplete, `.agent.md` support, Configure Tools appearance) as interdependent features. Epic 0.3.0.3 acceptance criteria updated to reflect merged scope. |
+| 2025-11-19 | Plan 014.1 complete: languageModelTools validated as primary Copilot integration path; Epic 0.3.0.3 unblocked | Plan 014.1 confirmed VS Code's `languageModelTools` API is the officially supported mechanism for Copilot agent integration (vs undocumented command invocation). Architecture updated to contribute Cognee tools that proxy into existing commands, preserving fallback strategies (direct commands, MCP). Epic 0.3.0.3 ready for implementation (Plans 015/016). |
+| 2025-11-18 | **STRATEGIC PIVOT**: Epic 0.3.0.2 scope revised - @cognee-memory participant summarization deferred; adding Epic 0.3.0.3 for agent-driven memory integration | User testing revealed two critical misalignments: (1) @cognee-memory augments answers with LLM training data instead of constraining to stored memories only, violating workspace-local memory principle; (2) "summarize this conversation" only sees @cognee-memory turns, not the broader Copilot agent conversations users want to summarize. Root cause: chatContext.history is participant-scoped, not session-scoped. **Strategic solution**: Instead of forcing @cognee-memory to summarize conversations it wasn't part of, expose Cognee ingest/retrieve functions so Copilot agents can manage their own memory (store summaries of agent conversations, retrieve context when needed). This aligns with Master Product Objective: "eliminate repeated context reconstruction **for AI agents**" - agents should be memory-aware, not reliant on a separate memory participant. Requires feasibility analysis (Plan 014.1) before implementation. |
 | 2025-11-17 | Plans 013 and 013.1 completed: display transparency (removed 150-char truncation), ingestion metrics (token count, chunk count, duration), timeout handling (30s → 300s configurable), streaming progress indicators | Delivered Epic 0.2.2.3 (Feature Discoverability) - users now see full memory content, ingestion feedback, and reliable operation. Unblocks v0.3.0 work (Plans 014/015). |
 | 2025-11-17 | Strategic unblocking: Plans 012 (implemented) and 013 (planned) resolve v0.2.x blockers; Epic 0.3.0.1 unblocked after Plan 013; added Epic 0.3.0.2; split error handling (Plan 016) and Python setup (Plan 017) into separate plans | Plans 012/013 address installation stability (0.2.2.1) and discoverability (0.2.2.3), enabling v0.3.0 work to proceed. Remaining v0.2.3 epics (error transparency, auto-setup) are valuable but not blocking—can proceed in parallel. Created focused plan structure: 013 (display fixes), 016 (error taxonomy), 017 (Python auto-setup) for better isolation and parallel development. |
 | 2025-11-16 | Added 3 new epics (0.2.2.3, 0.2.3.1, 0.2.3.2); revised v0.3.0 scope | Comprehensive review of Plans 001-011 revealed critical gaps: UX discoverability, Python environment complexity, and lack of operational monitoring. User cannot discover features after installation even if initialization succeeds. Shifted v0.3.0 focus from ranking (which requires baseline usage) to foundational UX and reliability. |
@@ -314,44 +319,128 @@ So that I don't waste time sifting through tangential results.
 
 ---
 
-### Epic 0.3.0.2: Structured Conversation Summaries
+### Epic 0.3.0.2: Structured Conversation Summaries (Bridge Infrastructure Only)
 
-**Priority**: P1 (High value - prerequisite for Epic 0.3.0.1)
-**Status**: Proposed (Plan 014)
+**Priority**: P1 (High value - prerequisite for Epic 0.3.0.3)
+**Status**: Revised (Plan 014 - scope narrowed to bridge contract only)
 
 **User Story**:
-As a developer capturing conversation summaries,
-I want summaries structured with semantic content sections (decisions, rationale, references),
-So that future sessions can retrieve organized context instead of raw chronological chat logs.
+As a Cognee bridge consumer (future Copilot agents or extension features),
+I want a stable ingestion and retrieval contract for structured conversation summaries,
+So that I can store and retrieve organized context (decisions, rationale, references) regardless of where conversations happen.
 
 **Business Value**:
 
-- **User Impact**: Enables capturing conversation essence in queryable structured format instead of raw text
-- **Strategic Importance**: Foundation for metadata and ranking features (Epic 0.3.0.1); structured content is prerequisite for effective retrieval
-- **Measurable Success**: Users create structured summaries on demand; retrieval surfaces semantic sections (decisions, rationale) transparently
+- **User Impact**: Provides foundation for agent-driven memory (Epic 0.3.0.3) and future ranking/compaction (Epic 0.3.0.1)
+- **Strategic Importance**: Establishes bridge contract that multiple consumers can use; decouples storage format from UX surface
+- **Measurable Success**: Bridge contract documented and tested; structured summaries ingestible and retrievable via Python bridge
 
 **Dependencies**:
 
-- Epic 0.2.2.3 (users must discover capture workflow before adding structure)
-- Plan 014 defines and implements this epic
+- Epic 0.2.2.3 (operational transparency and reliability must be proven)
+- Plan 014 delivers this epic (scope narrowed to bridge only)
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] Users can create conversation summaries with structured schema (Topic, Context, Decisions, Rationale, Open Questions, Next Steps, References, Time Scope)
-- [ ] Summary generation triggered via `@cognee-memory` with iterative scope adjustment (default 15 turns, user can override)
-- [ ] Summaries ingested into Cognee with content-only plain-text format (metadata deferred to Epic 0.3.0.1)
-- [ ] Retrieval displays summaries in structured, readable format with transparency (Plan 013 policy)
-- [ ] Documentation explains summary structure and when to create summaries
+- [ ] Bridge contract documented (`DATAPOINT_SCHEMA.md`, `RETRIEVE_CONTRACT.md`) with structured summary schema (Topic, Context, Decisions, Rationale, Open Questions, Next Steps, References, Time Scope) plus metadata fields (topic_id, session_id, plan_id, status, timestamps)
+- [ ] `ingest.py --summary` accepts structured JSON and stores summaries as enriched text with embedded metadata (Cognee 0.3.4 fallback per §4.4.1)
+- [ ] `retrieve.py` returns structured JSON with metadata fields parsed from enriched text; handles mixed-mode (enriched summaries + legacy raw-text)
+- [ ] Bridge contract tests validate ingestion, retrieval, and mixed-mode handling
+- [ ] **OUT OF SCOPE**: @cognee-memory participant summarization (deferred - see Epic 0.3.0.3 rationale)
 
 **Constraints**:
 
 - Must maintain backward compatibility with existing raw-text memories
-- Should not require users to change existing capture workflows
-- Content-only in this epic; metadata (topic_id, session_id, plan_id, timestamps, status) introduced in Epic 0.3.0.1
+- Enriched-text fallback is temporary until Cognee exposes DataPoint APIs
+- Template versioning required; changes to section headings need synchronized updates across summaryTemplate.ts, ingest.py, retrieve.py
 
 **Status Notes**:
 
+- 2025-11-18: **SCOPE NARROWED** - Epic now focuses only on bridge infrastructure (ingestion/retrieval contract). @cognee-memory participant summarization removed from Plan 014 scope due to architectural mismatch: (1) Participant can only summarize its own turns, not broader Copilot agent conversations; (2) Retrieval path currently augments answers with LLM training data instead of constraining to stored memories. Strategic pivot: expose Cognee functions to Copilot agents instead (see Epic 0.3.0.3). Plan 014 Milestones 0/1/3/4 remain (bridge contract, schema, ingestion, retrieval); Milestone 2 (participant summarization) deferred pending Plan 019 feasibility analysis.
 - 2025-11-17: Epic updated to reflect Plan 014 scope accurately. Plan 014 delivers content structure (schema), Plan 015 delivers metadata infrastructure. Epic 0.3.0.2 focuses on content organization, Epic 0.3.0.1 adds intelligence layer (metadata, ranking, compaction).
+
+---
+
+### Epic 0.3.0.3: Agent-Driven Memory Integration
+
+**Priority**: P0 (Critical - addresses core architectural misalignment)
+**Status**: ✅ Unblocked - Plan 014.1 Complete (languageModelTools validated)
+
+**User Story**:
+As a developer using GitHub Copilot agents (@workspace, coding agent, etc.),
+I want those agents to automatically store summaries of our conversations and retrieve relevant past context,
+So that agents maintain continuity across sessions without me manually reconstructing context.
+
+**Business Value**:
+
+- **User Impact**: Enables the Master Product Objective's core promise - "eliminate repeated context reconstruction **for AI agents**" - by making agents memory-aware instead of requiring a separate memory participant
+- **Strategic Importance**: Corrects architectural mismatch where @cognee-memory cannot access broader Copilot conversations; aligns with VS Code's agent-centric chat model and officially supported tool surface
+- **Measurable Success**: Copilot agents store conversation summaries automatically; retrieve context when needed; users see continuity across sessions
+
+**Dependencies**:
+
+- **PREREQUISITE**: Epic 0.3.0.2 (bridge contract for structured summaries must exist)
+- **✅ RESOLVED**: Plan 014.1 confirmed `languageModelTools` as the supported Copilot integration path (2025-11-19)
+
+**Acceptance Criteria** (outcome-focused):
+
+**Tool Visibility & Discovery** (Plan 016 - Milestones 4-5):
+- [ ] Both tools (`cognee_storeMemory`, `cognee_retrieveMemory`) appear in VS Code "Configure Tools" dialog
+- [ ] Tools include UI visibility flags: `canBeReferencedInPrompt: true`, `toolReferenceName`, `icon`
+- [ ] Custom agents can reference tools via `#cogneeStoreSummary` and `#cogneeRetrieveMemory` autocomplete
+- [ ] Custom agent `.agent.md` files can declare tools in `tools: ['cogneeStoreSummary', 'cogneeRetrieveMemory']` front-matter
+- [ ] Tool confirmation messages show workspace context and describe operation clearly
+
+**Agent Retrieval Infrastructure** (Plan 016 - Milestones 1-3):
+- [ ] `CogneeContextProvider` service centralizes retrieval logic, enforces rate limits (max 2 concurrent, queue size 5, clamped to max 5/30)
+- [ ] `cogneeMemory.retrieveForAgent` command returns structured `CogneeContextEntry` responses (summaryText, decisions, metadata)
+- [ ] Access gated behind `cogneeMemory.agentAccess.enabled` workspace setting (default: disabled)
+- [ ] Enabling agent access registers tool contributions; disabling unregisters them to remove from Copilot's tool selection
+- [ ] Agent commands return structured retrieval results with metadata (topicId, planId, createdAt, score) when available
+
+**Tool Integration** (Plan 015 + 016):
+- [ ] Cognee contributes `languageModelTools` (`cognee_storeMemory`, `cognee_retrieveMemory`) via package.json
+- [ ] Tools implement `LanguageModelTool` interface with `prepareInvocation()` and `invoke()` methods
+- [ ] Tools proxy to internal commands (`cogneeMemory.ingestForAgent`, `cogneeMemory.retrieveForAgent`) for business logic
+- [ ] Direct command invocation preserved for non-Copilot VS Code extensions
+
+**Transparency & Audit** (Plan 016 - Milestone 7):
+- [ ] All tool invocations logged to Output channel with timestamp, query hash, result count, token usage
+- [ ] Status bar indicator shows "Cognee Agent Access: Enabled" when `agentAccess.enabled = true`
+- [ ] Status bar changes icon/color during active agent retrieval; click opens Output channel
+- [ ] Documentation explains tool integration model, privacy controls, opt-in workflow, and fallback support (direct commands for non-Copilot extensions, MCP as contingency)
+
+**Testing & Documentation** (Plan 016 - Milestones 8-9):
+- [ ] Reference test agent extension demonstrates round-trip store/retrieve integration
+- [ ] README includes "Using Cognee Tools with Custom Agents" section with `.agent.md` examples
+- [ ] AGENT_INTEGRATION.md provides comprehensive integration guide for third-party extension developers
+- [ ] Integration tests validate tool registration/unregistration, round-trip store→retrieve, error handling
+
+**Constraints**:
+
+- Must preserve workspace-local privacy (no agent can access memories from other workspaces)
+- Tool metadata (name/title/description) must accurately describe privacy behaviors and workspace isolation
+- LLM usage restricted to formatting/structuring retrieved memories, not generating new content from training data
+- Rate limiting prevents subprocess overload from multiple simultaneous agent requests
+
+**Resolved Questions (from Plan 014.1)**:
+
+1. ✅ **Tool Surface**: `languageModelTools` is the officially supported Copilot integration mechanism (vs undocumented `executeCommand`)
+2. ✅ **Authorization**: Workspace-global access model with opt-in setting; tool registration/unregistration enforces enable/disable
+3. ⏳ **Chat History Access**: Deferred - agents pass conversation context as tool arguments rather than extension accessing history directly
+4. ✅ **Privacy Controls**: Tool contribution clearly documents workspace-wide access; enabling agent access shows status bar indicator
+5. ✅ **Rate Limiting**: `CogneeContextProvider` enforces concurrency limits (2 concurrent, queue size 5) with fast-fail on overflow
+
+**Status Notes**:
+
+- 2025-11-19: **✅ READY FOR IMPLEMENTATION** - Plan 016 merged scope complete (agent retrieval + UI-visible tools), pending critic review. Plan 016 combines:
+  - **Agent Retrieval Infrastructure**: `CogneeContextProvider` service, `retrieveForAgent` command, structured `CogneeContextEntry` responses, concurrency/rate limiting
+  - **UI-Visible Tools**: Both `storeMemory` and `retrieveMemory` tools configured with `canBeReferencedInPrompt: true`, `toolReferenceName` properties, and `icon` for Configure Tools UI visibility
+  - **Custom Agent Integration**: Tools support `#` autocomplete, `.agent.md` front-matter references, confirmation messages, comprehensive documentation
+  - **Transparency**: Output channel logs, status bar indicator, audit trail for all agent activity
+  - Plan 015 (agent ingestion) is prerequisite; Plan 014 (bridge contract) is blocking dependency
+- 2025-11-19: Plan 014.1 complete. Architecture updated to adopt `languageModelTools` as primary integration path (ADR: "Copilot Tool Surface vs Direct Commands"). Tool entry command proxies into existing headless commands, preserving command/MCP fallback strategies.
+- 2025-11-18: **EPIC CREATED** - Strategic pivot from @cognee-memory participant-driven summarization to agent-driven memory integration. Addresses two critical issues discovered in v0.3.1 user testing: (1) @cognee-memory cannot summarize conversations it wasn't part of (chatContext.history is participant-scoped); (2) retrieval augments answers with LLM training data instead of constraining to stored memories. Solution: expose Cognee functions so agents manage their own memory.
 
 ---
 

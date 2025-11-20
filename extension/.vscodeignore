@@ -46,6 +46,11 @@ test-output.txt
 **/__pycache__/**
 **/*.pyc
 
+# Python virtual environments (bridge development)
+bridge/.venv/**
+bridge/venv/**
+bridge/.pytest_cache/**
+
 # Environment and secret files
 .env
 .env.*

@@ -15,8 +15,8 @@ export function run(): Promise<void> {
 
 	return new Promise((resolve, reject) => {
 		try {
-			// Find all test files
-			const files = globSync('**/**.test.js', { cwd: testsRoot });
+			// Find all test files (excluding test-agent-scenarios which requires special runner)
+			const files = globSync('**/**.test.js', { cwd: testsRoot, ignore: ['**/test-agent-scenarios.test.js'] });
 
 			// Add files to the test suite
 			files.forEach((f: string) => mocha.addFile(path.resolve(testsRoot, f)));

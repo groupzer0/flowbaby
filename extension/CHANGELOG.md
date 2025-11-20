@@ -5,7 +5,65 @@ All notable changes to the Cognee Chat Memory extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2025-11-20
+
+### Fixed - Plan 016.1: Tool Lifecycle and Bridge Timeouts Hotfix
+
+**Bug Fixes**:
+
+- **Tool Lifecycle UI Desync**: Fixed issue where Configure Tools dialog showed stale enablement state when toggling tools on/off. Tools now register unconditionally at extension activation; VS Code's Configure Tools UI is the sole authorization mechanism (no redundant workspace setting).
+- **Bridge Timeout Opacity**: Added comprehensive diagnostic logging to Python bridge scripts (ingest.py, retrieve.py) with `[PROGRESS]`, `[WARNING]`, and `[ERROR]` markers. Users now see step-by-step progress in Output channel when bridge operations are slow or fail.
+- **Redundant Authorization**: Removed `cogneeMemory.agentAccess.*` workspace settings entirely. Simplified authorization model: users enable/disable tools via Configure Tools UI only.
+
+**Breaking Changes**:
+
+- Removed settings: `cogneeMemory.agentAccess.enabled`, `cogneeMemory.agentAccess.maxResultsDefault`, `cogneeMemory.agentAccess.maxTokensDefault`, `cogneeMemory.agentAccess.maxConcurrentRequests`, `cogneeMemory.agentAccess.rateLimitPerMinute`
+- Status bar "Cognee Agent Access" indicator removed (Configure Tools dialog provides feedback)
+- Error code `ACCESS_DISABLED` no longer returned (tools always registered)
+
+**Technical Details**:
+
+- Bridge scripts emit structured error payloads with error codes: `LLM_API_ERROR`, `COGNEE_SDK_ERROR`, `PYTHON_ENV_ERROR`, `ONTOLOGY_LOAD_ERROR`
+- TypeScript client (cogneeClient.ts) parses stderr for diagnostic markers and surfaces at appropriate log levels (INFO/ERROR/WARN)
+- Fixed sys module import shadowing bug in retrieve.py
+- Test suite updated to reflect new authorization model
+
+**User Impact**:
+
+- Simpler authorization: single source of truth (Configure Tools)
+- Better debugging: diagnostic logs visible in Output > "Cognee Chat Memory" channel
+- Faster resolution of bridge issues: progress markers identify exactly where operations block
+
 ## [0.3.2] - 2025-11-19
+
+### Fixed - Plan 016.1: Tool Lifecycle and Bridge Timeouts Hotfix
+
+**Bug Fixes**:
+
+- **Tool Lifecycle UI Desync**: Fixed issue where Configure Tools dialog showed stale enablement state when toggling tools on/off. Tools now register unconditionally at extension activation; VS Code's Configure Tools UI is the sole authorization mechanism (no redundant workspace setting).
+- **Bridge Timeout Opacity**: Added comprehensive diagnostic logging to Python bridge scripts (ingest.py, retrieve.py) with `[PROGRESS]`, `[WARNING]`, and `[ERROR]` markers. Users now see step-by-step progress in Output channel when bridge operations are slow or fail.
+- **Redundant Authorization**: Removed `cogneeMemory.agentAccess.*` workspace settings entirely. Simplified authorization model: users enable/disable tools via Configure Tools UI only.
+
+**Breaking Changes**:
+
+- Removed settings: `cogneeMemory.agentAccess.enabled`, `cogneeMemory.agentAccess.maxResultsDefault`, `cogneeMemory.agentAccess.maxTokensDefault`, `cogneeMemory.agentAccess.maxConcurrentRequests`, `cogneeMemory.agentAccess.rateLimitPerMinute`
+- Status bar "Cognee Agent Access" indicator removed (Configure Tools dialog provides feedback)
+- Error code `ACCESS_DISABLED` no longer returned (tools always registered)
+
+**Technical Details**:
+
+- Bridge scripts emit structured error payloads with error codes: `LLM_API_ERROR`, `COGNEE_SDK_ERROR`, `PYTHON_ENV_ERROR`, `ONTOLOGY_LOAD_ERROR`
+- TypeScript client (cogneeClient.ts) parses stderr for diagnostic markers and surfaces at appropriate log levels (INFO/ERROR/WARN)
+- Fixed sys module import shadowing bug in retrieve.py
+- Test suite updated to reflect new authorization model
+
+**User Impact**:
+
+- Simpler authorization: single source of truth (Configure Tools)
+- Better debugging: diagnostic logs visible in Output > "Cognee Chat Memory" channel
+- Faster resolution of bridge issues: progress markers identify exactly where operations block
+
+## [0.3.1] - 2025-11-19
 
 ### Added - Plan 015: Agent Ingestion Command
 
@@ -40,6 +98,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Validates all ingestion scenarios (valid, invalid, access control)
   - Automated test suite with pass/fail reporting
   - Can be used as template for custom agent development
+
+### Added - Plan 016: Agent Retrieval and UI-Visible Extension Tools
+
+- **Agent Retrieval API**: `cogneeMemory.retrieveForAgent` command enables agents to query Cognee knowledge graph
+  - Structured JSON request/response with `CogneeContextRequest`/`CogneeContextResponse` types
+  - Returns metadata-rich entries (topic, topicId, planId, score, decisions, timestamps)
+  - Concurrency limiting (max 2 in-flight requests, configurable up to 5)
+  - Rate limiting (max 10 requests/minute, configurable up to 30)
+  - Graceful degradation for legacy memories (null metadata fields)
+- **CogneeContextProvider Service**: Centralized retrieval infrastructure with architectural guardrails
+  - FIFO request queueing with concurrency enforcement
+  - Per-minute rate limiting with sliding window
+  - Structured error responses (ACCESS_DISABLED, RATE_LIMIT_EXCEEDED, QUEUE_FULL, BRIDGE_TIMEOUT, INVALID_REQUEST)
+  - Settings clamping with safe upper bounds (prevents misconfiguration)
+- **UI-Visible Language Model Tools**: Both tools appear in VS Code's "Configure Tools" dialog
+  - `cognee_storeMemory` (`#cogneeStoreSummary`) - Store conversation summaries
+  - `cognee_retrieveMemory` (`#cogneeRetrieveMemory`) - Retrieve relevant memories
+  - Tools support `#` autocomplete in chat and `.agent.md` front-matter references
+  - Atomic lifecycle: both tools register/unregister together when `agentAccess.enabled` toggles
+  - Icon support for visual identity (`$(database)` and `$(search)`)
+- **Custom Agent Integration**: Full support for custom `.agent.md` files
+  - Tools reference name format: `tools: ['cogneeStoreSummary', 'cogneeRetrieveMemory']`
+  - Confirmation messages for transparency (optional, depends on user trust settings)
+  - Retrieve tool returns BOTH narrative markdown AND verbatim JSON payload
+- **@cognee-memory Participant Refactor**: Now uses shared `CogneeContextProvider`
+  - Consistent retrieval behavior across participant and tools
+  - Leverages centralized concurrency/rate limiting
+  - Enhanced metadata display (topicId, planId, score when available)
+- **Transparency Indicators**: All agent activity is auditable
+  - Output channel logs every retrieval/ingestion with timestamps, query hashes, result counts
+  - Status bar indicator shows "Cognee Agent Access: Enabled" with spinner during operations
+  - Click behavior opens Output channel for inspection
+- **Enhanced Documentation**:
+  - `AGENT_INTEGRATION.md` extended with retrieval examples, tool integration guide, error code reference
+  - `README.md` includes "Using Cognee Tools with Custom Agents" section with `.agent.md` examples
+  - Complete TypeScript interfaces in `types/agentIntegration.ts`
+- **Agent Access Settings**: Additional configuration for retrieval behavior
+  - `cogneeMemory.agentAccess.maxResultsDefault` (default: 5)
+  - `cogneeMemory.agentAccess.maxTokensDefault` (default: 4000)
+  - `cogneeMemory.agentAccess.maxConcurrentRequests` (default: 2, max: 5)
+  - `cogneeMemory.agentAccess.rateLimitPerMinute` (default: 10, max: 30)
+
+### Changed
+
+- **Minimum VS Code Version**: Requires VS Code 1.106+ for `canBeReferencedInPrompt`/`toolReferenceName` support
+- **Extension Activation**: CogneeContextProvider initialization happens after CogneeClient setup
+- **Participant Behavior**: @cognee-memory now routes through CogneeContextProvider (no breaking changes to user experience)
 
 ### Added - Test Coverage Enhancements (from previous release)
 

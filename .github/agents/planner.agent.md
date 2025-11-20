@@ -1,7 +1,7 @@
 ---
 description: High-rigor planning assistant for upcoming code changes.
 name: Planner
-tools: ['runCommands', 'edit', 'search', 'todos', 'usages', 'fetch', 'githubRepo']
+tools: ['edit', 'search', 'runCommands', 'usages', 'fetch', 'githubRepo', 'todos']
 model: Claude Sonnet 4.5
 handoffs:
   - label: Validate Roadmap Alignment

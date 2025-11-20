@@ -76,10 +76,12 @@ async def ingest_summary(
         Dictionary with success status, ingested_chars, timestamp, metadata
     """
     try:
+        print(f"[PROGRESS] Starting summary ingestion: topic={summary_json.get('topic', 'unknown')[:50]}", file=sys.stderr)
         metrics = {}
         overall_start = perf_counter()
         
         # Step 1: Load workspace .env file
+        print("[PROGRESS] Loading .env file", file=sys.stderr, flush=True)
         step_start = perf_counter()
         workspace_dir = Path(workspace_path)
         env_file = workspace_dir / '.env'
@@ -99,6 +101,7 @@ async def ingest_summary(
         metrics['load_env_sec'] = perf_counter() - step_start
         
         # Step 2: Import cognee and configure directories
+        print("[PROGRESS] Importing cognee SDK", file=sys.stderr, flush=True)
         step_start = perf_counter()
         
         # Redirect stdout to suppress Cognee's print statements
@@ -111,12 +114,14 @@ async def ingest_summary(
             sys.stdout = old_stdout
         
         # Configure workspace-local storage directories
+        print("[PROGRESS] Configuring workspace storage directories", file=sys.stderr, flush=True)
         cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
         cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
         
         metrics['init_cognee_sec'] = perf_counter() - step_start
         
         # Step 3: Configure LLM provider and API key
+        print("[PROGRESS] Configuring LLM provider (OpenAI)", file=sys.stderr, flush=True)
         step_start = perf_counter()
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
@@ -202,6 +207,7 @@ async def ingest_summary(
         metrics['create_summary_text_sec'] = perf_counter() - step_start
         
         # Step 6: Add enriched summary text to dataset
+        print(f"[PROGRESS] Adding summary to dataset: {len(summary_text)} chars", file=sys.stderr)
         step_start = perf_counter()
         
         await cognee.add(
@@ -212,6 +218,7 @@ async def ingest_summary(
         metrics['add_sec'] = perf_counter() - step_start
         
         # Step 7: Cognify with dataset
+        print(f"[PROGRESS] Running cognify (this may take 30-60s)", file=sys.stderr)
         step_start = perf_counter()
         
         await cognee.cognify(datasets=[dataset_name])
@@ -237,27 +244,39 @@ async def ingest_summary(
         }
         
     except ImportError as e:
-        return {
+        error_payload = {
             'success': False,
+            'error_code': 'PYTHON_ENV_ERROR',
+            'error_type': 'ImportError',
+            'message': f'Failed to import required module: {str(e)}',
             'error': f'Failed to import required module: {str(e)}'
         }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
     except KeyError as e:
-        return {
+        error_payload = {
             'success': False,
+            'error_code': 'COGNEE_SDK_ERROR',
+            'error_type': 'ValidationError',
+            'message': f'Invalid summary JSON structure: missing field {str(e)}',
             'error': f'Invalid summary JSON structure: missing field {str(e)}'
         }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
     except Exception as e:
-        error_details = {
-            'exception_type': type(e).__name__,
-            'exception_message': str(e),
-            'dataset_name': dataset_name if 'dataset_name' in locals() else 'unknown',
-            'has_metadata': 'metadata' in locals()
-        }
-        print(f"Summary ingestion error details: {json.dumps(error_details, indent=2)}", file=sys.stderr)
-        return {
+        import traceback
+        error_payload = {
             'success': False,
+            'error_code': 'COGNEE_SDK_ERROR',
+            'error_type': type(e).__name__,
+            'message': str(e),
+            'traceback': traceback.format_exc(),
+            'dataset_name': dataset_name if 'dataset_name' in locals() else 'unknown',
+            'has_metadata': 'metadata' in locals(),
             'error': f'Summary ingestion failed ({type(e).__name__}): {str(e)}'
         }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
 
 
 async def ingest_conversation(
@@ -279,11 +298,13 @@ async def ingest_conversation(
         Dictionary with success status, ingested_chars, timestamp, or error
     """
     try:
+        print(f"[PROGRESS] Starting conversation ingestion: user_msg={user_message[:50]}...", file=sys.stderr)
         # Milestone 3 & 4: Initialize metrics dictionary and start overall timing
         metrics = {}
         overall_start = perf_counter()
         
         # Step 1: Load workspace .env file
+        print("[PROGRESS] Loading .env file", file=sys.stderr, flush=True)
         step_start = perf_counter()
         workspace_dir = Path(workspace_path)
         env_file = workspace_dir / '.env'
@@ -303,6 +324,7 @@ async def ingest_conversation(
         metrics['load_env_sec'] = perf_counter() - step_start
         
         # Step 2: Import cognee and configure directories
+        print("[PROGRESS] Importing cognee SDK", file=sys.stderr, flush=True)
         step_start = perf_counter()
         
         # Redirect stdout to suppress Cognee's print statements
@@ -318,12 +340,14 @@ async def ingest_conversation(
             sys.stdout = old_stdout
         
         # Configure workspace-local storage directories BEFORE any other cognee operations
+        print("[PROGRESS] Configuring workspace storage directories", file=sys.stderr, flush=True)
         cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
         cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
         
         metrics['init_cognee_sec'] = perf_counter() - step_start
         
         # Step 3: Configure LLM provider and API key
+        print("[PROGRESS] Configuring LLM provider (OpenAI)", file=sys.stderr, flush=True)
         step_start = perf_counter()
         
         # Configure Cognee with API key
@@ -342,22 +366,29 @@ async def ingest_conversation(
         ontology_path = Path(__file__).parent / 'ontology.ttl'
         
         # Validate ontology exists and is parseable
+        print(f"[PROGRESS] Checking ontology file: {ontology_path}", file=sys.stderr)
         ontology_valid = False
         if ontology_path.exists():
             try:
+                print("[PROGRESS] Parsing ontology with RDFLib", file=sys.stderr, flush=True)
                 # Validate RDFLib can parse the ontology
                 from rdflib import Graph
                 g = Graph()
                 g.parse(str(ontology_path), format='turtle')
                 ontology_valid = True
                 # Log success for debugging
-                print(f"Ontology loaded successfully: {ontology_path}", file=sys.stderr)
+                print(f"[PROGRESS] Ontology loaded successfully: {len(g)} triples", file=sys.stderr)
             except Exception as e:
                 # Log warning but continue without ontology (graceful degradation)
-                print(f"Warning: Ontology parse failed, proceeding without ontology grounding: {e}", file=sys.stderr)
+                error_payload = {
+                    'error_code': 'ONTOLOGY_LOAD_ERROR',
+                    'error_type': type(e).__name__,
+                    'message': str(e)
+                }
+                print(f"[WARNING] Ontology parse failed: {json.dumps(error_payload)}", file=sys.stderr)
                 ontology_valid = False
         else:
-            print(f"Warning: Ontology file not found at {ontology_path}, proceeding without ontology grounding", file=sys.stderr)
+            print(f"[WARNING] Ontology file not found at {ontology_path}", file=sys.stderr)
         
         # Generate timestamp
         timestamp = datetime.now().isoformat()
@@ -374,6 +405,7 @@ Assistant answered: {assistant_message}
 Metadata: timestamp={timestamp}, importance={importance}"""
         
         # Step 5: Add data to this workspace's dataset
+        print(f"[PROGRESS] Adding conversation to dataset: {len(conversation)} chars", file=sys.stderr)
         step_start = perf_counter()
         
         # 3. Add data to this workspace's dataset (Task 3: using correct parameter names)
@@ -385,6 +417,7 @@ Metadata: timestamp={timestamp}, importance={importance}"""
         metrics['add_sec'] = perf_counter() - step_start
         
         # Step 6: Cognify with datasets parameter
+        print(f"[PROGRESS] Running cognify (this may take 30-60s)", file=sys.stderr)
         step_start = perf_counter()
         
         # 4. Cognify with datasets parameter (Task 3: correct parameter, no ontology_file_path kwarg)
@@ -414,24 +447,30 @@ Metadata: timestamp={timestamp}, importance={importance}"""
         }
         
     except ImportError as e:
-        return {
+        error_payload = {
             'success': False,
+            'error_code': 'PYTHON_ENV_ERROR',
+            'error_type': 'ImportError',
+            'message': f'Failed to import required module: {str(e)}',
             'error': f'Failed to import required module: {str(e)}'
         }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
     except Exception as e:
-        # Task 5: Structured error logging with exception metadata
-        error_details = {
-            'exception_type': type(e).__name__,
-            'exception_message': str(e),
+        import traceback
+        error_payload = {
+            'success': False,
+            'error_code': 'COGNEE_SDK_ERROR',
+            'error_type': type(e).__name__,
+            'message': str(e),
+            'traceback': traceback.format_exc(),
             'dataset_name': dataset_name if 'dataset_name' in locals() else 'unknown',
             'conversation_length': len(conversation) if 'conversation' in locals() else 0,
-            'ontology_validated': ontology_valid if 'ontology_valid' in locals() else False
-        }
-        print(f"Ingestion error details: {json.dumps(error_details, indent=2)}", file=sys.stderr)
-        return {
-            'success': False,
+            'ontology_validated': ontology_valid if 'ontology_valid' in locals() else False,
             'error': f'Ingestion failed ({type(e).__name__}): {str(e)}'
         }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
 
 
 def main():

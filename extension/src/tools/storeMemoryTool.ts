@@ -4,9 +4,9 @@
  * Implements VS Code's LanguageModelTool interface to allow Copilot agents
  * to store conversation summaries in Cognee knowledge graph.
  * 
- * Tool registration follows opt-in lifecycle:
- * - Registered when cogneeMemory.agentAccess.enabled = true
- * - Unregistered when setting disabled
+ * Tool registration and authorization (Plan 016.1):
+ * - Registered unconditionally at extension activation
+ * - Authorization controlled by VS Code Configure Tools UI
  * - All invocations logged to audit trail
  */
 
@@ -50,23 +50,9 @@ export class StoreMemoryTool implements vscode.LanguageModelTool<StoreMemoryTool
         this.outputChannel.appendLine(`  Context length: ${options.input.context.length} chars`);
 
         try {
-            // Check if agent access is enabled
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
-            const agentAccessEnabled = config.get<boolean>('agentAccess.enabled', false);
-
-            if (!agentAccessEnabled) {
-                const errorMsg = 'Agent access is disabled. Enable cogneeMemory.agentAccess.enabled setting.';
-                this.outputChannel.appendLine(`  ❌ BLOCKED: ${errorMsg}`);
-                
-                return new vscode.LanguageModelToolResult([
-                    new vscode.LanguageModelTextPart(JSON.stringify({
-                        success: false,
-                        error: errorMsg,
-                        errorCode: 'ACCESS_DISABLED'
-                    }))
-                ]);
-            }
-
+            // Plan 016.1: No access check needed - Configure Tools is sole opt-in
+            // If this tool is invoked, user has enabled it via Configure Tools UI
+            
             // Prepare payload for cogneeMemory.ingestForAgent command
             const payload = {
                 topic: options.input.topic,

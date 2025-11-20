@@ -277,6 +277,68 @@ For legacy memories (captured before Plan 014):
 - Command Palette → "Cognee: Clear Workspace Memory"
 - Deletes all captured conversations for current workspace (requires confirmation)
 
+## For Agent Developers
+
+Cognee Chat Memory provides an API for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured summaries programmatically.
+
+### Use Cases
+
+- **Agent Continuity**: Agents can maintain context across sessions without requiring manual capture
+- **Multi-Agent Collaboration**: Different agents can share memory via a common knowledge base
+- **Custom Workflows**: Extensions can build custom agent memory patterns
+
+### Agent Ingestion API
+
+The `cogneeMemory.ingestForAgent` command allows agents to write structured summaries to Cognee:
+
+```typescript
+const payload = {
+  topic: "Plan 015 Implementation Discussion",
+  context: "User discussed agent ingestion command design with architect.",
+  decisions: ["Use VS Code commands as primary surface", "Implement workspace-global access model"],
+  rationale: ["Commands are accessible to Copilot agents", "VS Code doesn't expose caller identity"],
+  metadata: {
+    topicId: "plan-015-implementation",
+    sessionId: "session-2025-11-19-001",
+    planId: "015",
+    status: "Active",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+};
+
+const responseJson = await vscode.commands.executeCommand<string>(
+  'cogneeMemory.ingestForAgent',
+  JSON.stringify(payload)
+);
+
+const response = JSON.parse(responseJson);
+
+if (response.success) {
+  console.log(`✅ Ingested ${response.ingested_chars} characters`);
+} else {
+  console.error(`❌ Error: ${response.error} (${response.errorCode})`);
+}
+```
+
+### Configuration
+
+Cognee tools are controlled exclusively through VS Code's **Configure Tools** UI (see Quick Start below). No additional workspace settings are required for authorization.
+
+### Documentation
+
+- **Complete API Guide**: [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md)
+  - TypeScript examples and error handling
+  - Security model and best practices
+  - Troubleshooting guide
+- **Bridge Contract**: [bridge/INGEST_CONTRACT.md](./bridge/INGEST_CONTRACT.md)
+  - JSON schema specification
+  - Error codes reference
+  - Performance characteristics
+- **Test Agent**: [test-agent/](../test-agent/)
+  - Reference implementation validating all scenarios
+  - Can be used as template for custom agents
+
 ## Python Environment
 
 The extension requires Python 3.8+ with the following packages:
@@ -338,6 +400,91 @@ Access settings via **File → Preferences → Settings → Extensions → Cogne
 **Examples**:
 - To disable memory temporarily, set `cogneeMemory.enabled` to `false` in settings
 - To enable experimental auto-capture of @cognee-memory conversations (feedback loop), set `cogneeMemory.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
+
+## Using Cognee Tools with Custom Agents
+
+Cognee Chat Memory provides **Language Model Tools** that allow GitHub Copilot and custom agents to autonomously access workspace memory. These tools appear in VS Code's "Configure Tools" dialog and can be referenced in custom agent configurations.
+
+### Quick Start
+
+1. **Enable Tools via Configure Tools UI**:
+   - Open Copilot chat → Click "Tools" (⚙️ icon) → "Configure Tools"
+   - Find "Store Memory in Cognee" and "Retrieve Cognee Memory"
+   - Toggle tools on/off individually (disabled by default for privacy)
+
+2. **Use in Chat**:
+   - Type `#cognee` to see autocomplete suggestions
+   - Select `#cogneeStoreSummary` or `#cogneeRetrieveMemory`
+   - Tools appear only when enabled via Configure Tools
+
+3. **Transparency**:
+   - All tool invocations logged in Output channel ("Cognee Agent Activity")
+   - Configure Tools UI provides visual feedback for tool state
+
+### Custom Agent Example
+
+Create a `.agent.md` file in your workspace to define a memory-aware agent:
+
+```markdown
+---
+name: Memory-Aware Code Assistant
+description: Copilot assistant with access to workspace memory
+tools: ['search', 'cogneeStoreSummary', 'cogneeRetrieveMemory']
+---
+
+You are a code assistant with access to workspace-specific memory.
+
+When the user asks about past decisions or implementations:
+1. Use #cogneeRetrieveMemory to search for relevant context
+2. Ground your answer in the retrieved memories
+3. If no memories exist, use your training data but clarify it's not workspace-specific
+
+When the user completes an important implementation or makes a decision:
+1. Offer to store a summary using #cogneeStoreSummary
+2. Include topic, context, and key decisions in the summary
+```
+
+### Available Tools
+
+#### Store Memory Tool (`#cogneeStoreSummary`)
+
+Stores conversation summaries in Cognee knowledge graph.
+
+**Parameters**:
+- `topic` (required): Summary title
+- `context` (required): Summary description
+- `decisions` (optional): Key decisions made
+- `rationale` (optional): Reasoning behind decisions
+- `metadata` (optional): Plan ID, status, etc.
+
+#### Retrieve Memory Tool (`#cogneeRetrieveMemory`)
+
+Searches Cognee knowledge graph for relevant memories.
+
+**Parameters**:
+- `query` (required): Natural language search query
+- `maxResults` (optional): Max results to return (default: 3, max: 10)
+
+**Returns**: Both narrative markdown and structured JSON for agent parsing.
+
+### Agent Integration Settings
+
+### Transparency
+
+When agents use Cognee, you see:
+
+- **Output Channel**: All tool invocations logged in "Cognee Agent Activity"
+- **Configure Tools UI**: Visual feedback for which tools are enabled/disabled
+- **Chat Autocomplete**: `#cognee*` commands only appear when tools are enabled
+
+### For Extension Developers
+
+See [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md) for:
+- Complete API documentation with TypeScript examples
+- Command signatures (`cogneeMemory.ingestForAgent`, `cogneeMemory.retrieveForAgent`)
+- Error codes and handling strategies
+- Request/response schemas
+- Testing and troubleshooting guides
 
 ## Troubleshooting
 

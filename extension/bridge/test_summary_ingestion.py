@@ -28,29 +28,23 @@ def test_summary_ingestion(workspace_path: str) -> bool:
     Returns:
         bool: True if test passes, False otherwise
     """
-    # Create sample summary JSON
+    # Create sample summary JSON (camelCase to match TypeScript interface)
     summary_json = {
         "workspace_path": workspace_path,
         "topic": "Test Summary Ingestion",
         "context": "Testing Plan 014 Milestone 3 implementation",
         "decisions": ["Use enriched text format", "Embed metadata in text"],
-        "rationale": {
-            "enriched_text": "Cognee 0.3.4 doesn't expose DataPoint class"
-        },
-        "open_questions": [],
-        "next_steps": ["Implement Milestone 4 retrieval"],
+        "rationale": ["Cognee 0.3.4 doesn't expose DataPoint class"],
+        "openQuestions": [],
+        "nextSteps": ["Implement Milestone 4 retrieval"],
         "references": ["Plan 014 documentation"],
-        "time_scope": {
-            "start": "2025-11-18T11:00:00Z",
-            "end": "2025-11-18T11:30:00Z",
-            "turn_count": 10
-        },
-        "topic_id": "test-summary-ingestion",
-        "session_id": "test-session-001",
-        "plan_id": "014",
-        "status": "active",
-        "created_at": datetime.now().isoformat() + "Z",
-        "updated_at": datetime.now().isoformat() + "Z"
+        "timeScope": "2025-11-18T11:00:00Z to 2025-11-18T11:30:00Z (10 turns)",
+        "topicId": "test-summary-ingestion",
+        "sessionId": "test-session-001",
+        "planId": "014",
+        "status": "Active",
+        "createdAt": datetime.now().isoformat() + "Z",
+        "updatedAt": datetime.now().isoformat() + "Z"
     }
     
     # Serialize to JSON string
@@ -61,7 +55,7 @@ def test_summary_ingestion(workspace_path: str) -> bool:
     
     print(f"Testing summary ingestion to workspace: {workspace_path}")
     print(f"Summary topic: {summary_json['topic']}")
-    print(f"Topic ID: {summary_json['topic_id']}")
+    print(f"Topic ID: {summary_json['topicId']}")
     
     # Determine Python path (prefer venv if exists)
     venv_python = Path(workspace_path) / '.venv' / 'bin' / 'python'
@@ -110,9 +104,9 @@ def test_summary_ingestion(workspace_path: str) -> bool:
         # Verify metadata in response
         if 'metadata' in response:
             metadata = response['metadata']
-            assert metadata['topic_id'] == summary_json['topic_id']
-            assert metadata['session_id'] == summary_json['session_id']
-            assert metadata['plan_id'] == summary_json['plan_id']
+            assert metadata['topic_id'] == summary_json['topicId']
+            assert metadata['session_id'] == summary_json['sessionId']
+            assert metadata['plan_id'] == summary_json['planId']
             assert metadata['status'] == summary_json['status']
             print(f"\n✅ Metadata validated:")
             print(f"   - Topic ID: {metadata['topic_id']}")

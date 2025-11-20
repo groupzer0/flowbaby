@@ -1,7 +1,7 @@
 ---
 description: DevOps specialist responsible for packaging, versioning, deployment readiness, and release execution with user confirmation.
 name: DevOps
-tools: ['search', 'changes', 'problems', 'runCommands', 'edit/createFile', 'edit/editFiles']
+tools: ['edit/createFile', 'edit/editFiles', 'search', 'runCommands', 'problems', 'changes']
 model: Claude Sonnet 4.5
 handoffs:
   - label: Request Implementation Fixes
