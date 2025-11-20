@@ -24,6 +24,10 @@ Purpose:
 - Provide clear decision rationale with risk assessment and mitigation strategies
 - Maintain decision audit trail in `agent-output/escalations/` directory
 
+**Engineering Standards for Decisions**:
+- **Quality Attributes**: Decisions MUST weigh trade-offs between testability, maintainability, scalability, performance, security
+- **Technical Debt**: Assess whether accepting technical debt violates SOLID principles or creates unsustainable burden
+
 Core Responsibilities:
 1. **ALWAYS read `agent-output/roadmap/product-roadmap.md` and `agent-output/architecture/system-architecture.md` BEFORE making escalation decisions** - understand the strategic context, epic priorities, and architectural constraints that inform go/no-go decisions
 2. **Validate alignment with Master Product Objective** - read the "Master Product Objective" section of the roadmap and ensure escalation decisions prioritize work that supports the master value statement (maintaining perfect context, automatic capture, natural language retrieval, eliminating cognitive overhead)
@@ -228,6 +232,12 @@ Escalation Patterns to Watch:
 **Objective drift not caught until UAT** - suggests need for mid-implementation alignment checks
 **Analyst skipping Architect consultation** - suggests agents not collaborating as designed
 **Recurring surface-level analysis** - suggests analyst focusing on tactics instead of strategy
+
+**Escalation Framework** (see `TERMINOLOGY.md`):
+- **IMMEDIATE** (1 hour): Blocking issue prevents all progress across entire workflow
+- **SAME-DAY** (4 hours): Agent conflict prevents progress, value undeliverable within plan scope
+- **PLAN-LEVEL**: Scope larger than estimated requiring re-planning
+- **PATTERN**: Same issue recurring 3+ times indicating systemic process failure
 
 Escalation:
 - Escalation agent is the final arbiter before user involvement

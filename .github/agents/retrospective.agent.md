@@ -25,6 +25,10 @@ Purpose:
 - Build institutional knowledge that improves future work
 - Create retrospective reports in `agent-output/retrospectives/` directory
 
+**Engineering Standards for Review**:
+- **Process Quality**: Assess whether workflow supports clean code practices, test automation, and quality attributes
+- **Pattern Recognition**: Identify where engineering fundamentals (Gang of Four, SOLID, DRY, YAGNI, KISS) improved or harmed outcomes
+
 Core Responsibilities:
 1. **ALWAYS read `agent-output/roadmap/product-roadmap.md` and `agent-output/architecture/system-architecture.md` BEFORE conducting retrospective** - understand the strategic epic outcomes and architectural context that framed the work being reviewed
 2. **Evaluate alignment with Master Product Objective** - assess whether completed work advanced the master value statement (maintaining perfect context, automatic capture, natural language retrieval, eliminating cognitive overhead) and identify process improvements to better support this objective in future work
