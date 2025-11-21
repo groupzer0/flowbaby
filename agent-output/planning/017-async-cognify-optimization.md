@@ -3,27 +3,56 @@
 **Plan ID**: 017
 **Target Release**: v0.3.3
 **Created**: 2025-11-19
-**Status**: Planning
+**Updated**: 2025-11-20 (Architecture alignment: manual capture async, staged messaging)
+**Status**: Ready for Implementer
 **Epic Alignment**: Epic 0.3.0.3 - Agent-Driven Memory Integration (performance optimization)
 **Related Plans**: Plan 016 (Agent Retrieval and Tools), Plan 016.1 (Tool Lifecycle Hotfix)
-**Requires Analysis**: Yes - Python async subprocess management, error notification patterns
-**Requires Architecture**: Yes - Background process lifecycle, state tracking, error propagation
+**Requires Analysis**: ✅ Complete - See `agent-output/analysis/017-async-cognify-optimization-analysis.md`
+**Requires Architecture**: ✅ Complete - See `agent-output/architecture/017-async-cognify-optimization-architecture-findings.md` and `system-architecture.md` §9 Decisions 2025-11-20 09:45, 12:05, 13:05, 13:25, 13:45
+**Requires Critique**: ✅ Complete - See `agent-output/critiques/017-async-cognify-optimization-critique.md`
+**Architecture Requirements**: MUST implement per architectural constraints (mode split, ledger format, concurrency limits, dual-notification discipline with independent per-outcome throttling, staged messaging for ALL ingestion flows)
+
+---
+
+## Architectural Constraints (MUST BE SATISFIED)
+
+Per `agent-output/architecture/017-async-cognify-optimization-architecture-findings.md`, the following requirements are **MANDATORY** and must be reflected in all milestones:
+
+1. **Bridge Mode Split**: `ingest.py` MUST accept `--mode sync|add-only|cognify-only` with identical argument handling
+2. **Status Stubs**: Cognify-only mode MUST write `{operation_id, success, error_code, error_message, remediation, elapsed_ms}` to `.cognee/background_ops/<operation_id>.json`
+3. **Durable Ledger**: BackgroundOperationManager MUST maintain `.cognee/background_ops.json` (mirrored to VS Code `globalState`) with schema `{operationId, datasetPath, summaryDigest, pid, queueIndex, startTime, status}`
+4. **Concurrency Limits**: Maximum 2 concurrent cognify processes + FIFO queue of 3 pending operations; fail fast with `429_COGNIFY_BACKLOG` when exceeded
+5. **Notification Discipline**: Both success (info-level) and failure (warning-level) trigger VS Code notifications so users know ingestion outcome; Success = `✔ Cognify finished` with "View Status" action; Failure = `⚠ Cognify failed` with "Retry"/"View Logs" actions; independent throttle budgets per outcome type: ≤1 success notification per 5 min per workspace, ≤1 failure notification per 5 min per workspace (tracked separately: lastSuccessAt, lastFailureAt)
+6. **Lifecycle Management**: Activation reconciles PIDs, deactivation sends SIGTERM (5s grace) + SIGKILL, ledger updated accordingly
+7. **Operation ID Format**: Use UUID v4 for `operation_id`; include summary digest (first 50 chars) in ledger for debugging
+8. **Queue Persistence**: Queued operations serialized with position index; reloads resume queue in FIFO order
+9. **Staged Messaging Requirement**: ALL ingestion surfaces (agent tools, manual capture, headless commands) MUST display "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done." Never show "Done"/"Completed" while background cognify() runs; success toasts are the authoritative completion signal
 
 ---
 
 ## Value Statement and Business Objective
 
-As a developer using GitHub Copilot agents with Cognee memory tools,
-I want memory storage operations to return quickly without blocking the agent for 68+ seconds,
-So that agents can continue working while knowledge graph processing completes in the background, and I'm only interrupted if there's an error.
+As a developer using GitHub Copilot agents with Cognee memory tools, I want memory storage operations to return quickly without blocking the agent for 68+ seconds, so that agents can continue working while knowledge graph processing completes in the background, and I'm only interrupted if there's an error.
 
 **Success Criteria**:
 
-- Agent receives tool response within 5-10 seconds after invoking `#cogneeStoreSummary` (time for `cognee.add()` only)
-- Knowledge graph construction (`cognee.cognify()`) completes in background without blocking agent workflow
-- Users see notification ONLY if cognify() fails (silent success)
-- Background cognify() operations are tracked so users can verify completion status if needed
-- **Measurable**: Reduce agent blocking time from 73 seconds to <10 seconds for memory storage operations
+- ALL ingestion surfaces (agent tools, manual capture, headless commands) return after successful `add()` function, indicating that content has been staged for ingestion, which should complete in 1-2 minutes
+- Knowledge graph construction (`cognee.cognify()`) completes in background without blocking any user workflow
+- Users receive clear "staged" messaging immediately, then notification when cognify() completes (success) OR fails
+- Background cognify() operations are tracked in ledger for auditability and debugging
+- **Measurable**: Reduce ALL ingestion blocking time from 73 seconds to <10 seconds (agent AND manual capture)
+
+**Intent of Splitting add() and cognify()**:
+
+The split serves two critical purposes:
+
+1. **Agent Responsiveness**: Agents can acknowledge the ingestion request immediately after staging data (~5-10s) and continue their workflow while the expensive LLM-based graph construction happens asynchronously. This prevents 73-second blocking that currently makes agents unresponsive during memory storage.
+
+2. **Testing & Development**: Separating the fast staging operation (add) from the slow processing operation (cognify) enables:
+   - Faster integration tests that can validate staging without waiting 60+ seconds per test
+   - Ability to test add() and cognify() independently for debugging
+   - Option to re-run failed cognify() operations without re-staging data
+   - Future flexibility to batch or prioritize cognify() operations based on system load
 
 ---
 
@@ -110,16 +139,18 @@ AFTER (async):
                                       │ (68s)              │
                                       └────────────────────┘
                                                │
-                                               ├─→ Success: silent
-                                               └─→ Failure: notify user
+                                               ├─→ Success: notify user (completion)
+                                               └─→ Failure: notify user (error + retry)
 ```
 
 **Key Changes**:
 
-1. **Split `ingest.py` into two modes**: `--sync` (current behavior for testing) and `--async` (new default for agent tools)
-2. **Background subprocess**: After `cognee.add()` returns, spawn detached Python process for `cognee.cognify()`
-3. **Error notifications only**: Background process logs success to Output channel; failures trigger VS Code notification
-4. **State tracking**: Record in-flight cognify() operations to prevent duplicate processing and support status queries
+1. **Split `ingest.py` into three modes**: `--mode sync` (diagnostic/test only), `--mode add-only` (stage data, return immediately), `--mode cognify-only` (background graph construction)
+2. **Universal async adoption**: ALL production ingestion flows (agent tools, manual capture, headless commands) use add-only + background cognify-only; no user waits for cognify() inline
+3. **Background subprocess**: After `cognee.add()` returns, spawn detached Python process for `cognee.cognify()`
+4. **Staged messaging**: Every surface shows "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done." instead of "Done"
+5. **Outcome notifications**: Background process triggers VS Code notification on both success (info: completion time, entity count) and failure (warning: error + retry option)
+6. **State tracking**: Record in-flight cognify() operations to prevent duplicate processing and support status queries
 
 ---
 
@@ -132,33 +163,73 @@ AFTER (async):
 **Tasks**:
 
 1. **Research Python subprocess daemonization**
-   - Document how to spawn detached Python process that survives parent termination
-   - Validate whether Node.js `child_process.spawn()` with `detached: true` + `stdio: 'ignore'` is sufficient
-   - Test signal handling (SIGTERM, SIGINT) to ensure clean shutdown
-   - Identify risks: zombie processes, orphaned operations on extension reload
-   - **Acceptance**: Documented approach with code samples for detached subprocess creation
+   - **Architecture Answer**: Use `detached: true` + `unref()` after event subscription per §4.5.1
+   - **Platform Constraints** (from analysis):
+     - Windows: Job objects may terminate detached children on parent crash; validate survival across VS Code reload/crash scenarios
+     - macOS: Sandbox may restrict detached process signals; test SIGTERM/SIGKILL delivery
+     - Linux: Standard detached behavior expected; verify systemd does not interfere
+   - **Implementation Pattern**: `spawn(pythonPath, [script, ...args], { detached: true, stdio: 'ignore', cwd: workspace })` then `child.unref()` after attaching `exit`/`error` listeners
+   - **Risks Identified**:
+     - Zombie processes if ledger tracking fails
+     - Orphaned cognify() if extension crashes during operation
+     - PID reuse race conditions on rapid restart
+   - **Acceptance**: Platform-specific validation complete; detached process pattern documented with fallback strategies
 
 2. **Research background process state tracking**
-   - Design lightweight state store (in-memory Map vs workspace Memento vs `.cognee/bg_operations.json`)
-   - Define state schema: `{ operationId, workspaceUri, startTime, status, pid? }`
-   - Determine state lifecycle: when to persist, how long to retain completed operations
-   - **Acceptance**: State tracking design documented with persistence strategy
+   - **Architecture Answer**: Dual-ledger system: `.cognee/background_ops.json` (durable audit) + VS Code `globalState` (fast access)
+   - **Schema** (architecture-mandated): `{operationId: UUID, datasetPath: string, summaryDigest: string, pid: number, queueIndex: number, startTime: ISO8601, status: 'pending'|'running'|'completed'|'failed'|'unknown'|'terminated', lastUpdate: ISO8601, errorCode?: string, errorMessage?: string}`
+   - **Atomic Write Strategy** (from analysis):
+     - Python status stubs: Use temporary file with atomic rename pattern to prevent corruption
+     - TypeScript ledger: Use temporary file write + fsync + atomic rename to ensure durability across platforms (POSIX and Windows NTFS)
+   - **State Lifecycle**: 24h retention (success), 7 days (failure); cleanup on activation via age filter
+   - **Reconciliation Logic** (analysis requirement): On activation, read ledger + check each `running` entry's PID via `process.kill(pid, 0)` (signal 0 = existence check); mark stale entries `unknown` with remediation note
+   - **Queue Persistence**: Serialize with `queueIndex`; on reload, filter `status=pending`, sort by index ascending, spawn up to (2 - active_count)
+   - **Operation ID Format**: UUID v4 format for operationId; summaryDigest = first 50 chars of summary text for debugging
+   - **Acceptance**: Ledger schema finalized; atomic write patterns documented; reconciliation algorithm specified with PID validation
 
 3. **Research error notification patterns**
-   - Survey VS Code notification best practices for background operations
-   - Design notification message format: clear error, actionable guidance, link to Output channel
-   - Determine escalation path: when to show notification vs log-only
-   - **Acceptance**: Error notification UX design with message templates
+   - **Architectural Decision** (resolved 2025-11-20 12:05): Dual-notification policy approved with shared throttle budget per outcome type.
+   - **Notification Format** (architecture-mandated):
+     - **Success**: `vscode.window.showInformationMessage` with title "✅ Cognify finished", body "Workspace: {name}\nSummary: {digest}\nCompleted in {elapsed}s ({entity_count} entities)", action "View Status" → opens `cognee.backgroundStatus` command
+     - **Failure**: `vscode.window.showWarningMessage` with title "⚠️ Cognify failed", body "Workspace: {name}\nSummary: {digest}\n{remediation}", actions ["Retry", "View Logs"] → Retry calls `ingest.py --mode add-only` + spawns new `cognify-only`; View Logs opens Output channel
+   - **Throttling Strategy** (architecture-approved 2025-11-20 12:05):
+     - **Final Decision (12:05)**: Independent per-outcome throttles—success notifications throttled separately from failure notifications. Success throttle does NOT block failure notifications and vice versa.
+     - Maintain per-workspace, per-outcome-type timestamps: `Map<workspacePath, { lastSuccessAt: Date | null, lastFailureAt: Date | null }>`
+     - Enforce independent throttle budgets: ≤1 success notification per 5 min per workspace AND ≤1 failure notification per 5 min per workspace
+     - Subsequent events within throttle window → log to Output channel only, skip notification
+     - Store throttle state in `BackgroundOperationManager` memory; **OPTIONAL**: persist to `.cognee/notification_throttle.json` for cross-reload consistency (defer unless user reports notification noise after reload; in-memory throttle sufficient for Phase 1)
+   - **Retry Semantics** (analysis constraint): Retry button must check queue capacity before enqueueing; if at 5 total operations (2 running + 3 queued), show error toast "Cannot retry: background queue full. Wait 30-60s and try again."
+   - **Error Code Mapping** (reuse Plan 016.1 taxonomy):
+     - `MISSING_API_KEY` → "LLM_API_KEY not found in workspace .env. Add LLM_API_KEY=sk-... to continue."
+     - `COGNEE_TIMEOUT` → "Cognee processing exceeded suite-configured timeout. Check Output logs for details."
+     - `PYTHON_ENV_ERROR` → "Python dependencies missing. Run: pip install -r extension/bridge/requirements.txt"
+     - `COGNEE_SDK_ERROR` → "Cognee SDK error: {message}. Check API key validity and network connectivity."
+   - **Acceptance**: Notification copy finalized (pending architect decision on success); throttling logic specified; retry capacity check documented; error code mapping complete
 
 4. **Identify platform-specific constraints**
-   - Document differences: Windows (no fork), macOS (sandbox), Linux (systemd?)
-   - Validate Python `multiprocessing` vs `subprocess` for background cognify()
-   - Test extension restart scenarios: do background processes survive? should they?
-   - **Acceptance**: Platform constraints documented with mitigation strategies
+   - **Windows**:
+     - No fork support; detached processes via job objects which may terminate on parent crash
+     - File locking required for ledger writes due to NTFS semantics
+     - PID validation: `process.kill(pid, 0)` throws on non-existent PID (catch ESRCH)
+     - Test with VS Code crash simulator (kill process group) to verify cognify() survival
+   - **macOS**:
+     - App sandbox may restrict signal delivery to detached children; validate SIGTERM reaches cognify() subprocess
+     - APFS supports atomic renames; atomic write pattern should be reliable
+     - PID validation: `process.kill(pid, 0)` returns true/false, does not throw
+   - **Linux**:
+     - Standard detached process behavior; systemd should not interfere with VS Code extension subprocesses
+     - ext4/btrfs support atomic renames; no special handling needed
+     - PID validation: same as macOS (signal 0 check)
+   - **Python subprocess choice**: Use `subprocess` module (not `multiprocessing`) because:
+     - `multiprocessing` requires pickling which breaks with Cognee SDK objects
+     - `subprocess` with `detached=true` + `unref()` pattern is Node.js idiomatic
+     - Cognee SDK is already async-aware via `asyncio.run()`
+   - **Extension restart policy** (analysis recommendation): Background cognify() should survive extension reload but NOT VS Code exit. Rationale: reload is routine (extension updates, settings changes), but full VS Code exit signals user intent to stop all work. Implementation: on deactivate, send SIGTERM with 5s grace → SIGKILL to all tracked PIDs, mark ledger entries `terminated`.
+   - **Acceptance**: Platform differences documented with atomic-write and PID-check variations; subprocess vs multiprocessing decision recorded; restart survival policy specified
 
 **Owner**: Analyst  
 **Dependencies**: None (pure research)  
-**Validation**: Analysis document created in `agent-output/analysis/017-async-cognify-optimization-analysis.md`
+**Acceptance**: Analysis document created at `agent-output/analysis/017-async-cognify-optimization-analysis.md` with detailed findings on subprocess patterns, ledger atomicity, notification throttling, and platform constraints. Notification policy resolved by architect (2025-11-20 12:05): dual notifications with independent throttling per outcome type.
 
 ---
 
@@ -200,7 +271,7 @@ AFTER (async):
 
 **Owner**: Architect  
 **Dependencies**: Milestone 1 (analysis findings)  
-**Validation**: Architecture findings document created; `system-architecture.md` updated
+**Acceptance**: Architecture findings document created; `system-architecture.md` updated
 
 ---
 
@@ -211,10 +282,16 @@ AFTER (async):
 **Tasks**:
 
 1. **Add `--mode` flag to `ingest.py`**
-   - Support `--mode sync` (default, current behavior: add + cognify in one call)
-   - Support `--mode add-only` (new: only run `cognee.add()`, skip cognify)
-   - Support `--mode cognify-only` (new: only run `cognee.cognify()` on existing dataset)
-   - **Acceptance**: `ingest.py` accepts mode flag and behaves correctly for each mode
+   - **Refactor CLI dispatch** (analysis recommendation): Extract shared setup into `setup_environment(workspace_path) → (dataset_name, api_key, cognee_config)`, then branch:
+     - `--mode sync` (diagnostic/test only): calls `run_sync(summary_json | conversation_args)` → `await cognee.add()` + `await cognee.cognify()` (NOT used in production)
+     - `--mode add-only` (production default): calls `run_add_only(summary_json | conversation_args)` → `await cognee.add()`, return JSON with `{success, ingested_chars, timestamp, staged: true}`
+     - `--mode cognify-only --operation-id <UUID>`: calls `run_cognify_only(workspace_path, operation_id)` → derives dataset via `generate_dataset_name(workspace_path)`, runs `await cognee.cognify(datasets=[dataset_name])`, writes status stub
+   - **Argument Validation**:
+     - `cognify-only` requires `--operation-id` in valid UUID format (implementer decides validation approach)
+     - `cognify-only` requires workspace path as first positional arg (for dataset derivation)
+     - `add-only` and `sync` accept existing `--summary` + `--summary-json` OR positional conversation args
+   - **Architecture Requirement**: All modes share dataset resolution logic (identical `generate_dataset_name()` calls) to prevent dataset drift
+   - **Acceptance**: CLI parsing refactored; three dispatch functions exist; operation ID validation implemented; all modes derive dataset identically
 
 2. **Implement add-only mode**
    - Execute `cognee.add(text, dataset_name)`
@@ -223,11 +300,19 @@ AFTER (async):
    - **Acceptance**: `python ingest.py --mode add-only ...` returns after add() completes
 
 3. **Implement cognify-only mode**
-   - Skip text/dataset argument parsing (not needed for cognify)
-   - Execute `cognee.cognify()` on existing dataset
-   - Return JSON with success status, cognify duration, entity count
-   - Emit structured error payload on failure (reuse Plan 016.1 error codes)
-   - **Acceptance**: `python ingest.py --mode cognify-only` runs cognify independently
+   - **Entry Point**: `run_cognify_only(workspace_path: str, operation_id: str)`
+   - **Dataset Resolution**: Call `generate_dataset_name(workspace_path)` to derive same dataset used by add-only
+   - **Cognify Execution**: `start_time = perf_counter()` → `await cognee.cognify(datasets=[dataset_name])` → `elapsed_ms = (perf_counter() - start_time) * 1000`
+   - **Status Stub Writing** (atomic per analysis):
+     - Schema: `{operation_id: str, success: bool, error_code: str | None, error_message: str | None, remediation: str | None, elapsed_ms: int, entity_count: int | None, timestamp: ISO8601}`
+     - Directory: `.cognee/background_ops/` (create directory if missing)
+     - Atomic write pattern: Write to temporary file in same directory, then use atomic rename to final path (prevents corruption on crash)
+
+
+   - **Success Path**: Write stub with `success=true`, `entity_count` (if available from cognify return), return JSON to stdout
+   - **Failure Path**: Catch exception, map to error code (reuse Plan 016.1 taxonomy: `MISSING_API_KEY`, `COGNEE_TIMEOUT`, `COGNEE_SDK_ERROR`), write stub with `success=false` + error details + remediation text, return error JSON to stdout, exit code 1
+   - **Architecture Requirement**: Status stub write MUST complete before script exit (no `atexit` handlers that could fail silently)
+   - **Acceptance**: `python ingest.py --mode cognify-only --operation-id <uuid> <workspace>` writes atomic status stub; exit code correlates with success field; both stub and stdout contain identical error payloads on failure
 
 4. **Update progress markers for async mode**
    - Emit `[PROGRESS] Add completed` marker before returning in add-only mode
@@ -236,14 +321,31 @@ AFTER (async):
    - **Acceptance**: Progress markers appear in Output channel for both modes
 
 5. **Add bridge tests for split modes**
-   - Test add-only mode: verify returns after add(), dataset exists
-   - Test cognify-only mode: verify processes existing dataset correctly
-   - Test sync mode: verify backward compatibility (existing behavior unchanged)
-   - **Acceptance**: Bridge tests pass for all three modes
+   - **Conversation Mode Regression Prevention** (analysis finding): Although async is targeted at summaries, `ingest_conversation()` shares the same script. Test that:
+     - Conversation args (`python ingest.py <workspace> <user_msg> <asst_msg>`) default to sync mode (no `--mode` flag)
+     - Explicit `--mode sync` with conversation args produces identical behavior to legacy code
+     - `--mode add-only` with conversation args is REJECTED (not yet supported; require `--summary` flag)
+   - **Add-Only Mode Tests**:
+     - Verify returns JSON with `success=true, staged=true` after `cognee.add()` completes
+     - Verify dataset exists in `.cognee_data` via directory check
+     - Verify NO cognify() execution (check stderr for absence of `[PROGRESS] Cognify started`)
+   - **Cognify-Only Mode Tests**:
+     - Pre-stage data via add-only, then run cognify-only with same workspace + operation ID
+     - Verify cognify() processes existing dataset (check for entity count in response)
+     - Verify status stub exists at `.cognee/background_ops/<uuid>.json` with correct schema
+     - Verify atomic write: status stub is complete JSON (no truncation or partial writes)
+   - **Sync Mode Tests**:
+     - Verify backward compatibility: existing test fixtures pass unchanged
+     - Verify add + cognify execute sequentially within one subprocess lifecycle
+   - **Malformed Input Tests**:
+     - `cognify-only` without `--operation-id` → exit code 1, error message
+     - `cognify-only` with invalid UUID format → exit code 1, validation error
+     - `add-only` + `cognify-only` with mismatched workspace paths → cognify finds no staged data, fails gracefully
+   - **Acceptance**: 15+ bridge tests cover mode dispatch, argument validation, atomic stub writes, conversation mode preservation, and error cases
 
 **Owner**: Implementer  
 **Dependencies**: Milestones 1-2 (analysis and architecture complete)  
-**Validation**: Bridge script tests pass; manual test shows split execution
+**Acceptance**: Bridge script tests pass; manual test shows split execution
 
 ---
 
@@ -254,20 +356,60 @@ AFTER (async):
 **Tasks**:
 
 1. **Create `BackgroundOperationManager` service**
-   - Singleton service to track in-flight cognify() operations
-   - State store using VS Code Memento: `{ operationId, workspaceUri, startTime, status, pid }`
-   - Methods: `startOperation()`, `completeOperation()`, `failOperation()`, `getStatus()`
-   - **Acceptance**: Service exists with documented API
+   - **Location**: `extension/src/background/BackgroundOperationManager.ts` (new directory)
+   - **Singleton Pattern**: Export singleton instance; constructor private
+   - **Ledger Schema** (analysis-finalized):
+     - Fields are classified as REQUIRED (must be present) or OPTIONAL (may be absent initially or deferred):
+
+     | Field | Type | Required/Optional | Description |
+     |-------|------|-------------------|-------------|
+     | `operationId` | string (UUID v4) | REQUIRED | Unique operation identifier |
+     | `datasetPath` | string | REQUIRED | Workspace path for duplicate detection |
+     | `pid` | number \| null | REQUIRED | Process ID (null if queued/completed) |
+     | `startTime` | string (ISO8601) | REQUIRED | Operation start timestamp |
+     | `status` | enum | REQUIRED | One of: pending, running, completed, failed, terminated, unknown |
+     | `summaryDigest` | string | OPTIONAL | First 50 chars of summary for debugging |
+     | `queueIndex` | number | OPTIONAL | FIFO position if queued |
+     | `elapsedMs` | number | OPTIONAL | Duration from status stub (available after completion) |
+     | `entityCount` | number | OPTIONAL | Entity count from cognify success path (may be absent if SDK doesn't provide) |
+     | `errorCode` | string | OPTIONAL | Plan 016.1 error taxonomy (only for failed status) |
+     | `errorMessage` | string | OPTIONAL | Human-readable error (only for failed status) |
+     | `lastUpdate` | string (ISO8601) | OPTIONAL | Timestamp of last status change |
+
+
+   - **Dual Persistence** (architecture + analysis):
+     - **JSON File**: `.cognee/background_ops.json` (durable audit trail)
+     - **globalState**: `context.globalState.update('cognee.backgroundOps', ledger)` (fast read on activation)
+     - **Atomic Write Approach**: Use tempfile write + fsync + rename pattern to ensure durability and prevent corruption from crashes or concurrent access (atomic on POSIX and Windows NTFS)
+
+   - **Reconciliation Algorithm** (analysis-specified):
+     - On activation: load JSON ledger + globalState, merge (JSON is source of truth)
+     - For each `status=running` entry: check `process.kill(pid, 0)` (signal 0 = existence test)
+       - If PID exists: reattach exit listener, keep status=running
+       - If PID missing (throws ESRCH or returns false): mark status=unknown, add errorMessage="Process not found after reload"
+     - For each `status=pending` entry: sort by queueIndex, spawn up to (2 - activeCount)
+   - **Retention Policy**: On activation cleanup, filter out entries where:
+     - `status=completed` AND `age > 24 hours`
+     - `status=failed` AND `age > 7 days`
+     - **Rationale**: Assuming 5-10 ingestion operations per workspace per day (agent summaries + occasional manual captures), 24h success retention = ~10 entries, 7d failure retention = ~70 entries worst-case. At ~200 bytes/entry, total footprint <20KB per workspace. Short success window reduces clutter; extended failure window supports troubleshooting patterns. Future: If high-volume workspaces report ledger bloat, consider configurable retention via workspace setting.
+   - **Public API**:
+     - `startOperation(summaryText: string, datasetPath: string): string` → generates operationId, computes digest, enqueues or spawns
+     - `completeOperation(operationId: string, result: {entityCount, elapsedMs})` → updates status, schedules notification
+     - `failOperation(operationId: string, error: {code, message, remediation})` → updates status, triggers notification
+     - `getStatus(operationId?: string): OperationEntry | OperationEntry[]` → query ledger
+     - `reconcileLedger(): Promise<void>` → activation reconciliation
+     - `shutdown(): Promise<void>` → SIGTERM/SIGKILL all running PIDs
+   - **Acceptance**: Service implemented with atomic writes, PID reconciliation, retention cleanup, and documented API
 
 2. **Modify `CogneeClient.ingest()` for async mode**
    - Add optional `async: boolean` parameter (default: true for agent tools, false for manual capture)
-   - When `async = true`:
+   - When `async = true` (production default):
      - Execute `ingest.py --mode add-only`
      - Return immediately after add() completes
      - Spawn detached background process for `ingest.py --mode cognify-only`
      - Register operation with `BackgroundOperationManager`
-   - When `async = false`: retain current behavior (sync mode for backward compatibility)
-   - **Acceptance**: Async ingestion returns in <10s; background cognify() spawns successfully
+   - When `async = false` (test/diagnostic only): execute `ingest.py --mode sync` (blocking add + cognify)
+   - **Acceptance**: Async ingestion returns in <10s; background cognify() spawns successfully; sync mode available for tests
 
 3. **Implement detached subprocess spawning**
    - Use `child_process.spawn()` with `detached: true`, `stdio: 'ignore'`
@@ -276,53 +418,77 @@ AFTER (async):
    - **Acceptance**: Background subprocess spawns and runs independently of parent
 
 4. **Implement background process monitoring**
-   - Listen for background process exit events
-   - On exit code 0: log success to Output channel (silent to user)
-   - On exit code != 0: show VS Code notification with error + link to Output
-   - Update operation state in `BackgroundOperationManager`
-   - **Acceptance**: Exit events trigger correct logging and notifications
+   - **Exit Listener**: Attach to spawned process: `child.on('exit', (code, signal) => handleExit(operationId, code, signal))`
+   - **Status Stub Reading**: On exit, read `.cognee/background_ops/<operationId>.json`, parse JSON, extract `{success, error_code, error_message, remediation, elapsed_ms, entity_count}`
+   - **Notification Throttling** (architecture-approved):
+     - Store in `BackgroundOperationManager`: `Map<workspacePath, {lastSuccessAt: Date | null, lastFailureAt: Date | null}>`
+     - Before showing notification, check: `now - lastNotification[type] < 5 minutes` → skip toast, log to Output only
+     - After showing notification, update: `lastNotification[type] = now`
+     - Optionally persist throttle state to `.cognee/notification_throttle.json` for cross-reload consistency
+   - **Success Notification** (architecture-approved 2025-11-20 12:05):
+     - `vscode.window.showInformationMessage` with:
+       - Title: "✅ Cognify finished"
+       - Message: `Workspace: ${workspaceName}\nSummary: ${summaryDigest}\nCompleted in ${(elapsedMs/1000).toFixed(1)}s (${entityCount} entities)`
+       - Actions: ["View Status"] → opens `cognee.backgroundStatus` command
+   - **Failure Notification** (architecture-required):
+     - `vscode.window.showWarningMessage` with:
+       - Title: "⚠️ Background Memory Processing Failed"
+       - Message: `Workspace: ${workspaceName}\nSummary: ${summaryDigest}\n${remediation}`
+       - Actions: ["Retry", "View Logs"]
+         - **Retry Logic** (analysis constraint): Check queue capacity before retrying; if at 5 total operations (2 running + 3 queued), show error toast "Cannot retry: background queue full. Wait 30-60s and try again." Otherwise, re-run add-only mode + spawn new cognify-only subprocess, log operation ID mapping to Output channel.
+
+         - **View Logs**: `outputChannel.show()` + search for `[ERROR] ${operationId}`
+   - **Output Logging** (all events, regardless of notification throttling):
+     - Start: `[BACKGROUND] ${timestamp} - Cognify started (operationId=${id}, workspace=${name}, pid=${pid})`
+     - Success: `[BACKGROUND] ${timestamp} - Cognify completed (operationId=${id}, elapsed=${ms}ms, entities=${count})`
+     - Failure: `[ERROR] ${timestamp} - Cognify failed (operationId=${id}, errorCode=${code}, message=${msg})`
+   - **Ledger Update**: Call `manager.completeOperation(id, result)` or `manager.failOperation(id, error)` to persist final state
+   - **Acceptance**: Exit handler reads status stub, enforces throttling per workspace+type, shows conditional success toast + required failure toast with retry capacity check, logs all events to Output
 
 5. **Implement concurrency limits**
-   - Check active cognify() operations before spawning new one
-   - If at limit (recommendation: 2 concurrent): queue operation with timeout
-   - If queue full: fail fast with clear error message
-   - **Acceptance**: Concurrency limits enforced; no subprocess overload
+   - **Architecture-Mandated Limits**: Max 2 running + 3 queued = 5 total capacity
+   - **Enqueue Logic**: Check active + queued count; if >= 5, reject with `429_COGNIFY_BACKLOG` error. If < 2 active, spawn immediately (status=running); otherwise queue with FIFO index (status=pending). Persist ledger after each state change.
+   - **Dequeue Logic**: On operation completion, filter pending entries by queueIndex (ascending), spawn up to (2 - activeCount) processes, update status to running, persist ledger.
+
+   - **Duplicate Prevention** (analysis finding): Before enqueueing, check if identical `datasetPath + summaryDigest` already exists with `status=running|pending`. If found, reject with error: "Duplicate ingestion detected. Wait for in-flight operation to complete." **Important**: If existing entry has `status=completed|failed|terminated|unknown`, **allow new operation** (rationale: supports iterative refinement workflows where user edits and re-ingests near-identical content, or explicit retry after failure). Note: Digest-based collision detection uses first-pass content hash; legitimate iterative updates may produce identical digests. This policy prioritizes UX (allow re-ingest) over strict deduplication.
+   - **Queue Persistence**: Ledger writes capture full queue state (pending entries with queueIndex). On activation, `reconcileLedger()` restores queue and resumes spawning.
+   - **Acceptance**: Load test with 6+ rapid ingestions validates: first 2 spawn immediately (running), next 3 enqueue (pending with indexes 0-2), 6th rejects with 429; completion of any running operation triggers dequeue of pending[0]
 
 6. **Add cleanup on extension deactivate**
-   - Gracefully terminate background cognify() processes on extension shutdown
-   - Send SIGTERM, wait 5s, send SIGKILL if still running
-   - Log termination events to Output channel
-   - **Acceptance**: Extension deactivate cleanly terminates background operations
+   - **Deactivation Hook**: Register `context.subscriptions.push({ dispose: () => manager.shutdown() })`
+   - **Shutdown Sequence** (analysis-specified): Send SIGTERM to all running PIDs (graceful shutdown signal), wait 5 seconds, then send SIGKILL to any remaining processes (force kill). Update ledger entries to status=terminated with errorMessage="Extension deactivated during cognify", persist final ledger state.
+
+   - **Ledger Finalization**: Mark all running entries as `terminated` with timestamp so activation reconciliation knows they didn't crash
+   - **Acceptance**: Deactivation sends SIGTERM, waits 5s, sends SIGKILL to stragglers, updates ledger with terminated status, persists final state
 
 **Owner**: Implementer  
 **Dependencies**: Milestone 3 (split ingestion modes available)  
-**Validation**: Async ingestion completes in <10s; background cognify() tracked correctly
+**Acceptance**: Async ingestion completes in <10s; background cognify() tracked correctly
 
 ---
 
-### Milestone 5: Update Agent Tools to Use Async Mode
+### Milestone 5: Update All Ingestion Surfaces to Use Async Mode
 
-**Objective**: Configure `StoreMemoryTool` to use async ingestion by default, preserving sync mode for manual capture.
+**Objective**: Configure ALL ingestion entry points (agent tools, manual capture, headless commands) to use async ingestion with staged messaging.
 
 **Tasks**:
 
 1. **Update `storeMemoryTool.ts` to use async ingestion**
    - Modify tool's call to `CogneeClient.ingest()` to pass `async: true`
    - Update tool description: "Memory will be fully searchable within 60-90 seconds"
-   - Update confirmation message: "Memory staged successfully. Processing in background..."
-   - **Acceptance**: Tool invocation returns quickly; users see updated messaging
+   - Update confirmation message: "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."
+   - **Acceptance**: Tool invocation returns quickly; users see staged messaging
 
 2. **Update `ingestForAgent.ts` command for async mode**
-   - Add `async` parameter to command (default: true)
-   - Pass through to `CogneeClient.ingest()`
-   - Update audit logging to distinguish sync vs async calls
-   - **Acceptance**: Command supports both modes; agent tools use async by default
+   - Remove `async` parameter (always async in production)
+   - Update audit logging to log operation ID and staged status
+   - **Acceptance**: Command returns quickly with operation ID; background processing tracked
 
-3. **Preserve sync mode for manual capture**
-   - Manual capture command (`cognee.captureMessage`) should continue using sync mode
-   - Rationale: User explicitly invoked capture and expects immediate confirmation
-   - Update UX: show duration feedback after capture completes
-   - **Acceptance**: Manual capture still waits for full ingestion; users see duration
+3. **Update manual capture for async mode**
+   - Manual capture command (`cognee.captureMessage`) now uses async mode (matches agent flow)
+   - **Rationale Change**: Architecture Decision (2025-11-20 13:45) mandates universal async adoption—no user (agent or manual) should wait 60+ seconds for cognify(). This changes prior analysis assumption that manual capture might remain synchronous. Tradeoff: immediate confirmation toast replaced by staged messaging + completion notification, ensuring consistent UX across all ingestion surfaces.
+   - Update confirmation toast: "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."
+   - **Acceptance**: Manual capture returns in <10s with staged messaging; completion confirmed via toast
 
 4. **Update tool metadata and documentation**
    - Update `package.json` tool descriptions to mention background processing
@@ -332,44 +498,60 @@ AFTER (async):
 
 **Owner**: Implementer  
 **Dependencies**: Milestone 4 (async client implementation complete)  
-**Validation**: Agent tools return quickly; manual capture still synchronous
+**Acceptance**: All ingestion surfaces return quickly (<10s); staged messaging consistent across agent tools, manual capture, and headless commands
 
 ---
 
-### Milestone 6: Error Notification and Status Visibility
+### Milestone 6: Outcome Notifications and Status Visibility
 
-**Objective**: Implement user-facing notifications for background cognify() failures and status query capability.
+**Objective**: Implement user-facing notifications for both success (info-level) and failure (warning-level) outcomes per architectural decision 2025-11-20 12:05, plus status query capability.
 
 **Tasks**:
 
-1. **Implement error notification on cognify() failure**
-   - Show VS Code notification: "⚠️ Background memory processing failed. [View Details]"
-   - "View Details" button opens Output channel at error log
-   - Include workspace name in notification for multi-workspace scenarios
-   - **Acceptance**: Failed cognify() triggers notification; user can view details
+1. **Implement success notification on cognify() completion**
+   - **Architecture Requirement** (approved 2025-11-20 12:05): Show VS Code **info** notification on successful completion:
+     - Title: "✅ Cognify finished"
+     - Body: "Workspace: {workspace name}\nSummary: {first 50 chars of summary}\nCompleted in {elapsed}s ({entity count} entities processed)"
+     - Action: "View Status" (opens `cognee.backgroundStatus` command)
+   - Include workspace name and summary digest for multi-workspace/multi-operation scenarios
+   - **Throttling**: Independent budget for success notifications: ≤1 per 5 minutes per workspace (tracked via lastSuccessAt; does NOT block failure notifications)
+   - **Acceptance**: Successful cognify() triggers info notification per format; throttling prevents spam; View Status action opens status command
 
-2. **Add Output channel logging for background operations**
+2. **Implement error notification on cognify() failure**
+   - **Architecture-Mandated Format**: Show VS Code **warning** notification:
+     - Title: "⚠️ Cognify failed"
+     - Body: "Workspace: {workspace name}\nSummary: {first 50 chars of summary}\n{remediation text from status stub}"
+     - Actions: ["Retry", "View Logs"]
+   - "View Logs" button opens Output channel scrolled to error log for this operationId
+   - "Retry" button re-runs the ingestion (calls `ingest.py --mode add-only` + spawns new cognify-only)
+   - Include workspace name and summary digest for multi-workspace/multi-operation scenarios
+   - **Throttling**: Independent budget for failure notifications: ≤1 per 5 minutes per workspace (tracked via lastFailureAt; does NOT block success notifications)
+   - **Acceptance**: Failed cognify() triggers notification per format; throttling prevents spam; retry action functional
+
+3. **Add Output channel logging for background operations**
    - Log start: "[BACKGROUND] Cognify() started for workspace X"
    - Log success: "[BACKGROUND] Cognify() completed in 68s (1234 entities processed)"
    - Log failure: "[ERROR] Cognify() failed: ERROR_CODE - message details"
    - Include operation ID for correlation with state tracking
    - **Acceptance**: Output channel shows clear audit trail for all background operations
 
-3. **Add status query command (optional)**
+4. **Add status query command (optional)**
    - Register `cognee.backgroundStatus` command
    - Show quick pick with in-flight operations and their status
    - Display: operation ID, workspace, duration, status (pending/running/completed/failed)
    - **Acceptance**: Command exists; users can check background operation status
 
-4. **Add telemetry for success/failure rates (Output only, local)**
+5. **Add telemetry for success/failure rates (Output only, local) - OPTIONAL**
+   - **Status**: OPTIONAL - defer to Phase 2 unless QA requires for validation
    - Track: total cognify() operations, success count, failure count, avg duration
    - Log summary to Output channel on extension deactivate
    - Do NOT send telemetry remotely (privacy requirement)
-   - **Acceptance**: Local telemetry available for debugging and QA
+   - **Rationale for deferral**: Ledger + Output logs provide sufficient audit trail for Phase 1; only implement if time permits or QA explicitly needs aggregated metrics
+   - **Acceptance**: If implemented: Local telemetry available for debugging and QA
 
 **Owner**: Implementer  
 **Dependencies**: Milestone 4 (background process monitoring implemented)  
-**Validation**: Notifications appear on failure; Output logs provide visibility
+**Acceptance**: Notifications appear on both success and failure; Output logs provide visibility
 
 ---
 
@@ -381,10 +563,11 @@ AFTER (async):
 
 1. **Update integration tests**
    - Add test for async ingestion: verify returns quickly, cognify() runs in background
-   - Add test for sync ingestion: verify backward compatibility (manual capture)
-   - Add test for concurrency limits: verify queuing and fail-fast behavior
-   - Add test for error notification: verify notification appears on failure
-   - **Acceptance**: Integration tests cover async ingestion paths
+   - Add test for sync mode: verify diagnostic mode still available for testing/debugging
+   - Add test for concurrency limits: verify queuing and fail-fast behavior across agent + manual sources
+   - Add test for error notification: verify notification appears on failure with correct throttling
+   - Add test for staged messaging: verify all ingestion surfaces show "Memory staged..." copy
+   - **Acceptance**: Integration tests cover async ingestion paths for all surfaces
 
 2. **Add unit tests for BackgroundOperationManager**
    - Test state transitions: pending → running → completed/failed
@@ -404,24 +587,26 @@ AFTER (async):
 
 4. **Manual QA scenarios**
    - Scenario 1: Store memory via agent tool, verify <10s response, check Output for cognify() completion
-   - Scenario 2: Store 3 memories rapidly, verify concurrency limits enforced
-   - Scenario 3: Simulate cognify() failure (invalid LLM key), verify notification appears
-   - Scenario 4: Reload extension during cognify(), verify graceful termination
-   - Scenario 5: Manual capture still waits for full ingestion (sync mode preserved)
-   - **Acceptance**: All scenarios pass; behavior matches expectations
+   - Scenario 2: Store 3 memories rapidly (mix agent + manual), verify concurrency limits enforced across all sources
+   - Scenario 3: Simulate cognify() failure (invalid LLM key), verify notification appears with correct throttling
+   - Scenario 4: Reload extension during cognify(), verify graceful termination and reconciliation
+   - Scenario 5: Manual capture via `Ctrl+Alt+C`, verify async behavior (returns <10s with staged message, toast on completion)
+   - Scenario 6: Test independent throttling: trigger rapid successes (no failure block) and rapid failures (no success block)
+   - **Acceptance**: All scenarios pass; behavior matches expectations; manual capture never waits for cognify()
 
 5. **Update CHANGELOG for v0.3.3**
-   - **Added**: Async memory ingestion - agent tools return in <10s while processing continues in background
-   - **Changed**: `#cogneeStoreSummary` tool description mentions 60-90s processing time
-   - **Fixed**: Agent blocking during memory storage reduced from 73s to <10s
-   - **Technical**: Split ingestion modes in bridge, background subprocess management
-   - **Acceptance**: CHANGELOG entry complete
+   - **Added**: Universal async memory ingestion - all ingestion flows (agent, manual, headless) return in <10s with staged messaging: "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."
+   - **Changed**: `#cogneeStoreSummary` tool description mentions 60-90s background processing; manual capture now async
+   - **Fixed**: Ingestion blocking reduced from 73s to <10s across all surfaces
+   - **Technical**: Split ingestion modes in bridge (`--mode sync|add-only|cognify-only`), background subprocess management, dual notifications with independent throttling
+   - **Acceptance**: CHANGELOG entry complete with verbatim staged messaging copy
 
 6. **Update README**
    - Add section explaining async ingestion behavior
    - Document timing expectations: 5-10s agent response, 60-90s full processing
-   - Explain error notification behavior: silent success, popup on failure
-   - **Acceptance**: README accurately describes async behavior
+   - Explain notification behavior: staged message immediately, then success/failure toast on completion
+   - **Include verbatim staged messaging copy**: "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."
+   - **Acceptance**: README accurately describes async behavior with consistent messaging
 
 7. **Update AGENT_INTEGRATION.md**
    - Document async ingestion API: how to control sync vs async mode
@@ -431,7 +616,56 @@ AFTER (async):
 
 **Owner**: Implementer + QA  
 **Dependencies**: Milestones 3-6 (implementation complete)  
-**Validation**: All tests pass; documentation accurate and complete
+**Acceptance**: All tests pass; documentation accurate and complete
+
+---
+
+### Milestone 7.5: Architecture Compliance Validation
+
+**Objective**: Verify implementation satisfies all architecture-mandated constraints before release.
+
+**Tasks**:
+
+1. **Bridge Contract Validation**
+   - Verify `ingest.py` accepts all three modes with identical argument handling
+   - Verify cognify-only writes status stub with correct schema to `.cognee/background_ops/<uuid>.json`
+   - Verify status stub includes `operation_id`, `success`, `error_code`, `remediation`, `elapsed_ms`
+   - **Acceptance**: Bridge tests cover all modes; status stub format matches architecture schema
+
+2. **Ledger Schema Validation**
+   - Verify `BackgroundOperationManager` ledger matches architecture schema: `{operationId, datasetPath, summaryDigest, pid, queueIndex, startTime, status}`
+   - Verify dual persistence (JSON file + globalState) with reconciliation on activation
+   - Verify retention policy (24h success, 7 days failure) enforced
+   - **Acceptance**: Ledger inspection shows correct schema; retention tested
+
+3. **Concurrency & Queue Validation**
+   - Verify maximum 2 concurrent processes enforced
+   - Verify FIFO queue of 3 pending operations with persistence across reloads
+   - Verify fail-fast with `429_COGNIFY_BACKLOG` when queue full
+   - **Acceptance**: Load test spawns 6+ operations; first 2 run, next 3 queue, 6th rejects with 429
+
+4. **Notification Discipline Validation**
+   - Verify success path shows info notification (`✔ Cognify finished`) with workspace name, summary digest, elapsed time, entity count, View Status action
+   - Verify failure path shows warning notification (`⚠ Cognify failed`) with workspace name, summary digest, remediation, Retry/View Logs actions
+   - Verify independent throttling per outcome type (≤1 per 5 min per workspace): rapid successes throttle independently from rapid failures
+   - Verify Output channel logs all events regardless of notification throttling
+   - **Acceptance**: QA scenario validates dual notification architecture per decision 2025-11-20 12:05; throttle budgets tracked separately (lastSuccessAt, lastFailureAt)
+
+5. **Lifecycle Validation**
+   - Verify activation reconciles ledger with live PIDs (reattach or mark `unknown`)
+   - Verify deactivation sends SIGTERM (5s grace) + SIGKILL to running processes
+   - Verify ledger updates to `terminated` with exit reason
+   - **Acceptance**: Extension reload during cognify() shows correct reconciliation; deactivate cleanly terminates
+
+6. **Operation ID Format Validation**
+   - Verify operationId uses UUID v4 format
+   - Verify summaryDigest captures first 50 chars of summary text
+   - Verify Output logs include operationId for correlation
+   - **Acceptance**: Ledger inspection shows UUID v4 IDs + digest; logs correlate correctly
+
+**Owner**: QA + Architect  
+**Dependencies**: Milestone 7 (testing complete)  
+**Acceptance**: Architect reviews implementation against `017-async-cognify-optimization-architecture-findings.md` checklist; all mandatory constraints satisfied
 
 ---
 
@@ -463,7 +697,7 @@ AFTER (async):
 
 **Owner**: Implementer  
 **Dependencies**: Milestone 7 (testing complete)  
-**Validation**: Version artifacts updated; ready for release
+**Acceptance**: Version artifacts updated; ready for release
 
 ---
 
@@ -479,10 +713,10 @@ AFTER (async):
 **Integration Tests**:
 
 - Round-trip async ingestion: store via tool, verify quick return, check background completion
-- Sync ingestion backward compatibility: manual capture waits for full processing
-- Concurrency stress test: spawn multiple background operations, verify limits respected
-- Error handling: simulate cognify() failure, verify notification appears
-- Extension reload: verify background operations terminate gracefully
+- Universal async adoption: verify agent tools, manual capture, and headless commands all use async mode with staged messaging
+- Concurrency stress test: spawn multiple background operations across all surfaces, verify limits respected
+- Error handling: simulate cognify() failure, verify notification appears with independent throttling
+- Extension reload: verify background operations terminate gracefully and reconcile on restart
 
 **Manual Tests**:
 
@@ -497,7 +731,9 @@ AFTER (async):
 
 - Agent blocking time reduced from 73s to <10s (measured)
 - Background cognify() completes successfully (Output log evidence)
-- Notifications appear ONLY on failure (silent success validated)
+- Success notifications show completion details (elapsed time, entity count, workspace context)
+- Failure notifications show actionable remediation with Retry/View Logs actions
+- Notification throttling prevents spam (≤1 per 5 min per workspace per outcome type)
 - Manual capture still synchronous (user expectation preserved)
 - No performance regression in retrieval or other extension features
 
@@ -531,54 +767,58 @@ AFTER (async):
    - Impact: Users must actively check Output to monitor progress (acceptable for Phase 1)
 
 6. **Backward Compatibility with Sync Mode**
-   - Risk: Changes to bridge scripts break existing manual capture flow
-   - Mitigation: Preserve sync mode as default for `ingest.py`; async mode is opt-in via flag
-   - Impact: If backward compatibility breaks, manual capture will fail (caught by tests)
+   - Risk: Changes to bridge scripts break existing ingestion flows
+   - Mitigation: Sync mode still available as `--mode sync` for diagnostic/test purposes; regression tests validate all three modes
+   - Impact: If mode dispatch breaks, ingestion will fail (caught by tests)
 
 ---
 
-## Validation
+## Expected Validation Criteria
 
-**Milestone Acceptance**:
+**Milestone Completion Criteria**:
 
-- ✅ **Milestone 1**: Analysis document created with subprocess patterns and platform constraints
-- ✅ **Milestone 2**: Architecture findings document created; system-architecture.md updated
-- ✅ **Milestone 3**: Bridge script supports split modes; tests pass for all three modes
-- ✅ **Milestone 4**: Async client implementation complete; background subprocess management working
-- ✅ **Milestone 5**: Agent tools use async mode; manual capture preserved as sync
-- ✅ **Milestone 6**: Error notifications implemented; Output logging provides visibility
-- ✅ **Milestone 7**: Tests pass; documentation updated; CHANGELOG current
-- ✅ **Milestone 8**: Version updated to v0.3.3; release artifacts prepared
+- **Milestone 1**: Analysis document created with subprocess patterns and platform constraints
+- **Milestone 2**: Architecture findings document created; system-architecture.md updated
+- **Milestone 3**: Bridge script supports split modes; tests pass for all three modes
+- **Milestone 4**: Async client implementation complete; background subprocess management working
+- **Milestone 5**: All ingestion surfaces use async mode; staged messaging deployed universally
+- **Milestone 6**: Dual notifications (success + failure) implemented; Output logging provides visibility
+- **Milestone 7**: Tests pass; documentation updated; CHANGELOG current
+- **Milestone 7.5**: Architecture compliance validated; all mandatory constraints satisfied
+- **Milestone 8**: Version updated to v0.3.3; release artifacts prepared
 
-**Plan Success**:
+**Plan Success Criteria**:
 
-- Agent blocking time reduced from 73s to <10s during memory storage (measurable improvement)
-- Background cognify() completes successfully without blocking agent workflow
-- Error notifications appear ONLY when cognify() fails (silent success validated)
-- Manual capture (user-initiated) still synchronous with full completion feedback
+- ALL ingestion blocking time reduced from 73s to <10s (agent tools AND manual capture - measurable improvement)
+- Background cognify() completes successfully without blocking any user workflow
+- Users receive clear "staged" messaging immediately, then outcome notifications for BOTH success (info with completion details) and failure (warning with retry option)
+- Notification throttling prevents alert fatigue (independent budgets: ≤1 success per 5 min per workspace, ≤1 failure per 5 min per workspace)
+- Manual capture returns immediately with staged messaging, relies on toast for completion signal (matches agent UX)
 - No zombie processes or resource leaks from background operations
 - Output channel provides full audit trail of background operations
-- Documentation explains async behavior and timing expectations clearly
+- Documentation explains async behavior, staged messaging, and timing expectations clearly
 - QA report shows all acceptance criteria passing
+- **Architecture Compliance (Milestone 7.5)**: All mandatory constraints from `017-async-cognify-optimization-architecture-findings.md` (updated 2025-11-20 13:45) satisfied and validated by architect
 
 ---
 
 ## Open Questions
 
-1. **Should background cognify() operations survive extension reload?**
-   - Recommendation: No, terminate gracefully on reload to avoid orphaned processes. User can re-ingest if needed.
+1. ✅ **ANSWERED**: Should background cognify() operations survive extension reload?
+   - **Architecture Decision**: Operations persist in ledger with PID tracking. On reload, manager reattaches to live PIDs or marks stale entries `unknown`. Queue persists and resumes spawning.
 
-2. **What is the optimal concurrency limit for background cognify() operations?**
-   - Recommendation: Start with 2 concurrent (matches Plan 016 retrieval limit); monitor via local telemetry and adjust in future if needed.
+2. ✅ **ANSWERED**: What is the optimal concurrency limit for background cognify() operations?
+   - **Architecture Decision**: 2 concurrent + FIFO queue of 3 pending (total capacity: 5). This matches Plan 016 retrieval limits and prevents subprocess overload.
 
-3. **Should we add progress notifications for long-running cognify() operations?**
-   - Recommendation: Defer to Phase 2. Phase 1 delivers silent success with Output logging; users can check status if curious.
+3. **DEFERRED**: Should we add progress notifications for long-running cognify() operations?
+   - Recommendation: Defer to Phase 2. Phase 1 delivers silent success with Output logging; users can check status if curious via `cognee.backgroundStatus` command.
 
-4. **How should we handle cognify() failures: retry automatically or require manual re-ingestion?**
-   - Recommendation: No automatic retry in Phase 1 (simpler). Show notification with "Retry" button that re-invokes manual capture. Defer retry queue to Phase 2.
+4. ✅ **ANSWERED**: How should we handle cognify() failures: retry automatically or require manual re-ingestion?
+   - **Architecture Decision**: No automatic retry in Phase 1. Notification shows "Retry" button that re-runs add-only + spawns new cognify-only. Defer retry queue to Phase 2.
+   - **Action Required**: Document retry UX in README/AGENT_INTEGRATION per architect question 3.
 
-5. **Should async mode be configurable via workspace setting?**
-   - Recommendation: No, async mode should be the default for agent tools (hardcoded). Manual capture remains sync. Avoid adding more settings unless users explicitly request control.
+5. **DEFERRED**: Should async mode be configurable via workspace setting?
+   - Recommendation: No, async mode is now universal (agent tools, manual capture, headless commands) per architecture decision 2025-11-20 13:45. Sync mode available only as `--mode sync` for diagnostic/testing purposes. Avoid adding settings unless users explicitly request granular control.
 
 ---
 
@@ -616,13 +856,3 @@ AFTER (async):
 - `extension/bridge/ingest.py` (current ingestion implementation)
 - `extension/src/cogneeClient.ts` (subprocess orchestration)
 - `extension/src/tools/storeMemoryTool.ts` (agent tool implementation)
-
----
-
-**Status**: Planning - Requires Analyst and Architect Review
-
-**Next Steps**:
-
-1. Invoke analyst for Milestone 1 (async subprocess patterns and constraints)
-2. Invoke architect for Milestone 2 (background process lifecycle and error propagation)
-3. Invoke critic for plan review before implementation begins

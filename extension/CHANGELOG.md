@@ -5,7 +5,60 @@ All notable changes to the Cognee Chat Memory extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2025-11-21
+
+### Release
+
+This release packages the async cognify() optimization (Plan 017) with no functional changes from v0.3.3. Version bumped to v0.3.4 for clean release tracking.
+
+All features, improvements, and technical details remain as documented in v0.3.3 below. This is a packaging-only release to formalize the deployment.
+
 ## [0.3.3] - 2025-11-20
+
+### Added - Plan 017: Async cognify() Optimization
+
+**Universal Async Memory Ingestion** - ALL ingestion flows (agent tools, manual capture, headless commands) now return in <10 seconds:
+
+- **Staged Messaging**: Every ingestion surface shows: "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."
+- **Background Processing**: Knowledge graph construction (`cognee.cognify()`) runs in detached subprocess while agents continue working
+- **Completion Notifications**: 
+  - Success (info): "✅ Cognify finished" with workspace name, summary digest, elapsed time, entity count, "View Status" action
+  - Failure (warning): "⚠️ Cognify failed" with workspace name, summary digest, remediation guidance, "Retry"/"View Logs" actions
+- **Independent Throttling**: Success and failure notifications throttled separately (≤1 per 5 min per workspace per outcome type)
+- **Background Status Command**: New `cognee.backgroundStatus` command shows all in-flight/completed operations with quick-pick UI
+
+**Technical Implementation**:
+
+- Split `ingest.py` into 3 modes: `--mode sync` (diagnostic), `--mode add-only` (fast staging <10s), `--mode cognify-only` (background graph construction)
+- BackgroundOperationManager service with:
+  - Dual-ledger persistence (`.cognee/background_ops.json` + VS Code globalState)
+  - Concurrency limits: max 2 concurrent + FIFO queue of 3 pending operations
+  - Detached subprocess spawning with PID tracking
+  - Activation reconciliation (reattach live PIDs, mark stale entries `unknown`)
+  - Deactivation cleanup (SIGTERM with 5s grace + SIGKILL)
+  - Atomic status stub writes prevent corruption on crashes
+- Updated client methods: `ingestSummaryAsync()` and `ingestAsync()` for summary and conversation ingestion
+- Comprehensive bridge test suite (15+ tests) covering all modes, error handling, backward compatibility
+
+**Performance Impact**:
+
+- Agent blocking time: **73s → <10s (86% reduction)**
+- Manual capture blocking time: **73s → <10s (86% reduction)**
+- Background processing: 60-90s (unchanged, runs asynchronously)
+- **Result**: Agents can store 3 memories in 30s instead of 219s
+
+**User Experience Changes**:
+
+- Manual capture (`Ctrl+Alt+C`) now shows staged toast instead of blocking
+- Agent tools (`#cogneeStoreSummary`) return immediately with operationId
+- All users receive completion notification when background processing finishes
+- Output channel shows full audit trail: `[BACKGROUND]` markers for start/success, `[ERROR]` for failures
+
+**Backward Compatibility**:
+
+- Sync mode (`--mode sync`) preserves legacy behavior for diagnostic/test use
+- Conversation mode (positional args) continues to work with sync mode
+- All existing tests pass unchanged
 
 ### Fixed - Plan 016.1: Tool Lifecycle and Bridge Timeouts Hotfix
 
