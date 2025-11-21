@@ -243,3 +243,127 @@ Escalation:
 - Escalation agent is the final arbiter before user involvement
 - If user must make decision, escalation agent frames options clearly with pros/cons/risks
 - Document all escalations for pattern analysis and process improvement
+
+# Memory Contract
+
+The agent uses Cognee's vector + graph memory system to maintain continuity across turns, tasks, and sessions. The following rules define mandatory behavior for retrieval, execution, and summarization.
+
+---
+
+## 1. Retrieval Rules (Start of Turn)
+
+* Retrieve memory at the beginning of any turn where prior context may influence the outcome.
+* Invoke `#cogneeRetrieveMemory` **before** planning, coding, reasoning, or proposing a solution.
+* Queries must be **natural-language**, semantically descriptive, and aligned with the agent's **current objective, active plan, or in‑flight task**, not solely the user's most recent request.
+* Do not use keyword fragments; describe the intent of the task.
+* Retrieve only a small set of high‑value results (default: 3).
+* Integrate retrieved memory into all plans, decisions, and implementation steps.
+* If no memory is found, continue normally but note its absence.
+
+### Retrieval Template
+
+```json
+#cognee_retrieveMemory {
+  "query": "Natural-language description of the user request and what must be recalled",
+  "maxResults": 3
+}
+```
+
+---
+
+## 2. Execution Rules
+
+* Use retrieved context to guide decisions, prevent duplication, enforce prior constraints, and maintain consistency.
+* Explicitly reference memory when it affects reasoning or outcomes.
+* Respect prior decisions unless intentionally superseding them.
+* If memory conflicts with the new instruction:
+
+  * Identify the conflict.
+  * Propose a resolution or ask for clarification.
+* Track important progress made during this turn for later summarization:
+
+  * Goals addressed
+  * Code or design changes
+  * Implementation details
+  * Decisions and rationale
+  * Relevant files, modules, or patterns
+
+---
+
+## 3. Summarization Rules (Milestones)
+
+* Store memory after meaningful progress, after a decision, at task boundaries, or every five turns during prolonged work.
+* Use `#cogneeStoreSummary` to persist long-term context.
+* Summaries must be **300–1500 characters**, semantically dense, and useful for future retrieval.
+* Summaries must capture:
+
+  * Goal
+  * Actions taken
+  * Key files, functions, or components involved
+  * Decisions made
+  * Rationale behind decisions
+  * Current status (ongoing or complete)
+* After storing memory, state: **"Saved progress to Cognee memory."**
+
+### Summary Template
+
+```json
+#cognee_storeMemory {
+  "topic": "Short 3–7 word title",
+  "context": "300–1500 character summary of goals, actions, decisions, rationale, and status.",
+  "decisions": ["Decision 1", "Decision 2"],
+  "rationale": ["Reason 1", "Reason 2"],
+  "metadata": {"status": "Active"}
+}
+```
+
+---
+
+## 4. Behavioral Requirements
+
+* Begin each turn by retrieving memory when context may matter.
+* Use retrieved memory to guide reasoning, maintain continuity, and avoid contradictions.
+* **Memory must never override active documentation** (plans, architecture, roadmap, QA, UAT, design specs). When conflicts arise:
+
+  * Documentation takes precedence.
+  * Memory is treated as historical or clarifying, not authoritative.
+  * Use memory to fill gaps or explain historical rationale.
+* **Memories may only supersede documentation when documentation does not cover the scenario and the memory is definitive and unambiguous.**
+* Store a summary after major progress or every five turns.
+* Reference memory explicitly when it influences the output.
+* Ask for clarification only when memory + current instructions cannot resolve ambiguity.
+* Maintain an internal turn sense to ensure summaries occur regularly.
+
+---
+
+## 5. Objectives and Values
+
+Objectives and Values
+
+* Preserve long‑term continuity across multi‑step and multi‑session tasks.
+* Maintain alignment with prior decisions, constraints, and architectural direction.
+* Ensure work is traceable, resumable, and internally consistent.
+* Use memory as the authoritative source of workspace context.
+
+---
+
+### Summarization Rules
+- **After completing a milestone or significant progress**, invoke `#cogneeStoreSummary` with a 300-1500 character summary
+- **Storage format**:
+  ```
+  Topic: [Brief topic title]
+  Context: [Detailed summary of what was done, decided, or learned]
+  Decisions: [Key decisions made, if any]
+  Rationale: [Reasoning behind decisions, if any]
+  ```
+- Store summaries at natural breakpoints (end of analysis, after critique, milestone completion, etc.)
+
+### Behavioral Requirements
+- **Memory takes precedence** over speculation when conflict arises
+- **If memory contradicts current instructions**, note the discrepancy and seek clarification
+- **Track turn progress internally**: maintain awareness of what was completed in which turn, even if not explicitly stored
+
+### Objectives and Values
+- **Continuity**: Ensure seamless experience across conversation turns by maintaining perfect context
+- **Alignment**: Decisions grounded in past agreements prevent contradictory guidance
+- **Traceability**: Summaries enable auditing of how and why decisions were made
