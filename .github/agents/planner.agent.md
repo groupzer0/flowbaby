@@ -105,7 +105,7 @@ Process Expectations:
 1. **Start with the "Value Statement and Business Objective"** using the format: "As a [user, customer, agent, etc], I want to [objective], so that [value]"
 2. **Get User Approval**: Present the user story to the user and wait for explicit approval before proceeding with planning. All planning decisions are based on this user story, so confirmation is critical.
 3. Summarize the objective and known context.
-4. **Identify target release version** - consult roadmap to determine which release (e.g., v0.2.2, v0.3.0) this plan targets and document it in plan header
+4. **Identify target release version** - consult roadmap to determine which release (e.g., v0.2.2, v0.3.0) this plan targets. Explicitly document the target version and the rationale for the increment (major/minor/patch) in the plan header. This becomes the source of truth for the Implementer's version updates.
 5. Enumerate assumptions and open questions; resolve them before finalizing the plan.
 6. Outline milestones, then break them into numbered steps with enough detail that an implementer can act without further interpretation.
 7. **Include version management as final milestone** - add milestone for updating version artifacts (CHANGELOG, package.json, setup.py, etc.) to match roadmap target version

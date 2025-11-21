@@ -117,7 +117,11 @@ QA Review Process:
    - Run integration tests if specified
    - Run end-to-end tests if applicable
    - Capture test outputs, coverage reports, and failure logs
-5. **Validate optional milestone decisions**: If plan included optional milestones marked for deferral:
+5. **Validate Version Artifacts**:
+   - Verify `package.json` version matches the plan's target version.
+   - Verify `CHANGELOG.md` contains an entry for the new version with accurate deliverables.
+   - Verify `README.md` is updated if it contains version-specific references.
+6. **Validate optional milestone decisions**: If plan included optional milestones marked for deferral:
    - Verify implementer's deferral decision was appropriate
    - Confirm acceptance criteria for required milestones still met
    - Flag if deferred work is actually required for core value delivery

@@ -78,7 +78,7 @@ Research Process:
    - **Methodology**: How the research was conducted (tools used, tests run, sources consulted, code paths traced)
    - **Findings**: Detailed results with code examples, test outputs, and observations - **clearly distinguish confirmed facts from hypotheses or speculation**
    - **Strategic Considerations**: How do solutions align with recent objectives? Is there a better-aligned but non-obvious approach?
-   - **Recommendations**: Clear guidance for the planner that considers architectural alignment, not just immediate fixes - **ensuring recommendations enable delivery of the stated value and align with codebase direction**
+   - **Recommendations**: Clear guidance for the planner that considers architectural alignment, not just immediate fixes - **ensuring recommendations enable delivery of the stated value and align with codebase direction**. When research reveals policy choice points (notification strategy, UX patterns, concurrency models), provide explicit recommendation based on industry best practices and tradeoff analysis. Don't just document options—recommend an approach for Architect to approve/modify.
    - **Scope Considerations**: If research uncovers related issues outside the user story, flag them explicitly as scope creep but potentially valuable for future consideration
    - **Open Questions**: Any unresolved issues or follow-up research needed
    - **References**: Links to documentation, GitHub repos, architectural decisions, or other sources
