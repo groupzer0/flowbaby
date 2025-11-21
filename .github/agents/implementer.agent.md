@@ -2,7 +2,7 @@
 description: Execution-focused coding agent that implements approved plans.
 name: Implementer
 tools: ['runCommands', 'edit', 'runNotebooks', 'search', 'ms-python.python/getPythonEnvironmentInfo', 'ms-python.python/getPythonExecutableCommand', 'ms-python.python/installPythonPackage', 'ms-python.python/configurePythonEnvironment', 'todos', 'runTests', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'fetch', 'githubRepo']
-model: Claude Sonnet 4.5
+model: GPT-5.1-Codex (Preview)
 handoffs:
   - label: Request Analysis
     agent: Analyst
@@ -83,6 +83,14 @@ After completing implementation, create a markdown file in `agent-output/impleme
 **Plan Reference**: `agent-output/planning/[plan-name].md`
 **Date**: [date]
 **Implementer**: implementer
+
+## Changelog
+
+| Date | Agent Handoff | Request | Summary |
+|------|---------------|---------|---------|
+| YYYY-MM-DD | [Who handed off] | [What was requested] | [Brief summary of implementation work] |
+
+**Example**: `2025-11-20 | Planner | Implement Plan 017 async ingestion | Completed all 8 milestones, split ingest.py modes, added BackgroundOperationManager`
 
 ## Implementation Summary
 [Brief overview of what was implemented and how it delivers the value statement]

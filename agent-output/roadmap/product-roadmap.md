@@ -57,8 +57,10 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 - **Plan 014** (Proposed) → Epic 0.3.0.2 (Structured Summaries) - prerequisite for Plans 015/016
 - **Plan 014.1** ✅ Complete → Epic 0.3.0.3 (feasibility validation for languageModelTools integration)
 - **Plan 015** (Proposed) → Epic 0.3.0.3 (Agent-Driven Memory Integration - ingestion)
-- **Plan 016** (Ready for Implementation) → Epic 0.3.0.3 (Agent-Driven Memory Integration - retrieval + UI visibility)
-- **Plan 017** (Proposed) → Epic 0.3.0.1 (Ranking and Relevance - metadata infrastructure)
+- **Plan 016** ✅ Complete → Epic 0.3.0.3 (Agent-Driven Memory Integration - retrieval + UI visibility)
+- **Plan 016.1** ✅ Complete → Epic 0.3.0.3 (Tool lifecycle hotfix)
+- **Plan 017** (Ready for Implementation) → Async cognify() optimization - unblocks testing and Epic 0.3.0.1
+- **Plan 018** (Proposed) → Epic 0.3.0.1 (Ranking and Relevance - metadata infrastructure) + Icons (participant + extension)
 - **Plans TBD** → Epic 0.2.3.1 (Error Transparency), Epic 0.2.3.2 (Python Auto-Setup)
 
 **Strategic Decision**: Plans 012/013/013.1 resolve v0.2.x blockers; v0.3.0 work (Plans 014/015) can now proceed. Remaining v0.2.x epics (Plans 016/017) enhance UX but don't block advanced features—proceed in parallel.
@@ -67,6 +69,7 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-20 | Plan 017/018 sequencing finalized: Plan 017 = Async cognify() optimization (v0.3.4), Plan 018 = Metadata infrastructure + Icons (v0.3.5) | User prioritized async optimization to unblock testing workflows - 73s synchronous ingestion blocks automation testing and would create poor UX during metadata testing. Plan 018 will bundle metadata infrastructure (Epic 0.3.0.1) with icon assets (participant + extension identity). Icons added to implementation mapping as Plan 018 deliverable. |
 | 2025-11-19 | Plan 016 merged scope finalized: Agent retrieval infrastructure + UI-visible extension tools combined into single comprehensive plan targeting v0.3.2 | User clarified that extension tools (not MCP) are the path to Configure Tools UI visibility via `canBeReferencedInPrompt` and `toolReferenceName` flags. Plan 016 now delivers both agent retrieval capabilities (CogneeContextProvider, retrieveForAgent command, structured responses) AND tool UI visibility (`#` autocomplete, `.agent.md` support, Configure Tools appearance) as interdependent features. Epic 0.3.0.3 acceptance criteria updated to reflect merged scope. |
 | 2025-11-19 | Plan 014.1 complete: languageModelTools validated as primary Copilot integration path; Epic 0.3.0.3 unblocked | Plan 014.1 confirmed VS Code's `languageModelTools` API is the officially supported mechanism for Copilot agent integration (vs undocumented command invocation). Architecture updated to contribute Cognee tools that proxy into existing commands, preserving fallback strategies (direct commands, MCP). Epic 0.3.0.3 ready for implementation (Plans 015/016). |
 | 2025-11-18 | **STRATEGIC PIVOT**: Epic 0.3.0.2 scope revised - @cognee-memory participant summarization deferred; adding Epic 0.3.0.3 for agent-driven memory integration | User testing revealed two critical misalignments: (1) @cognee-memory augments answers with LLM training data instead of constraining to stored memories only, violating workspace-local memory principle; (2) "summarize this conversation" only sees @cognee-memory turns, not the broader Copilot agent conversations users want to summarize. Root cause: chatContext.history is participant-scoped, not session-scoped. **Strategic solution**: Instead of forcing @cognee-memory to summarize conversations it wasn't part of, expose Cognee ingest/retrieve functions so Copilot agents can manage their own memory (store summaries of agent conversations, retrieve context when needed). This aligns with Master Product Objective: "eliminate repeated context reconstruction **for AI agents**" - agents should be memory-aware, not reliant on a separate memory participant. Requires feasibility analysis (Plan 014.1) before implementation. |
@@ -293,9 +296,9 @@ So that I don't waste time sifting through tangential results.
 - **Measurable Success**: Users report finding needed context in first 3 results >80% of time
 
 **Dependencies**:
-- **BLOCKER**: Epic 0.2.2.3 (users must discover retrieval workflow before ranking matters)
-- **BLOCKER**: Epic 0.2.3.1 (must have operational reliability before optimizing results)
-- **PREREQUISITE**: Epic 0.3.0.2 (must have structured summaries before adding metadata and ranking)
+- **✅ RESOLVED**: Epic 0.2.2.3 (display transparency, ingestion reliability) - Plans 012/013/013.1 complete
+- **PREREQUISITE**: Epic 0.3.0.2 (structured summaries) - Plan 014 must establish content schema before metadata
+- **PREREQUISITE**: Plan 017 (async cognify optimization) - testing and metadata ingestion blocked by 73s synchronous operations
 - Requires stable v0.2.x foundation with real usage data to inform ranking approach
 
 **Acceptance Criteria** (outcome-focused):
@@ -313,7 +316,8 @@ So that I don't waste time sifting through tangential results.
 
 **Status Notes**:
 
-- 2025-11-17: **✅ UNBLOCKED - READY TO PROCEED** - Plans 012 (installation stability) and 013/013.1 (display transparency, ingestion reliability) completed. All v0.2.x blockers resolved. Epic can now proceed with Plan 015 implementation (metadata infrastructure, ranking algorithms, compaction backend). Epic 0.3.0.2 (Plan 014) delivers content structure prerequisite.
+- 2025-11-20: **BLOCKED - Plan 017 prerequisite** - Async cognify() optimization required before implementing metadata infrastructure. Current 73s synchronous ingestion blocks testing workflows and would create poor UX during metadata testing. Plan 017 (async optimization) → Plan 018 (metadata infrastructure) sequencing prioritizes practical testing needs.
+- 2025-11-17: Epic unblocked after Plans 012/013/013.1 completed installation stability and display transparency.
 - 2025-11-16: DEFERRED - Review of Plans 001-011 revealed users cannot yet discover or reliably use basic retrieval. Ranking optimization premature until foundational UX and error handling delivered in v0.2.x.
 - 2025-11-15: Epic placeholder. Requires research phase to determine ranking approach.
 

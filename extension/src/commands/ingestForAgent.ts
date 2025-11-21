@@ -47,7 +47,7 @@ export function registerIngestForAgentCommand(
  * @param context Extension context
  * @returns JSON string containing CogneeIngestResponse
  */
-async function handleIngestForAgent(
+export async function handleIngestForAgent(
     requestJson: string,
     cogneeClient: CogneeClient,
     outputChannel: vscode.OutputChannel,
@@ -110,13 +110,17 @@ async function handleIngestForAgent(
         const createdAt = request.metadata.createdAt || now;
         const updatedAt = request.metadata.updatedAt || now;
 
-        // Step 5: Call bridge via CogneeClient
+        // Step 5: Call bridge via CogneeClient (async mode per Plan 017)
         outputChannel.appendLine(
-            `[Agent Ingest] ${new Date().toISOString()} - Agent: ${request.agentName || 'Unknown'} - Topic: ${request.topic} - Status: ingesting...`
+            `[Agent Ingest] ${new Date().toISOString()} - Agent: ${request.agentName || 'Unknown'} - Topic: ${request.topic} - Status: staging...`
         );
 
         try {
-            const success = await cogneeClient.ingestSummary({
+            // Get BackgroundOperationManager instance
+            const { BackgroundOperationManager } = await import('../background/BackgroundOperationManager');
+            const manager = BackgroundOperationManager.getInstance();
+            
+            const result = await cogneeClient.ingestSummaryAsync({
                 topic: request.topic,
                 context: request.context,
                 decisions: request.decisions || [],
@@ -131,14 +135,16 @@ async function handleIngestForAgent(
                 status: status as 'Active' | 'Superseded' | 'Draft',
                 createdAt: new Date(createdAt),
                 updatedAt: new Date(updatedAt)
-            });
+            }, manager);
 
             const duration = Date.now() - startTime;
 
-            if (success) {
-                // Step 6: Build success response
+            if (result.success && result.staged) {
+                // Step 6: Build staged response per Plan 017
                 const response: CogneeIngestResponse = {
                     success: true,
+                    staged: true,
+                    operationId: result.operationId,
                     ingested_chars: request.topic.length + request.context.length +
                         (request.decisions || []).join('').length +
                         (request.rationale || []).join('').length +
@@ -154,30 +160,30 @@ async function handleIngestForAgent(
                         created_at: createdAt,
                         updated_at: updatedAt
                     },
-                    ingestion_duration_sec: duration / 1000
+                    staging_duration_sec: duration / 1000
                 };
 
                 outputChannel.appendLine(
-                    `[Agent Ingest] ${new Date().toISOString()} - Agent: ${request.agentName || 'Unknown'} - Topic: ${request.topic} - Status: success - Duration: ${(duration / 1000).toFixed(2)}s`
+                    `[Agent Ingest] ${new Date().toISOString()} - Agent: ${request.agentName || 'Unknown'} - Topic: ${request.topic} - Status: staged - Operation ID: ${result.operationId} - Duration: ${(duration / 1000).toFixed(2)}s`
                 );
 
-                // Log success to audit file
+                // Log staging success to audit file
                 await logAuditEntry(context, {
                     timestamp: new Date().toISOString(),
                     command: 'ingestForAgent',
                     agentName: request.agentName || 'Unknown',
                     topicDigest: hashTopicId(topicId),
-                    result: 'success',
+                    result: 'staged',
                     errorCode: null,
                     durationMs: duration
                 });
 
                 return JSON.stringify(response);
             } else {
-                // Bridge returned failure
+                // Staging failed
                 const response: CogneeIngestResponse = {
                     success: false,
-                    error: 'Ingestion failed - check Output channel for details',
+                    error: result.error || 'Staging failed - check Output channel for details',
                     errorCode: 'COGNEE_ERROR'
                 };
 
@@ -280,7 +286,7 @@ function hashTopicId(topicId: string): string {
  * @param context Extension context
  * @param entry Audit log entry
  */
-async function logAuditEntry(
+export async function logAuditEntry(
     context: vscode.ExtensionContext,
     entry: {
         timestamp: string;

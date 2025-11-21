@@ -8,6 +8,9 @@ import { expect } from 'chai';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as sinon from 'sinon';
+import { CogneeClient } from '../cogneeClient';
+import { handleIngestForAgent } from '../commands/ingestForAgent';
 
 suite('Agent Ingestion Integration Tests', () => {
     let testWorkspaceFolder: vscode.WorkspaceFolder;
@@ -77,43 +80,53 @@ suite('Agent Ingestion Integration Tests', () => {
                 }
             };
 
+            const auditLogPath = path.join(testWorkspaceFolder.uri.fsPath, '.cognee', 'agent_audit.log');
+            fs.rmSync(auditLogPath, { force: true });
+
+            const ingestStub = sinon.stub().resolves({
+                    success: true,
+                    staged: true,
+                    operationId: 'test-operation'
+            });
+
+            const fakeClient = {
+                ingestSummaryAsync: ingestStub
+            } as unknown as CogneeClient;
+
+            const fakeOutput = {
+                appendLine: () => {}
+            } as unknown as vscode.OutputChannel;
+
+            const fakeContext = {
+                subscriptions: []
+            } as unknown as vscode.ExtensionContext;
+
+            const backgroundModule = await import('../background/BackgroundOperationManager');
+            const fakeManager = {
+                startOperation: sinon.stub().resolves('test-operation')
+            };
+            const managerStub = sinon.stub(backgroundModule.BackgroundOperationManager, 'getInstance').returns(
+                fakeManager as unknown as ReturnType<typeof backgroundModule.BackgroundOperationManager.getInstance>
+            );
+
             try {
-                // Add 3s timeout to prevent hanging
-                const responseJson = await Promise.race([
-                    vscode.commands.executeCommand<string>(
-                        'cogneeMemory.ingestForAgent',
-                        JSON.stringify(payload)
-                    ),
-                    new Promise<string>((_, reject) => 
-                        setTimeout(() => reject(new Error('Command timeout')), 3000)
-                    )
-                ]);
-                
+                const responseJson = await handleIngestForAgent(
+                    JSON.stringify(payload),
+                    fakeClient,
+                    fakeOutput,
+                    fakeContext
+                );
                 const response = JSON.parse(responseJson);
-                
-                // Skip if bridge unavailable
-                if (!response.success) {
-                    console.warn('Bridge unavailable, skipping audit log test:', response.error);
-                    this.skip();
-                    return;
-                }
 
-                // Check for audit log file
-                const auditLogPath = path.join(testWorkspaceFolder.uri.fsPath, '.cognee', 'agent_audit.log');
-                
-                // Wait briefly for file write
-                await new Promise(resolve => setTimeout(resolve, 100));
+                expect(response.success).to.be.true;
+                expect(response.staged).to.be.true;
+                expect(ingestStub.calledOnce).to.be.true;
 
-                if (fs.existsSync(auditLogPath)) {
-                    const logContent = fs.readFileSync(auditLogPath, 'utf8');
-                    expect(logContent).to.include('ingestForAgent');
-                    // Audit log records command execution, not access blocking
-                } else {
-                    console.warn('Audit log not created - may indicate command registration issue');
-                }
-            } catch (error) {
-                console.warn('Command not available in test environment:', error);
-                this.skip();
+                expect(fs.existsSync(auditLogPath)).to.be.true;
+                const logContent = fs.readFileSync(auditLogPath, 'utf8');
+                expect(logContent).to.include('ingestForAgent');
+            } finally {
+                managerStub.restore();
             }
         });
     });

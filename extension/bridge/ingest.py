@@ -1,35 +1,24 @@
 #!/usr/bin/env python3
 """
-Cognee Conversation Ingestion Script for VS Code Extension
+Cognee Conversation Ingestion Script for VS Code Extension - Plan 017
 
-Usage (conversation mode): python ingest.py <workspace_path> <user_message> <assistant_message> [importance]
-Usage (summary mode):      python ingest.py --summary --summary-json '<json_string>'
-
-Conversation Mode:
-Ingests a conversation pair into Cognee with workspace-specific dataset isolation:
-1. Loads API key from workspace .env
-2. Generates unique dataset name for workspace
-3. Creates conversation with timestamp and importance
-4. Adds to workspace-specific dataset with dataset_name parameter
-5. Runs cognify() with ontology scoped to workspace dataset
-
-Summary Mode (Milestone 3):
-Ingests a structured ConversationSummary as a DataPoint:
-1. Parses JSON from --summary-json argument
-2. Creates DataPoint with text template and metadata
-3. Ingests DataPoint with workspace-specific dataset
-4. Returns success with metadata confirmation
+Usage Modes:
+  Sync (diagnostic):     python ingest.py --mode sync --summary --summary-json '<json>'
+                         OR: python ingest.py --mode sync <workspace_path> <user_msg> <asst_msg> [importance]
+  Add-only (production): python ingest.py --mode add-only --summary --summary-json '<json>'
+  Cognify-only (background): python ingest.py --mode cognify-only --operation-id <uuid> <workspace_path>
 
 Returns JSON to stdout:
-  Success: {"success": true, "ingested_chars": 357, "timestamp": "2025-11-09T14:32:21.234Z"}
-  Failure: {"success": false, "error": "error message"}
+  Success: {"success": true, "ingested_chars": 357, "timestamp": "2025-11-09T14:32:21.234Z", "staged": true/false}
+  Failure: {"success": false, "error": "error message", "error_code": "ERROR_CODE"}
 """
 
 import asyncio
-import io
 import json
 import os
 import sys
+import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
@@ -37,131 +26,90 @@ from time import perf_counter
 from workspace_utils import generate_dataset_name
 
 
-async def ingest_summary(
-    workspace_path: str,
-    summary_json: dict
-) -> dict:
+def setup_environment(workspace_path: str):
     """
-    Ingest a structured ConversationSummary as a DataPoint.
-    
-    Implements Milestone 3: DataPoint-based summary ingestion with metadata.
-    Creates DataPoint following DATAPOINT_SCHEMA.md specification.
-    
-    Args:
-        workspace_path: Absolute path to VS Code workspace root
-        summary_json: ConversationSummary object from TypeScript (already validated)
-                     Expected structure:
-                     {
-                       "topic": str,
-                       "context": str,
-                       "decisions": [str],
-                       "rationale": {key: str},
-                       "open_questions": [str],
-                       "next_steps": [str],
-                       "references": [str],
-                       "time_scope": {
-                         "start": ISO8601 timestamp,
-                         "end": ISO8601 timestamp,
-                         "turn_count": int
-                       },
-                       "topic_id": str,
-                       "session_id": str,
-                       "plan_id": str or null,
-                       "status": "active" | "completed" | "archived",
-                       "created_at": ISO8601 timestamp,
-                       "updated_at": ISO8601 timestamp
-                     }
+    Shared environment setup for all ingestion modes.
     
     Returns:
-        Dictionary with success status, ingested_chars, timestamp, metadata
+        tuple: (dataset_name, api_key, cognee_config_dict) or raises exception
     """
-    try:
-        print(f"[PROGRESS] Starting summary ingestion: topic={summary_json.get('topic', 'unknown')[:50]}", file=sys.stderr)
-        metrics = {}
-        overall_start = perf_counter()
-        
-        # Step 1: Load workspace .env file
-        print("[PROGRESS] Loading .env file", file=sys.stderr, flush=True)
-        step_start = perf_counter()
-        workspace_dir = Path(workspace_path)
-        env_file = workspace_dir / '.env'
-        
-        if env_file.exists():
-            from dotenv import load_dotenv
-            load_dotenv(env_file)
-        
-        # Check for API key
-        api_key = os.getenv('LLM_API_KEY')
-        if not api_key:
-            return {
-                'success': False,
-                'error': 'LLM_API_KEY not found in environment or .env file. Set LLM_API_KEY="sk-..." in your workspace .env'
-            }
-        
-        metrics['load_env_sec'] = perf_counter() - step_start
-        
-        # Step 2: Import cognee and configure directories
-        print("[PROGRESS] Importing cognee SDK", file=sys.stderr, flush=True)
-        step_start = perf_counter()
-        
-        # Redirect stdout to suppress Cognee's print statements
-        old_stdout = sys.stdout
-        sys.stdout = sys.stderr
-        
-        try:
-            import cognee
-        finally:
-            sys.stdout = old_stdout
-        
-        # Configure workspace-local storage directories
-        print("[PROGRESS] Configuring workspace storage directories", file=sys.stderr, flush=True)
-        cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
-        cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
-        
-        metrics['init_cognee_sec'] = perf_counter() - step_start
-        
-        # Step 3: Configure LLM provider and API key
-        print("[PROGRESS] Configuring LLM provider (OpenAI)", file=sys.stderr, flush=True)
-        step_start = perf_counter()
-        cognee.config.set_llm_api_key(api_key)
-        cognee.config.set_llm_provider('openai')
-        metrics['config_llm_sec'] = perf_counter() - step_start
-        
-        # Step 4: Generate dataset name
-        step_start = perf_counter()
-        dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
-        metrics['dataset_sec'] = perf_counter() - step_start
-        
-        # Step 5: Create enriched summary text with embedded metadata per §4.4.1
-        step_start = perf_counter()
-        
-        # CRITICAL per §4.4.1: Include template version tag for future migration support
-        # Section headings must match summaryTemplate.ts and retrieve.py regex patterns exactly
-        TEMPLATE_VERSION = "1.0"
-        
-        # Validate required timestamp fields (camelCase from TypeScript)
-        created_ts = summary_json.get('createdAt')
-        updated_ts = summary_json.get('updatedAt')
-        
-        if not created_ts:
-            return {
-                'success': False,
-                'error': 'Summary missing required "createdAt" field (ISO 8601 timestamp)'
-            }
-        if not updated_ts:
-            return {
-                'success': False,
-                'error': 'Summary missing required "updatedAt" field (ISO 8601 timestamp)'
-            }
-        
-        # Format lists with (none) marker for empty sections
-        def format_list(items):
-            if not items or len(items) == 0:
-                return '(none)'
-            return '\n'.join(f'- {item}' for item in items)
-        
-        # Format summary with metadata embedded (Cognee 0.3.4 enriched-text fallback per §4.4.1)
-        summary_text = f"""<!-- Template: v{TEMPLATE_VERSION} -->
+    from dotenv import load_dotenv
+    
+    workspace_dir = Path(workspace_path)
+    env_file = workspace_dir / '.env'
+    
+    if env_file.exists():
+        load_dotenv(env_file)
+    
+    # Check for API key
+    api_key = os.getenv('LLM_API_KEY')
+    if not api_key:
+        raise ValueError('LLM_API_KEY not found in environment or .env file')
+    
+    # Generate dataset name
+    dataset_name, _ = generate_dataset_name(workspace_path)
+    
+    # Return config
+    return dataset_name, api_key, {
+        'system_root': str(workspace_dir / '.cognee_system'),
+        'data_root': str(workspace_dir / '.cognee_data'),
+        'workspace_dir': workspace_dir
+    }
+
+
+def write_status_stub(operation_id: str, workspace_dir: Path, success: bool, 
+                       error_code: str = None, error_message: str = None, 
+                       remediation: str = None, elapsed_ms: int = 0, entity_count: int = None):
+    """
+    Write status stub atomically to .cognee/background_ops/<operation_id>.json
+    
+    Uses atomic temp file + rename pattern to prevent corruption.
+    """
+    stub_dir = workspace_dir / '.cognee' / 'background_ops'
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    
+    stub_data = {
+        'operation_id': operation_id,
+        'success': success,
+        'error_code': error_code,
+        'error_message': error_message,
+        'remediation': remediation,
+        'elapsed_ms': elapsed_ms,
+        'entity_count': entity_count,
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    # Atomic write: temp file + rename
+    stub_path = stub_dir / f'{operation_id}.json'
+    with tempfile.NamedTemporaryFile(mode='w', dir=stub_dir, delete=False, suffix='.tmp') as f:
+        json.dump(stub_data, f, indent=2)
+        temp_path = f.name
+    
+    # Atomic rename (POSIX guarantee)
+    os.replace(temp_path, stub_path)
+
+
+def create_summary_text(summary_json: dict) -> str:
+    """Create enriched summary text with embedded metadata per §4.4.1"""
+    TEMPLATE_VERSION = "1.0"
+    
+    # Validate required timestamp fields (camelCase from TypeScript)
+    created_ts = summary_json.get('createdAt')
+    updated_ts = summary_json.get('updatedAt')
+    
+    if not created_ts:
+        raise ValueError('Summary missing required "createdAt" field (ISO 8601 timestamp)')
+    if not updated_ts:
+        raise ValueError('Summary missing required "updatedAt" field (ISO 8601 timestamp)')
+    
+    # Format lists with (none) marker for empty sections
+    def format_list(items):
+        if not items or len(items) == 0:
+            return '(none)'
+        return '\n'.join(f'- {item}' for item in items)
+    
+    # Format summary with metadata embedded (Cognee 0.3.4 enriched-text fallback per §4.4.1)
+    summary_text = f"""<!-- Template: v{TEMPLATE_VERSION} -->
 # Conversation Summary: {summary_json['topic']}
 
 **Metadata:**
@@ -193,21 +141,79 @@ async def ingest_summary(
 ## Time Scope
 {summary_json.get('timeScope', '(not specified)')}
 """
+    
+    return summary_text, created_ts
+
+
+async def run_add_only(
+    summary_json: dict | None = None,
+    workspace_path: str | None = None,
+    user_message: str | None = None,
+    assistant_message: str | None = None,
+    importance: float = 0.0
+) -> dict:
+    """Stage data for ingestion without cognify(). Supports summary and conversation payloads."""
+    try:
+        payload_type = 'summary' if summary_json else 'conversation'
+        if summary_json:
+            workspace_path = summary_json.get('workspace_path')
         
-        # Store metadata dictionary for response (camelCase from TypeScript)
-        metadata = {
-            'topic_id': summary_json.get('topicId'),
-            'session_id': summary_json.get('sessionId'),
-            'plan_id': summary_json.get('planId'),
-            'status': summary_json.get('status', 'Active'),
-            'created_at': created_ts,
-            'updated_at': updated_ts
-        }
+        if not workspace_path:
+            return {
+                'success': False,
+                'error_code': 'MISSING_WORKSPACE_PATH',
+                'error': 'Add-only mode requires workspace_path'
+            }
         
+        if payload_type == 'conversation' and (not user_message or not assistant_message):
+            return {
+                'success': False,
+                'error_code': 'INVALID_CONVERSATION_PAYLOAD',
+                'error': 'Conversation ingestion requires user and assistant messages'
+            }
+        
+        print(
+            f"[PROGRESS] Add-only mode ({payload_type}): workspace={workspace_path}",
+            file=sys.stderr,
+            flush=True
+        )
+        metrics = {}
+        overall_start = perf_counter()
+        
+        # Step 1: Setup environment
+        print("[PROGRESS] Setting up environment", file=sys.stderr, flush=True)
+        step_start = perf_counter()
+        dataset_name, api_key, cognee_config = setup_environment(workspace_path)
+        metrics['setup_env_sec'] = perf_counter() - step_start
+        
+        # Step 2: Import and configure cognee
+        print("[PROGRESS] Importing cognee SDK", file=sys.stderr, flush=True)
+        step_start = perf_counter()
+        
+        old_stdout = sys.stdout
+        sys.stdout = sys.stderr
+        try:
+            import cognee
+        finally:
+            sys.stdout = old_stdout
+        
+        cognee.config.system_root_directory(cognee_config['system_root'])
+        cognee.config.data_root_directory(cognee_config['data_root'])
+        cognee.config.set_llm_api_key(api_key)
+        cognee.config.set_llm_provider('openai')
+        metrics['init_cognee_sec'] = perf_counter() - step_start
+        
+        # Step 3: Create enriched summary text
+        step_start = perf_counter()
+        if payload_type == 'summary':
+            summary_text, created_ts = create_summary_text(summary_json)
+        else:
+            created_ts = datetime.now().isoformat()
+            summary_text = f"""<!-- Conversation Capture: async add-only -->\n# Captured Conversation\n\n**Metadata:**\n- Created: {created_ts}\n- Importance: {importance}\n\n## User Message\n{user_message}\n\n## Assistant Response\n{assistant_message}\n"""
         metrics['create_summary_text_sec'] = perf_counter() - step_start
         
-        # Step 6: Add enriched summary text to dataset
-        print(f"[PROGRESS] Adding summary to dataset: {len(summary_text)} chars", file=sys.stderr)
+        # Step 4: Add enriched summary text to dataset (NO cognify)
+        print(f"[PROGRESS] Add completed: {len(summary_text)} chars staged", file=sys.stderr, flush=True)
         step_start = perf_counter()
         
         await cognee.add(
@@ -216,33 +222,30 @@ async def ingest_summary(
         )
         
         metrics['add_sec'] = perf_counter() - step_start
+        metrics['total_add_sec'] = perf_counter() - overall_start
         
-        # Step 7: Cognify with dataset
-        print(f"[PROGRESS] Running cognify (this may take 30-60s)", file=sys.stderr)
-        step_start = perf_counter()
+        print(f"Add-only duration: {metrics['total_add_sec']:.3f} seconds", file=sys.stderr)
+        print(f"[PROGRESS] Add completed", file=sys.stderr, flush=True)
         
-        await cognee.cognify(datasets=[dataset_name])
-        
-        metrics['cognify_sec'] = perf_counter() - step_start
-        metrics['total_ingest_sec'] = perf_counter() - overall_start
-        
-        # Calculate total characters
-        ingested_chars = len(summary_text)
-        
-        # Log metrics
-        print(f"Summary ingestion duration: {metrics['total_ingest_sec']:.3f} seconds", file=sys.stderr)
-        print(f"Summary ingestion metrics: {json.dumps(metrics)}", file=sys.stderr)
-        
-        # Return success with metadata confirmation (use resolved created_ts)
+        # Return success with staged=True
         return {
             'success': True,
-            'ingested_chars': ingested_chars,
+            'ingested_chars': len(summary_text),
             'timestamp': created_ts,
-            'metadata': metadata,
-            'ingestion_duration_sec': metrics['total_ingest_sec'],
+            'staged': True,
+            'payload_type': payload_type,
+            'ingestion_duration_sec': metrics['total_add_sec'],
             'ingestion_metrics': metrics
         }
         
+    except ValueError as e:
+        error_payload = {
+            'success': False,
+            'error_code': 'MISSING_API_KEY',
+            'error': str(e)
+        }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
     except ImportError as e:
         error_payload = {
             'success': False,
@@ -250,16 +253,6 @@ async def ingest_summary(
             'error_type': 'ImportError',
             'message': f'Failed to import required module: {str(e)}',
             'error': f'Failed to import required module: {str(e)}'
-        }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
-        return error_payload
-    except KeyError as e:
-        error_payload = {
-            'success': False,
-            'error_code': 'COGNEE_SDK_ERROR',
-            'error_type': 'ValidationError',
-            'message': f'Invalid summary JSON structure: missing field {str(e)}',
-            'error': f'Invalid summary JSON structure: missing field {str(e)}'
         }
         print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
@@ -271,181 +264,253 @@ async def ingest_summary(
             'error_type': type(e).__name__,
             'message': str(e),
             'traceback': traceback.format_exc(),
-            'dataset_name': dataset_name if 'dataset_name' in locals() else 'unknown',
-            'has_metadata': 'metadata' in locals(),
-            'error': f'Summary ingestion failed ({type(e).__name__}): {str(e)}'
+            'error': f'Add-only failed ({type(e).__name__}): {str(e)}'
         }
         print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
 
 
-async def ingest_conversation(
-    workspace_path: str,
-    user_message: str,
-    assistant_message: str,
-    importance: float = 0.0
-) -> dict:
+async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
     """
-    Ingest a user/assistant conversation pair into Cognee with dataset isolation.
+    Cognify-only mode: Run cognify() on previously staged data.
     
     Args:
         workspace_path: Absolute path to VS Code workspace root
-        user_message: User's question or prompt
-        assistant_message: Assistant's response
-        importance: Importance score 0-1 (default 0.0)
-        
+        operation_id: UUID identifying this background operation
+    
     Returns:
-        Dictionary with success status, ingested_chars, timestamp, or error
+        Dictionary with success status, elapsed_ms, entity_count or error
     """
+    workspace_dir = Path(workspace_path)
+    
     try:
-        print(f"[PROGRESS] Starting conversation ingestion: user_msg={user_message[:50]}...", file=sys.stderr)
-        # Milestone 3 & 4: Initialize metrics dictionary and start overall timing
-        metrics = {}
+        print(f"[PROGRESS] Cognify-only mode: operation_id={operation_id}", file=sys.stderr, flush=True)
         overall_start = perf_counter()
         
-        # Step 1: Load workspace .env file
-        print("[PROGRESS] Loading .env file", file=sys.stderr, flush=True)
-        step_start = perf_counter()
-        workspace_dir = Path(workspace_path)
-        env_file = workspace_dir / '.env'
+        # Step 1: Setup environment
+        print("[PROGRESS] Setting up environment", file=sys.stderr, flush=True)
+        dataset_name, api_key, cognee_config = setup_environment(workspace_path)
         
-        if env_file.exists():
-            from dotenv import load_dotenv
-            load_dotenv(env_file)
-        
-        # Check for API key
-        api_key = os.getenv('LLM_API_KEY')
-        if not api_key:
-            return {
-                'success': False,
-                'error': 'LLM_API_KEY not found in environment or .env file. Set LLM_API_KEY="sk-..." in your workspace .env'
-            }
-        
-        metrics['load_env_sec'] = perf_counter() - step_start
-        
-        # Step 2: Import cognee and configure directories
+        # Step 2: Import and configure cognee
         print("[PROGRESS] Importing cognee SDK", file=sys.stderr, flush=True)
-        step_start = perf_counter()
-        
-        # Redirect stdout to suppress Cognee's print statements
-        # (e.g., "User X has registered") that break JSON parsing
         old_stdout = sys.stdout
         sys.stdout = sys.stderr
-        
         try:
-            # Import cognee (may print registration messages)
             import cognee
         finally:
-            # Restore stdout for our JSON response
             sys.stdout = old_stdout
         
-        # Configure workspace-local storage directories BEFORE any other cognee operations
-        print("[PROGRESS] Configuring workspace storage directories", file=sys.stderr, flush=True)
-        cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
-        cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
-        
-        metrics['init_cognee_sec'] = perf_counter() - step_start
-        
-        # Step 3: Configure LLM provider and API key
-        print("[PROGRESS] Configuring LLM provider (OpenAI)", file=sys.stderr, flush=True)
-        step_start = perf_counter()
-        
-        # Configure Cognee with API key
+        cognee.config.system_root_directory(cognee_config['system_root'])
+        cognee.config.data_root_directory(cognee_config['data_root'])
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
         
-        metrics['config_llm_sec'] = perf_counter() - step_start
+        # Step 3: Run cognify on dataset
+        print(f"[PROGRESS] Cognify started (this may take 30-90s)", file=sys.stderr, flush=True)
+        start_time = perf_counter()
         
-        # Step 4: Generate dataset name and resolve ontology
+        await cognee.cognify(datasets=[dataset_name])
+        
+        elapsed_ms = int((perf_counter() - start_time) * 1000)
+        
+        print(f"[PROGRESS] Cognify completed in {elapsed_ms}ms", file=sys.stderr, flush=True)
+        
+        # Write success stub
+        write_status_stub(
+            operation_id=operation_id,
+            workspace_dir=workspace_dir,
+            success=True,
+            elapsed_ms=elapsed_ms,
+            entity_count=None  # Cognee SDK doesn't provide this reliably
+        )
+        
+        return {
+            'success': True,
+            'operation_id': operation_id,
+            'elapsed_ms': elapsed_ms,
+            'entity_count': None
+        }
+        
+    except ValueError as e:
+        elapsed_ms = int((perf_counter() - overall_start) * 1000)
+        error_code = 'MISSING_API_KEY'
+        error_message = str(e)
+        remediation = 'Add LLM_API_KEY=sk-... to workspace .env file'
+        
+        write_status_stub(
+            operation_id=operation_id,
+            workspace_dir=workspace_dir,
+            success=False,
+            error_code=error_code,
+            error_message=error_message,
+            remediation=remediation,
+            elapsed_ms=elapsed_ms
+        )
+        
+        error_payload = {
+            'success': False,
+            'error_code': error_code,
+            'error': error_message
+        }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
+        
+    except ImportError as e:
+        elapsed_ms = int((perf_counter() - overall_start) * 1000)
+        error_code = 'PYTHON_ENV_ERROR'
+        error_message = f'Failed to import required module: {str(e)}'
+        remediation = 'Run: pip install -r extension/bridge/requirements.txt'
+        
+        write_status_stub(
+            operation_id=operation_id,
+            workspace_dir=workspace_dir,
+            success=False,
+            error_code=error_code,
+            error_message=error_message,
+            remediation=remediation,
+            elapsed_ms=elapsed_ms
+        )
+        
+        error_payload = {
+            'success': False,
+            'error_code': error_code,
+            'error': error_message
+        }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
+        
+    except Exception as e:
+        import traceback
+        elapsed_ms = int((perf_counter() - overall_start) * 1000)
+        error_code = 'COGNEE_SDK_ERROR'
+        error_message = str(e)
+        remediation = 'Check API key validity and network connectivity. View logs for details.'
+        
+        write_status_stub(
+            operation_id=operation_id,
+            workspace_dir=workspace_dir,
+            success=False,
+            error_code=error_code,
+            error_message=error_message,
+            remediation=remediation,
+            elapsed_ms=elapsed_ms
+        )
+        
+        error_payload = {
+            'success': False,
+            'error_code': error_code,
+            'error_type': type(e).__name__,
+            'message': error_message,
+            'traceback': traceback.format_exc(),
+            'error': f'Cognify failed ({type(e).__name__}): {error_message}'
+        }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
+
+
+async def run_sync(summary_json: dict = None, workspace_path: str = None, 
+                   user_message: str = None, assistant_message: str = None,
+                   importance: float = 0.0) -> dict:
+    """
+    Sync mode: Complete add() + cognify() in single subprocess (diagnostic/test only).
+    
+    Supports both summary and conversation modes.
+    """
+    try:
+        # Determine mode from arguments
+        if summary_json:
+            workspace_path = summary_json.get('workspace_path')
+            if not workspace_path:
+                return {
+                    'success': False,
+                    'error_code': 'MISSING_WORKSPACE_PATH',
+                    'error': 'Summary JSON must include workspace_path field'
+                }
+            
+            print(f"[PROGRESS] Sync mode (summary): topic={summary_json.get('topic', 'unknown')[:50]}", file=sys.stderr, flush=True)
+        else:
+            print(f"[PROGRESS] Sync mode (conversation): user_msg={user_message[:50]}...", file=sys.stderr, flush=True)
+        
+        metrics = {}
+        overall_start = perf_counter()
+        
+        # Step 1: Setup environment
+        print("[PROGRESS] Setting up environment", file=sys.stderr, flush=True)
+        step_start = perf_counter()
+        dataset_name, api_key, cognee_config = setup_environment(workspace_path)
+        metrics['setup_env_sec'] = perf_counter() - step_start
+        
+        # Step 2: Import and configure cognee
+        print("[PROGRESS] Importing cognee SDK", file=sys.stderr, flush=True)
         step_start = perf_counter()
         
-        # 1. Generate same unique dataset name as init.py (using canonical path)
-        dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
+        old_stdout = sys.stdout
+        sys.stdout = sys.stderr
+        try:
+            import cognee
+        finally:
+            sys.stdout = old_stdout
         
-        # 2. Load ontology file path (OWL/Turtle format)
-        ontology_path = Path(__file__).parent / 'ontology.ttl'
+        cognee.config.system_root_directory(cognee_config['system_root'])
+        cognee.config.data_root_directory(cognee_config['data_root'])
+        cognee.config.set_llm_api_key(api_key)
+        cognee.config.set_llm_provider('openai')
+        metrics['init_cognee_sec'] = perf_counter() - step_start
         
-        # Validate ontology exists and is parseable
-        print(f"[PROGRESS] Checking ontology file: {ontology_path}", file=sys.stderr)
-        ontology_valid = False
-        if ontology_path.exists():
-            try:
-                print("[PROGRESS] Parsing ontology with RDFLib", file=sys.stderr, flush=True)
-                # Validate RDFLib can parse the ontology
-                from rdflib import Graph
-                g = Graph()
-                g.parse(str(ontology_path), format='turtle')
-                ontology_valid = True
-                # Log success for debugging
-                print(f"[PROGRESS] Ontology loaded successfully: {len(g)} triples", file=sys.stderr)
-            except Exception as e:
-                # Log warning but continue without ontology (graceful degradation)
-                error_payload = {
-                    'error_code': 'ONTOLOGY_LOAD_ERROR',
-                    'error_type': type(e).__name__,
-                    'message': str(e)
-                }
-                print(f"[WARNING] Ontology parse failed: {json.dumps(error_payload)}", file=sys.stderr)
-                ontology_valid = False
+        # Step 3: Create text content
+        step_start = perf_counter()
+        if summary_json:
+            text_content, timestamp = create_summary_text(summary_json)
         else:
-            print(f"[WARNING] Ontology file not found at {ontology_path}", file=sys.stderr)
-        
-        # Generate timestamp
-        timestamp = datetime.now().isoformat()
-        
-        metrics['dataset_ontology_sec'] = perf_counter() - step_start
-        
-        # Format conversation with simplified conversational prose format
-        # Analysis Finding 3: Natural language format works best for Cognee's LLM extraction
-        # Avoid bracketed metadata like [Timestamp: ...] which dilutes extraction signals
-        conversation = f"""User asked: {user_message}
+            timestamp = datetime.now().isoformat()
+            text_content = f"""User asked: {user_message}
 
 Assistant answered: {assistant_message}
 
 Metadata: timestamp={timestamp}, importance={importance}"""
         
-        # Step 5: Add data to this workspace's dataset
-        print(f"[PROGRESS] Adding conversation to dataset: {len(conversation)} chars", file=sys.stderr)
+        metrics['create_text_sec'] = perf_counter() - step_start
+        
+        # Step 4: Add to dataset
+        print(f"[PROGRESS] Adding to dataset: {len(text_content)} chars", file=sys.stderr, flush=True)
         step_start = perf_counter()
         
-        # 3. Add data to this workspace's dataset (Task 3: using correct parameter names)
         await cognee.add(
-            data=[conversation],
+            data=[text_content],
             dataset_name=dataset_name
         )
         
         metrics['add_sec'] = perf_counter() - step_start
         
-        # Step 6: Cognify with datasets parameter
-        print(f"[PROGRESS] Running cognify (this may take 30-60s)", file=sys.stderr)
+        # Step 5: Cognify
+        print(f"[PROGRESS] Running cognify (this may take 30-90s)", file=sys.stderr, flush=True)
         step_start = perf_counter()
         
-        # 4. Cognify with datasets parameter (Task 3: correct parameter, no ontology_file_path kwarg)
-        # Note: Ontology configuration should be set via .env (ontology_file_path=/path/to/file.ttl)
         await cognee.cognify(datasets=[dataset_name])
         
         metrics['cognify_sec'] = perf_counter() - step_start
-        metrics['total_ingest_sec'] = perf_counter() - overall_start
+        metrics['total_sync_sec'] = perf_counter() - overall_start
         
-        # Note: This ensures the chat ontology is only applied to this workspace's data.
-        # Tutorial data (with different dataset_name) remains separate and can use its own ontology.
+        print(f"Sync ingestion duration: {metrics['total_sync_sec']:.3f} seconds", file=sys.stderr)
+        print(f"Sync ingestion metrics: {json.dumps(metrics)}", file=sys.stderr)
         
-        # Calculate total characters
-        ingested_chars = len(conversation)
-        
-        # Milestone 3 & 4: Log metrics to stderr for debugging
-        print(f"Ingestion duration: {metrics['total_ingest_sec']:.3f} seconds", file=sys.stderr)
-        print(f"Ingestion metrics: {json.dumps(metrics)}", file=sys.stderr)
-        
-        # Milestone 3 & 4: Return success with duration and step-level metrics
         return {
             'success': True,
-            'ingested_chars': ingested_chars,
+            'ingested_chars': len(text_content),
             'timestamp': timestamp,
-            'ingestion_duration_sec': metrics['total_ingest_sec'],
+            'staged': False,  # sync mode completes cognify immediately
+            'ingestion_duration_sec': metrics['total_sync_sec'],
             'ingestion_metrics': metrics
         }
         
+    except ValueError as e:
+        error_payload = {
+            'success': False,
+            'error_code': 'MISSING_API_KEY',
+            'error': str(e)
+        }
+        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
     except ImportError as e:
         error_payload = {
             'success': False,
@@ -464,10 +529,7 @@ Metadata: timestamp={timestamp}, importance={importance}"""
             'error_type': type(e).__name__,
             'message': str(e),
             'traceback': traceback.format_exc(),
-            'dataset_name': dataset_name if 'dataset_name' in locals() else 'unknown',
-            'conversation_length': len(conversation) if 'conversation' in locals() else 0,
-            'ontology_validated': ontology_valid if 'ontology_valid' in locals() else False,
-            'error': f'Ingestion failed ({type(e).__name__}): {str(e)}'
+            'error': f'Sync ingestion failed ({type(e).__name__}): {str(e)}'
         }
         print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
@@ -475,112 +537,145 @@ Metadata: timestamp={timestamp}, importance={importance}"""
 
 def main():
     """Main entry point for the script."""
-    # Check for summary mode
-    if '--summary' in sys.argv:
-        # Summary mode: python ingest.py --summary --summary-json '<json_string>'
-        try:
+    try:
+        # Parse --mode flag
+        mode = 'sync'  # default for backward compatibility
+        if '--mode' in sys.argv:
+            mode_idx = sys.argv.index('--mode')
+            if mode_idx + 1 >= len(sys.argv):
+                result = {'success': False, 'error': '--mode requires argument: sync|add-only|cognify-only'}
+                print(json.dumps(result))
+                sys.exit(1)
+            mode = sys.argv[mode_idx + 1]
+            if mode not in ['sync', 'add-only', 'cognify-only']:
+                result = {'success': False, 'error': f'Invalid mode: {mode}. Must be sync|add-only|cognify-only'}
+                print(json.dumps(result))
+                sys.exit(1)
+        
+        # Dispatch based on mode
+        if mode == 'cognify-only':
+            # Cognify-only requires --operation-id and workspace_path
+            if '--operation-id' not in sys.argv:
+                result = {'success': False, 'error': 'cognify-only mode requires --operation-id <uuid>'}
+                print(json.dumps(result))
+                sys.exit(1)
+            
+            op_id_idx = sys.argv.index('--operation-id')
+            if op_id_idx + 1 >= len(sys.argv):
+                result = {'success': False, 'error': '--operation-id requires UUID argument'}
+                print(json.dumps(result))
+                sys.exit(1)
+            
+            operation_id = sys.argv[op_id_idx + 1]
+            
+            # Validate UUID format
+            try:
+                uuid.UUID(operation_id)
+            except ValueError:
+                result = {'success': False, 'error': f'Invalid UUID format for operation_id: {operation_id}'}
+                print(json.dumps(result))
+                sys.exit(1)
+            
+            # Get workspace path (first positional arg after all flags)
+            positional_args = [arg for arg in sys.argv[1:] if not arg.startswith('--') and arg != operation_id and arg != mode]
+            if len(positional_args) < 1:
+                result = {'success': False, 'error': 'cognify-only mode requires workspace_path as positional argument'}
+                print(json.dumps(result))
+                sys.exit(1)
+            
+            workspace_path = positional_args[0]
+            if not Path(workspace_path).is_dir():
+                result = {'success': False, 'error': f'Workspace path does not exist: {workspace_path}'}
+                print(json.dumps(result))
+                sys.exit(1)
+            
+            result = asyncio.run(run_cognify_only(workspace_path, operation_id))
+            
+        elif '--summary' in sys.argv:
+            # Summary mode (add-only or sync)
+            if '--summary-json' not in sys.argv:
+                result = {'success': False, 'error': '--summary requires --summary-json <json>'}
+                print(json.dumps(result))
+                sys.exit(1)
+            
             summary_json_idx = sys.argv.index('--summary-json')
             if summary_json_idx + 1 >= len(sys.argv):
-                result = {
-                    'success': False,
-                    'error': '--summary-json requires JSON string argument'
-                }
+                result = {'success': False, 'error': '--summary-json requires JSON string argument'}
                 print(json.dumps(result))
                 sys.exit(1)
             
             summary_json_str = sys.argv[summary_json_idx + 1]
             summary_json = json.loads(summary_json_str)
             
-            # Extract workspace_path from JSON (required field)
-            if 'workspace_path' not in summary_json:
+            if mode == 'add-only':
+                result = asyncio.run(run_add_only(summary_json=summary_json))
+            else:  # sync
+                result = asyncio.run(run_sync(summary_json=summary_json))
+                
+        else:
+            # Conversation mode (supports add-only + sync)
+            # Get positional args (excluding --mode and mode value)
+            positional_args = [arg for arg in sys.argv[1:] if not arg.startswith('--') and arg != mode]
+            
+            if len(positional_args) < 3:
                 result = {
                     'success': False,
-                    'error': 'Summary JSON must include workspace_path field'
+                    'error': 'Missing required arguments: workspace_path, user_message, assistant_message'
                 }
                 print(json.dumps(result))
                 sys.exit(1)
             
-            workspace_path = summary_json['workspace_path']
+            workspace_path = positional_args[0]
+            user_message = positional_args[1]
+            assistant_message = positional_args[2]
             
-            # Validate workspace path
+            importance = 0.0
+            if len(positional_args) >= 4:
+                try:
+                    importance = float(positional_args[3])
+                    importance = max(0.0, min(1.0, importance))
+                except ValueError:
+                    result = {'success': False, 'error': f'Invalid importance value: {positional_args[3]}'}
+                    print(json.dumps(result))
+                    sys.exit(1)
+            
             if not Path(workspace_path).is_dir():
-                result = {
-                    'success': False,
-                    'error': f'Workspace path does not exist: {workspace_path}'
-                }
+                result = {'success': False, 'error': f'Workspace path does not exist: {workspace_path}'}
                 print(json.dumps(result))
                 sys.exit(1)
             
-            # Run summary ingestion
-            result = asyncio.run(ingest_summary(workspace_path, summary_json))
-            
-        except ValueError as e:
-            result = {
-                'success': False,
-                'error': f'Invalid JSON in --summary-json: {str(e)}'
-            }
-            print(json.dumps(result))
-            sys.exit(1)
-        except Exception as e:
-            result = {
-                'success': False,
-                'error': f'Summary mode failed: {str(e)}'
-            }
-            print(json.dumps(result))
-            sys.exit(1)
-    
-    else:
-        # Conversation mode: python ingest.py <workspace_path> <user_message> <assistant_message> [importance]
-        # Check command-line arguments (minimum 3 required)
-        if len(sys.argv) < 4:
-            result = {
-                'success': False,
-                'error': 'Missing required arguments: workspace_path, user_message, assistant_message'
-            }
-            print(json.dumps(result))
-            sys.exit(1)
+            if mode == 'add-only':
+                result = asyncio.run(run_add_only(
+                    workspace_path=workspace_path,
+                    user_message=user_message,
+                    assistant_message=assistant_message,
+                    importance=importance
+                ))
+            else:
+                result = asyncio.run(run_sync(
+                    workspace_path=workspace_path,
+                    user_message=user_message,
+                    assistant_message=assistant_message,
+                    importance=importance
+                ))
         
-        workspace_path = sys.argv[1]
-        user_message = sys.argv[2]
-        assistant_message = sys.argv[3]
+        # Output JSON result
+        print(json.dumps(result))
+        sys.exit(0 if result['success'] else 1)
         
-        # Optional importance parameter (default 0.0)
-        importance = 0.0
-        if len(sys.argv) >= 5:
-            try:
-                importance = float(sys.argv[4])
-                # Clamp to 0-1 range
-                importance = max(0.0, min(1.0, importance))
-            except ValueError:
-                result = {
-                    'success': False,
-                    'error': f'Invalid importance value: {sys.argv[4]} (must be float 0-1)'
-                }
-                print(json.dumps(result))
-                sys.exit(1)
-        
-        # Validate workspace path
-        if not Path(workspace_path).is_dir():
-            result = {
-                'success': False,
-                'error': f'Workspace path does not exist: {workspace_path}'
-            }
-            print(json.dumps(result))
-            sys.exit(1)
-        
-        # Run conversation ingestion
-        result = asyncio.run(ingest_conversation(
-            workspace_path,
-            user_message,
-            assistant_message,
-            importance
-        ))
-    
-    # Output JSON result
-    print(json.dumps(result))
-    
-    # Exit with appropriate code
-    sys.exit(0 if result['success'] else 1)
+    except json.JSONDecodeError as e:
+        result = {'success': False, 'error': f'Invalid JSON: {str(e)}'}
+        print(json.dumps(result))
+        sys.exit(1)
+    except Exception as e:
+        import traceback
+        result = {
+            'success': False,
+            'error': f'Unexpected error: {str(e)}',
+            'traceback': traceback.format_exc()
+        }
+        print(json.dumps(result))
+        sys.exit(1)
 
 
 if __name__ == '__main__':

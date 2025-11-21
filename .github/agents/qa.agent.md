@@ -2,7 +2,7 @@
 description: Dedicated QA specialist verifying test coverage and execution before implementation approval.
 name: QA
 tools: ['runCommands', 'edit/createFile', 'edit/editNotebook', 'edit/newJupyterNotebook', 'edit/editFiles', 'search', 'runTests', 'problems', 'changes', 'testFailure']
-model: GPT-5.1-Codex (Preview)
+model: Gemini 3 Pro (Preview)
 handoffs:
   - label: Request Testing Infrastructure
     agent: Planner
@@ -142,6 +142,16 @@ Create markdown file in `agent-output/qa/` directory matching plan name with str
 **Plan Reference**: `agent-output/planning/[plan-name].md`
 **QA Status**: [Test Strategy Development / Awaiting Implementation / Testing In Progress / QA Complete / QA Failed]
 **QA Specialist**: qa
+
+## Changelog
+
+| Date | Agent Handoff | Request | Summary |
+|------|---------------|---------|---------|
+| YYYY-MM-DD | [Who handed off] | [What was requested] | [Brief summary of QA phase/changes] |
+
+**Example entries**:
+- Initial: `2025-11-20 | Planner | Test strategy for Plan 017 async ingestion | Created test strategy with 15+ test cases`
+- Update: `2025-11-22 | Implementer | Implementation complete, ready for testing | Executed tests, 14/15 passed, 1 edge case failure`
 
 ## Timeline
 - **Test Strategy Started**: [date/time]

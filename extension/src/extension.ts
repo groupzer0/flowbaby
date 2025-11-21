@@ -55,6 +55,20 @@ export async function activate(_context: vscode.ExtensionContext) {
             const agentOutputChannel = vscode.window.createOutputChannel('Cognee Agent Activity');
             registerIngestForAgentCommand(_context, cogneeClient, agentOutputChannel);
             
+            // Plan 017: Initialize BackgroundOperationManager AFTER output channel creation
+            try {
+                const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
+                const manager = BackgroundOperationManager.initialize(_context, agentOutputChannel);
+                await manager.initializeForWorkspace(workspacePath);
+                console.log('BackgroundOperationManager initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize BackgroundOperationManager:', error);
+                // Continue activation - sync mode will still work
+            }
+            
+            // Plan 017: Register backgroundStatus command
+            registerBackgroundStatusCommand(_context);
+            
             // Plan 016 Milestone 1: Initialize CogneeContextProvider
             const { CogneeContextProvider } = await import('./cogneeContextProvider');
             cogneeContextProvider = new CogneeContextProvider(cogneeClient, agentOutputChannel);
@@ -124,11 +138,103 @@ function registerLanguageModelTool(context: vscode.ExtensionContext, outputChann
 }
 
 /**
+ * Register backgroundStatus command for Plan 017 Milestone 5
+ */
+function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
+    const command = vscode.commands.registerCommand(
+        'cognee.backgroundStatus',
+        async () => {
+            try {
+                const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
+                const manager = BackgroundOperationManager.getInstance();
+                const result = manager.getStatus();
+                
+                // getStatus() returns OperationEntry[] when no operationId provided
+                const operations = Array.isArray(result) ? result : [result];
+                
+                if (operations.length === 0) {
+                    vscode.window.showInformationMessage('No background operations');
+                    return;
+                }
+                
+                // Status icons per operation status
+                const statusIcons: Record<string, string> = {
+                    'pending': '⏸️',
+                    'running': '⏳',
+                    'completed': '✅',
+                    'failed': '❌',
+                    'terminated': '⏹️',
+                    'unknown': '❓'
+                };
+                
+                // Create quick pick items
+                interface QuickPickItemWithOperation extends vscode.QuickPickItem {
+                    operation: import('./background/BackgroundOperationManager').OperationEntry;
+                }
+                
+                const items: QuickPickItemWithOperation[] = operations.map(op => {
+                    const icon = statusIcons[op.status] || '•';
+                    const elapsed = op.elapsedMs ? `${(op.elapsedMs / 1000).toFixed(1)}s` : 'N/A';
+                    const workspace = op.datasetPath.split('/').pop() || 'unknown';
+                    const digest = op.summaryDigest || 'N/A';
+                    
+                    return {
+                        label: `${icon} ${op.status.toUpperCase()} - ${workspace}`,
+                        description: `${elapsed} - ${digest.substring(0, 40)}`,
+                        detail: op.errorMessage || (op.entityCount ? `${op.entityCount} entities` : undefined),
+                        operation: op
+                    };
+                });
+                
+                const selected = await vscode.window.showQuickPick(items, {
+                    placeHolder: 'Select operation for details'
+                });
+                
+                if (selected) {
+                    const op = selected.operation;
+                    const details = [
+                        `Operation ID: ${op.operationId}`,
+                        `Status: ${op.status}`,
+                        `Workspace: ${op.datasetPath}`,
+                        `Summary: ${op.summaryDigest || 'N/A'}`,
+                        `Started: ${op.startTime}`,
+                        op.elapsedMs ? `Elapsed: ${(op.elapsedMs / 1000).toFixed(1)}s` : null,
+                        op.entityCount ? `Entities: ${op.entityCount}` : null,
+                        op.errorCode ? `Error Code: ${op.errorCode}` : null,
+                        op.errorMessage ? `Error: ${op.errorMessage}` : null
+                    ].filter(Boolean).join('\n');
+                    
+                    vscode.window.showInformationMessage(details, { modal: true });
+                }
+            } catch (error) {
+                vscode.window.showErrorMessage(
+                    `Failed to get operation status: ${error instanceof Error ? error.message : String(error)}`
+                );
+            }
+        }
+    );
+    
+    context.subscriptions.push(command);
+    console.log('✅ cognee.backgroundStatus command registered');
+}
+
+/**
  * Extension deactivation entry point
  * Called when VS Code deactivates the extension
  */
-export function deactivate() {
+export async function deactivate() {
     console.log('Cognee Chat Memory extension deactivated');
+    
+    // Plan 017: Shutdown BackgroundOperationManager (sends SIGTERM to running processes)
+    try {
+        const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
+        const manager = BackgroundOperationManager.getInstance();
+        await manager.shutdown();
+        console.log('BackgroundOperationManager shutdown complete');
+    } catch (error) {
+        console.error('Failed to shutdown BackgroundOperationManager:', error);
+    }
+    
     if (storeMemoryToolDisposable) {
         storeMemoryToolDisposable.dispose();
         storeMemoryToolDisposable = undefined;
@@ -195,19 +301,35 @@ function registerCaptureCommands(
                         `✅ VALIDATION PASS: Capture command works! Got ${content.length} chars`
                     );
                     
-                    // Test ingestion (Validation 2 prep)
-                    console.log('Testing ingestion...');
+                    // Test ingestion with async mode per Plan 017
+                    console.log('Testing async ingestion...');
                     
-                    // For manual capture, treat as user note
-                    const userMsg = 'Manual note: ' + content;
-                    const assistantMsg = 'Captured via Ctrl+Alt+C (Cmd+Alt+C on Mac) shortcut';
-                    
-                    const ingested = await client.ingest(userMsg, assistantMsg);
-                    
-                    if (ingested) {
-                        vscode.window.showInformationMessage('✅ Captured to Cognee memory');
-                    } else {
-                        vscode.window.showWarningMessage('⚠️ Capture input received but ingestion failed');
+                    try {
+                        // For manual capture, treat as user note
+                        const userMsg = 'Manual note: ' + content;
+                        const assistantMsg = 'Captured via Ctrl+Alt+C (Cmd+Alt+C on Mac) shortcut';
+                        
+                        // Get BackgroundOperationManager instance
+                        const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
+                        const manager = BackgroundOperationManager.getInstance();
+                        
+                        // Use async ingestion
+                        const result = await client.ingestAsync(userMsg, assistantMsg, manager);
+                        
+                        if (result.success && result.staged) {
+                            // Show staged messaging per Plan 017
+                            vscode.window.showInformationMessage(
+                                "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."
+                            );
+                        } else {
+                            vscode.window.showWarningMessage(
+                                `⚠️ Capture failed: ${result.error || 'Unknown error'}`
+                            );
+                        }
+                    } catch (error) {
+                        vscode.window.showWarningMessage(
+                            `⚠️ Ingestion error: ${error instanceof Error ? error.message : String(error)}`
+                        );
                     }
                 } else {
                     vscode.window.showWarningMessage(

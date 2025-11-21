@@ -119,6 +119,16 @@ export interface CogneeIngestResponse {
     success: boolean;
 
     /**
+     * Whether data was staged (async mode) - Plan 017
+     */
+    staged?: boolean;
+
+    /**
+     * Background operation ID (async mode) - Plan 017
+     */
+    operationId?: string;
+
+    /**
      * Number of characters ingested (on success)
      */
     ingested_chars?: number;
@@ -141,9 +151,14 @@ export interface CogneeIngestResponse {
     };
 
     /**
-     * Ingestion duration in seconds (on success)
+     * Ingestion duration in seconds (on success, sync mode)
      */
     ingestion_duration_sec?: number;
+
+    /**
+     * Staging duration in seconds (on success, async mode) - Plan 017
+     */
+    staging_duration_sec?: number;
 
     /**
      * Detailed performance metrics (on success)

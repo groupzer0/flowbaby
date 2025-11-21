@@ -8,10 +8,31 @@ import { suite, test } from 'mocha';
 import { expect } from 'chai';
 import * as vscode from 'vscode';
 import { StoreMemoryTool, StoreMemoryToolInput } from '../tools/storeMemoryTool';
+import * as sinon from 'sinon';
 
 suite('StoreMemoryTool (Language Model Tool Integration)', () => {
     const outputChannel = vscode.window.createOutputChannel('Test Output');
     let tool: StoreMemoryTool;
+    let sandbox: sinon.SinonSandbox;
+    let executeCommandStub: sinon.SinonStub;
+
+    suiteSetup(() => {
+        sandbox = sinon.createSandbox();
+        executeCommandStub = sandbox.stub(vscode.commands, 'executeCommand');
+    });
+
+    setup(() => {
+        executeCommandStub.resetHistory();
+        executeCommandStub.resolves(JSON.stringify({
+            success: true,
+            staged: true,
+            operationId: 'test-operation'
+        }));
+    });
+
+    suiteTeardown(() => {
+        sandbox.restore();
+    });
 
     test('Tool implements LanguageModelTool interface', () => {
         tool = new StoreMemoryTool(outputChannel);
@@ -56,99 +77,60 @@ suite('StoreMemoryTool (Language Model Tool Integration)', () => {
         tokenSource.dispose();
     });
 
-    test('invoke returns structured result', async function() {
-        // Test validates tool invocation returns proper LanguageModelToolResult
-        // Authorization is handled by VS Code Configure Tools, not workspace setting
-        // Skip if bridge unavailable to prevent timeout
-        
+    test('invoke returns structured staged result', async () => {
         tool = new StoreMemoryTool(outputChannel);
         const tokenSource = new vscode.CancellationTokenSource();
 
-        let result: vscode.LanguageModelToolResult;
-        try {
-            // Add 8s timeout to prevent hanging
-            result = await Promise.race([
-                tool.invoke({
-                    input: {
-                        topic: 'Test Topic',
-                        context: 'Test Context'
-                    }
-                } as vscode.LanguageModelToolInvocationOptions<StoreMemoryToolInput>, tokenSource.token),
-                new Promise<vscode.LanguageModelToolResult>((_, reject) => setTimeout(() => reject(new Error('Tool invoke timeout')), 8000))
-            ]);
-        } catch (error: any) {
-            if (error.message === 'Tool invoke timeout') {
-                console.log('Bridge unavailable (timeout), skipping structured result test');
-                this.skip();
-                return;
+        const result = await tool.invoke({
+            input: {
+                topic: 'Test Topic',
+                context: 'Test Context'
             }
-            throw error;
-        }
+        } as vscode.LanguageModelToolInvocationOptions<StoreMemoryToolInput>, tokenSource.token);
 
-        // Verify result structure
+        expect(executeCommandStub.calledOnce).to.be.true;
+        const [commandId, payloadJson] = executeCommandStub.firstCall.args;
+        expect(commandId).to.equal('cogneeMemory.ingestForAgent');
+        const payload = JSON.parse(payloadJson as string);
+        expect(payload.topic).to.equal('Test Topic');
+        expect(payload.context).to.equal('Test Context');
+
         expect(result).to.be.instanceOf(vscode.LanguageModelToolResult);
-        expect(result.content).to.have.length.greaterThan(0);
-        
+        expect(result.content).to.have.lengthOf(1);
         const content = result.content[0] as vscode.LanguageModelTextPart;
         const response = JSON.parse(content.value);
-        
-        // Response should have success field
-        expect(response).to.have.property('success');
-        
-        // Test validates structure; actual success depends on bridge availability
-        if (!response.success) {
-            console.log('Note: Ingestion failed (bridge may be unavailable):', response.error);
-        }
+        expect(response.success).to.be.true;
+        expect(response.staged).to.be.true;
+        expect(response.message).to.include('Memory staged');
 
         tokenSource.dispose();
     });
 
-    test('invoke validates tool invocation flow', async function() {
-        // Test validates tool structure and response format
-        // (Integration test requires workspace + Python environment + bridge setup)
-        // Skip if bridge unavailable to prevent timeout
-        
+    test('invoke surfaces command errors', async () => {
+        executeCommandStub.resolves(JSON.stringify({
+            success: false,
+            error: 'Simulated failure',
+            errorCode: 'COGNEE_ERROR'
+        }));
+
         tool = new StoreMemoryTool(outputChannel);
         const tokenSource = new vscode.CancellationTokenSource();
 
-        // Invoke tool with timeout protection
-        let result: vscode.LanguageModelToolResult;
-        try {
-            result = await Promise.race([
-                tool.invoke({
-                    input: {
-                        topic: 'Test Tool Invocation',
-                        context: 'Testing language model tool path',
-                        decisions: ['Use languageModelTools for Copilot integration'],
-                        metadata: { plan_id: '015', status: 'Active' }
-                    }
-                } as vscode.LanguageModelToolInvocationOptions<StoreMemoryToolInput>, tokenSource.token),
-                new Promise<vscode.LanguageModelToolResult>((_, reject) => setTimeout(() => reject(new Error('Tool invoke timeout')), 8000))
-            ]);
-        } catch (error: any) {
-            tokenSource.dispose();
-            if (error.message === 'Tool invoke timeout') {
-                console.log('Bridge unavailable (timeout), skipping tool invocation flow test');
-                this.skip();
-                return;
+        const result = await tool.invoke({
+            input: {
+                topic: 'Test Tool Invocation',
+                context: 'Testing language model tool path',
+                decisions: ['Use languageModelTools for Copilot integration'],
+                metadata: { plan_id: '015', status: 'Active' }
             }
-            throw error;
-        }
+        } as vscode.LanguageModelToolInvocationOptions<StoreMemoryToolInput>, tokenSource.token);
 
-        // Verify result structure
-        expect(result).to.be.instanceOf(vscode.LanguageModelToolResult);
-        expect(result.content).to.have.length.greaterThan(0);
-        
+        expect(executeCommandStub.calledOnce).to.be.true;
         const content = result.content[0] as vscode.LanguageModelTextPart;
         const response = JSON.parse(content.value);
-        
-        // Response should have success field
-        expect(response).to.have.property('success');
-        
-        // Test validates structure; actual success depends on bridge availability
-        if (!response.success) {
-            console.log('Note: Invocation failed (bridge may be unavailable):', response.error);
-        }
+        expect(response.success).to.be.false;
+        expect(response.error).to.equal('Simulated failure');
+        expect(response.errorCode).to.equal('COGNEE_ERROR');
 
         tokenSource.dispose();
     });

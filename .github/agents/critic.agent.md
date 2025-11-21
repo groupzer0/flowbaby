@@ -127,6 +127,12 @@ Critique Document Format:
 **Critic Review Date**: YYYY-MM-DD  
 **Status**: Initial Review | Revision N
 
+## Changelog
+
+| Date | Agent Handoff | Request | Summary of Changes |
+|------|---------------|---------|-------------------|
+| YYYY-MM-DD | [Who requested review] | [What was requested] | [Brief summary of review/revision] |
+
 ---
 
 ## Value Statement Assessment

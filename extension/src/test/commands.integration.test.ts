@@ -22,7 +22,7 @@ suite('Commands Integration (no production changes)', () => {
 
     // CogneeClient method stubs on prototype (affects instance created within activate)
     // initialize is stubbed but not asserted on explicitly
-    let ingestStub: sinon.SinonStub;
+    let ingestAsyncStub: sinon.SinonStub;
     let clearMemoryStub: sinon.SinonStub;
 
     // Provide a fake workspace folder
@@ -69,7 +69,7 @@ suite('Commands Integration (no production changes)', () => {
         // Avoid real Python calls during activation and ingestion/clear
         const CogneeClientMod = await import('../cogneeClient');
     sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'initialize').resolves(true);
-        ingestStub = sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'ingest').resolves(true);
+        ingestAsyncStub = sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'ingestAsync').resolves({ success: true, staged: true, operationId: 'test-operation' });
         clearMemoryStub = sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'clearMemory').resolves(true);
 
         // Prevent chat participant registration side-effects in this suite
@@ -96,8 +96,8 @@ suite('Commands Integration (no production changes)', () => {
 
         await cb();
 
-        assert.ok(ingestStub.calledOnce, 'ingest should be called once');
-        const [userMsg, assistantMsg] = ingestStub.firstCall.args;
+        assert.ok(ingestAsyncStub.calledOnce, 'ingestAsync should be called once');
+        const [userMsg, assistantMsg] = ingestAsyncStub.firstCall.args;
         assert.match(String(userMsg), /Manual note:/);
         assert.match(String(assistantMsg), /Captured via Ctrl\+Alt\+C/);
         assert.ok(infoMsgStub.called, 'success info message should be shown');
@@ -112,7 +112,7 @@ suite('Commands Integration (no production changes)', () => {
 
         await cb();
 
-        assert.ok(ingestStub.calledOnce, 'ingest should be called once on clipboard path');
+        assert.ok(ingestAsyncStub.calledOnce, 'ingestAsync should be called once on clipboard path');
         assert.ok(infoMsgStub.called, 'success info message should be shown');
     });
 
@@ -125,7 +125,7 @@ suite('Commands Integration (no production changes)', () => {
 
         await cb();
 
-        assert.ok(ingestStub.notCalled, 'ingest should not be called when no content');
+        assert.ok(ingestAsyncStub.notCalled, 'ingestAsync should not be called when no content');
         assert.ok(warnMsgStub.called, 'warning should be shown for no content');
     });
 

@@ -1,4 +1,4 @@
-%% Cognee Chat Memory System Architecture Diagram (updated 2025-11-19)
+%% Cognee Chat Memory System Architecture Diagram (updated 2025-11-20)
 graph TD
     subgraph VS_Code_Extension [VS Code Extension (TypeScript)]
     activation[extension.ts / activation]
@@ -6,6 +6,8 @@ graph TD
   (subprocess orchestration)]
     contextProvider[CogneeContextProvider
   (rate limits + formatting)]
+    bgManager[BackgroundOperationManager
+  (async cognify queue + ledger)]
     participant[@cognee-memory participant]
     agentCommands[Agent Commands
   (retrieveForAgent, future APIs)]
@@ -14,12 +16,16 @@ graph TD
     outputLogs[Output channel + diagnostics]
     summaryModules[Summary Template & Parser
     (Plan 014 schema)]
+    statusCmd[cognee.backgroundStatus
+  (status surface)]
     end
 
   subgraph Python_Bridge [Python Bridge Scripts]
     init[init.py]
-    ingest[ingest.py
+    ingest[ingest.py --mode sync/add-only
 (legacy + enriched summaries)]
+    cognifyOnly[ingest.py --mode cognify-only
+(background process)]
     fallback[Enriched metadata markdown
 (fallback until DataPoints)]
     retrieve[retrieve.py
@@ -33,8 +39,12 @@ graph TD
     cognition[Cognify + search pipelines]
   end
 
+  ledger[.cognee/background_ops.json
+(persisted operation ledger)]
+
   activation --> cogneeClient
   contextProvider --> cogneeClient
+  cogneeClient --> bgManager
   contextProvider --> summaryModules
   summaryModules --> cogneeClient
   participant --> contextProvider
@@ -42,6 +52,10 @@ graph TD
   lmTools --> contextProvider
   cogneeClient -->|JSON over stdout| ingest
   cogneeClient -->|JSON over stdout| retrieve
+  bgManager --> cognifyOnly
+  statusCmd --> bgManager
+  bgManager --> ledger
+  cognifyOnly --> ledger
   ingest --> fallback
   fallback --> retrieve
   Python_Bridge -->|Local API / FS| Cognee_SDK

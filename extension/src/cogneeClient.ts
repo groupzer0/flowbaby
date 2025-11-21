@@ -358,6 +358,148 @@ export class CogneeClient {
     }
 
     /**
+     * Ingest summary asynchronously (Plan 017)
+     * 
+     * Runs add-only mode, then spawns background cognify-only subprocess.
+     * Returns immediately after add() completes (<10s).
+     * 
+     * @param summary - ConversationSummary object
+     * @param manager - BackgroundOperationManager instance
+     * @returns Promise<{success: boolean, operationId?: string, staged: boolean}>
+     */
+    async ingestSummaryAsync(
+        summary: {
+            topic: string;
+            context: string;
+            decisions: string[];
+            rationale: string[];
+            openQuestions: string[];
+            nextSteps: string[];
+            references: string[];
+            timeScope: string;
+            topicId: string | null;
+            sessionId: string | null;
+            planId: string | null;
+            status: 'Active' | 'Superseded' | 'Draft' | null;
+            createdAt: Date | null;
+            updatedAt: Date | null;
+        },
+        manager: any // BackgroundOperationManager
+    ): Promise<{success: boolean, operationId?: string, staged: boolean, error?: string}> {
+        const startTime = Date.now();
+        
+        this.log('DEBUG', 'Ingesting conversation summary (async mode)', {
+            topic: summary.topic,
+            topicId: summary.topicId,
+            status: summary.status
+        });
+
+        try {
+            // Convert to Python format
+            const summaryPayload = {
+                topic: summary.topic,
+                context: summary.context,
+                decisions: summary.decisions,
+                rationale: summary.rationale,
+                openQuestions: summary.openQuestions,
+                nextSteps: summary.nextSteps,
+                references: summary.references,
+                timeScope: summary.timeScope,
+                topicId: summary.topicId,
+                sessionId: summary.sessionId,
+                planId: summary.planId,
+                status: summary.status,
+                createdAt: summary.createdAt ? summary.createdAt.toISOString() : null,
+                updatedAt: summary.updatedAt ? summary.updatedAt.toISOString() : null,
+                workspace_path: this.workspacePath
+            };
+            const summaryJson = JSON.stringify(summaryPayload);
+            
+            // Run add-only mode (fast, <10s)
+            const result = await this.runPythonScript('ingest.py', [
+                '--mode', 'add-only',
+                '--summary',
+                '--summary-json',
+                summaryJson
+            ], 30000); // 30s timeout for add-only
+
+            const duration = Date.now() - startTime;
+
+            if (result.success && result.staged) {
+                this.log('INFO', 'Summary staged for background cognify', {
+                    topic: summary.topic,
+                    topicId: summary.topicId,
+                    chars: result.ingested_chars,
+                    duration_ms: duration
+                });
+                
+                // Get summary text for digest
+                const summaryText = `${summary.topic}: ${summary.context.substring(0, 100)}`;
+                const ingestScriptPath = path.join(this.bridgePath, 'ingest.py');
+                
+                // Start background cognify operation
+                try {
+                    const operationId = await manager.startOperation(
+                        summaryText,
+                        this.workspacePath,
+                        this.pythonPath,
+                        ingestScriptPath,
+                        {
+                            type: 'summary',
+                            summary: summaryPayload
+                        }
+                    );
+                    
+                    return {
+                        success: true,
+                        operationId,
+                        staged: true
+                    };
+                } catch (bgError) {
+                    // Background operation failed to start (queue full, etc.)
+                    const bgErrorMessage = bgError instanceof Error ? bgError.message : String(bgError);
+                    this.log('ERROR', 'Failed to start background cognify', {
+                        topic: summary.topic,
+                        error: bgErrorMessage
+                    });
+                    
+                    return {
+                        success: false,
+                        staged: true, // Data was staged, but cognify didn't queue
+                        error: bgErrorMessage
+                    };
+                }
+            } else {
+                this.log('ERROR', 'Summary staging failed (add-only)', {
+                    topic: summary.topic,
+                    duration,
+                    error: result.error
+                });
+                return {
+                    success: false,
+                    staged: false,
+                    error: result.error
+                };
+            }
+        } catch (error) {
+            const duration = Date.now() - startTime;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            
+            this.log('ERROR', 'Summary async ingestion failed', {
+                topic: summary.topic,
+                duration_ms: duration,
+                error: errorMessage
+            });
+            
+            return {
+                success: false,
+                staged: false,
+                error: errorMessage
+            };
+        }
+    }
+
+    /**
      * Ingest conversation into Cognee
      * 
      * Calls ingest.py to store user/assistant conversation with metadata
@@ -445,6 +587,119 @@ export class CogneeClient {
             }
             
             return false;
+        }
+    }
+
+    /**
+     * Ingest conversation asynchronously (Plan 017)
+     * 
+     * Runs add-only mode, then spawns background cognify-only subprocess.
+     * Returns immediately after add() completes (<10s).
+     * 
+     * Used by manual capture command for async ingestion.
+     * 
+     * @param userMessage - User message
+     * @param assistantMessage - Assistant message
+     * @param manager - BackgroundOperationManager instance
+     * @param importance - Optional importance score (0.0-1.0)
+     * @returns Promise<{success: boolean, operationId?: string, staged: boolean, error?: string}>
+     */
+    async ingestAsync(
+        userMessage: string,
+        assistantMessage: string,
+        manager: any, // BackgroundOperationManager
+        importance: number = 0.0
+    ): Promise<{success: boolean, operationId?: string, staged: boolean, error?: string}> {
+        const startTime = Date.now();
+        
+        this.log('DEBUG', 'Ingesting conversation (async mode)', {
+            user_length: userMessage.length,
+            assistant_length: assistantMessage.length,
+            importance
+        });
+
+        try {
+            // Run add-only mode (fast, <10s)
+            const result = await this.runPythonScript('ingest.py', [
+                '--mode', 'add-only',
+                this.workspacePath,
+                userMessage,
+                assistantMessage,
+                importance.toString()
+            ], 30000); // 30s timeout for add-only
+
+            const duration = Date.now() - startTime;
+
+            if (result.success && result.staged) {
+                this.log('INFO', 'Conversation staged for background cognify', {
+                    chars: result.ingested_chars,
+                    duration_ms: duration
+                });
+                
+                // Get conversation summary for digest
+                const summaryText = `${userMessage.substring(0, 50)}: ${assistantMessage.substring(0, 50)}`;
+                const ingestScriptPath = path.join(this.bridgePath, 'ingest.py');
+                
+                // Start background cognify operation
+                try {
+                    const operationId = await manager.startOperation(
+                        summaryText,
+                        this.workspacePath,
+                        this.pythonPath,
+                        ingestScriptPath,
+                        {
+                            type: 'conversation',
+                            conversation: {
+                                userMessage,
+                                assistantMessage,
+                                importance
+                            }
+                        }
+                    );
+                    
+                    return {
+                        success: true,
+                        operationId,
+                        staged: true
+                    };
+                } catch (bgError) {
+                    // Background operation failed to start (queue full, etc.)
+                    const bgErrorMessage = bgError instanceof Error ? bgError.message : String(bgError);
+                    this.log('ERROR', 'Failed to start background cognify', {
+                        error: bgErrorMessage
+                    });
+                    
+                    return {
+                        success: false,
+                        staged: true, // Data was staged, but cognify didn't queue
+                        error: bgErrorMessage
+                    };
+                }
+            } else {
+                this.log('ERROR', 'Conversation staging failed (add-only)', {
+                    duration,
+                    error: result.error
+                });
+                return {
+                    success: false,
+                    staged: false,
+                    error: result.error
+                };
+            }
+        } catch (error) {
+            const duration = Date.now() - startTime;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            
+            this.log('ERROR', 'Conversation async ingestion failed', {
+                duration_ms: duration,
+                error: errorMessage
+            });
+            
+            return {
+                success: false,
+                staged: false,
+                error: errorMessage
+            };
         }
     }
 

@@ -32,6 +32,12 @@ test-output.txt
 !README.md
 !CHANGELOG.md
 !LICENSE
+!AGENT_INTEGRATION.md
+
+# Backup and old files
+*.backup
+*_old.py
+*.sha256
 
 # Git files
 .git/**
@@ -47,8 +53,11 @@ test-output.txt
 **/*.pyc
 
 # Python virtual environments (bridge development)
+.venv
+.venv/**
 bridge/.venv/**
 bridge/venv/**
+.pytest_cache/**
 bridge/.pytest_cache/**
 
 # Environment and secret files

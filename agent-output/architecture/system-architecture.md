@@ -1,6 +1,6 @@
 # Cognee Chat Memory System Architecture
 
-**Last Updated**: 2025-11-19 14:45
+**Last Updated**: 2025-11-20 13:45
 **Owner**: architect agent
 
 ## Change Log
@@ -18,6 +18,11 @@
 | 2025-11-19 09:05 | Adopted languageModelTools surface as primary Copilot integration path | Align agent access with officially supported Copilot tool contract while retaining command/MCP fallback strategy | Plan 014.1 / Epic 0.3.0.3 |
 | 2025-11-19 14:45 | Documented UI-visible Cognee tools (store/retrieve) and transparency guardrails for Plan 016 scope merge; updated diagram | Ensure planners implement workspace-gated tool discovery, shared provider usage, and audit surfaces before implementation | Plan 016 |
 | 2025-11-19 18:05 | Simplified agent-access model to rely solely on VS Code Configure Tools toggles; removed status bar dependency; captured Plan 016.1 bridge-timeout diagnostics guidance | Align architecture with Plan 016.1 hotfix (tool lifecycle + timeout fixes) | Plan 016.1 |
+| 2025-11-20 09:45 | Captured async cognify background-processing architecture (state tracking, notifications, diagram update) | Provide Plan 017 design guardrails before implementation to unblock agent testing | Plan 017 |
+| 2025-11-20 12:05 | Resolved async notification policy (success + failure toasts with shared throttling) | Align Plan 017 acceptance criteria with architecture while preserving transparency limits | Plan 017 |
+| 2025-11-20 13:05 | Clarified async ingestion definition vs bridge modes | Address critique that async intent was ambiguous; reiterate architectural contract for background cognify | Plan 017 |
+| 2025-11-20 13:25 | Documented async UX messaging (staged copy + completion notification promise) | Ensure users never see "Done" while cognify still running; set expectation for 1–2 min completion + toast | Plan 017 |
+| 2025-11-20 13:45 | Extended async ingestion requirement to manual capture | Align all ingestion flows with business goal of non-blocking UX; document additional UX/QA constraints | Plan 017 |
 
 
 ## 1. Purpose and Scope
@@ -64,6 +69,7 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 - Streams UX feedback (notifications, Output channel logs, chat participant markdown).
 - Delegates all knowledge operations to Python bridge via `CogneeClient` helper and the shared `CogneeContextProvider` service. The provider centralizes retrieval logic, enforces concurrency/rate limits, and emits telemetry consumed by both UI surfaces and agent commands.
 - Hosts the `CogneeContextProvider`, a singleton service that normalizes retrieval responses (structured metadata once Plan 014 migration lands), enforces rate limiting/back-pressure, and feeds both the chat participant and public agent commands.
+- Hosts the `BackgroundOperationManager`, a singleton service that coordinates async cognify() runs introduced in Plan 017. The manager owns a volatile in-memory map plus a persisted ledger at `.cognee/background_ops.json` (mirrored to VS Code `globalState`) so extension reloads can reconcile orphaned work. It enforces a hard limit of 2 concurrent background cognify() processes, maintains a FIFO queue of 3 pending jobs, exposes the `cognee.backgroundStatus` command for visibility, and publishes lifecycle events (start/complete/fail) to both the Output channel and notification pipeline (info-level success toast, warning-level failure toast, each throttled to ≤1 per 5 minutes per workspace). Any surface that returns immediately after `add-only` (agent tool response, command output, etc.) MUST state that the memory was staged, that cognify() will finish within ~1–2 minutes, and that a toast will confirm completion—never display “Done” while the background job still runs.
 - Contributes VS Code `languageModelTools` metadata for the Cognee Store/Retrieve tools. These definitions surface inside "Configure Tools", drive `#cogneeStoreSummary` / `#cogneeRetrieveMemory` autocomplete, and now rely solely on VS Code's opt-in UI. Tools register at activation; when users disable them in Configure Tools, VS Code hides them automatically and the extension listens for enablement events to keep audit logging/command availability in sync.
 - Exposes the `cogneeMemory.retrieveForAgent` command (Plan 016) without an additional workspace setting; instead, the command consults the same tool-enablement state surfaced via Configure Tools (or fails fast if tools are disabled). Commands are headless: they remain hidden from command palette/menus and exist solely for other extensions or agents to invoke programmatically via `vscode.commands.executeCommand`. The roadmap pivot adds `cogneeMemory.ingestForAgent`, giving Copilot agents parity with @cognee-memory capture flows while keeping ingestion centralized.
 - Provides a unified validation/auditing pipeline: every agent command invocation is logged (timestamp, workspace, caller hint) and rejected unless workspace access is enabled. Future capability tokens can plug into this layer without touching bridge scripts.
@@ -77,6 +83,7 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 - Maintains ontology assets (currently `ontology.ttl`) and dataset naming strategy.
 - Handles Terraform-style migration markers to coordinate one-time pruning.
 - Emits JSON envelopes for success/error, plus structured stderr for diagnostics.
+- `ingest.py` now supports explicit modes: `sync` (legacy fallback / tests), `add-only` (stage data, return immediately), and `cognify-only` (background graph construction). All UI/agent flows call `add-only`, then spawn a detached `cognify-only` subprocess identified by `operation_id`. Manual capture no longer waits for `sync`; it shares the same async orchestration contract and relies on toast notifications for completion. Each invocation writes a status stub to `.cognee/background_ops/<operation_id>.json` so TypeScript can correlate exit codes with persisted entries.
 - Implements the enriched-text fallback for Plan 014 summaries: `ingest.py` accepts `--summary-json`, renders metadata-rich markdown, and `retrieve.py` parses metadata via regex before producing structured JSON. Bridge unit tests MUST cover both enriched and legacy text paths until Cognee exposes DataPoint APIs. These scripts are the only sanctioned entry points for agents; `retrieveForAgent` and `ingestForAgent` commands ultimately call them so ontology wiring and dataset isolation remain consistent.
 
 ### 3.3 Cognee Knowledge Layer
@@ -93,12 +100,13 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 3. `init.py` loads `.env`, verifies `LLM_API_KEY`, sets Cognee directories to `.cognee_system` / `.cognee_data`, loads ontology, and writes migration markers.
 4. Result JSON returns dataset metadata. TS layer logs to Output channel and either registers commands/participant (success) or surfaces guidance (failure).
 
-### 4.2 Manual Capture Flow
+### 4.2 Manual Capture Flow (Async)
 
 1. User invokes keyboard shortcut or command palette (command `cognee.captureMessage`).
-2. TypeScript collects text (input box or clipboard) and calls `CogneeClient.ingest(user, assistant)`.
-3. `ingest.py` formats conversation, invokes `cognee.add` + `cognee.cognify`, referencing workspace dataset and ontology.
-4. Result is logged and confirmation toast displayed.
+2. TypeScript collects text (input box or clipboard) and calls `CogneeClient.ingestAsync()` which issues `ingest.py --mode add-only`.
+3. The extension immediately responds with “Memory staged – processing will finish in ~1–2 minutes; you’ll get a notification when it’s done,” logs the operation ID, and enqueues the background job via `BackgroundOperationManager`.
+4. The manager spawns a detached `ingest.py --mode cognify-only --operation-id <uuid>` process, tracks its PID/ledger entry, and surfaces completion/failure via throttled notifications plus Output logs.
+5. Users rely on the success toast (and optional `cognee.backgroundStatus` command) to know when the memory is searchable; no UI surface claims completion before cognify() exits.
 
 ### 4.3 Retrieval / Chat Participant Flow
 
@@ -158,6 +166,22 @@ Testing Guidance: `extension/bridge/test_datapoint_contract.py` is now mandated 
 6. **Tool Lifecycle & Discovery** – Language model tools honor the Configure Tools opt-in. Users toggle availability directly in VS Code, and the extension listens for `onDidChangeEnablement` to synchronize command gating and logging. Tool metadata (name/title/description) continues to drive Copilot discovery; no additional registration/unregistration dance is required beyond reacting to enablement state.
 
 7. **MCP Fallback** – If tool invocation proves insufficient (e.g., other agent platforms lack tool support or require richer auth), Cognee will expose equivalent `retrieve`/`ingest` tools via a local MCP server running inside the extension. Those tools proxy into `CogneeContextProvider`, reuse the same rate limiting and audit logging, and give MCP-aware agents a supported integration path without duplicating business logic. MCP remains a contingency path and should only ship after discovery/auth flows are validated.
+
+#### 4.5.1 Async Ingestion & Background Cognify (Plan 017)
+
+Plan 017 refines the agent-ingestion half of this flow so Copilot tools acknowledge `cognee.add()` quickly while `cognee.cognify()` finishes in the background. The architecture introduces deterministic state tracking, queueing, and error propagation so async work does not regress transparency or reliability.
+
+> **Clarification (2025-11-20 13:45)** – “Async” in this context does **not** introduce a new magical bridge API; it is achieved by explicitly splitting the existing `ingest.py` responsibilities into two callable modes (`--mode add-only` and `--mode cognify-only`) and orchestrating them from TypeScript. Every production ingestion path (agent tools, manual capture, headless commands) calls `add-only`, returns to the user immediately (<10 s) with staged messaging, then launches a detached `cognify-only` subprocess that the `BackgroundOperationManager` supervises. The legacy `--mode sync` exists solely for diagnostics/tests. This split is the sole sanctioned way to make cognify asynchronous and is the Highest Business Objective for Plan 017.
+
+1. **Async Entry Point** – `CogneeContextProvider` exposes `ingestAsync` (used by `cogneeStoreSummary`, `cogneeMemory.ingestForAgent`, and the manual `cognee.captureMessage` command) which wraps `CogneeClient.ingest()` but instructs it to call `ingest.py --mode add-only`. The legacy `sync` mode is reserved for diagnostics/tests only. Every caller must tell the user “Memory staged – finishing in ~1–2 minutes. You’ll get a notification when cognify completes.” instead of implying the operation is fully complete.
+2. **Operation Ledger** – Once `add-only` succeeds, `BackgroundOperationManager` creates an operation record `{operationId, datasetPath, summaryDigest, startTime, pid, status=pending}` in memory, VS Code `globalState`, and `.cognee/background_ops.json`. Records age out after 24 hours (success) or 7 days (failure) so QA can inspect histories.
+3. **Background Subprocess** – The manager spawns `python ingest.py --mode cognify-only --operation-id <id>` with `detached: true`, `stdio: 'ignore'`, and inherits the workspace environment. The TypeScript process keeps the `ChildProcess` handle long enough to subscribe to `exit` / `error` events, then `unref()` so VS Code threads are not blocked.
+4. **Concurrency Limits** – Only 2 background cognify() jobs may run simultaneously; up to 3 additional operations queue in FIFO order. The queue is persisted with the ledger so restarts do not drop pending work. When limits are exceeded, tools fail fast with `429_COGNIFY_BACKLOG` and instruct agents to retry later. This mirrors the retrieval-side throttling and prevents a thundering herd if multiple agents ingest at once.
+5. **Lifecycle Events** – When the background process starts, the manager logs `[BACKGROUND] Cognify started (operationId, pid)` to the Output channel and writes a `[PROGRESS]` marker to the ledger file. Success transitions the record to `completed`, captures duration/entity count from the subprocess JSON stub, logs `[BACKGROUND] completed in Ns`, and emits an info-level notification (`✔ Cognify finished`, "View Status" opens the status command) so agents know the summary is ready. Failures mark the record `failed`, persist the error payload, and trigger a warning notification with "Retry" (re-run add-only) and "View Logs" actions. Success and failure notifications share the same throttle budget: ≤1 per outcome type every 5 minutes per workspace to prevent alert fatigue.
+6. **Crash / Restart Handling** – On activation the manager reloads `.cognee/background_ops.json`, checks each `running` entry, and verifies if the recorded PID still exists. If yes, it reattaches to the process; if not, it marks the entry `unknown` and surfaces a warning in the Output channel so users know cognify() may not have completed. During extension `deactivate()`, all live processes receive SIGTERM with a 5-second grace period followed by SIGKILL if still running, and ledger entries are updated accordingly.
+7. **Status Surface** – The new `cognee.backgroundStatus` command (consumed by QA + advanced users) renders the ledger in a quick-pick: operation ID, elapsed time, current state. This command only surfaces local data and never transmits telemetry.
+
+Error payloads remain consistent with the Plan 014/016 taxonomy: the background subprocess writes `{ operation_id, success, error_code, error_message, remediation }` to its status stub before exiting so the TypeScript side can deliver actionable notifications.
 
 ## 5. Data & Storage Boundaries
 
@@ -317,6 +341,22 @@ Enabling agent access grants every extension in the workspace the ability to rea
 **Alternatives Considered**: (1) Keep the workspace setting and attempt to refresh Configure Tools manually; rejected because VS Code caches tool metadata and would still mislead users. (2) Introduce a new in-extension toggle; rejected as duplicative and still unable to reflect Configure Tools state. (3) Delay change until VS Code exposes tool-refresh APIs; rejected because hotfix is required for v0.3.2.
 **Consequences**: (+) Eliminates contradictory privacy controls; (+) aligns with VS Code best practices; (+) reduces lifecycle bugs by letting the platform manage tool visibility; (-) removes persistent status bar indicator, so future transparency work must leverage notifications/logs. Commands invoked outside Configure Tools must now check tool enablement and fail fast when disabled.
 **Related**: Plan 016.1 (Fix Tool Lifecycle and Bridge Timeouts), §4.5 runtime flow, Epic 0.3.0.3.
+
+### Decision: Async Cognify Background Processing (2025-11-20 09:45)
+
+**Context**: Profiling on 2025-11-19 confirmed that `cognee.add()` completes in ~5 seconds while `cognee.cognify()` blocks agent tools for ~68 seconds. Epic 0.3.0.3 requires agent tools to return promptly so QA can exercise retrieval and audit flows, yet synchronous ingestion makes every test take 70+ seconds and causes VS Code integration tests to time out. We must decouple staging from graph construction without sacrificing transparency or workspace isolation.
+**Choice**: Split `ingest.py` into explicit modes and orchestrate background cognify() via a new `BackgroundOperationManager`. All production ingestion paths (agent tools, manual capture, headless commands) call `ingest.py --mode add-only`, return success immediately with staged messaging, then enqueue a detached `--mode cognify-only` subprocess managed by the TS service. The manager persists operation state (JSON ledger + VS Code Memento), enforces 2 concurrent jobs with a bounded queue, resumes orphaned work on activation, terminates children on deactivate, and emits throttled notifications for both success (info) and failure (warning) outcomes. The legacy `sync` mode is reserved for diagnostics/tests.
+**Alternatives Considered**: (1) Keep synchronous ingestion and simply increase timeouts—rejected because it blocks user workflows and still hides failures. (2) Implement a persistent Python worker/daemon—rejected for now due to packaging/lifecycle complexity and need for per-workspace sandboxing. (3) Depend on Cognee SDK-level async APIs—none exist today, and introducing threads within the bridge would not solve VS Code host blocking or state tracking requirements.
+**Consequences**: (+) Reduces perceived agent latency from ~73s to <10s while preserving eventual consistency. (+) Introduces a durable audit trail for background work plus structured error propagation, improving transparency over the previous synchronous "spinner" UX. (-) Raises operational complexity: planners must deliver ledger persistence, queue limits, restart reconciliation, and notification throttling to avoid zombie processes or alert fatigue. (-) Async mode cannot ship until bridge tests cover all three modes, meaning Plan 017 needs a strict implementation order (bridge split → manager → tools). Future telemetry (status bar, retries) builds atop this foundation.
+**Related**: Plan 017 (Async Cognify Optimization), §3.1 BackgroundOperationManager, §4.5.1 runtime flow, Roadmap Epic 0.3.0.3.
+
+### Decision: Background Notification Policy (2025-11-20 12:05)
+
+**Context**: Plan 017’s planner required success + failure notifications so agents know when background cognify() finishes, but the initial architectural findings allowed only failure toasts. This left QA without clear acceptance criteria and risked diverging UX between docs and implementation.
+**Choice**: Adopt dual notification outcomes backed by one throttle budget: info-level success toast (`✔ Cognify finished – View Status`) and warning-level failure toast (`⚠ Cognify failed – Retry/View Logs`). Both share the existing ≤1 per outcome type per 5 minutes per workspace throttle, and the Output channel remains the authoritative log.
+**Alternatives Considered**: (1) Failure-only notifications with Output logs for success—rejected for lack of positive confirmation that memories are usable. (2) Notification-per-operation with no throttling—rejected for noise during batch ingestion.
+**Consequences**: (+) Resolves plan/architecture discrepancy; (+) provides deterministic user feedback while preserving noise limits; (-) adds state to `BackgroundOperationManager` (lastSuccessAt/lastFailureAt) and QA coverage for both copy variants.
+**Related**: Plan 017, §3.1 BackgroundOperationManager, §4.5.1 runtime flow.
 
 ## 10. Roadmap Architecture Outlook
 

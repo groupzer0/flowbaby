@@ -109,6 +109,14 @@ Create markdown file in `agent-output/uat/` directory matching plan name with st
 **Date**: [date]
 **UAT Agent**: Product Owner (UAT)
 
+## Changelog
+
+| Date | Agent Handoff | Request | Summary |
+|------|---------------|---------|---------|
+| YYYY-MM-DD | [Who handed off] | [What was requested] | [Brief summary of UAT outcome] |
+
+**Example**: `2025-11-22 | QA | All tests passing, ready for value validation | UAT Complete - implementation delivers stated value, async ingestion working <10s`
+
 ## Value Statement Under Test
 [Copy value statement from plan]
 

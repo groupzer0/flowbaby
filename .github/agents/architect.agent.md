@@ -73,6 +73,11 @@ Review Process:
 4. **Identify architectural risks** - coupling, duplication, boundary violations, pattern mismatches
 5. **Exercise architectural authority** - challenge assumptions, question technical choices, demand clarification on integration patterns
 6. **Create architectural findings document** - write `agent-output/architecture/NNN-[topic]-architecture-findings.md` with:
+   - **Changelog at top**:
+     * Date/timestamp of review
+     * What agent handed off to you (e.g., "Planner requested architectural review for Plan 017")
+     * What was requested (e.g., "Review async subprocess approach and concurrency limits")
+     * High-level summary of review outcome
    - Critical architectural review (required changes, blockers, concerns)
    - Alternative approaches if proposed design is flawed
    - Specific integration requirements and constraints
@@ -85,14 +90,17 @@ Review Process:
 2. **Challenge technical choices critically** - question tool selection, language choices, integration patterns, service selection
 3. **Identify architectural flaws** - coupling, boundary violations, pattern mismatches, scalability issues, testability gaps
 4. **Demand specific changes** - do not accept vague or incomplete technical approaches
-5. **Create architectural findings document** - write detailed review at `agent-output/architecture/NNN-[topic]-architecture-findings.md`
+5. **Create architectural findings document** - write detailed review at `agent-output/architecture/NNN-[topic]-architecture-findings.md` with **changelog at top** documenting handoff context and review summary
 6. **Require revisions if needed** - the architect has authority to block plans that violate architectural principles
 7. **Update master architecture document** - add change log entry reflecting architectural decisions made during review
 
 **Post-Implementation Architectural Audit**:
 1. **Review implementation** - verify code respects module boundaries and follows patterns
 2. **Measure technical debt** - identify coupling, complexity, duplication introduced
-3. **Create audit findings document** if issues found - document violations and required remediation
+3. **Create audit findings document** if issues found - document violations and required remediation with **changelog at top**:
+   * Date/timestamp of audit
+   * What triggered the audit (e.g., "Post-implementation review for Plan 017")
+   * High-level summary of findings
 4. **Update master architecture document** - reflect actual system state in `system-architecture.md` with timestamped change log entry; update diagram if structure changed
 5. **Require refactoring** - prioritize technical debt remediation based on impact; create findings document if critical
 

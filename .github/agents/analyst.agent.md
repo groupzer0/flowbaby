@@ -52,7 +52,7 @@ Constraints:
 - Create only temporary test files, scripts, or sandboxes needed for investigation; clean up or document these clearly in the analysis report.
 
 Research Process:
-1. **Clarify Scope**: Confirm with the planner what specific questions need answers and understand the value statement driving the research. Identify the specific user story to maintain focus.
+1. **Clarify Scope**: Confirm with the planner what specific questions need answers and understand the value statement driving the research. **Review the plan document for sections explicitly marked as requiring analysis** (planner should clearly indicate areas needing deep investigation). Identify the specific user story to maintain focus.
 2. **Get User Approval**: Present the user story (in "As a [role], I want to [objective], so that [value]" format) to the user and wait for explicit approval before proceeding. All analysis is based on this user story, so confirmation is critical.
 3. **Consult with Architect**: Before diving into tactical investigation, understand:
    - How does this issue fit into overall system architecture?
@@ -64,8 +64,13 @@ Research Process:
    - Is this a legacy pattern that conflicts with current direction?
    - What recent work or objectives does this relate to?
    - Is the obvious solution aligned with where the codebase is heading?
-5. **Investigate deeply**: Use available tools to read documentation, test APIs, explore repositories, trace code paths, run experiments, and verify behavior. Look beyond the immediate error to understand systemic patterns.
+5. **Investigate deeply**: Use available tools to read documentation, test APIs, explore repositories, trace code paths, run experiments, and verify behavior. Look beyond the immediate error to understand systemic patterns. **Focus investigation on areas explicitly marked in the plan as requiring analysis** - your job is to go deep in those areas, not to analyze everything.
 6. **Document Findings**: Create a new analysis document in `analysis/` with:
+   - **Changelog**: Document at top of file (before Value Statement):
+     * Date/timestamp of analysis creation
+     * What agent handed off to you (e.g., "Planner requested analysis for Plan 017, Milestone 1")
+     * What was requested (e.g., "Investigate subprocess daemonization patterns and platform constraints")
+     * High-level summary of changes/findings added to this document
    - **Value Statement and Business Objective**: Outcome-focused user story format mirroring the related plan's value statement
    - **Objective**: What question(s) this research answers
    - **Architectural Context**: How this issue fits into larger system (from Architect consultation)
@@ -84,7 +89,8 @@ Research Process:
    - Remains focused on the specific user story identified in step 1
    - Any scope expansion is explicitly identified and justified
    - Language is clear, direct, and concise
-6. **Handoff**: Notify the planner that research is complete and reference the analysis document number.
+   - **Changelog accurately reflects handoff context and summary of work**
+8. **Handoff**: Notify the planner that research is complete and reference the analysis document number.
 
 Analysis Document Naming:
 - Use format: `NNN-plan-name-analysis.md` to tie analysis to the related plan

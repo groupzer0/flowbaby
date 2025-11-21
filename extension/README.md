@@ -85,6 +85,49 @@ If you see errors, check the [Troubleshooting](#troubleshooting) section below.
 
 ## Usage
 
+### Async Ingestion Behavior (v0.3.3+)
+
+Starting in v0.3.3, memory ingestion operates asynchronously to prevent blocking your workflow. Here's what to expect:
+
+**Timing Expectations**:
+- **Capture Response**: 5-10 seconds—you can continue working immediately after capture
+- **Background Processing**: 60-90 seconds—knowledge graph construction happens in the background
+- **Total Time**: ~1-2 minutes from capture to searchable memory
+
+**Staged Messaging**:
+
+When you capture a memory (via keyboard shortcut, command palette, or agent tools), you'll see:
+
+> **"Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."**
+
+This means:
+- ✅ Your content has been safely staged for processing
+- ✅ You can continue working without waiting
+- ⏳ Knowledge graph construction is running in the background
+- 🔔 You'll receive a notification when processing completes
+
+**Completion Notifications**:
+
+After background processing finishes, you'll receive one of two notifications:
+
+- **Success** (ℹ️ Info): "✅ Cognify finished" with workspace name, summary digest, elapsed time, and entity count. Click "View Status" to see all background operations.
+- **Failure** (⚠️ Warning): "⚠️ Cognify failed" with workspace name, summary digest, and remediation guidance. Click "Retry" to re-process or "View Logs" for error details.
+
+**Why Async?**
+
+Previously, memory capture blocked for 60-90 seconds while the knowledge graph was being built. This made agents unresponsive and disrupted your workflow. With async ingestion:
+- Agents return responses in <10 seconds
+- You can store multiple memories without waiting
+- Background processing doesn't interrupt your work
+- You're only notified if there's an error
+
+**Background Status**:
+
+To check all in-flight operations:
+1. Press `Cmd+Shift+P` (or `Ctrl+Shift+P` on Linux/Windows)
+2. Type "Cognee: Background Status"
+3. View pending, running, completed, and failed operations
+
 ### Capturing Conversations
 
 **Keyboard Shortcut (Primary Method)**:
@@ -92,7 +135,8 @@ If you see errors, check the [Troubleshooting](#troubleshooting) section below.
 2. Press **Ctrl+Alt+C** (or **Cmd+Alt+C** on macOS)
 3. Paste the message content in the input box (or leave empty to use clipboard)
 4. Press Enter to capture
-5. See "✅ Captured to memory" confirmation
+5. See "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done." confirmation
+6. Continue working—you'll receive a completion notification when ready
 
 **Command Palette (Alternative)**:
 1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)

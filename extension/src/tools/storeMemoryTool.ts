@@ -66,23 +66,39 @@ export class StoreMemoryTool implements vscode.LanguageModelTool<StoreMemoryTool
                 agentName: 'Copilot (via languageModelTool)'
             };
 
-            // Invoke internal command
+            // Invoke internal command (now async)
             const responseJson = await vscode.commands.executeCommand<string>(
                 'cogneeMemory.ingestForAgent',
                 JSON.stringify(payload)
             );
 
             const duration = Date.now() - startTime;
-            this.outputChannel.appendLine(`  ✅ Ingestion completed in ${duration}ms`);
+            this.outputChannel.appendLine(`  ✅ Memory staged in ${duration}ms`);
 
             // Parse and return response
             const response = JSON.parse(responseJson || '{"success":false,"error":"No response"}');
             
+            // Return staged messaging per Plan 017 architecture
+            if (response.success && response.staged) {
+                this.outputChannel.appendLine(`  📝 Operation ID: ${response.operationId}`);
+                this.outputChannel.appendLine(`  ⏳ Background processing started`);
+                
+                return new vscode.LanguageModelToolResult([
+                    new vscode.LanguageModelTextPart(JSON.stringify({
+                        success: true,
+                        operationId: response.operationId,
+                        staged: true,
+                        message: "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done.",
+                        duration_ms: duration
+                    }))
+                ]);
+            }
+            
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(JSON.stringify({
                     success: response.success,
-                    summary_id: response.summary_id,
-                    ingested_chars: response.ingested_chars,
+                    error: response.error,
+                    errorCode: response.errorCode || 'INGESTION_ERROR',
                     duration_ms: duration
                 }))
             ]);

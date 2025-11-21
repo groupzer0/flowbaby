@@ -218,6 +218,146 @@ if (!response.success) {
 | `INVALID_WORKSPACE_PATH` | Workspace path invalid or inaccessible | Verify workspace exists |
 | `BRIDGE_TIMEOUT` | Python bridge exceeded timeout | Retry; check bridge logs |
 | `COGNEE_ERROR` | Cognee library threw exception | Check Output channel for details |
+| `429_COGNIFY_BACKLOG` | Background queue full (5 operations max) | Wait 30-60s for queue to clear, then retry |
+
+---
+
+## Async Ingestion Behavior (v0.3.3+)
+
+### Overview
+
+Starting in v0.3.3, the `cogneeMemory.ingestForAgent` command operates **asynchronously** to prevent blocking agent workflows. Previously, ingestion took 60-90 seconds and blocked the agent until completion. With async mode:
+
+- **Agent response**: <10 seconds (returns after data staging)
+- **Background processing**: 60-90 seconds (knowledge graph construction)
+- **Notification**: User receives completion/failure toast when done
+
+### Timing Expectations
+
+**Ingestion Flow Timeline**:
+1. **0-5s**: Extension receives `ingestForAgent` command
+2. **5-10s**: Python bridge stages data (`cognee.add()`), command returns `success`
+3. **10-100s**: Background subprocess builds knowledge graph (`cognee.cognify()`)
+4. **100s**: User receives notification (success or failure toast)
+
+**What This Means for Agents**:
+- ✅ Agents can acknowledge ingestion immediately (<10s)
+- ✅ Agents don't block waiting for graph construction
+- ✅ Multiple ingestion requests can be queued
+- ⚠️ Memory is **not immediately searchable** after command returns (60-90s delay)
+
+### Response Fields for Async Mode
+
+The `CogneeIngestResponse` includes fields to indicate async processing:
+
+```typescript
+interface CogneeIngestResponse {
+  success: boolean;
+  staged?: boolean;           // true if background processing queued
+  operationId?: string;        // UUID for tracking background operation
+  ingested_chars: number;
+  staging_duration_sec: number; // Time for add() only (excludes cognify)
+  // ... other fields
+}
+```
+
+**Example Response**:
+```json
+{
+  "success": true,
+  "staged": true,
+  "operationId": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+  "ingested_chars": 1234,
+  "staging_duration_sec": 6.2,
+  "metadata": { "topic_id": "plan-017-async" }
+}
+```
+
+### Checking Background Operation Status
+
+To query the status of a background operation:
+
+```typescript
+const statusJson = await vscode.commands.executeCommand<string>(
+  'cogneeMemory.backgroundStatus',
+  operationId // optional: specific operation, or omit for all
+);
+
+const status = JSON.parse(statusJson);
+console.log(`Operation ${operationId}: ${status.status}`);
+// status: 'pending' | 'running' | 'completed' | 'failed' | 'terminated' | 'unknown'
+```
+
+### Handling 429_COGNIFY_BACKLOG
+
+Async mode enforces concurrency limits to prevent resource exhaustion:
+- **Max concurrent**: 2 cognify() processes running simultaneously
+- **Max queued**: 3 pending operations in FIFO queue
+- **Total capacity**: 5 operations (2 running + 3 queued)
+
+When capacity is exceeded, `ingestForAgent` returns an error:
+
+```json
+{
+  "success": false,
+  "errorCode": "429_COGNIFY_BACKLOG",
+  "error": "Background queue full (5 operations max). Wait 30-60s and retry."
+}
+```
+
+**Recommended Agent Behavior**:
+```typescript
+const response = JSON.parse(responseJson);
+
+if (response.errorCode === '429_COGNIFY_BACKLOG') {
+  // Option 1: Inform user and defer ingestion
+  vscode.window.showWarningMessage(
+    'Memory storage queue full. Capturing conversation later when capacity available.'
+  );
+
+  // Option 2: Retry after delay (aggressive, may annoy user)
+  setTimeout(() => retryIngestion(payload), 60000); // 60s
+
+  // Option 3: Discard this ingestion attempt (acceptable for low-priority captures)
+  console.log('Skipping ingestion due to backlog');
+}
+```
+
+### Race Condition: Retrieve Before Cognify Completes
+
+**Scenario**: Agent stores memory at T+0s, then immediately retrieves at T+5s. Background cognify() hasn't completed yet (still running at ~T+30s).
+
+**Behavior**: Retrieval will **not find** the newly staged memory because knowledge graph hasn't been built yet.
+
+**Mitigation Strategies**:
+
+1. **Inform user about delay** (recommended):
+   ```typescript
+   if (response.staged) {
+     vscode.window.showInformationMessage(
+       'Memory staged – processing will finish in ~1–2 minutes. You\'ll get a notification when it\'s done.'
+     );
+   }
+   ```
+
+2. **Delay retrieval** (if agent controls both store and retrieve):
+   ```typescript
+   // Store memory
+   const ingestResponse = await ingestForAgent(payload);
+   
+   // Wait for background processing (polling approach)
+   if (ingestResponse.staged) {
+     await waitForCompletion(ingestResponse.operationId, { timeout: 120000, pollInterval: 5000 });
+   }
+   
+   // Now retrieve
+   const retrieveResponse = await retrieveForAgent(query);
+   ```
+
+3. **Accept eventual consistency** (best UX):
+   - Don't block agent on cognify() completion
+   - User will see memory in future retrieval attempts (after T+90s)
+   - This matches async philosophy: don't block workflow for background processing
 
 ---
 

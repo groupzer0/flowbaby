@@ -44,3 +44,4 @@ extension/test-*.js
 
 # Logs
 *.log
+.envrc
