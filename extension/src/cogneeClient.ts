@@ -24,9 +24,12 @@ export interface RetrievalResult {
     topicId?: string;
     planId?: string;
     sessionId?: string;
-    status?: 'Active' | 'Superseded' | null;
+    status?: 'Active' | 'Superseded' | 'DecisionRecord' | null;
     createdAt?: Date;
+    sourceCreatedAt?: Date;
+    updatedAt?: Date;
     score: number;
+    finalScore?: number;
     decisions?: string[];
     rationale?: string[];
     openQuestions?: string[];
@@ -57,8 +60,7 @@ export class CogneeClient {
     private readonly bridgePath: string;
     private readonly maxContextResults: number;
     private readonly maxContextTokens: number;
-    private readonly recencyWeight: number;
-    private readonly importanceWeight: number;
+    private readonly rankingHalfLifeDays: number;
     private readonly logLevel: LogLevel;
     private readonly outputChannel: vscode.OutputChannel;
 
@@ -74,8 +76,9 @@ export class CogneeClient {
         const config = vscode.workspace.getConfiguration('cogneeMemory');
         this.maxContextResults = config.get<number>('maxContextResults', 3);
         this.maxContextTokens = config.get<number>('maxContextTokens', 2000);
-        this.recencyWeight = config.get<number>('recencyWeight', 0.3);
-        this.importanceWeight = config.get<number>('importanceWeight', 0.2);
+        const rankingConfig = vscode.workspace.getConfiguration('cogneeMemory.ranking');
+        const halfLifeSetting = rankingConfig.get<number>('halfLifeDays', 7);
+        this.rankingHalfLifeDays = this.clampHalfLifeDays(halfLifeSetting);
 
         // Map log level string to enum
         const logLevelStr = config.get<string>('logLevel', 'info');
@@ -102,6 +105,7 @@ export class CogneeClient {
             pythonSource: detectionSource,
             maxContextResults: this.maxContextResults,
             maxContextTokens: this.maxContextTokens,
+            rankingHalfLifeDays: this.rankingHalfLifeDays,
             bridgePath: this.bridgePath
         });
     }
@@ -253,7 +257,8 @@ export class CogneeClient {
         topicId: string | null;
         sessionId: string | null;
         planId: string | null;
-        status: 'Active' | 'Superseded' | 'Draft' | null;
+        status: 'Active' | 'Superseded' | 'DecisionRecord' | null;
+        sourceCreatedAt: Date | null;
         createdAt: Date | null;
         updatedAt: Date | null;
     }): Promise<boolean> {
@@ -281,6 +286,7 @@ export class CogneeClient {
                 sessionId: summary.sessionId,
                 planId: summary.planId,
                 status: summary.status,
+                sourceCreatedAt: summary.sourceCreatedAt ? summary.sourceCreatedAt.toISOString() : null,
                 createdAt: summary.createdAt ? summary.createdAt.toISOString() : null,
                 updatedAt: summary.updatedAt ? summary.updatedAt.toISOString() : null,
                 workspace_path: this.workspacePath
@@ -380,7 +386,8 @@ export class CogneeClient {
             topicId: string | null;
             sessionId: string | null;
             planId: string | null;
-            status: 'Active' | 'Superseded' | 'Draft' | null;
+            status: 'Active' | 'Superseded' | 'DecisionRecord' | null;
+            sourceCreatedAt: Date | null;
             createdAt: Date | null;
             updatedAt: Date | null;
         },
@@ -409,6 +416,7 @@ export class CogneeClient {
                 sessionId: summary.sessionId,
                 planId: summary.planId,
                 status: summary.status,
+                sourceCreatedAt: summary.sourceCreatedAt ? summary.sourceCreatedAt.toISOString() : null,
                 createdAt: summary.createdAt ? summary.createdAt.toISOString() : null,
                 updatedAt: summary.updatedAt ? summary.updatedAt.toISOString() : null,
                 workspace_path: this.workspacePath
@@ -618,6 +626,23 @@ export class CogneeClient {
             importance
         });
 
+        if (!this.pythonPath) {
+            const interpreterError = 'Python interpreter not configured. Set cogneeMemory.pythonPath or create a workspace .venv.';
+            this.log('ERROR', 'Cannot start async ingestion without Python interpreter', {
+                duration_ms: 0,
+                error: interpreterError
+            });
+            vscode.window.showErrorMessage(
+                'Cognee cannot start background ingestion because no Python interpreter is configured. ' +
+                'Set cogneeMemory.pythonPath or create a workspace .venv and try again.'
+            );
+            return {
+                success: false,
+                staged: false,
+                error: interpreterError
+            };
+        }
+
         try {
             // Run add-only mode (fast, <10s)
             const result = await this.runPythonScript('ingest.py', [
@@ -713,16 +738,29 @@ export class CogneeClient {
      * @param query User's search query
      * @returns Promise<RetrievalResult[]> - Array of retrieval results with metadata (empty on error)
      */
-    async retrieve(query: string): Promise<RetrievalResult[]> {
+    async retrieve(
+        query: string,
+        options?: {
+            maxResults?: number;
+            maxTokens?: number;
+            includeSuperseded?: boolean;
+            halfLifeDays?: number;
+        }
+    ): Promise<RetrievalResult[]> {
         const startTime = Date.now();
+
+        const maxResults = options?.maxResults ?? this.maxContextResults;
+        const maxTokens = options?.maxTokens ?? this.maxContextTokens;
+        const halfLifeDays = this.clampHalfLifeDays(options?.halfLifeDays ?? this.rankingHalfLifeDays);
+        const includeSuperseded = options?.includeSuperseded ?? false;
 
         this.log('DEBUG', 'Retrieving context', {
             query_length: query.length,
             query_preview: query.length > 200 ? query.substring(0, 200) + `... (${query.length} chars total)` : query,
-            max_results: this.maxContextResults,
-            max_tokens: this.maxContextTokens,
-            recency_weight: this.recencyWeight,
-            importance_weight: this.importanceWeight
+            max_results: maxResults,
+            max_tokens: maxTokens,
+            half_life_days: halfLifeDays,
+            include_superseded: includeSuperseded
         });
 
         try {
@@ -730,10 +768,10 @@ export class CogneeClient {
             const result = await this.runPythonScript('retrieve.py', [
                 this.workspacePath,
                 query,
-                this.maxContextResults.toString(),
-                this.maxContextTokens.toString(),
-                this.recencyWeight.toString(),
-                this.importanceWeight.toString()
+                maxResults.toString(),
+                maxTokens.toString(),
+                halfLifeDays.toString(),
+                includeSuperseded ? 'true' : 'false'
             ], 15000);
 
             const duration = Date.now() - startTime;
@@ -754,7 +792,12 @@ export class CogneeClient {
                         sessionId: r.session_id || undefined,
                         status: r.status || undefined,
                         createdAt: r.created_at ? new Date(r.created_at) : undefined,
-                        score: r.score || 0,
+                        sourceCreatedAt: r.source_created_at
+                            ? new Date(r.source_created_at)
+                            : (r.created_at ? new Date(r.created_at) : undefined),
+                        updatedAt: r.updated_at ? new Date(r.updated_at) : undefined,
+                        score: r.score ?? r.final_score ?? r.relevance_score ?? 0,
+                        finalScore: r.final_score ?? r.relevance_score ?? r.score ?? 0,
                         decisions: r.decisions || [],
                         rationale: r.rationale || [],
                         openQuestions: r.open_questions || [],
@@ -1199,5 +1242,15 @@ export class CogneeClient {
             case 'debug': return LogLevel.Debug;
             default: return LogLevel.Info;
         }
+    }
+
+    /**
+     * Clamp half-life configuration to supported bounds (0.5 - 90 days)
+     */
+    private clampHalfLifeDays(value: number | undefined): number {
+        if (value === undefined || Number.isNaN(value)) {
+            return 7;
+        }
+        return Math.min(Math.max(value, 0.5), 90);
     }
 }

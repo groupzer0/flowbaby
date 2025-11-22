@@ -91,11 +91,12 @@ def write_status_stub(operation_id: str, workspace_dir: Path, success: bool,
 
 def create_summary_text(summary_json: dict) -> str:
     """Create enriched summary text with embedded metadata per §4.4.1"""
-    TEMPLATE_VERSION = "1.0"
+    TEMPLATE_VERSION = "1.1"
     
     # Validate required timestamp fields (camelCase from TypeScript)
     created_ts = summary_json.get('createdAt')
     updated_ts = summary_json.get('updatedAt')
+    source_created_ts = summary_json.get('sourceCreatedAt') or 'N/A'
     
     if not created_ts:
         raise ValueError('Summary missing required "createdAt" field (ISO 8601 timestamp)')
@@ -109,15 +110,21 @@ def create_summary_text(summary_json: dict) -> str:
         return '\n'.join(f'- {item}' for item in items)
     
     # Format summary with metadata embedded (Cognee 0.3.4 enriched-text fallback per §4.4.1)
+    topic_id = summary_json.get('topicId') or 'N/A'
+    session_id = summary_json.get('sessionId') or 'N/A'
+    plan_id = summary_json.get('planId') or 'N/A'
+    status = summary_json.get('status', 'Active') or 'Active'
+
     summary_text = f"""<!-- Template: v{TEMPLATE_VERSION} -->
 # Conversation Summary: {summary_json['topic']}
 
 **Metadata:**
-- Topic ID: {summary_json['topicId']}
-- Session ID: {summary_json.get('sessionId') or 'N/A'}
-- Plan ID: {summary_json.get('planId') or 'N/A'}
-- Status: {summary_json.get('status', 'Active')}
+- Topic ID: {topic_id}
+- Session ID: {session_id}
+- Plan ID: {plan_id}
+- Status: {status}
 - Created: {created_ts}
+- Source Created: {source_created_ts}
 - Updated: {updated_ts}
 
 ## Context

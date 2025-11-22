@@ -77,17 +77,30 @@ suite('CogneeContextProvider Test Suite', () => {
      * Helper to create mock retrieval results
      */
     function createMockResults(count: number): RetrievalResult[] {
-        return Array.from({ length: count }, (_, i) => ({
-            summaryText: `Summary ${i + 1}`,
-            text: `Summary ${i + 1}`,
-            decisions: [`Decision ${i + 1}`],
-            topic: `Topic ${i + 1}`,
-            topicId: `topic-${i + 1}`,
-            planId: undefined,
-            createdAt: new Date(),
-            score: 0.9 - (i * 0.1),
-            tokens: 100
-        }));
+        return Array.from({ length: count }, (_, i) => {
+            const createdAt = new Date(Date.now() - (i * 60000));
+            const sourceCreatedAt = new Date(createdAt.getTime() - 86400000);
+
+            return {
+                summaryText: `Summary ${i + 1}`,
+                text: `Summary ${i + 1}`,
+                decisions: [`Decision ${i + 1}`],
+                rationale: [`Reason ${i + 1}`],
+                openQuestions: [`Question ${i + 1}`],
+                nextSteps: [`Step ${i + 1}`],
+                references: [`Reference ${i + 1}`],
+                topic: `Topic ${i + 1}`,
+                topicId: `topic-${i + 1}`,
+                planId: `plan-${i + 1}`,
+                sessionId: `session-${i + 1}`,
+                status: 'Active',
+                createdAt,
+                sourceCreatedAt,
+                updatedAt: createdAt,
+                score: 0.9 - (i * 0.1),
+                tokens: 100
+            } as RetrievalResult;
+        });
     }
 
     suite('Configuration and Initialization', () => {
@@ -329,9 +342,21 @@ suite('CogneeContextProvider Test Suite', () => {
                 
                 // Check entry structure
                 const firstEntry = response.entries[0];
+                const firstResult = mockResults[0];
                 assert.strictEqual(firstEntry.summaryText, 'Summary 1');
                 assert.deepStrictEqual(firstEntry.decisions, ['Decision 1']);
                 assert.strictEqual(firstEntry.topicId, 'topic-1');
+                assert.deepStrictEqual(firstEntry.rationale, ['Reason 1']);
+                assert.deepStrictEqual(firstEntry.openQuestions, ['Question 1']);
+                assert.deepStrictEqual(firstEntry.nextSteps, ['Step 1']);
+                assert.deepStrictEqual(firstEntry.references, ['Reference 1']);
+                assert.strictEqual(firstEntry.sessionId, 'session-1');
+                assert.strictEqual(firstEntry.planId, 'plan-1');
+                assert.strictEqual(firstEntry.status, firstResult.status);
+                assert.strictEqual(firstEntry.createdAt, firstResult.createdAt?.toISOString());
+                assert.strictEqual(firstEntry.sourceCreatedAt, firstResult.sourceCreatedAt?.toISOString());
+                assert.strictEqual(firstEntry.updatedAt, firstResult.updatedAt?.toISOString());
+                assert.strictEqual(firstEntry.tokens, 100);
             }
         });
 
@@ -344,6 +369,8 @@ suite('CogneeContextProvider Test Suite', () => {
                 topicId: undefined,
                 planId: undefined,
                 createdAt: undefined,
+                sourceCreatedAt: undefined,
+                status: undefined,
                 score: 0.8,
                 tokens: 50
             };
@@ -357,6 +384,8 @@ suite('CogneeContextProvider Test Suite', () => {
                 assert.strictEqual(entry.topicId, null);
                 assert.strictEqual(entry.planId, null);
                 assert.strictEqual(entry.createdAt, null);
+                assert.strictEqual(entry.sourceCreatedAt, null);
+                assert.strictEqual(entry.status, null);
             }
         });
 

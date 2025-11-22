@@ -1,7 +1,7 @@
 ---
 description: Research and analysis specialist for pre-implementation investigation.
 name: Analyst
-tools: ['runCommands', 'edit/createFile', 'edit/editFiles', 'runNotebooks', 'search', 'usages', 'vscodeAPI', 'problems', 'fetch', 'githubRepo']
+tools: ['edit/createFile', 'edit/editFiles', 'runNotebooks', 'search', 'runCommands', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'usages', 'vscodeAPI', 'problems', 'fetch', 'githubRepo', 'todos']
 model: GPT-5.1-Codex (Preview)
 handoffs:
   - label: Create Plan

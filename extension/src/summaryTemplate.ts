@@ -19,7 +19,7 @@
  * MUST be incremented when section headings or metadata format changes.
  * Changes require synchronized updates across TypeScript and Python layers.
  */
-export const TEMPLATE_VERSION = '1.0';
+export const TEMPLATE_VERSION = '1.1';
 
 /**
  * Structured conversation summary following Plan 014 schema.
@@ -66,7 +66,10 @@ export interface ConversationSummary {
     planId: string | null;
     
     /** Summary lifecycle status; null for legacy memories per §4.4.1 */
-    status: 'Active' | 'Superseded' | 'Draft' | null;
+    status: 'Active' | 'Superseded' | 'DecisionRecord' | null;
+
+    /** Original creation timestamp derived from source content */
+    sourceCreatedAt: Date | null;
     
     /** Timestamp when summary was created; null for legacy memories per §4.4.1 */
     createdAt: Date | null;
@@ -98,8 +101,8 @@ export function validateSummary(summary: Partial<ConversationSummary>): void {
     
     // Status can be null for legacy memories per §4.4.1
     if (summary.status !== null && summary.status !== undefined && 
-        !['Active', 'Superseded', 'Draft'].includes(summary.status)) {
-        throw new Error('Summary status must be Active, Superseded, Draft, or null');
+        !['Active', 'Superseded', 'DecisionRecord'].includes(summary.status)) {
+        throw new Error('Summary status must be Active, Superseded, DecisionRecord, or null');
     }
     
     // Timestamps can be null for legacy memories per §4.4.1
@@ -111,6 +114,11 @@ export function validateSummary(summary: Partial<ConversationSummary>): void {
     if (summary.updatedAt !== null && summary.updatedAt !== undefined && 
         !(summary.updatedAt instanceof Date)) {
         throw new Error('Summary updatedAt must be a Date or null');
+    }
+
+    if (summary.sourceCreatedAt !== null && summary.sourceCreatedAt !== undefined &&
+        !(summary.sourceCreatedAt instanceof Date)) {
+        throw new Error('Summary sourceCreatedAt must be a Date or null');
     }
 }
 
@@ -136,6 +144,7 @@ export function formatSummaryAsText(summary: ConversationSummary): string {
     // Format timestamps as ISO 8601 (or N/A for null timestamps per §4.4.1)
     const createdAt = summary.createdAt ? summary.createdAt.toISOString() : 'N/A';
     const updatedAt = summary.updatedAt ? summary.updatedAt.toISOString() : 'N/A';
+    const sourceCreatedAt = summary.sourceCreatedAt ? summary.sourceCreatedAt.toISOString() : 'N/A';
     
     // Format list items
     const decisionsText = summary.decisions.length > 0
@@ -168,6 +177,7 @@ export function formatSummaryAsText(summary: ConversationSummary): string {
 - Session ID: ${summary.sessionId || 'N/A'}
 - Plan ID: ${summary.planId || 'N/A'}
 - Status: ${summary.status || 'N/A'}
+- Source Created: ${sourceCreatedAt}
 - Created: ${createdAt}
 - Updated: ${updatedAt}
 
@@ -217,9 +227,10 @@ export function createDefaultSummary(topic: string, context: string): Conversati
         topicId: generateTopicId(topic),
         sessionId: null,
         planId: null,
-        status: 'Draft',
+        status: 'Active',
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        sourceCreatedAt: now
     };
 }
 

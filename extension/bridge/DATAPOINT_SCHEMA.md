@@ -10,9 +10,9 @@ This document defines the **structured DataPoint schema** for storing conversati
 
 ## Schema Version
 
-**Schema Version**: 1.0.0  
-**Template Version**: 1.0 (embedded in markdown as `<!-- Template: v1.0 -->`)
-**Effective Date**: 2025-11-18  
+**Schema Version**: 1.1.0  
+**Template Version**: 1.1 (embedded in markdown as `<!-- Template: v1.1 -->`)
+**Effective Date**: 2025-11-21  
 **Cognee SDK**: 0.3.4  
 **Architecture Reference**: `system-architecture.md` §4.4.1 (Enriched Text Metadata Fallback)
 
@@ -22,7 +22,7 @@ This document defines the **structured DataPoint schema** for storing conversati
 
 ### Key Requirements:
 
-1. **Template Versioning**: All generated summaries MUST include `<!-- Template: v1.0 -->` as the first line to enable future format migrations.
+1. **Template Versioning**: All generated summaries MUST include `<!-- Template: v1.1 -->` as the first line to enable future format migrations.
 
 2. **Deterministic Section Headings**: The markdown template uses fixed section headings (`## Context`, `## Key Decisions`, etc.) that MUST match exactly across:
    - `extension/src/summaryTemplate.ts` (generation)
@@ -120,7 +120,7 @@ class ConversationSummary(BaseModel):
     
     status: str = Field(
         default="Active",
-        description="Summary lifecycle status: 'Active', 'Superseded', 'Draft'"
+        description="Summary lifecycle status: 'Active', 'Superseded', 'DecisionRecord'"
     )
     
     created_at: datetime = Field(
@@ -128,9 +128,19 @@ class ConversationSummary(BaseModel):
         description="Timestamp when summary was created (ISO 8601)"
     )
     
+    source_created_at: Optional[datetime] = Field(
+        default=None,
+        description="Original timestamp of the underlying work (files, commits, or historical logs)"
+    )
+
     updated_at: datetime = Field(
         ...,
         description="Timestamp when summary was last updated (ISO 8601)"
+    )
+
+    relevance_score: Optional[float] = Field(
+        default=None,
+        description="Computed during retrieval (semantic similarity * recency decay); not stored at rest"
     )
 
 
@@ -157,6 +167,11 @@ When ingesting a conversation summary into Cognee:
    - `session_id` (used for grouping/compaction)
    - `updated_at` (audit trail)
    - `context`, `rationale`, `open_questions`, `next_steps`, `references`, `time_scope` (available in full results)
+    - `source_created_at` (preserved for truthful recency; may be null on legacy memories)
+
+4. **Derived Fields (Retrieval Only)**:
+    - `relevance_score` = `semantic_similarity * exp(-decay_alpha * days_since_source_created)`
+    - Returned by `retrieve.py` responses but NOT persisted in Cognee datasets
 
 ### Example DataPoint Structure
 
@@ -171,6 +186,7 @@ When ingesting a conversation summary into Cognee:
         "plan_id": "014",
         "status": "Active",
         "created_at": "2025-11-17T16:30:00Z",
+        "source_created_at": "2025-11-17T14:00:00Z",
         "updated_at": "2025-11-17T16:31:00Z",
         "context": "Implementing structured conversation summaries...",
         "decisions": [
@@ -191,12 +207,12 @@ When ingesting a conversation summary into Cognee:
 }
 ```
 
-### Enriched Text Template (v1.0)
+### Enriched Text Template (v1.1)
 
 The enriched text MUST use this exact markdown format for regex parsing:
 
 ```markdown
-<!-- Template: v1.0 -->
+<!-- Template: v1.1 -->
 # Conversation Summary: {topic}
 
 **Metadata:**
@@ -205,6 +221,7 @@ The enriched text MUST use this exact markdown format for regex parsing:
 - Plan ID: {plan_id}
 - Status: {status}
 - Created: {created_at}
+- Source Created: {source_created_at}
 - Updated: {updated_at}
 
 ## Context
@@ -232,6 +249,8 @@ The enriched text MUST use this exact markdown format for regex parsing:
 - Turn Count: {turn_count}
 ```
 
+**Source Created Guidance**: `source_created_at` SHOULD capture the best-known timestamp from original artifacts (file mtime, git commit, legacy log). If no trustworthy value exists, emit `N/A` so `retrieve.py` can fall back to `created_at` during ranking.
+
 ### Regex Patterns for Metadata Extraction
 
 `retrieve.py` uses these patterns to parse enriched summaries. **CRITICAL**: Any template changes require updating these patterns.
@@ -247,8 +266,9 @@ METADATA_BLOCK_PATTERN = r'\*\*Metadata:\*\*'
 TOPIC_ID_PATTERN = r'- Topic ID: ([a-f0-9\-]+)'
 SESSION_ID_PATTERN = r'- Session ID: ([a-f0-9\-]+|N/A)'
 PLAN_ID_PATTERN = r'- Plan ID: ([\w\-]+|N/A)'
-STATUS_PATTERN = r'- Status: (Active|Superseded|Draft)'
+STATUS_PATTERN = r'- Status: (Active|Superseded|DecisionRecord)'
 CREATED_AT_PATTERN = r'- Created: ([\d\-T:Z]+)'
+SOURCE_CREATED_AT_PATTERN = r'- Source Created: ([\d\-T:Z]+|N/A)'
 UPDATED_AT_PATTERN = r'- Updated: ([\d\-T:Z]+)'
 
 # Content sections (headings)
@@ -261,6 +281,7 @@ REFERENCES_SECTION_PATTERN = r'## References\n(.+?)(?=\n##|$)'
 ```
 
 **Validation Rules**:
+
 - If `**Metadata:**` block is missing, treat as legacy memory (all metadata fields = null).
 - If metadata block exists but regex groups fail, log error with malformed text snippet and return error payload.
 - All section headings are optional; missing sections return empty arrays/strings.
@@ -289,7 +310,7 @@ When retrieving memories, `retrieve.py` must handle both:
 
 1. **Schema validation**: Pydantic model validates all field types and required fields
 2. **Timestamp format**: ISO 8601 format (e.g., `2025-11-17T16:30:00Z`)
-3. **Status enum**: Must be one of `["Active", "Superseded", "Draft"]`
+3. **Status enum**: Must be one of `["Active", "Superseded", "DecisionRecord"]`
 4. **Topic ID format**: UUID or stable slug (validated by bridge, not Pydantic)
 
 ### Test Coverage Requirements

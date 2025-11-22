@@ -31,6 +31,9 @@ extension/*.vsix
 extension/*.vsix.sha256
 extension/.vscode-test/
 
+# Root Node dependencies
+node_modules/
+
 # Test/debug files
 extension/test-*.js
 *.backup

@@ -5,6 +5,27 @@ All notable changes to the Cognee Chat Memory extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2025-11-21
+
+### Added - Plan 018: Metadata Infrastructure and Ranking
+
+**Intelligent Ranking & Filtering** - Retrieval now prioritizes memories based on recency and status:
+- **Recency-Aware Ranking**: New exponential decay algorithm prioritizes fresh memories. Configurable via `cogneeMemory.ranking.halfLifeDays` (default: 7 days).
+- **Status Filtering**: Memories can be marked as `Active`, `Superseded`, or `DecisionRecord`.
+  - `Superseded` memories are hidden by default to reduce noise.
+  - `DecisionRecord` memories receive a relevance boost.
+- **Metadata-Rich Storage**: Summaries now embed structured metadata (topicId, status, timestamps) directly in the text, enabling robust tracking even without graph metadata support.
+
+**Technical Implementation**:
+- **Enriched Text Fallback**: Implemented "Enriched Text" pattern to store metadata within summary text, bypassing Cognee 0.3.4 DataPoint limitations.
+- **Migration Script**: New `migrate_summaries.py` script automatically upgrades legacy memories to the new schema.
+- **Safe Migration**: Uses file locking (`.cognee/maintenance.lock`) to pause background operations during migration.
+- **Updated Tool Definitions**: `cognee_storeMemory` and `cognee_retrieveMemory` tools updated with clearer descriptions and privacy guarantees ("Data stays in this workspace").
+
+### Fixed
+- **Ranking Quality**: Addressed issue where old, less relevant memories cluttered retrieval results.
+- **Status Visibility**: Superseded plans and decisions no longer confuse agents.
+
 ## [0.3.4] - 2025-11-21
 
 ### Release

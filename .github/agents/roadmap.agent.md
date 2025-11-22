@@ -1,8 +1,8 @@
 ---
 description: Strategic vision holder maintaining outcome-focused product roadmap aligned with releases.
 name: Roadmap
-tools: ['search', 'fetch', 'githubRepo', 'usages', 'changes', 'edit/editFiles']
-model: Claude Sonnet 4.5
+tools: ['edit/editFiles', 'search', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'usages', 'changes', 'fetch', 'githubRepo', 'todos']
+model: GPT-5.1-Codex (Preview)
 handoffs:
   - label: Request Architectural Guidance
     agent: Architect

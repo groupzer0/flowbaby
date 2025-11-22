@@ -63,6 +63,9 @@ async def test_retrieve_success_with_llm_api_key(temp_workspace, mock_env):
             assert 'results' in result
             assert 'result_count' in result
             assert 'total_tokens' in result
+            assert 'total_results' in result
+            assert result['half_life_days'] > 0
+            assert result['include_superseded'] is False
             # Verify API key was set (using key from mock_env fixture)
             mock_cognee.config.set_llm_api_key.assert_called_once_with('sk-test-mock-key-12345')
             # Verify workspace-local storage directories configured
@@ -93,20 +96,23 @@ async def test_retrieve_with_search_results(temp_workspace, mock_env):
             
             assert result['success'] is True
             assert result['result_count'] == 1
+            assert result['total_results'] == 1
             assert len(result['results']) == 1
             
             # Verify result structure
             first_result = result['results'][0]
             assert 'text' in first_result
             assert 'score' in first_result
-            assert 'recency_score' in first_result
-            assert 'importance_score' in first_result
+            assert 'final_score' in first_result
+            assert 'relevance_score' in first_result
+            assert 'semantic_score' in first_result
+            assert 'recency_multiplier' in first_result
+            assert 'status_multiplier' in first_result
             assert 'tokens' in first_result
             
             # Verify scoring calculations
             assert 0 <= first_result['score'] <= 1
-            assert 0 <= first_result['recency_score'] <= 1
-            assert first_result['importance_score'] == 0.8
+            assert 0 <= first_result['recency_multiplier'] <= 1
 
 
 @pytest.mark.asyncio
@@ -135,7 +141,8 @@ async def test_retrieve_token_limit_enforcement(temp_workspace, mock_env):
             
             assert result['success'] is True
             # Should only include first result due to token limit
-            assert result['result_count'] <= 2
+            assert result['result_count'] == 1
+            assert result['total_results'] == 3
             assert result['total_tokens'] <= 600
 
 
@@ -202,29 +209,34 @@ def test_main_invalid_max_results(capsys):
             assert 'Invalid max_results' in output['error']
 
 
-def test_recency_score_calculation():
-    """Test recency score calculation for various timestamps."""
-    from retrieve import calculate_recency_score
-    from datetime import datetime, timedelta
+def test_recency_multiplier_calculation():
+    """Test recency multiplier calculation for various timestamps."""
+    from retrieve import calculate_recency_multiplier
+    from datetime import datetime, timedelta, timezone
+
+    half_life_days = 7.0
+
+    recent = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    # Ensure Z suffix if isoformat doesn't include it (it usually includes +00:00 for aware)
+    # But the function handles +00:00 via fromisoformat.
+    # However, the test previously added 'Z'. Let's keep it consistent or rely on isoformat.
+    # datetime.now(timezone.utc).isoformat() produces "2023-10-27T10:00:00+00:00"
+    # The retrieve function does: timestamp_str.replace('Z', '+00:00')
+    # So if we pass "+00:00", it's fine.
     
-    # Recent timestamp (1 day ago) should have high score
-    recent = (datetime.now() - timedelta(days=1)).isoformat()
-    recent_score = calculate_recency_score(recent)
-    assert 0.9 <= recent_score <= 1.0
-    
-    # Old timestamp (30+ days ago) should have score near 0
-    old = (datetime.now() - timedelta(days=35)).isoformat()
-    old_score = calculate_recency_score(old)
-    assert 0.0 <= old_score <= 0.2
-    
-    # Mid-range timestamp (15 days ago) should have mid score
-    mid = (datetime.now() - timedelta(days=15)).isoformat()
-    mid_score = calculate_recency_score(mid)
-    assert 0.4 <= mid_score <= 0.6
-    
-    # Invalid timestamp should return default
-    invalid_score = calculate_recency_score("invalid-timestamp")
-    assert invalid_score == 0.5
+    recent_multiplier = calculate_recency_multiplier(recent, half_life_days)
+    assert 0.85 <= recent_multiplier <= 1.0
+
+    old = (datetime.now(timezone.utc) - timedelta(days=35)).isoformat()
+    old_multiplier = calculate_recency_multiplier(old, half_life_days)
+    assert 0.0 <= old_multiplier <= 0.2
+
+    mid = (datetime.now(timezone.utc) - timedelta(days=15)).isoformat()
+    mid_multiplier = calculate_recency_multiplier(mid, half_life_days)
+    assert 0.2 <= mid_multiplier <= 0.6
+
+    invalid_multiplier = calculate_recency_multiplier("invalid-timestamp", half_life_days)
+    assert invalid_multiplier == 1.0
 
 
 def test_estimate_tokens():

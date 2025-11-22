@@ -98,6 +98,7 @@ export async function handleIngestForAgent(
                 topicId: generateTopicId(request.topic),
                 status: 'Active',
                 createdAt: new Date().toISOString(),
+                sourceCreatedAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
         }
@@ -108,6 +109,7 @@ export async function handleIngestForAgent(
         const status = request.metadata.status || 'Active';
         const now = new Date().toISOString();
         const createdAt = request.metadata.createdAt || now;
+        const sourceCreatedAt = request.metadata.sourceCreatedAt || createdAt;
         const updatedAt = request.metadata.updatedAt || now;
 
         // Step 5: Call bridge via CogneeClient (async mode per Plan 017)
@@ -132,7 +134,8 @@ export async function handleIngestForAgent(
                 topicId,
                 sessionId,
                 planId,
-                status: status as 'Active' | 'Superseded' | 'Draft',
+                status: status as 'Active' | 'Superseded' | 'DecisionRecord',
+                sourceCreatedAt: new Date(sourceCreatedAt),
                 createdAt: new Date(createdAt),
                 updatedAt: new Date(updatedAt)
             }, manager);
@@ -157,6 +160,7 @@ export async function handleIngestForAgent(
                         session_id: sessionId || undefined,
                         plan_id: planId || undefined,
                         status,
+                        source_created_at: sourceCreatedAt,
                         created_at: createdAt,
                         updated_at: updatedAt
                     },

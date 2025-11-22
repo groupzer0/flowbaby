@@ -1,7 +1,7 @@
 ---
 description: Makes go/no-go decisions when agents reach impasses or encounter blocking issues.
 name: Escalation
-tools: ['search', 'fetch', 'githubRepo', 'usages', 'changes', 'problems', 'edit/createFile']
+tools: ['edit/createFile', 'search', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'usages', 'problems', 'changes', 'fetch', 'githubRepo']
 model: GPT-5.1 (Preview)
 handoffs:
   - label: Invoke Planner

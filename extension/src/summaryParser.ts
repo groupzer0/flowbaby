@@ -20,7 +20,7 @@ import { ConversationSummary, createDefaultSummary, TEMPLATE_VERSION } from './s
  * 
  * Enriched text format:
  * ```
- * <!-- Template: v1.0 -->
+ * <!-- Template: v1.1 -->
  * # Conversation Summary: {topic}
  * 
  * **Metadata:**
@@ -88,7 +88,8 @@ function parseEnrichedSummary(text: string): ConversationSummary | null {
     const topicIdMatch = text.match(/- Topic ID:\s*(N\/A|[a-zA-Z0-9\-]+)/i);
     const sessionIdMatch = text.match(/- Session ID:\s*(N\/A|[a-zA-Z0-9\-]+)/);
     const planIdMatch = text.match(/- Plan ID:\s*(N\/A|[\w\-]+)/);
-    const statusMatch = text.match(/- Status:\s*(N\/A|Active|Superseded|Draft)/i);
+    const statusMatch = text.match(/- Status:\s*(N\/A|Active|Superseded|DecisionRecord)/i);
+    const sourceCreatedMatch = text.match(/- Source Created:\s*(N\/A|[\d\-T:Z.]+)/i);
     const createdAtMatch = text.match(/- Created:\s*(N\/A|[\d\-T:Z.]+)/i);
     const updatedAtMatch = text.match(/- Updated:\s*(N\/A|[\d\-T:Z.]+)/i);
     
@@ -118,7 +119,10 @@ function parseEnrichedSummary(text: string): ConversationSummary | null {
         topicId: topicIdMatch && topicIdMatch[1] !== 'N/A' ? topicIdMatch[1] : null,
         sessionId: sessionIdMatch && sessionIdMatch[1] !== 'N/A' ? sessionIdMatch[1] : null,
         planId: planIdMatch && planIdMatch[1] !== 'N/A' ? planIdMatch[1] : null,
-        status: statusMatch && statusMatch[1] !== 'N/A' ? statusMatch[1] as 'Active' | 'Superseded' | 'Draft' : null,
+        status: statusMatch && statusMatch[1] !== 'N/A' ? statusMatch[1] as 'Active' | 'Superseded' | 'DecisionRecord' : null,
+        sourceCreatedAt: sourceCreatedMatch && sourceCreatedMatch[1] !== 'N/A'
+            ? new Date(sourceCreatedMatch[1])
+            : (createdAtMatch && createdAtMatch[1] !== 'N/A' ? new Date(createdAtMatch[1]) : null),
         createdAt: createdAtMatch && createdAtMatch[1] !== 'N/A' ? new Date(createdAtMatch[1]) : null,
         updatedAt: updatedAtMatch && updatedAtMatch[1] !== 'N/A' ? new Date(updatedAtMatch[1]) : null
     };
@@ -150,6 +154,7 @@ function parseLegacySummary(text: string): ConversationSummary | null {
     summary.status = null; // Legacy memories don't have status tracking
     summary.createdAt = null; // Legacy memories don't have timestamp metadata
     summary.updatedAt = null;
+    summary.sourceCreatedAt = null;
     
     // Try to parse list sections if present
     if (text.includes('Decisions:')) {
@@ -341,6 +346,13 @@ export function validateRoundTrip(
     
     if (original.status !== parsed.status) {
         console.warn('Round-trip validation failed: status mismatch');
+        return false;
+    }
+
+    const originalSource = original.sourceCreatedAt ? original.sourceCreatedAt.toISOString() : null;
+    const parsedSource = parsed.sourceCreatedAt ? parsed.sourceCreatedAt.toISOString() : null;
+    if (originalSource !== parsedSource) {
+        console.warn('Round-trip validation failed: sourceCreatedAt mismatch');
         return false;
     }
     

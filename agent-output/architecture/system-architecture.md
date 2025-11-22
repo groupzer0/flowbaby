@@ -23,6 +23,8 @@
 | 2025-11-20 13:05 | Clarified async ingestion definition vs bridge modes | Address critique that async intent was ambiguous; reiterate architectural contract for background cognify | Plan 017 |
 | 2025-11-20 13:25 | Documented async UX messaging (staged copy + completion notification promise) | Ensure users never see "Done" while cognify still running; set expectation for 1–2 min completion + toast | Plan 017 |
 | 2025-11-20 13:45 | Extended async ingestion requirement to manual capture | Align all ingestion flows with business goal of non-blocking UX; document additional UX/QA constraints | Plan 017 |
+| 2025-11-21 15:05 | Recorded Plan 018 migration/ranking guardrails (maintenance mode, truthful timestamps, unified decay config) | Keep metadata ranking aligned with async ingestion contract and preserve recency semantics | Plan 018 |
+| 2025-11-21 15:15 | Captured Plan 019 compaction queue + conflict-store requirements | Prevent compaction jobs from violating background limits and ensure conflict review has durable state | Plan 019 |
 
 
 ## 1. Purpose and Scope
@@ -148,6 +150,19 @@ Cognee SDK 0.3.4 does **not** expose a public `DataPoint` API, so Plan 014 inges
 - Treat this fallback as temporary. As soon as Cognee exposes DataPoints, Planner MUST schedule the migration to native metadata storage and retire regex parsing to reduce brittleness.
 
 Testing Guidance: `extension/bridge/test_datapoint_contract.py` is now mandated to cover (a) enriched-text formatting, (b) metadata parsing, (c) legacy path regression tests, and (d) JSON contract validation so QA can rely on deterministic behavior even without DataPoints.
+
+#### 4.4.2 Metadata Migration & Ranking Readiness (Plan 018)
+
+- Legacy summary migration must run as a bridge-level maintenance operation that temporarily pauses `BackgroundOperationManager`, performs `add` + `cognify` synchronously per batch, and logs to a dedicated `.cognee/maintenance/migration.log`. It may not route through agent-facing ingestion commands or emit user-facing staged notifications.
+- Migration must preserve truthful recency data: store both `sourceCreatedAt` (best-effort timestamp derived from legacy artifacts) and `migratedAt`, and have ranking/decay logic operate on `sourceCreatedAt` to avoid biasing scores.
+- Ranking exposes a single user-facing parameter (`halfLifeDays` recommended). The bridge derives `decayAlpha` internally (`alpha = ln(2)/halfLifeDays`) so QA, docs, and retrieval consumers share one contract.
+- All schema/version changes for enriched-text metadata continue to require synchronized template + parser updates with regression tests to keep fallback stable until DataPoints land.
+
+#### 4.4.3 Compaction Prerequisites (Plan 019)
+
+- `compact.py` jobs must coordinate with the async ingestion ledger: either enqueue `add-only` operations through `BackgroundOperationManager` with maintenance labels or hold an exclusive lock that pauses the queue while synchronous compaction runs. Automatic runs must skip if the queue is non-empty.
+- Since enriched-text entries are immutable, “superseding” a summary means ingesting a new metadata wrapper that marks it `Superseded` and references the original via `supersededBy`. Retrieval logic (and Plan 018 ranking) must honor the newest metadata entry, not mutate historical text.
+- Compaction must persist conflict diagnostics in a deterministic local store (e.g., `.cognee/compaction/conflicts.json`) so both bridge scripts and VS Code UI surfaces share state for review/resolution workflows. The schema must capture cluster/topic IDs, conflicting decisions, timestamps, and resolution status.
 
 #### 4.5 Agent-Initiated Retrieval & Ingestion (Epic 0.3.0.3)
 
@@ -357,6 +372,22 @@ Enabling agent access grants every extension in the workspace the ability to rea
 **Alternatives Considered**: (1) Failure-only notifications with Output logs for success—rejected for lack of positive confirmation that memories are usable. (2) Notification-per-operation with no throttling—rejected for noise during batch ingestion.
 **Consequences**: (+) Resolves plan/architecture discrepancy; (+) provides deterministic user feedback while preserving noise limits; (-) adds state to `BackgroundOperationManager` (lastSuccessAt/lastFailureAt) and QA coverage for both copy variants.
 **Related**: Plan 017, §3.1 BackgroundOperationManager, §4.5.1 runtime flow.
+
+### Decision: Metadata Migration Maintenance Mode (2025-11-21 15:05)
+
+**Context**: Plan 018 needs to migrate hundreds of legacy summaries into the structured metadata schema while Plan 017 introduced `BackgroundOperationManager` and staged messaging for every ingestion. Naively re-ingesting each summary via the public add-only path would overwhelm the background queue, emit spurious notifications, and distort the async ledger.
+**Choice**: Treat metadata migration as a bridge-level maintenance operation that (a) pauses the background queue, (b) performs `cognee.add` + `cognify` synchronously per batch, (c) records progress in `.cognee/maintenance/migration.log`, and (d) resumes the queue after completion. Migration must capture both `sourceCreatedAt` and `migratedAt`, and ranking must rely on the former so exponential decay remains truthful. Users configure recency via a single `halfLifeDays` setting; the bridge derives `decayAlpha` internally.
+**Alternatives Considered**: (1) Run migration through the live ingestion commands—rejected for queue saturation and noisy UX. (2) Skip truthful timestamps—rejected because ranking would perceive migrated data as brand new. (3) Expose both decay parameters—rejected for configuration drift.
+**Consequences**: (+) Maintains async ingestion guarantees during maintenance; (+) preserves recency semantics for ranking; (+) simplifies configuration/testing by owning the alpha↔half-life conversion centrally; (-) Requires additional tooling (queue lock, maintenance log) and detection of legacy timestamps.
+**Related**: Plan 018, §4.4.2, §4.5, §11 roadmap ranking goals.
+
+### Decision: Compaction Queue Coordination & Conflict Store (2025-11-21 15:15)
+
+**Context**: Plan 019 introduces background compaction that ingests new `DecisionRecord` entries and marks originals as `Superseded`, alongside a conflict-review UI. Without guidance, compaction could run concurrently with async ingestion, mutate immutable enriched-text records, or leave conflict metadata scattered across ad-hoc logs.
+**Choice**: Require compaction jobs to coordinate with `BackgroundOperationManager` (either enqueue labeled add-only work or hold an exclusive maintenance lock), treat supersedence as new metadata entries rather than in-place mutations, and persist conflict diagnostics in a deterministic local store (`.cognee/compaction/conflicts.json`) consumable by both bridge scripts and VS Code UI. Auto-compaction must defer when the ingestion queue is busy and publish audit logs distinct from regular captures.
+**Alternatives Considered**: (1) Let compaction run independently of the queue—rejected for risking concurrent writes and broken throttling. (2) Modify existing summaries in place—rejected because enriched-text fallback lacks mutable fields and would desynchronize metadata. (3) Keep conflicts only in Output logs—rejected because the review UI would have no durable data.
+**Consequences**: (+) Preserves async ingestion invariants; (+) keeps immutable storage model intact; (+) enables deterministic conflict review; (-) Adds bookkeeping (locks, conflict files) and stricter scheduling logic for auto-compaction.
+**Related**: Plan 019, §4.4.3, §8 (Problem Area 9), roadmap Epic 0.3.0.1.
 
 ## 10. Roadmap Architecture Outlook
 

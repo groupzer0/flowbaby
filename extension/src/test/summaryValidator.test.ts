@@ -228,6 +228,7 @@ suite('summaryValidator', () => {
                         topicId: 'test-001',
                         status,
                         createdAt: '2025-11-19T10:00:00Z',
+                        sourceCreatedAt: '2025-11-19T09:45:00Z',
                         updatedAt: '2025-11-19T10:00:00Z'
                     }
                 };
@@ -245,6 +246,24 @@ suite('summaryValidator', () => {
             expect(result.errors).to.include('Payload must be a non-null object');
         });
 
+        test('rejects payload with invalid sourceCreatedAt timestamp', () => {
+            const payload = {
+                topic: 'Test Topic',
+                context: 'Test context',
+                metadata: {
+                    topicId: 'test-001',
+                    createdAt: '2025-11-19T10:00:00Z',
+                    sourceCreatedAt: 'invalid',
+                    updatedAt: '2025-11-19T10:00:00Z'
+                }
+            };
+
+            const result = validateIngestRequest(payload);
+
+            expect(result.valid).to.be.false;
+            expect(result.errors.some(e => e.includes('metadata.sourceCreatedAt'))).to.be.true;
+        });
+
         test('rejects null payload', () => {
             const result = validateIngestRequest(null);
 
@@ -260,6 +279,7 @@ suite('summaryValidator', () => {
             expect(metadata.topicId).to.equal('test-topic-id');
             expect(metadata.status).to.equal('Active');
             expect(metadata.createdAt).to.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+            expect(metadata.sourceCreatedAt).to.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
             expect(metadata.updatedAt).to.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
         });
 
@@ -273,10 +293,12 @@ suite('summaryValidator', () => {
             const customTime = '2025-01-01T00:00:00Z';
             const metadata = generateDefaultMetadata('test-id', {
                 createdAt: customTime,
+                sourceCreatedAt: customTime,
                 updatedAt: customTime
             });
 
             expect(metadata.createdAt).to.equal(customTime);
+            expect(metadata.sourceCreatedAt).to.equal(customTime);
             expect(metadata.updatedAt).to.equal(customTime);
         });
 

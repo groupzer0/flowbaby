@@ -1,7 +1,7 @@
 ---
 description: Constructive reviewer and program manager that stress-tests planning documents.
 name: Critic
-tools: ['search', 'fetch', 'githubRepo', 'usages', 'runCommands', 'edit']
+tools: ['edit', 'search', 'runCommands', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'usages', 'fetch', 'githubRepo', 'todos']
 model: GPT-5.1 (Preview)
 handoffs:
   - label: Revise Plan

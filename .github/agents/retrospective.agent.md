@@ -1,8 +1,8 @@
 ---
 description: Captures lessons learned, architectural decisions, and patterns after implementation completes.
 name: Retrospective
-tools: ['edit/createFile', 'search', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'usages', 'changes', 'fetch', 'githubRepo']
-model: Claude Sonnet 4.5
+tools: ['edit/createFile', 'search', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'usages', 'changes', 'fetch', 'githubRepo', 'todos']
+model: Gemini 3 Pro (Preview)
 handoffs:
   - label: Update Architecture
     agent: Architect

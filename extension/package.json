@@ -2,7 +2,7 @@
   "name": "cognee-chat-memory",
   "displayName": "Cognee Chat Memory",
   "description": "Automatic memory for GitHub Copilot chat using Cognee knowledge graphs",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "publisher": "cognee",
   "icon": "media/icon.png",
   "engines": {
@@ -83,41 +83,48 @@
         "toolReferenceName": "cogneeStoreSummary",
         "canBeReferencedInPrompt": true,
         "icon": "$(database)",
-        "modelDescription": "Use this tool to store structured conversation summaries, decisions, and context in Cognee's knowledge graph for future retrieval. Call this when the user wants to remember important information, decisions, or conversation context. The tool accepts topic (required), context (required), and optional fields for decisions, rationale, and metadata. Workspace-specific and stores data locally.",
-        "userDescription": "Store a conversation summary in Cognee knowledge graph",
+        "modelDescription": "Primary tool for writing episodic long-term memory into Cognee's knowledge graph. Agents should call this after meaningful progress, at the end of multi-step reasoning, or when concluding a task, to persist a rich summary of what was done and why. Use this tool proactively as a state checkpoint; do not wait for the user to explicitly ask to save memory. Summaries should be 300–1500 characters and describe goals, actions, important files, decisions, and rationale. Use it to record durable decisions, plans, and implementation notes that will be useful in future turns in this workspace. Do not use this for trivial or ephemeral chit-chat.\n\nExample usage (conceptual): after completing a refactor or design decision, call this tool with topic=\"Auth refactor step 1\" and context summarizing the work, and include any key decisions and rationale. Data stays in this workspace.",
+        "userDescription": "Store a structured conversation or work summary into Cognee's knowledge graph for future retrieval. Data stays in this workspace.",
         "inputSchema": {
           "type": "object",
           "properties": {
             "topic": {
               "type": "string",
-              "description": "Brief topic or title for this memory (e.g., 'Redis caching implementation')"
+              "description": "Short 3–7 word title for this memory that clearly identifies the work or decision (e.g., \"Redis caching implementation plan\"). Do not put the full summary here."
             },
             "context": {
               "type": "string",
-              "description": "Detailed context, conversation summary, or implementation notes"
+              "description": "A rich 300–1500 character summary describing the goal, what was done, key files or components, important details, and the reasoning behind the work. This acts as long-term memory and should be understandable if read weeks later."
             },
             "decisions": {
               "type": "array",
               "items": {"type": "string"},
-              "description": "List of decisions made (optional)"
+              "description": "Optional list (0–5 items) of durable decisions made in this session (e.g., \"Keep legacy hashing for backward compatibility\"). Only include decisions that will matter for future work."
             },
             "rationale": {
               "type": "array",
               "items": {"type": "string"},
-              "description": "Reasoning behind decisions (optional)"
+              "description": "Optional list (0–5 items) explaining why the decisions were made (e.g., trade-offs, constraints, or risk considerations)."
             },
             "metadata": {
               "type": "object",
               "properties": {
-                "plan_id": {"type": "string"},
-                "status": {"type": "string", "enum": ["Active", "Superseded", "DecisionRecord"]}
+                "plan_id": {
+                  "type": "string",
+                  "description": "Optional identifier used to group related summaries or steps in a plan (e.g., \"memory-2025-01-15-auth-refactor\")."
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["Active", "Superseded", "DecisionRecord"],
+                  "description": "Optional status describing whether this memory is the current approach (Active), has been replaced (Superseded), or is a stable decision record (DecisionRecord)."
+                }
               },
-              "description": "Optional metadata (auto-generated if omitted)"
+              "description": "Optional metadata about this memory entry. If omitted, the system may auto-generate values. Use this to track plan IDs and status of decisions."
             }
           },
           "required": ["topic", "context"]
         },
-        "tags": ["memory", "knowledge-graph", "persistence", "cognee"]
+        "tags": ["memory", "knowledge-graph", "persistence", "cognee", "long-term-memory", "state-checkpoint"]
       },
       {
         "name": "cognee_retrieveMemory",
@@ -125,14 +132,14 @@
         "toolReferenceName": "cogneeRetrieveMemory",
         "canBeReferencedInPrompt": true,
         "icon": "$(search)",
-        "modelDescription": "Retrieve relevant memories from Cognee knowledge graph based on a query. Returns structured summaries with topic, context, decisions, and metadata from past conversations. Use this when you need context about previous decisions, implementations, or discussions in this workspace. Returns both human-readable markdown and structured JSON for agent parsing.",
-        "userDescription": "Search Cognee knowledge graph for relevant conversation history",
+        "modelDescription": "Primary mechanism for retrieving past context, decisions, and implementation details from Cognee's knowledge graph. Agents should call this at the start of a turn, or before planning an answer, whenever the user request might relate to prior work, previous discussions, or existing decisions in this workspace. Use a natural-language query that describes the user goal or task (not just keywords), and retrieve a small number of highly relevant memories to ground reasoning. The tool returns human-readable markdown plus structured JSON with topic, context, decisions, rationale, and metadata, which should be used to guide current planning and responses. If no results are relevant, the agent should proceed but note that no prior memory was found.\n\nExample usage (conceptual): when asked \"How did we implement caching?\" call this tool with query=\"Previous decisions and implementation details for redis caching\" and review the returned summaries before answering. Data stays in this workspace.",
+        "userDescription": "Search Cognee knowledge graph for relevant stored summaries, decisions, and context from past work. Data stays in this workspace.",
         "inputSchema": {
           "type": "object",
           "properties": {
             "query": {
               "type": "string",
-              "description": "Natural language query to search for relevant memories (e.g., 'How did we implement caching?', 'What was decided about authentication?')"
+              "description": "Natural-language description of what you want to recall, including the goal or task (e.g., \"Previous decisions about authentication strategy\", \"How we implemented Redis caching in this project\"). Avoid short keyword-only queries; instead, describe the intent and context."
             },
             "maxResults": {
               "type": "number",
@@ -144,7 +151,7 @@
           },
           "required": ["query"]
         },
-        "tags": ["memory", "knowledge-graph", "search", "retrieval", "cognee"]
+        "tags": ["memory", "knowledge-graph", "search", "retrieval", "cognee", "context", "long-term-memory"]
       }
     ],
     "configuration": {
@@ -169,19 +176,12 @@
           "maximum": 10000,
           "description": "Maximum token budget for retrieved context"
         },
-        "cogneeMemory.recencyWeight": {
+        "cogneeMemory.ranking.halfLifeDays": {
           "type": "number",
-          "default": 0.3,
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Weight for recency scoring (0-1)"
-        },
-        "cogneeMemory.importanceWeight": {
-          "type": "number",
-          "default": 0.2,
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Weight for importance scoring (0-1)"
+          "default": 7,
+          "minimum": 0.5,
+          "maximum": 90,
+          "markdownDescription": "Half-life (in days) used for recency-aware ranking. Memories older than this value will have their relevance score halved. Leave between 0.5 and 90 days to balance freshness vs. semantic similarity."
         },
         "cogneeMemory.autoIngestConversations": {
           "type": "boolean",

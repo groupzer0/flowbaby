@@ -11,8 +11,8 @@ This document describes the **structured JSON contract** returned by `extension/
 
 ## Contract Version
 
-**Version**: 1.0.0  
-**Effective Date**: 2025-11-17  
+**Version**: 1.1.0  
+**Effective Date**: 2025-11-21  
 **Cognee SDK**: 0.3.4  
 
 ## Top-Level Response Shape
@@ -34,8 +34,24 @@ This document describes the **structured JSON contract** returned by `extension/
 
 - **`success`** (boolean, required): `true` if retrieval completed, `false` if an error occurred
 - **`results`** (array, required): Ordered list of retrieval hits (highest score first)
-- **`total_results`** (integer, required): Count of all hits considered (may equal `results.length` or be higher if down-sampled)
+- **`result_count`** (integer, optional): Number of results returned in this response. Maintained for backward compatibility with Plan 014 consumers.
+- **`total_results`** (integer, required): Count of all hits considered (may exceed `results.length` if token budgets trimmed the list)
 - **`total_tokens`** (integer, required): Approximate token count of all returned results (for budget tracking)
+- **`half_life_days`** (number, optional): Half-life (in days) used for recency decay in this response.
+- **`include_superseded`** (boolean, optional): Whether the query allowed Superseded summaries in this response.
+
+### Query Parameters
+
+`retrieve.py` accepts the following CLI arguments (in order) from the extension:
+
+1. `workspace_path` – required, absolute workspace directory
+2. `query` – required, natural-language search string
+3. `max_results` – optional integer (default: VS Code setting `cogneeMemory.maxContextResults`)
+4. `max_tokens` – optional integer (default: VS Code setting `cogneeMemory.maxContextTokens`)
+5. `half_life_days` – optional float (default: VS Code setting `cogneeMemory.ranking.halfLifeDays`, fallback 7)
+6. `include_superseded` – optional boolean (`true`/`false`, default: `false`)
+
+Bridge scripts MUST document defaults and clamp invalid values (e.g., `half_life_days < 0.5` → fallback to 0.5). These parameters propagate from the TypeScript `CogneeContextRequest` interface.
 
 ### Error Handling
 
@@ -54,7 +70,13 @@ interface RetrievalResult {
   // === REQUIRED FIELDS ===
   
   summary_text: string;           // Full formatted summary (markdown template)
-  score: number;                  // Final ranking score (0.0 to 1.0+)
+  score: number;                  // Final relevance score (semantic * recency)
+  final_score?: number;           // Alias of score (preserved for analytics)
+  relevance_score?: number;       // Exposed for compatibility with Plan 014 docs
+  semantic_score?: number;        // Raw semantic similarity component
+  recency_multiplier?: number;    // Exponential decay multiplier (0-1)
+  status_multiplier?: number;     // Status weighting applied to entry
+  tokens?: number;                // Rough token count for this entry
   
   // === OPTIONAL METADATA FIELDS ===
   
@@ -62,7 +84,8 @@ interface RetrievalResult {
   topic_id?: string | null;       // UUID or stable identifier
   plan_id?: string | null;        // Associated plan (e.g., "014")
   session_id?: string | null;     // Originating session identifier
-  status?: "Active" | "Superseded" | null; // Summary lifecycle status
+  status?: "Active" | "Superseded" | "DecisionRecord" | null; // Summary lifecycle status
+  source_created_at?: string | null; // Original source timestamp (ISO 8601)
   created_at?: string | null;     // ISO 8601 timestamp
   updated_at?: string | null;     // ISO 8601 timestamp
   
@@ -100,7 +123,9 @@ interface RetrievalResult {
 - **`status`**: Lifecycle status of the summary
   - `"Active"`: Current, valid summary
   - `"Superseded"`: Replaced by a newer summary or DecisionRecord
+  - `"DecisionRecord"`: Compacted/authoritative record (Plan 019)
   - `null`: Status unknown (legacy memory)
+- **`source_created_at`**: Best-effort timestamp for the original artifact (file edit, commit, meeting). Used for recency ranking; may be `null` or `"N/A"` if unknown.
 - **`created_at`** / **`updated_at`**: Timestamps in ISO 8601 format (e.g., `"2025-11-17T16:32:10Z"`)
   - MUST be `null` if not available (do not use empty strings)
 
@@ -207,22 +232,39 @@ Downstream TypeScript code MUST:
 - Display legacy memories without metadata badges
 - Not assume presence of structured content fields
 
+## Status Filtering & Prioritization
+
+- CLI/query flag `include_superseded` controls whether Superseded summaries are returned. Default: `false` (exclude)
+- When flag is `true`, retrieval includes every status but MUST stable-sort ties so `DecisionRecord` > `Active` > `Superseded`
+- Responses MUST always include `status` so TS/UI layers can render badges (e.g., `[Decision]`, `[Superseded]`)
+
 ## Scoring Transparency
 
 ### Score Composition
 
-The `score` field in each result represents a **final ranking score** that MAY combine:
+The `score` (and `final_score`) field represents the final ranking output computed by `retrieve.py`. It combines:
 
-1. **Semantic similarity**: From Cognee's search algorithm (typically 0.0 to 1.0)
-2. **Recency adjustment**: Based on `created_at` timestamp (exponential decay or linear)
-3. **Status adjustment**: Boost `Active` records, penalize `Superseded` records
-4. **Importance/priority**: Optional boost from metadata (future enhancement)
+1. **`semantic_score`** – Cognee's similarity value (0-1).
+2. **`recency_multiplier`** – Exponential decay computed via `exp(-alpha * days_since_source_created)` where `alpha = ln(2) / half_life_days`.
+3. **`status_multiplier`** – Boost/penalty applied per status (`DecisionRecord` > `Active` > `Superseded`).
+
+`score = semantic_score * recency_multiplier * status_multiplier`
+
+`relevance_score` mirrors `final_score` for compatibility with prior documentation.
 
 ### Implementation Notes
 
 - Plan 014: Score is primarily semantic similarity from Cognee; recency awareness is minimal
-- Plan 015: Will add configurable recency-aware scoring with transparent formula
+- Plan 018: Introduces configurable recency-aware scoring via `half_life_days` parameter and `source_created_at` timestamps
 - Implementers MAY document scoring formula in retrieve.py comments for transparency
+
+### Configuration: Half-Life Parameter
+
+- VS Code setting `cogneeMemory.ranking.halfLifeDays` controls the recency decay half-life (default: 7 days, min: 0.5, max: 90)
+- TypeScript passes this value to `retrieve.py`; the bridge computes `decay_alpha = ln(2) / half_life_days`
+- API consumers MAY override per-request by setting `halfLifeDays` in `CogneeContextRequest`
+- Shorter half-life → stronger recency bias; longer half-life → more weight on semantic similarity
+- Responses now echo the `half_life_days` used for each invocation.
 
 ## Contract Evolution
 

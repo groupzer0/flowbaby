@@ -104,6 +104,8 @@ export class RetrieveMemoryTool implements vscode.LanguageModelTool<RetrieveMemo
                     }
                     
                     // Display metadata if available (graceful degradation for legacy memories)
+                    const displayScore = entry.finalScore ?? entry.score ?? 0;
+
                     if (entry.topicId || entry.planId || entry.createdAt) {
                         narrative += `**Metadata:**\n`;
                         if (entry.topicId) {
@@ -115,10 +117,10 @@ export class RetrieveMemoryTool implements vscode.LanguageModelTool<RetrieveMemo
                         if (entry.createdAt) {
                             narrative += `- Created: ${entry.createdAt}\n`;
                         }
-                        narrative += `- Relevance Score: ${entry.score.toFixed(3)}\n\n`;
+                        narrative += `- Relevance Score: ${displayScore.toFixed(3)}\n\n`;
                     } else {
                         // Legacy memory without metadata - just show score
-                        narrative += `**Relevance Score:** ${entry.score.toFixed(3)}\n\n`;
+                        narrative += `**Relevance Score:** ${displayScore.toFixed(3)}\n\n`;
                     }
                     
                     narrative += '---\n\n';

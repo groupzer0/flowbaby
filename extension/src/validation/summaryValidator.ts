@@ -64,6 +64,15 @@ export function validateIngestRequest(payload: unknown): ValidationResult {
                 }
             }
 
+            // Validate metadata.sourceCreatedAt (optional ISO 8601 timestamp)
+            if (req.metadata.sourceCreatedAt !== undefined) {
+                if (typeof req.metadata.sourceCreatedAt !== 'string') {
+                    errors.push('Field "metadata.sourceCreatedAt" must be an ISO 8601 timestamp string if provided');
+                } else if (!isValidISO8601(req.metadata.sourceCreatedAt)) {
+                    errors.push(`Field "metadata.sourceCreatedAt" is not a valid ISO 8601 timestamp: ${req.metadata.sourceCreatedAt}`);
+                }
+            }
+
             // Validate metadata.updatedAt (optional, ISO 8601 timestamp if provided)
             if (req.metadata.updatedAt !== undefined) {
                 if (typeof req.metadata.updatedAt !== 'string') {
@@ -233,6 +242,7 @@ export function generateDefaultMetadata(
         planId?: string;
         status?: SummaryStatus;
         createdAt?: string;
+        sourceCreatedAt?: string;
         updatedAt?: string;
     }
 ): {
@@ -241,6 +251,7 @@ export function generateDefaultMetadata(
     planId?: string;
     status: SummaryStatus;
     createdAt: string;
+    sourceCreatedAt?: string;
     updatedAt: string;
 } {
     const now = new Date().toISOString();
@@ -251,6 +262,7 @@ export function generateDefaultMetadata(
         planId: options?.planId,
         status: options?.status || 'Active',
         createdAt: options?.createdAt || now,
+        sourceCreatedAt: options?.sourceCreatedAt || options?.createdAt || now,
         updatedAt: options?.updatedAt || now
     };
 }

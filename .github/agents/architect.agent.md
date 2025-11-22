@@ -1,7 +1,7 @@
 ---
 description: Maintains architectural coherence across features and reviews technical debt accumulation.
 name: Architect
-tools: ['runCommands', 'edit/createFile', 'edit/editFiles', 'search', 'usages', 'problems', 'fetch', 'githubRepo']
+tools: ['edit/createFile', 'edit/editFiles', 'search', 'runCommands', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'usages', 'problems', 'fetch', 'githubRepo', 'todos']
 model: GPT-5.1-Codex (Preview)
 handoffs:
   - label: Validate Roadmap Alignment

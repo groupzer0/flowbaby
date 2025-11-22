@@ -1,6 +1,14 @@
 ---
-tools: ['search', 'usages', 'changes', 'fetch', 'githubRepo', 'edit/createFile']
-model: Claude Sonnet 4.5
+description: Analyze retrospective findings and systematically improves agent workflows.
+name: ProcessImprovement
+
+tools: ['edit/createFile', 'edit/editFiles', 'runNotebooks', 'search', 'runCommands', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'usages', 'vscodeAPI', 'problems', 'fetch', 'githubRepo', 'todos']
+model: GPT-5.1-Codex (Preview)
+handoffs:
+  - label: Start New Plan
+    agent: Planner
+    prompt: Previous work iteration is complete. REady to start something new
+    send: false
 
 ---
 

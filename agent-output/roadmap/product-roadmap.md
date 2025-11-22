@@ -60,8 +60,9 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 - **Plan 016** ✅ Complete → Epic 0.3.0.3 (Agent-Driven Memory Integration - retrieval + UI visibility)
 - **Plan 016.1** ✅ Complete → Epic 0.3.0.3 (Tool lifecycle hotfix)
 - **Plan 017** (Ready for Implementation) → Async cognify() optimization - unblocks testing and Epic 0.3.0.1
-- **Plan 018** (Proposed) → Epic 0.3.0.1 (Ranking and Relevance - metadata infrastructure) + Icons (participant + extension)
-- **Plans TBD** → Epic 0.2.3.1 (Error Transparency), Epic 0.2.3.2 (Python Auto-Setup)
+- **Plan 018** (Proposed) → Epic 0.3.0.1 (Metadata infrastructure + Ranking) + Icons (participant + extension)
+- **Plan 019** (Proposed) → Epic 0.3.0.1 (Compaction pipeline - merge summaries, conflict detection)
+- **Plans TBD** → Epic 0.2.3.1 (Error Transparency), Epic 0.4.0.2 (Auto-Setup Wizard), Epic 0.4.0.3 (Memory Browser), Epic 0.4.0.4 (Graph Export)
 
 **Strategic Decision**: Plans 012/013/013.1 resolve v0.2.x blockers; v0.3.0 work (Plans 014/015) can now proceed. Remaining v0.2.x epics (Plans 016/017) enhance UX but don't block advanced features—proceed in parallel.
 
@@ -69,6 +70,8 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-21 | Added four v0.4.0 epics: Auto-Setup Wizard (0.4.0.2), Memory Browser (0.4.0.3), Context Cards, Graph Export (0.4.0.4) | UX improvement brainstorming identified key onboarding and transparency features. Auto-Setup Wizard reduces friction by guiding Python/venv setup post-install via `Cognee: Initialize Workspace` command + walkthrough (aligns with VS Code 1.106 best practices). Memory Browser and Context Cards make Plan 018 metadata actionable through persistent UI. Graph Export leverages graph backend to visualize knowledge relationships. |
+| 2025-11-21 | Plan 018/019 scope split: Plan 018 = Metadata infrastructure + Ranking + Icons (v0.3.5), Plan 019 = Compaction pipeline (v0.3.6) | User requested separation of compaction work from Plan 018 to reduce plan complexity and enable independent delivery of metadata/ranking features. Plan 018 delivers metadata schema, recency-aware ranking, status filtering, and visual identity. Plan 019 delivers memory compaction pipeline (merge summaries into DecisionRecords, conflict detection, manual/auto-compaction). |
 | 2025-11-20 | Plan 017/018 sequencing finalized: Plan 017 = Async cognify() optimization (v0.3.4), Plan 018 = Metadata infrastructure + Icons (v0.3.5) | User prioritized async optimization to unblock testing workflows - 73s synchronous ingestion blocks automation testing and would create poor UX during metadata testing. Plan 018 will bundle metadata infrastructure (Epic 0.3.0.1) with icon assets (participant + extension identity). Icons added to implementation mapping as Plan 018 deliverable. |
 | 2025-11-19 | Plan 016 merged scope finalized: Agent retrieval infrastructure + UI-visible extension tools combined into single comprehensive plan targeting v0.3.2 | User clarified that extension tools (not MCP) are the path to Configure Tools UI visibility via `canBeReferencedInPrompt` and `toolReferenceName` flags. Plan 016 now delivers both agent retrieval capabilities (CogneeContextProvider, retrieveForAgent command, structured responses) AND tool UI visibility (`#` autocomplete, `.agent.md` support, Configure Tools appearance) as interdependent features. Epic 0.3.0.3 acceptance criteria updated to reflect merged scope. |
 | 2025-11-19 | Plan 014.1 complete: languageModelTools validated as primary Copilot integration path; Epic 0.3.0.3 unblocked | Plan 014.1 confirmed VS Code's `languageModelTools` API is the officially supported mechanism for Copilot agent integration (vs undocumented command invocation). Architecture updated to contribute Cognee tools that proxy into existing commands, preserving fallback strategies (direct commands, MCP). Epic 0.3.0.3 ready for implementation (Plans 015/016). |
@@ -302,12 +305,12 @@ So that I don't waste time sifting through tangential results.
 - Requires stable v0.2.x foundation with real usage data to inform ranking approach
 
 **Acceptance Criteria** (outcome-focused):
-- [ ] Metadata infrastructure introduced (topic_id, session_id, plan_id, status, timestamps) via Cognee DataPoints
-- [ ] Plan 014 summaries migrated to DataPoints with generated metadata (one-time migration script)
-- [ ] Retrieval results ranked by recency-aware scoring (exponential decay, configurable alpha and halfLifeDays)
-- [ ] Status-aware retrieval filters Superseded summaries, prioritizes DecisionRecords
-- [ ] Compaction trigger creates DecisionRecords from multiple summaries with conflict detection
-- [ ] Ranking transparency displays relevance scores and metadata in UI
+- [ ] Metadata infrastructure introduced (topic_id, session_id, plan_id, status, timestamps) via Cognee DataPoints (Plan 018)
+- [ ] Plan 014 summaries migrated to DataPoints with generated metadata (one-time migration script) (Plan 018)
+- [ ] Retrieval results ranked by recency-aware scoring (exponential decay, configurable alpha and halfLifeDays) (Plan 018)
+- [ ] Status-aware retrieval filters Superseded summaries, prioritizes DecisionRecords (Plan 018)
+- [ ] Compaction pipeline creates DecisionRecords from multiple summaries with conflict detection (Plan 019)
+- [ ] Ranking transparency displays relevance scores and metadata in UI (Plan 018)
 
 **Constraints**:
 - Must maintain <2s retrieval performance target
@@ -484,6 +487,112 @@ So that I can leverage patterns discovered in one project while working on anoth
 
 **Status Notes**:
 - 2025-11-15: Epic placeholder. Requires significant architectural planning.
+
+---
+
+### Epic 0.4.0.2: Auto-Setup Wizard and Onboarding
+
+**Priority**: P1 (High value - reduces setup friction)
+**Status**: Backlog
+
+**User Story**:
+As a new extension user,
+I want the extension to guide me through environment setup automatically,
+So that I can start capturing and retrieving context without troubleshooting dependencies.
+
+**Business Value**:
+- **User Impact**: Eliminates manual Python/venv setup that currently blocks 90% of new users
+- **Strategic Importance**: Zero-friction onboarding directly supports "Zero Cognitive Overhead" core principle
+- **Measurable Success**: 90% of users complete setup on first attempt without consulting docs
+
+**Dependencies**:
+- None (can be delivered independently)
+
+**Acceptance Criteria** (outcome-focused):
+- [ ] `Cognee: Initialize Workspace` command checks Python, offers one-click `.venv` creation, installs bridge deps
+- [ ] Setup progress streams to Output channel and status-bar badge with clear success/failure indicators
+- [ ] VS Code walkthrough launches after successful setup, highlighting capture shortcuts, @cognee-memory usage, ranking signals
+- [ ] Walkthrough includes "try it now" buttons that invoke commands (capture, retrieve) for immediate hands-on learning
+- [ ] Status bar displays persistent Python env health; clicking opens diagnostics panel with quick fixes
+
+**Constraints**:
+- Must respect existing `.venv` if present (don't override user's environment)
+- Auto-install must use workspace-local `.venv`, not global site-packages
+- Walkthrough must use VS Code's `contributes.walkthroughs` standard (not custom webview unless necessary)
+
+**Status Notes**:
+- 2025-11-21: Epic created based on UX improvement brainstorming. Aligns with Microsoft's activation-event and walkthrough guidelines (v1.106, Nov 2025) for post-install setup patterns.
+
+---
+
+### Epic 0.4.0.3: Memory Browser and Context Cards
+
+**Priority**: P2 (Nice to have - enhances discoverability)
+**Status**: Backlog
+
+**User Story**:
+As a developer using Cognee Chat Memory,
+I want to browse and audit stored memories with rich metadata visualization,
+So that I understand what the system knows and can act on context directly.
+
+**Business Value**:
+- **User Impact**: Makes Plan 018 metadata (ranking, status, topics) actionable; enables manual memory management
+- **Strategic Importance**: Transparency builds trust; browser view surfaces hidden value in stored context
+- **Measurable Success**: 50% of active users open Memory Browser at least once per session
+
+**Dependencies**:
+- **PREREQUISITE**: Plan 018 (metadata infrastructure) must be complete
+- Ideally delivered after Plan 019 (compaction) to surface DecisionRecords
+
+**Acceptance Criteria** (outcome-focused):
+- [ ] `Cognee Memories` tree view groups entries by topic_id/status with expandable metadata
+- [ ] Quick actions on each entry: open source file, copy decisions, mark as favorite/archived
+- [ ] Retrieval results (in chat or agent responses) render as rich cards with relevance bars, metadata badges, inline actions (pin, open, copy)
+- [ ] Context cards make ranking/status/timestamps visible to users during retrieval workflows
+- [ ] Memory browser supports filtering (Active/Superseded/DecisionRecord) and search by topic/plan
+
+**Constraints**:
+- Tree view must lazy-load for large workspaces (1000+ summaries)
+- Context cards should not clutter chat UI; collapsible or tabbed presentation
+
+**Status Notes**:
+- 2025-11-21: Epic created based on UX improvement brainstorming. Complements Plan 018 transparency goals by providing persistent inspection UI.
+
+---
+
+### Epic 0.4.0.4: Graph HTML Export
+
+**Priority**: P3 (Future enhancement)
+**Status**: Backlog
+
+**User Story**:
+As a developer with complex workspace knowledge,
+I want to visualize memory relationships as a graph,
+So that I can see how topics, plans, and decisions connect over time.
+
+**Business Value**:
+- **User Impact**: Enables high-level understanding of workspace knowledge structure; useful for onboarding or documentation
+- **Strategic Importance**: Differentiates Cognee from simple note-taking tools; showcases graph-based backend
+- **Measurable Success**: 20% of power users export graph at least once
+
+**Dependencies**:
+- **PREREQUISITE**: Plan 018 (metadata with topic_id, plan_id references)
+- Optional: Plan 019 (compaction) to include DecisionRecord → original summary edges
+
+**Acceptance Criteria** (outcome-focused):
+- [ ] `Cognee: Export Memory Graph` command walks metadata (topic_id relationships, plan references) and emits HTML/JS bundle
+- [ ] Graph uses D3.js or Cytoscape for interactive node/edge visualization
+- [ ] Nodes represent summaries; edges represent relationships (same topic, plan references, superseded-by)
+- [ ] Export saves to `.cognee_system/exports/graph-<timestamp>.html` as static file
+- [ ] Graph respects status filtering (option to exclude Superseded summaries)
+
+**Constraints**:
+- Graph export should not block UI (run in background task with progress notification)
+- HTML/JS bundle must work offline (embed libraries, no CDN dependencies)
+- Large workspaces (1000+ nodes) may require clustering or pagination
+
+**Status Notes**:
+- 2025-11-21: Epic created based on UX improvement brainstorming. Leverages Cognee's graph backend to expose knowledge structure visually.
 
 ---
 

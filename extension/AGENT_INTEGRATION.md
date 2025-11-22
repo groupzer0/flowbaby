@@ -1,4 +1,5 @@
 # Agent Integration Guide
+<!-- markdownlint-disable MD024 MD031 MD032 MD034 MD040 MD060 -->
 
 **Version**: 1.0  
 **Last Updated**: 2025-11-19  
@@ -372,6 +373,15 @@ Cognee Chat Memory provides two **Language Model Tools** that appear in VS Code'
 
 These tools allow Copilot and custom agents to autonomously access workspace memory through the standard VS Code tools UI.
 
+### Recommended Tool Cadence
+
+- **Retrieve before reasoning**: Kick off each turn (or whenever the user references prior work) by calling `#cogneeRetrieveMemory` with a natural-language description of the goal. Reviewing context before planning reduces contradictions and surfaces existing decisions.
+- **Store after meaningful progress**: Use `#cogneeStoreSummary` once a task finishes, a decision is made, or a debugging session concludes. Think of it as a state checkpoint recorded every time the agent would normally summarize work back to the user.
+- **Batch noise, not signal**: Minor clarifications or single-turn answers generally do not warrant their own summary—capture them inside the next substantial summary instead so retrieval stays precise.
+- **Close every session**: End-of-day or pre-handoff recaps greatly improve continuity; default to capturing one summary even if no major event occurred.
+
+These expectations mirror the guidance embedded in the tool metadata (e.g., 300–1500 character context, 0–5 decision bullets) and are advisory rather than enforced.
+
 ### Tool Discovery
 
 **In Configure Tools UI**:
@@ -426,6 +436,8 @@ When the user completes an important implementation or makes a decision:
   }
 }
 ```
+
+> **Length guidance (advisory):** Summaries land best when the `context` field is roughly 300–1500 characters that describe the goal, actions taken, and outcome. Keep `decisions`/`rationale` to 0–5 concise bullets each. The extension will not reject longer payloads, but downstream agents assume those ranges when budgeting tokens.
 
 **Example Usage in Chat**:
 ```
@@ -535,6 +547,41 @@ Both tools register at extension activation. VS Code manages tool enablement thr
 
 **Implementation Note**: Tools register unconditionally at activation. VS Code's Configure Tools UI is the sole authorization mechanism.
 
+### Rate Limits and Throttling
+
+- **Retrieval concurrency**: `CogneeContextProvider` executes up to **2** retrievals at once (user setting can lower this; any value above 5 is clamped). Additional requests queue up to 5 deep before being rejected.
+- **Requests per minute**: By default only **10** retrievals may start per 60-second window. Raising the workspace setting above 30 still clamps at **30/min** to stay within architectural guarantees.
+- **Ingestion backlog**: Async ingestion shares the same 2-active / 3-queued limits via `BackgroundOperationManager`. When the queue fills, `ingestForAgent` returns `429_COGNIFY_BACKLOG` without staging the summary.
+
+Both retrieval and ingestion communicate throttling with HTTP-style 429 messages:
+
+| Surface | Error Code | When it fires | Recommended agent behavior |
+|---------|------------|---------------|----------------------------|
+| Retrieval | `RATE_LIMIT_EXCEEDED` *(surfaced as `429_AGENT_THROTTLED`)* | More than `cogneeMemory.agentAccess.rateLimitPerMinute` requests in last 60s | Wait 2s, retry; increase delay exponentially up to ~15s on repeated 429s |
+| Retrieval | `QUEUE_FULL` *(also surfaced as `429_AGENT_THROTTLED`)* | >2 concurrent requests and 5 queued | Inform user queue is saturated, then retry with exponential backoff |
+| Ingestion | `429_COGNIFY_BACKLOG` | 2 background `cognify()` jobs + 3 queued (max 5) | Offer to retry later or skip low-priority summary |
+
+```typescript
+async function safeRetrieve(request: CogneeContextRequest) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const response = await provider.retrieveContext(request);
+    if (!('error' in response)) {
+      return response;
+    }
+    if (response.error === AgentErrorCode.RATE_LIMIT_EXCEEDED ||
+        response.error === AgentErrorCode.QUEUE_FULL) {
+      const delayMs = Math.min(15000, 2000 * 2 ** attempt);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      continue;
+    }
+    throw new Error(response.message);
+  }
+  throw new Error('Exceeded retry budget after repeated 429_AGENT_THROTTLED responses');
+}
+```
+
+Always surface a user-facing notice when throttling occurs so developers know why the agent paused.
+
 ### Transparency Indicators
 
 When agents use Cognee tools, you see:
@@ -618,8 +665,8 @@ try {
 | Error Code | Description | Remediation |
 |------------|-------------|-------------|
 | `INVALID_REQUEST` | Invalid query or malformed JSON | Check request structure |
-| `RATE_LIMIT_EXCEEDED` | Too many requests per minute | Wait and retry (max 10/min default) |
-| `QUEUE_FULL` | Too many concurrent requests | Wait for in-flight requests to complete |
+| `RATE_LIMIT_EXCEEDED` (`429_AGENT_THROTTLED`) | Too many requests per minute (default 10/min, max 30/min) | Wait 2–5s and retry with exponential backoff |
+| `QUEUE_FULL` (`429_AGENT_THROTTLED`) | Too many concurrent/queued requests (2 active, 5 queued) | Retry with exponential backoff; inform user queue is saturated |
 | `BRIDGE_TIMEOUT` | Python bridge exceeded timeout | Retry; check bridge logs |
 
 ---
@@ -685,6 +732,49 @@ interface CogneeIngestResponse {
   // On failure
   error?: string;                   // Error message
   errorCode?: string;               // Error code
+}
+```
+
+### CogneeContextRequest
+
+```typescript
+interface CogneeContextRequest {
+  // Required fields
+  query: string;                    // Natural language search query
+
+  // Optional fields
+  maxResults?: number;              // Max results (default: 3)
+  maxTokens?: number;               // Max tokens (default: 2000)
+  includeSuperseded?: boolean;      // Include superseded summaries (default: false)
+  halfLifeDays?: number;            // Recency decay half-life in days
+  contextHints?: string[];          // Contextual hints
+}
+```
+
+### CogneeContextResponse
+
+```typescript
+interface CogneeContextResponse {
+  success: boolean;
+
+  // On success
+  entries: CogneeMemoryEntry[];
+  totalResults: number;
+  tokensUsed: number;
+
+  // On failure
+  error?: string;                   // Error message
+  errorCode?: string;               // Error code
+}
+
+interface CogneeMemoryEntry {
+  summaryText: string;              // Summary text
+  topic?: string;                   // Topic (optional)
+  topicId?: string;                 // Topic ID (optional)
+  planId?: string;                  // Plan ID (optional)
+  createdAt?: string;               // Creation timestamp (optional)
+  score?: number;                   // Relevance score (optional)
+  decisions?: string[];             // Decisions made (optional)
 }
 ```
 

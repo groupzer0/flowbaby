@@ -544,6 +544,7 @@ suite('CogneeClient Test Suite', () => {
                 sessionId: null,
                 planId: '007',
                 status: 'Active' as const,
+                sourceCreatedAt: new Date('2025-11-17T15:00:00Z'),
                 createdAt: new Date('2025-11-17T16:30:00Z'),
                 updatedAt: new Date('2025-11-17T16:30:00Z')
             };
@@ -571,6 +572,7 @@ suite('CogneeClient Test Suite', () => {
                     sessionId: summary.sessionId,
                     planId: summary.planId,
                     status: summary.status,
+                    sourceCreatedAt: '2025-11-17T15:00:00.000Z',
                     createdAt: '2025-11-17T16:30:00.000Z',
                     updatedAt: '2025-11-17T16:30:00.000Z',
                     workspace_path: workspacePath
@@ -605,6 +607,7 @@ suite('CogneeClient Test Suite', () => {
                 sessionId: null,
                 planId: null,
                 status: 'Active' as const,
+                sourceCreatedAt: new Date('2025-11-17T16:10:00Z'),
                 createdAt: new Date('2025-11-17T16:30:00Z'),
                 updatedAt: null
             };
@@ -646,6 +649,7 @@ suite('CogneeClient Test Suite', () => {
                 sessionId: null,
                 planId: null,
                 status: 'Active' as const,
+                sourceCreatedAt: new Date(),
                 createdAt: new Date(),
                 updatedAt: null
             };
@@ -687,6 +691,7 @@ suite('CogneeClient Test Suite', () => {
                 sessionId: null,
                 planId: null,
                 status: null,
+                sourceCreatedAt: null,
                 createdAt: null,
                 updatedAt: null
             };
@@ -727,6 +732,7 @@ suite('CogneeClient Test Suite', () => {
                 sessionId: null,
                 planId: null,
                 status: null,
+                sourceCreatedAt: null,
                 createdAt: null,
                 updatedAt: null
             };
@@ -740,6 +746,7 @@ suite('CogneeClient Test Suite', () => {
             assert.strictEqual(payload.sessionId, null);
             assert.strictEqual(payload.planId, null);
             assert.strictEqual(payload.status, null);
+            assert.strictEqual(payload.sourceCreatedAt, null);
             assert.strictEqual(payload.createdAt, null);
             assert.strictEqual(payload.updatedAt, null);
         });
@@ -766,6 +773,7 @@ suite('CogneeClient Test Suite', () => {
                 sessionId: null,
                 planId: null,
                 status: 'Active' as const,
+                sourceCreatedAt: new Date(),
                 createdAt: new Date(),
                 updatedAt: null
             };

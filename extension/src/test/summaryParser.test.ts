@@ -30,6 +30,7 @@ suite('summaryParser', () => {
 - Session ID: abc-123
 - Plan ID: 014
 - Status: Active
+- Source Created: 2025-11-16T20:00:00.000Z
 - Created: 2025-11-17T16:30:00.000Z
 - Updated: 2025-11-17T16:31:00.000Z
 
@@ -79,6 +80,7 @@ Nov 17 14:00-16:30`;
             assert.strictEqual(parsed!.sessionId, 'abc-123');
             assert.strictEqual(parsed!.planId, '014');
             assert.strictEqual(parsed!.status, 'Active');
+            assert.ok(parsed!.sourceCreatedAt instanceof Date);
             assert.ok(parsed!.createdAt instanceof Date);
             assert.ok(parsed!.updatedAt instanceof Date);
         });
@@ -91,7 +93,8 @@ Nov 17 14:00-16:30`;
 - Topic ID: minimal-summary
 - Session ID: N/A
 - Plan ID: N/A
-- Status: Draft
+- Status: N/A
+- Source Created: N/A
 - Created: 2025-11-18T10:00:00.000Z
 - Updated: 2025-11-18T10:00:00.000Z
 
@@ -127,9 +130,12 @@ Just a quick note
             assert.strictEqual(parsed!.nextSteps.length, 0);
             assert.strictEqual(parsed!.references.length, 0);
             
-            // Verify N/A is parsed as null per §4.4.1
+            // Verify N/A handling per §4.4.1 (source falls back to created-at timestamp)
             assert.strictEqual(parsed!.sessionId, null);
             assert.strictEqual(parsed!.planId, null);
+            assert.strictEqual(parsed!.status, null);
+            assert.ok(parsed!.sourceCreatedAt instanceof Date, 'Source Created should fall back to Created timestamp');
+            assert.strictEqual(parsed!.sourceCreatedAt?.toISOString(), '2025-11-18T10:00:00.000Z');
         });
         
         test('parses summary with missing optional sections', () => {
@@ -225,7 +231,8 @@ Time Scope: `;
                 planId: '014',
                 status: 'Active',
                 createdAt: new Date('2025-11-18T10:00:00.000Z'),
-                updatedAt: new Date('2025-11-18T11:00:00.000Z')
+                updatedAt: new Date('2025-11-18T11:00:00.000Z'),
+                sourceCreatedAt: new Date('2025-11-18T09:00:00.000Z')
             };
             
             // Format to enriched text
@@ -251,6 +258,7 @@ Time Scope: `;
             assert.strictEqual(parsed!.status, original.status);
             assert.deepStrictEqual(parsed!.createdAt, original.createdAt);
             assert.deepStrictEqual(parsed!.updatedAt, original.updatedAt);
+            assert.deepStrictEqual(parsed!.sourceCreatedAt, original.sourceCreatedAt);
         });
         
         test('detects topic mismatch in enriched format', () => {
@@ -275,6 +283,18 @@ Time Scope: `;
             const isValid = validateRoundTrip(original, modified);
             
             assert.strictEqual(isValid, false, 'SessionId mismatch should fail validation');
+        });
+
+        test('detects sourceCreatedAt mismatch', () => {
+            const original = createDefaultSummary('Topic', 'Context');
+            original.sourceCreatedAt = new Date('2025-11-18T09:00:00Z');
+
+            const modified = createDefaultSummary('Topic', 'Context');
+            modified.sourceCreatedAt = new Date('2025-11-18T10:00:00Z');
+
+            const isValid = validateRoundTrip(original, modified);
+
+            assert.strictEqual(isValid, false, 'sourceCreatedAt mismatch should fail validation');
         });
         
         test('handles N/A metadata values correctly', () => {
@@ -327,6 +347,7 @@ Time Scope: Recent`;
             assert.strictEqual(parsed!.status, null);
             assert.strictEqual(parsed!.createdAt, null);
             assert.strictEqual(parsed!.updatedAt, null);
+            assert.strictEqual(parsed!.sourceCreatedAt, null);
         });
         
         test('handles mixed corpus: enriched summary after legacy memory', () => {
@@ -338,6 +359,7 @@ Time Scope: Recent`;
 - Session ID: session-456
 - Plan ID: N/A
 - Status: Active
+- Source Created: 2025-11-18T11:00:00.000Z
 - Created: 2025-11-18T11:00:00.000Z
 - Updated: 2025-11-18T11:00:00.000Z
 

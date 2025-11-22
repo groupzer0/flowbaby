@@ -1,7 +1,7 @@
 ---
 description: Dedicated QA specialist verifying test coverage and execution before implementation approval.
 name: QA
-tools: ['runCommands', 'edit/createFile', 'edit/editNotebook', 'edit/newJupyterNotebook', 'edit/editFiles', 'search', 'runTests', 'problems', 'changes', 'testFailure']
+tools: ['edit/createFile', 'edit/editNotebook', 'edit/newJupyterNotebook', 'edit/editFiles', 'search', 'runCommands', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'problems', 'changes', 'testFailure', 'todos', 'runTests']
 model: Gemini 3 Pro (Preview)
 handoffs:
   - label: Request Testing Infrastructure

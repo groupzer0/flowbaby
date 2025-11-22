@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 
 import { activate } from '../extension';
-import { formatSummaryAsText, createDefaultSummary } from '../summaryTemplate';
+import { formatSummaryAsText, createDefaultSummary, TEMPLATE_VERSION } from '../summaryTemplate';
 import { parseSummaryFromText } from '../summaryParser';
 
 type Handler = vscode.ChatRequestHandler;
@@ -308,7 +308,10 @@ suite('README and Template Consistency (Plan 014)', () => {
         const formatted = formatSummaryAsText(testSummary);
         
         // Verify structure matches README example
-        assert.ok(formatted.includes('<!-- Template: v1.0 -->'), 'Should include template version tag');
+        assert.ok(
+            formatted.includes(`<!-- Template: v${TEMPLATE_VERSION} -->`),
+            'Should include template version tag'
+        );
         assert.ok(formatted.includes('# Conversation Summary:'), 'Should have title heading');
         assert.ok(formatted.includes('**Metadata:**'), 'Should have metadata block');
         assert.ok(formatted.includes('## Context'), 'Should have Context section');
@@ -324,6 +327,7 @@ suite('README and Template Consistency (Plan 014)', () => {
         assert.ok(formatted.includes('- Session ID:'), 'Should include Session ID metadata');
         assert.ok(formatted.includes('- Plan ID:'), 'Should include Plan ID metadata');
         assert.ok(formatted.includes('- Status:'), 'Should include Status metadata');
+        assert.ok(formatted.includes('- Source Created:'), 'Should include Source Created timestamp');
         assert.ok(formatted.includes('- Created:'), 'Should include Created timestamp');
         assert.ok(formatted.includes('- Updated:'), 'Should include Updated timestamp');
     });
@@ -407,7 +411,8 @@ suite('README and Template Consistency (Plan 014)', () => {
         assert.ok(/- Topic ID: [a-z0-9-]+/i.test(metadataBlock), 'Should include Topic ID');
         assert.ok(/- Session ID: /.test(metadataBlock), 'Should include Session ID line');
         assert.ok(/- Plan ID: /.test(metadataBlock), 'Should include Plan ID line');
-        assert.ok(/- Status: (Active|Superseded|Draft)/i.test(metadataBlock), 'Should include Status with valid value');
+        assert.ok(/- Status: (Active|Superseded|DecisionRecord)/i.test(metadataBlock), 'Should include Status with valid value');
+        assert.ok(/- Source Created: (N\/A|\d{4}-\d{2}-\d{2})/i.test(metadataBlock), 'Should include Source Created timestamp');
         assert.ok(/- Created: \d{4}-\d{2}-\d{2}/i.test(metadataBlock), 'Should include Created timestamp');
         assert.ok(/- Updated: \d{4}-\d{2}-\d{2}/i.test(metadataBlock), 'Should include Updated timestamp');
     });

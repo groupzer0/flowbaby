@@ -33,7 +33,8 @@ suite('summaryTemplate', () => {
                 planId: null,
                 status: 'Active',
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
+                sourceCreatedAt: new Date()
             };
             
             // Should not throw
@@ -49,7 +50,8 @@ suite('summaryTemplate', () => {
                 topicId: 'test',
                 status: 'Active',
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
+                sourceCreatedAt: new Date()
             } as Partial<ConversationSummary>;
             
             assert.throws(
@@ -65,7 +67,8 @@ suite('summaryTemplate', () => {
                 topicId: 'test',
                 status: 'Active',
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
+                sourceCreatedAt: new Date()
             } as Partial<ConversationSummary>;
             
             assert.throws(
@@ -81,12 +84,13 @@ suite('summaryTemplate', () => {
                 topicId: 'test',
                 status: 'Invalid',
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
+                sourceCreatedAt: new Date()
             } as any;
             
             assert.throws(
                 () => validateSummary(summary),
-                /Summary status must be Active, Superseded, Draft, or null/
+                /Summary status must be Active, Superseded, DecisionRecord, or null/
             );
         });
         
@@ -97,7 +101,8 @@ suite('summaryTemplate', () => {
                 topicId: '',
                 status: 'Active',
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
+                sourceCreatedAt: new Date()
             } as Partial<ConversationSummary>;
             
             assert.throws(
@@ -135,7 +140,8 @@ suite('summaryTemplate', () => {
                 planId: '014',
                 status: 'Active',
                 createdAt: new Date('2025-11-17T16:30:00Z'),
-                updatedAt: new Date('2025-11-17T16:31:00Z')
+                updatedAt: new Date('2025-11-17T16:31:00Z'),
+                sourceCreatedAt: new Date('2025-11-16T20:00:00Z')
             };
             
             const formatted = formatSummaryAsText(summary);
@@ -153,6 +159,7 @@ suite('summaryTemplate', () => {
             assert.ok(formatted.includes('- Session ID: abc-123'));
             assert.ok(formatted.includes('- Plan ID: 014'));
             assert.ok(formatted.includes('- Status: Active'));
+            assert.ok(formatted.includes('- Source Created: 2025-11-16T20:00:00.000Z'));
             assert.ok(formatted.includes('- Created: 2025-11-17T16:30:00.000Z'));
             assert.ok(formatted.includes('- Updated: 2025-11-17T16:31:00.000Z'));
             
@@ -187,9 +194,10 @@ suite('summaryTemplate', () => {
                 topicId: 'minimal-summary',
                 sessionId: null,
                 planId: null,
-                status: 'Draft',
+                status: 'DecisionRecord',
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
+                sourceCreatedAt: null
             };
             
             const formatted = formatSummaryAsText(summary);
@@ -220,6 +228,7 @@ suite('summaryTemplate', () => {
                 sessionId: null,
                 planId: null,
                 status: 'Active',
+                sourceCreatedAt: new Date(),
                 createdAt: new Date(),
                 updatedAt: new Date()
             } as ConversationSummary;
@@ -240,7 +249,7 @@ suite('summaryTemplate', () => {
             
             assert.strictEqual(summary.topic, topic);
             assert.strictEqual(summary.context, context);
-            assert.strictEqual(summary.status, 'Draft');
+            assert.strictEqual(summary.status, 'Active');
             assert.strictEqual(summary.decisions.length, 0);
             assert.strictEqual(summary.rationale.length, 0);
             assert.strictEqual(summary.openQuestions.length, 0);
@@ -248,6 +257,7 @@ suite('summaryTemplate', () => {
             assert.strictEqual(summary.references.length, 0);
             assert.ok(summary.createdAt instanceof Date);
             assert.ok(summary.updatedAt instanceof Date);
+            assert.ok(summary.sourceCreatedAt instanceof Date);
         });
         
         test('generates topic ID from topic string', () => {

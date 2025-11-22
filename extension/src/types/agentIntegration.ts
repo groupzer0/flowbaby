@@ -41,6 +41,11 @@ export interface SummaryMetadata {
     createdAt: string;
 
     /**
+     * ISO 8601 timestamp for original source creation (optional)
+     */
+    sourceCreatedAt?: string;
+
+    /**
      * ISO 8601 timestamp when summary was last updated
      */
     updatedAt: string;
@@ -146,6 +151,7 @@ export interface CogneeIngestResponse {
         session_id?: string;
         plan_id?: string;
         status: string;
+        source_created_at?: string;
         created_at: string;
         updated_at: string;
     };
@@ -199,15 +205,11 @@ export interface CogneeRetrieveRequest {
      */
     maxTokens?: number;
 
-    /**
-     * Weight for recency score 0.0-1.0 (optional, default: 0.3)
-     */
-    recencyWeight?: number;
+    /** Include superseded summaries (default: false) */
+    includeSuperseded?: boolean;
 
-    /**
-     * Weight for importance score 0.0-1.0 (optional, default: 0.2)
-     */
-    importanceWeight?: number;
+    /** Half-life parameter (days) for recency decay; derives decay alpha internally */
+    halfLifeDays?: number;
 
     /**
      * Optional caller hint for audit logs
@@ -320,6 +322,12 @@ export interface CogneeContextRequest {
     
     /** Contextual hints to help refine search (optional) */
     contextHints?: string[];
+
+    /** Whether to include Superseded entries (default: false) */
+    includeSuperseded?: boolean;
+
+    /** Half-life parameter for recency decay (days, default configured value) */
+    halfLifeDays?: number;
 }
 
 /**
@@ -338,6 +346,15 @@ export interface CogneeContextEntry {
     
     /** Rationale behind decisions */
     rationale?: string[];
+
+    /** Open questions still unresolved */
+    openQuestions?: string[];
+
+    /** Next steps or follow-up actions */
+    nextSteps?: string[];
+
+    /** Reference links or citations */
+    references?: string[];
     
     /** Short title or topic */
     topic?: string;
@@ -345,14 +362,32 @@ export interface CogneeContextEntry {
     /** UUID or stable identifier for the summary's topic */
     topicId?: string | null;
     
+    /** Session identifier for traceability */
+    sessionId?: string | null;
+
     /** Plan number associated with this summary (e.g., "014") */
     planId?: string | null;
+
+    /** Summary status indicator */
+    status?: SummaryStatus | null;
     
     /** ISO 8601 timestamp when summary was created */
     createdAt?: string | null;
+
+    /** ISO 8601 timestamp when source content was created */
+    sourceCreatedAt?: string | null;
+
+    /** ISO 8601 timestamp when summary was last updated */
+    updatedAt?: string | null;
     
     /** Final relevance score (0.0 to 1.0+) */
-    score: number;
+    finalScore: number;
+
+    /** @deprecated Use finalScore instead */
+    score?: number;
+
+    /** Estimated tokens consumed by this entry */
+    tokens?: number;
 }
 
 /**

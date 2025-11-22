@@ -1,7 +1,7 @@
 ---
 description: Product Owner conducting UAT to verify implementation delivers stated business value.
 name: UAT
-tools: ['search', 'changes', 'problems', 'testFailure', 'runCommands', 'edit', 'fetch']
+tools: ['edit', 'search', 'runCommands', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'problems', 'changes', 'testFailure', 'fetch', 'todos']
 model: Claude Sonnet 4.5
 handoffs:
   - label: Report UAT Failure

@@ -771,11 +771,20 @@ function registerCogneeMemoryParticipant(
                         topic: entry.topic,
                         topicId: entry.topicId || undefined,
                         planId: entry.planId || undefined,
+                        sessionId: entry.sessionId || undefined,
+                        status: entry.status || undefined,
                         createdAt: entry.createdAt ? new Date(entry.createdAt) : undefined,
+                        sourceCreatedAt: entry.sourceCreatedAt
+                            ? new Date(entry.sourceCreatedAt)
+                            : (entry.createdAt ? new Date(entry.createdAt) : undefined),
+                        updatedAt: entry.updatedAt ? new Date(entry.updatedAt) : undefined,
                         score: entry.score,
                         decisions: entry.decisions,
                         rationale: entry.rationale,
-                        tokens: Math.ceil(entry.summaryText.length / 4) // Rough token estimate
+                        openQuestions: entry.openQuestions,
+                        nextSteps: entry.nextSteps,
+                        references: entry.references,
+                        tokens: entry.tokens ?? Math.ceil(entry.summaryText.length / 4)
                     } as RetrievalResult));
                     
                     const retrievalDuration = Date.now() - retrievalStart;
@@ -817,6 +826,14 @@ function registerCogneeMemoryParticipant(
                             if (result.createdAt) {
                                 const timeAgo = getTimeAgoString(result.createdAt);
                                 badges.push(`📅 Created: ${timeAgo}`);
+                            }
+                            if (result.sourceCreatedAt) {
+                                const sourceAgo = getTimeAgoString(result.sourceCreatedAt);
+                                badges.push(`🕰️ Source: ${sourceAgo}`);
+                            }
+                            if (result.updatedAt) {
+                                const updatedAgo = getTimeAgoString(result.updatedAt);
+                                badges.push(`♻️ Updated: ${updatedAgo}`);
                             }
                             if (result.planId) {
                                 badges.push(`🏷️ Plan: ${result.planId}`);

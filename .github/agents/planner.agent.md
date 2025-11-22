@@ -1,8 +1,8 @@
 ---
 description: High-rigor planning assistant for upcoming code changes.
 name: Planner
-tools: ['edit', 'search', 'runCommands', 'usages', 'fetch', 'githubRepo', 'todos']
-model: Claude Sonnet 4.5
+tools: ['edit', 'search', 'runCommands', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'usages', 'fetch', 'githubRepo', 'todos']
+model: Gemini 3 Pro (Preview)
 handoffs:
   - label: Validate Roadmap Alignment
     agent: Roadmap

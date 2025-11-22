@@ -265,18 +265,32 @@ export class CogneeContextProvider {
             // Note: maxResults and maxTokens are handled by CogneeClient configuration
             // Per Milestone 1 Task 2, provider enforces concurrency/rate limits but
             // delegates token budgets to existing CogneeClient settings
-            const results = await this.client.retrieve(request.query);
+            const results = await this.client.retrieve(request.query, {
+                maxResults: request.maxResults,
+                maxTokens: request.maxTokens,
+                includeSuperseded: request.includeSuperseded,
+                halfLifeDays: request.halfLifeDays
+            });
             
             // Convert RetrievalResult[] to CogneeContextEntry[]
             const entries: CogneeContextEntry[] = results.map(result => ({
                 summaryText: result.summaryText || result.text || '',
                 decisions: result.decisions,
                 rationale: result.rationale,
+                openQuestions: result.openQuestions,
+                nextSteps: result.nextSteps,
+                references: result.references,
                 topic: result.topic,
                 topicId: result.topicId || null,
+                sessionId: result.sessionId || null,
                 planId: result.planId || null,
+                status: result.status ?? null,
                 createdAt: result.createdAt ? result.createdAt.toISOString() : null,
-                score: result.score
+                sourceCreatedAt: result.sourceCreatedAt ? result.sourceCreatedAt.toISOString() : null,
+                updatedAt: result.updatedAt ? result.updatedAt.toISOString() : null,
+                finalScore: result.score,
+                score: result.score,
+                tokens: result.tokens
             }));
             
             // Calculate total tokens

@@ -1,8 +1,8 @@
 ---
 description: Execution-focused coding agent that implements approved plans.
 name: Implementer
-tools: ['runCommands', 'edit', 'runNotebooks', 'search', 'ms-python.python/getPythonEnvironmentInfo', 'ms-python.python/getPythonExecutableCommand', 'ms-python.python/installPythonPackage', 'ms-python.python/configurePythonEnvironment', 'todos', 'runTests', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'fetch', 'githubRepo']
-model: GPT-5.1-Codex (Preview)
+tools: ['edit', 'runNotebooks', 'search', 'runCommands', 'runTasks', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'fetch', 'githubRepo', 'ms-python.python/getPythonEnvironmentInfo', 'ms-python.python/getPythonExecutableCommand', 'ms-python.python/installPythonPackage', 'ms-python.python/configurePythonEnvironment', 'todos', 'runTests']
+model: Gemini 3 Pro (Preview)
 handoffs:
   - label: Request Analysis
     agent: Analyst
