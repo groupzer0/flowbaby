@@ -116,6 +116,34 @@ async def test_retrieve_with_search_results(temp_workspace, mock_env):
 
 
 @pytest.mark.asyncio
+async def test_retrieve_default_score(temp_workspace, mock_env):
+    """Test that retrieval defaults score to 0.0 when missing from search results."""
+    with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
+        # Mock cognee module with search results lacking score
+        mock_cognee = MagicMock()
+        mock_cognee.config = MagicMock()
+        # Result tuple: (text, metadata) - no score in metadata or text prefix
+        mock_search_result = (
+            "This is a test result without score.",
+            {"metadata": "test"}
+        )
+        mock_cognee.search = AsyncMock(return_value=[mock_search_result])
+        mock_cognee.prune.prune_data = AsyncMock()
+        
+        with patch.dict('sys.modules', {'cognee': mock_cognee, 'cognee.modules.search.types': MagicMock()}):
+            from retrieve import retrieve_context
+            
+            result = await retrieve_context(str(temp_workspace), "test")
+            
+            assert result['success'] is True
+            assert len(result['results']) == 1
+            
+            first_result = result['results'][0]
+            assert 'score' in first_result
+            assert first_result['score'] == 0.0
+
+
+@pytest.mark.asyncio
 async def test_retrieve_token_limit_enforcement(temp_workspace, mock_env):
     """Test that retrieval respects max_tokens limit."""
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):

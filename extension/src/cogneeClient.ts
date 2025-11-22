@@ -63,6 +63,7 @@ export class CogneeClient {
     private readonly rankingHalfLifeDays: number;
     private readonly logLevel: LogLevel;
     private readonly outputChannel: vscode.OutputChannel;
+    private readonly MAX_PAYLOAD_CHARS = 100000;
 
     /**
      * Constructor - Load configuration and initialize output channel
@@ -292,6 +293,10 @@ export class CogneeClient {
                 workspace_path: this.workspacePath
             };
             const summaryJson = JSON.stringify(summaryPayload);
+
+            if (summaryJson.length > this.MAX_PAYLOAD_CHARS) {
+                throw new Error(`Payload too large (${summaryJson.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
+            }
             
             // Use 120-second timeout for summary ingestion (same as conversation)
             const result = await this.runPythonScript('ingest.py', [
@@ -422,6 +427,10 @@ export class CogneeClient {
                 workspace_path: this.workspacePath
             };
             const summaryJson = JSON.stringify(summaryPayload);
+
+            if (summaryJson.length > this.MAX_PAYLOAD_CHARS) {
+                throw new Error(`Payload too large (${summaryJson.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
+            }
             
             // Run add-only mode (fast, <10s)
             const result = await this.runPythonScript('ingest.py', [
@@ -531,6 +540,10 @@ export class CogneeClient {
         });
 
         try {
+            if ((userMessage.length + assistantMessage.length) > this.MAX_PAYLOAD_CHARS) {
+                throw new Error(`Payload too large (${userMessage.length + assistantMessage.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
+            }
+
             // Use 120-second timeout for ingestion (Cognee setup + LLM processing can take time)
             // Increased from 30s to reduce false-positive timeout errors when ingestion succeeds but takes >30s
             const result = await this.runPythonScript('ingest.py', [
@@ -644,6 +657,10 @@ export class CogneeClient {
         }
 
         try {
+            if ((userMessage.length + assistantMessage.length) > this.MAX_PAYLOAD_CHARS) {
+                throw new Error(`Payload too large (${userMessage.length + assistantMessage.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
+            }
+
             // Run add-only mode (fast, <10s)
             const result = await this.runPythonScript('ingest.py', [
                 '--mode', 'add-only',

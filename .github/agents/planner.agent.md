@@ -105,7 +105,7 @@ Process Expectations:
 1. **Start with the "Value Statement and Business Objective"** using the format: "As a [user, customer, agent, etc], I want to [objective], so that [value]"
 2. **Get User Approval**: Present the user story to the user and wait for explicit approval before proceeding with planning. All planning decisions are based on this user story, so confirmation is critical.
 3. Summarize the objective and known context.
-4. **Identify target release version** - consult roadmap to determine which release (e.g., v0.2.2, v0.3.0) this plan targets. Explicitly document the target version and the rationale for the increment (major/minor/patch) in the plan header. This becomes the source of truth for the Implementer's version updates.
+4. **Identify target release version** - Check the current version in `package.json` (or equivalent). Then, consult the roadmap to determine the target release. Ensure the target version is an increment of the current version (major/minor/patch). Explicitly document the target version and the rationale for the increment in the plan header. This becomes the source of truth for the Implementer's version updates.
 5. Enumerate assumptions and open questions; resolve them before finalizing the plan.
 6. Outline milestones, then break them into numbered steps with enough detail that an implementer can act without further interpretation.
 7. **Include version management as final milestone** - add milestone for updating version artifacts (CHANGELOG, package.json, setup.py, etc.) to match roadmap target version
@@ -145,7 +145,7 @@ Every plan MUST include a final milestone for updating version artifacts to matc
 
 **Key Constraints**:
 - **VS Code Extensions**: MUST use 3-part semver (X.Y.Z) - 4-part versions (X.Y.Z.W) are rejected by VS Code Marketplace
-- Version number SHOULD match roadmap epic target (e.g., Epic 0.2.3 → version 0.2.3)
+- Version number SHOULD match roadmap epic target (e.g., Epic 0.2.3 → version 0.2.3). Always verify the current version in `package.json` to ensure the target is a valid increment.
 - CHANGELOG MUST document plan deliverables under target version section
 
 **For detailed version management guidance**, see DevOps agent (`agent.md/devops.agent.md`) which specifies:

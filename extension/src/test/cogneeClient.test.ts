@@ -489,6 +489,30 @@ suite('CogneeClient Test Suite', () => {
             assert.strictEqual(failureCall!.args[2].error_type, 'failure');
             assert.match(failureCall!.args[2].error as string, /LLM_API_KEY/);
         });
+
+        test('rejects payloads larger than 100k characters', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+            const runPythonStub = sandbox.stub(client as any, 'runPythonScript').resolves({
+                success: true,
+                ingested_chars: 100000,
+                timestamp: '2025-11-17T14:00:00.000Z',
+                ingestion_duration_sec: 1.5
+            });
+
+            const warningStub = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+
+            const largeContext = 'A'.repeat(100005);
+            const result = await client.ingest('Question', largeContext);
+
+            assert.strictEqual(result, false, 'Should return false for oversized payload');
+            assert.ok(runPythonStub.notCalled, 'Should not call python script');
+
+            const failureCall = logStub.getCalls().find((call) => call.args[1] === 'Ingestion exception');
+            assert.ok(failureCall, 'Failure log missing');
+            assert.match(failureCall!.args[2].error as string, /Payload too large/);
+        });
     });
 
     suite('ingestSummary (Plan 014)', () => {

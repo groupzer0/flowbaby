@@ -27,13 +27,13 @@ const pendingSummaries = new Map<string, PendingSummary>();
  * Called when VS Code activates the extension (onStartupFinished)
  */
 export async function activate(_context: vscode.ExtensionContext) {
-    console.log('Cognee Chat Memory extension activated');
+    console.log('RecallFlow Chat Memory extension activated');
     
     // Get workspace folder
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
         vscode.window.showWarningMessage(
-            'Cognee Chat Memory requires an open workspace folder'
+            'RecallFlow Chat Memory requires an open workspace folder'
         );
         return;
     }
@@ -52,7 +52,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             registerCaptureCommands(_context, cogneeClient);
             
             // Plan 015: Register agent ingestion command
-            const agentOutputChannel = vscode.window.createOutputChannel('Cognee Agent Activity');
+            const agentOutputChannel = vscode.window.createOutputChannel('RecallFlow Agent Activity');
             registerIngestForAgentCommand(_context, cogneeClient, agentOutputChannel);
             
             // Plan 017: Initialize BackgroundOperationManager AFTER output channel creation
@@ -73,7 +73,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             const { CogneeContextProvider } = await import('./cogneeContextProvider');
             cogneeContextProvider = new CogneeContextProvider(cogneeClient, agentOutputChannel);
             
-            // Milestone 2: Register @cognee-memory chat participant (Plan 016 Milestone 6: now uses provider)
+            // Milestone 2: Register @recallflow-memory chat participant (Plan 016 Milestone 6: now uses provider)
             registerCogneeMemoryParticipant(_context, cogneeClient, cogneeContextProvider);
             console.log('CogneeContextProvider initialized successfully');
             
@@ -86,8 +86,8 @@ export async function activate(_context: vscode.ExtensionContext) {
             console.warn('Cognee client initialization failed (see Output Channel)');
             
             // Check if it's an API key issue and provide helpful guidance
-            const outputChannel = vscode.window.createOutputChannel('Cognee Memory');
-            outputChannel.appendLine('Failed to initialize Cognee. Common issues:');
+            const outputChannel = vscode.window.createOutputChannel('RecallFlow Memory');
+            outputChannel.appendLine('Failed to initialize RecallFlow. Common issues:');
             outputChannel.appendLine('');
             outputChannel.appendLine('1. Missing LLM API Key:');
             outputChannel.appendLine('   - Create a .env file in your workspace root');
@@ -99,7 +99,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             outputChannel.show();
             
             const action = await vscode.window.showWarningMessage(
-                'Cognee initialization failed. Check Output > Cognee Memory for setup instructions.',
+                'RecallFlow initialization failed. Check Output > RecallFlow Memory for setup instructions.',
                 'Open Output',
                 'Dismiss'
             );
@@ -111,7 +111,7 @@ export async function activate(_context: vscode.ExtensionContext) {
     } catch (error) {
         console.error('Failed to create Cognee client:', error);
         vscode.window.showErrorMessage(
-            `Cognee Chat Memory initialization error: ${error}`
+            `RecallFlow Chat Memory initialization error: ${error}`
         );
     }
 }
@@ -178,9 +178,12 @@ function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
                     const workspace = op.datasetPath.split('/').pop() || 'unknown';
                     const digest = op.summaryDigest || 'N/A';
                     
+                    // Format start time (e.g., "14:32:21")
+                    const startTime = new Date(op.startTime).toLocaleTimeString();
+                    
                     return {
                         label: `${icon} ${op.status.toUpperCase()} - ${workspace}`,
-                        description: `${elapsed} - ${digest.substring(0, 40)}`,
+                        description: `${startTime} - ${elapsed} - ${digest.substring(0, 40)}`,
                         detail: op.errorMessage || (op.entityCount ? `${op.entityCount} entities` : undefined),
                         operation: op
                     };
@@ -223,7 +226,7 @@ function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
  * Called when VS Code deactivates the extension
  */
 export async function deactivate() {
-    console.log('Cognee Chat Memory extension deactivated');
+    console.log('RecallFlow Chat Memory extension deactivated');
     
     // Plan 017: Shutdown BackgroundOperationManager (sends SIGTERM to running processes)
     try {
@@ -592,7 +595,7 @@ function extractPlanIdFromConversation(text: string): string | null {
 }
 
 /**
- * Register @cognee-memory chat participant for Milestone 2
+ * Register @recallflow-memory chat participant for Milestone 2
  * Implements 6-step flow: retrieval → format display → augment prompt → generate response → capture conversation
  * Plan 016 Milestone 6: Refactored to use CogneeContextProvider instead of direct client.retrieve
  */
@@ -601,18 +604,18 @@ function registerCogneeMemoryParticipant(
     client: CogneeClient,
     provider: CogneeContextProvider
 ) {
-    console.log('=== MILESTONE 2: Registering @cognee-memory Chat Participant ===');
+    console.log('=== MILESTONE 2: Registering @recallflow-memory Chat Participant ===');
 
     // Register chat participant with ID matching package.json
     const participant = vscode.chat.createChatParticipant(
-        'cognee-memory',
+        'recallflow-memory',
         async (
             request: vscode.ChatRequest,
             _chatContext: vscode.ChatContext,
             stream: vscode.ChatResponseStream,
             token: vscode.CancellationToken
         ): Promise<vscode.ChatResult> => {
-            console.log('=== @cognee-memory participant invoked ===');
+            console.log('=== @recallflow-memory participant invoked ===');
             console.log('User query:', request.prompt);
 
             try {
@@ -621,7 +624,7 @@ function registerCogneeMemoryParticipant(
                 const memoryEnabled = config.get<boolean>('enabled', true);
 
                 if (!memoryEnabled) {
-                    stream.markdown('⚠️ **Cognee Memory is disabled**\n\nEnable it in settings: `cogneeMemory.enabled`');
+                    stream.markdown('⚠️ **RecallFlow Memory is disabled**\n\nEnable it in settings: `cogneeMemory.enabled`');
                     return { metadata: { disabled: true } };
                 }
 
@@ -634,16 +637,16 @@ function registerCogneeMemoryParticipant(
                                      trimmedPrompt.includes('what can you do');
 
                 if (isHelpRequest) {
-                    stream.markdown('# 📚 Cognee Memory Help\n\n');
+                    stream.markdown('# 📚 RecallFlow Memory Help\n\n');
                     stream.markdown('## Query for Context\n\n');
                     stream.markdown('Ask a question to retrieve relevant memories from your workspace:\n\n');
-                    stream.markdown('- `@cognee-memory How did I implement caching?`\n');
-                    stream.markdown('- `@cognee-memory What did we decide about Plan 013?`\n');
-                    stream.markdown('- `@cognee-memory What are the next steps for authentication?`\n\n');
+                    stream.markdown('- `@recallflow-memory How did I implement caching?`\n');
+                    stream.markdown('- `@recallflow-memory What did we decide about Plan 013?`\n');
+                    stream.markdown('- `@recallflow-memory What are the next steps for authentication?`\n\n');
                     stream.markdown('## Create Summaries\n\n');
                     stream.markdown('Capture structured summaries of your conversations:\n\n');
-                    stream.markdown('- `@cognee-memory summarize this conversation` - Create a summary of recent chat history\n');
-                    stream.markdown('- `@cognee-memory remember this session` - Same as above\n\n');
+                    stream.markdown('- `@recallflow-memory summarize this conversation` - Create a summary of recent chat history\n');
+                    stream.markdown('- `@recallflow-memory remember this session` - Same as above\n\n');
                     stream.markdown('Summaries include: Topic, Context, Decisions, Rationale, Open Questions, Next Steps, References\n\n');
                     stream.markdown('## Tips\n\n');
                     stream.markdown('- **Summaries are optional** - Create them after important discussions or decisions\n');

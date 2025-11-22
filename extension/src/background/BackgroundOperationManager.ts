@@ -75,6 +75,7 @@ export class BackgroundOperationManager {
     private context: vscode.ExtensionContext;
     private outputChannel: vscode.OutputChannel;
     private ledgerPath: string | null = null;
+    private logFilePath: string | null = null;
     private defaultPythonPath: string | null = null;
     private defaultBridgeScriptPath: string | null = null;
     
@@ -102,10 +103,24 @@ export class BackgroundOperationManager {
      */
     public async initializeForWorkspace(workspacePath: string): Promise<void> {
         const cogneeDir = path.join(workspacePath, '.cognee');
+        const logsDir = path.join(cogneeDir, 'logs');
         await fs.promises.mkdir(cogneeDir, { recursive: true });
         await fs.promises.mkdir(path.join(cogneeDir, 'background_ops'), { recursive: true });
+        await fs.promises.mkdir(logsDir, { recursive: true });
         
         this.ledgerPath = path.join(cogneeDir, 'background_ops.json');
+        this.logFilePath = path.join(logsDir, 'ingest.log');
+
+        // Log rotation: if log file > 5MB, truncate it
+        try {
+            const stats = await fs.promises.stat(this.logFilePath);
+            if (stats.size > 5 * 1024 * 1024) {
+                await fs.promises.writeFile(this.logFilePath, ''); // Truncate
+                this.outputChannel.appendLine(`[BACKGROUND] Log file rotated: ${this.logFilePath}`);
+            }
+        } catch {
+            // Log file doesn't exist yet, ignore
+        }
         
         // Load existing ledger
         await this.loadLedger();
@@ -213,9 +228,19 @@ export class BackgroundOperationManager {
             workspacePath
         ];
         
+        let stdio: any = 'ignore';
+        if (this.logFilePath) {
+            try {
+                const logFd = fs.openSync(this.logFilePath, 'a');
+                stdio = ['ignore', logFd, logFd];
+            } catch (err) {
+                this.outputChannel.appendLine(`[ERROR] Failed to open log file: ${err}`);
+            }
+        }
+
         const child = spawn(pythonExecutable, args, {
             detached: true,
-            stdio: 'ignore',
+            stdio: stdio,
             cwd: path.dirname(bridgeScriptPath)
         });
         
@@ -360,6 +385,10 @@ export class BackgroundOperationManager {
         // Architecture spec format: "Workspace: {name}\nSummary: {digest}\n{remediation}"
         const message = `Workspace: ${workspaceName}\nSummary: ${entry.summaryDigest || 'N/A'}\n${remediation}`;
         
+        if (this.logFilePath) {
+             this.outputChannel.appendLine(`[INFO] Logs available at: ${this.logFilePath}`);
+        }
+
         const action = await vscode.window.showWarningMessage(
             '⚠️ Cognify failed',
             { detail: message, modal: false },
@@ -376,7 +405,12 @@ export class BackgroundOperationManager {
                 vscode.window.showErrorMessage(`Retry failed: ${message}`);
             }
         } else if (action === 'View Logs') {
-            this.outputChannel.show();
+            if (this.logFilePath) {
+                const doc = await vscode.workspace.openTextDocument(this.logFilePath);
+                await vscode.window.showTextDocument(doc);
+            } else {
+                this.outputChannel.show();
+            }
         }
     }
     
@@ -427,7 +461,17 @@ export class BackgroundOperationManager {
             return true;
         } catch (err) {
             if (!silentOnMissing) {
-                this.outputChannel.appendLine(`[ERROR] ${new Date().toISOString()} - Cognify status stub not ready (operationId=${operationId}): ${err instanceof Error ? err.message : String(err)}`);
+                // If we are here, it means the process exited but no stub was found.
+                // This is a crash or silent failure.
+                this.outputChannel.appendLine(`[ERROR] ${new Date().toISOString()} - Cognify process crashed or was killed (operationId=${operationId})`);
+                await this.failOperation(operationId, {
+                    code: 'PROCESS_CRASHED',
+                    message: 'Background process crashed or was killed unexpectedly.',
+                    remediation: 'Check logs for details. You may need to restart VS Code.'
+                });
+                this.clearStubMonitor(operationId);
+                await this.dequeueNext();
+                return true;
             }
             return false;
         }

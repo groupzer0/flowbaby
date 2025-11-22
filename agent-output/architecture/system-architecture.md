@@ -25,6 +25,7 @@
 | 2025-11-20 13:45 | Extended async ingestion requirement to manual capture | Align all ingestion flows with business goal of non-blocking UX; document additional UX/QA constraints | Plan 017 |
 | 2025-11-21 15:05 | Recorded Plan 018 migration/ranking guardrails (maintenance mode, truthful timestamps, unified decay config) | Keep metadata ranking aligned with async ingestion contract and preserve recency semantics | Plan 018 |
 | 2025-11-21 15:15 | Captured Plan 019 compaction queue + conflict-store requirements | Prevent compaction jobs from violating background limits and ensure conflict review has durable state | Plan 019 |
+| 2025-11-22 09:40 | Documented RecallFlow user-facing branding shift + background log capture surfacing | Keep UX terminology consistent while exposing new ingest log diagnostics | Plan 019 |
 
 
 ## 1. Purpose and Scope
@@ -70,8 +71,10 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 - Provides user entry points: keyboard capture command, command palette, @cognee-memory chat participant, toggle/clear commands.
 - Streams UX feedback (notifications, Output channel logs, chat participant markdown).
 - Delegates all knowledge operations to Python bridge via `CogneeClient` helper and the shared `CogneeContextProvider` service. The provider centralizes retrieval logic, enforces concurrency/rate limits, and emits telemetry consumed by both UI surfaces and agent commands.
+- User-facing copy (commands, notifications, chat participant name) ships under the **RecallFlow** brand starting v0.3.6, while internal namespaces (`cogneeMemory.*`, `CogneeClient`, command IDs) remain unchanged for backward compatibility.
 - Hosts the `CogneeContextProvider`, a singleton service that normalizes retrieval responses (structured metadata once Plan 014 migration lands), enforces rate limiting/back-pressure, and feeds both the chat participant and public agent commands.
 - Hosts the `BackgroundOperationManager`, a singleton service that coordinates async cognify() runs introduced in Plan 017. The manager owns a volatile in-memory map plus a persisted ledger at `.cognee/background_ops.json` (mirrored to VS Code `globalState`) so extension reloads can reconcile orphaned work. It enforces a hard limit of 2 concurrent background cognify() processes, maintains a FIFO queue of 3 pending jobs, exposes the `cognee.backgroundStatus` command for visibility, and publishes lifecycle events (start/complete/fail) to both the Output channel and notification pipeline (info-level success toast, warning-level failure toast, each throttled to ≤1 per 5 minutes per workspace). Any surface that returns immediately after `add-only` (agent tool response, command output, etc.) MUST state that the memory was staged, that cognify() will finish within ~1–2 minutes, and that a toast will confirm completion—never display “Done” while the background job still runs.
+- Background processes now pipe `stdout`/`stderr` into `.cognee/logs/ingest.log` (rotated/truncated on startup). Failure notifications include a **View Logs** action that opens this file, and Output-channel entries record the log path alongside the `operationId` so QA can correlate ledger entries with raw diagnostics.
 - Contributes VS Code `languageModelTools` metadata for the Cognee Store/Retrieve tools. These definitions surface inside "Configure Tools", drive `#cogneeStoreSummary` / `#cogneeRetrieveMemory` autocomplete, and now rely solely on VS Code's opt-in UI. Tools register at activation; when users disable them in Configure Tools, VS Code hides them automatically and the extension listens for enablement events to keep audit logging/command availability in sync.
 - Exposes the `cogneeMemory.retrieveForAgent` command (Plan 016) without an additional workspace setting; instead, the command consults the same tool-enablement state surfaced via Configure Tools (or fails fast if tools are disabled). Commands are headless: they remain hidden from command palette/menus and exist solely for other extensions or agents to invoke programmatically via `vscode.commands.executeCommand`. The roadmap pivot adds `cogneeMemory.ingestForAgent`, giving Copilot agents parity with @cognee-memory capture flows while keeping ingestion centralized.
 - Provides a unified validation/auditing pipeline: every agent command invocation is logged (timestamp, workspace, caller hint) and rejected unless workspace access is enabled. Future capability tokens can plug into this layer without touching bridge scripts.
@@ -388,6 +391,18 @@ Enabling agent access grants every extension in the workspace the ability to rea
 **Alternatives Considered**: (1) Let compaction run independently of the queue—rejected for risking concurrent writes and broken throttling. (2) Modify existing summaries in place—rejected because enriched-text fallback lacks mutable fields and would desynchronize metadata. (3) Keep conflicts only in Output logs—rejected because the review UI would have no durable data.
 **Consequences**: (+) Preserves async ingestion invariants; (+) keeps immutable storage model intact; (+) enables deterministic conflict review; (-) Adds bookkeeping (locks, conflict files) and stricter scheduling logic for auto-compaction.
 **Related**: Plan 019, §4.4.3, §8 (Problem Area 9), roadmap Epic 0.3.0.1.
+
+### Decision: RecallFlow Branding & Log Surfacing (2025-11-22 09:40)
+
+**Context**: Plan 019 introduces a user-facing rebrand from "Cognee" to "RecallFlow" plus new background log capture to diagnose silent failures. Architecture must clarify which identifiers change, how diagnostics surface, and how UX copy remains consistent across tools, notifications, and documentation.
+
+**Choice**: Adopt the RecallFlow brand for all user-visible strings (extension display name, command categories/titles, chat participant label, notification copy, Output channel headings, Configure Tools descriptions) starting with release v0.3.6, while retaining existing internal identifiers (`cogneeMemory.*` settings, command IDs, language model tool names) for compatibility. BackgroundOperationManager now redirects subprocess `stdout`/`stderr` into `.cognee/logs/ingest.log`, rotates it on startup, and wires the failure toast’s "View Logs" action plus Output-channel entries to that file so support and QA can access diagnostics immediately.
+
+**Alternatives Considered**: (1) Rename internal identifiers alongside user copy—rejected for migration risk across commands/APIs. (2) Capture logs without surfacing them—rejected because it perpetuates the "black box" issue identified in Plan 019 analysis.
+
+**Consequences**: (+) Aligns UX terminology with branding/legal requirements without breaking configuration contracts; (+) provides deterministic log access paths tied to operation IDs, improving troubleshooting; (-) requires documentation (AGENT_INTEGRATION.md, Configure Tools descriptions, architecture diagram) to be updated during implementation to avoid mixed branding. Implementers must ensure `.cognee/logs` is created lazily and log rotation prevents unbounded growth.
+
+**Related**: Plan 019, §3.1, §4.5.1, Roadmap Epic 0.2.3.1.
 
 ## 10. Roadmap Architecture Outlook
 

@@ -250,7 +250,8 @@ async def retrieve_context(
                 query_type=SearchType.GRAPH_COMPLETION,
                 query_text=query,
                 datasets=[dataset_name],  # Filter to this workspace only
-                top_k=search_top_k
+                top_k=search_top_k,
+                system_prompt="You are a helpful assistant. Answer the question strictly using ONLY the provided context. If the answer is not contained in the context, state 'I don't know' or 'The information is not available in the provided context'. Do not use outside knowledge or fabricate information."
             )
             print(f"[PROGRESS] Search completed: {len(search_results) if search_results else 0} results", file=sys.stderr, flush=True)
         except Exception as search_error:
@@ -330,7 +331,7 @@ async def retrieve_context(
                     semantic_score = None
 
             if semantic_score is None:
-                semantic_score = 0.7
+                semantic_score = 0.0
 
             return text_value, float(semantic_score)
 

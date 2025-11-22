@@ -1,6 +1,6 @@
 # Cognee Chat Memory - Product Roadmap
 
-**Last Updated**: 2025-11-17 (Roadmap Agent)
+**Last Updated**: 2025-11-22 (Roadmap Agent)
 **Roadmap Owner**: roadmap agent
 
 ---
@@ -61,8 +61,14 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 - **Plan 016.1** ✅ Complete → Epic 0.3.0.3 (Tool lifecycle hotfix)
 - **Plan 017** (Ready for Implementation) → Async cognify() optimization - unblocks testing and Epic 0.3.0.1
 - **Plan 018** (Proposed) → Epic 0.3.0.1 (Metadata infrastructure + Ranking) + Icons (participant + extension)
-- **Plan 019** (Proposed) → Epic 0.3.0.1 (Compaction pipeline - merge summaries, conflict detection)
+- **Plan 019** (In Progress) → Release v0.3.6 Alpha / Epic 0.3.6.1 (Reliability & RecallFlow rebrand: retrieval fabrication fix, silent-failure observability, log surfacing)
+- **Plan 021** (Proposed) → Release v0.3.7 Alpha / Epic 0.3.7.1 (Memory visibility & validation UI/commands for smoke-testing stored context)
+- **Plan 020** (Draft) → Release v0.3.8 / Epic 0.3.0.1 (Compaction pipeline - merge summaries, conflict detection) **after** Plan 021 delivers validation surface
 - **Plans TBD** → Epic 0.2.3.1 (Error Transparency), Epic 0.4.0.2 (Auto-Setup Wizard), Epic 0.4.0.3 (Memory Browser), Epic 0.4.0.4 (Graph Export)
+
+**Near-Term Alpha Releases**:
+- **v0.3.6 – Reliability & RecallFlow**: Complete Plan 019 to eliminate silent failures, surface logs, and align branding.
+- **v0.3.7 – Memory Visibility**: Deliver validation/smoke-testing workflows (Plan 021) so users can inspect stored context before compaction.
 
 **Strategic Decision**: Plans 012/013/013.1 resolve v0.2.x blockers; v0.3.0 work (Plans 014/015) can now proceed. Remaining v0.2.x epics (Plans 016/017) enhance UX but don't block advanced features—proceed in parallel.
 
@@ -70,8 +76,10 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-22 | Repositioned Plan 019 (v0.3.6 reliability & RecallFlow rebrand) under Epic 0.2.3.1, introduced Plan 020 for compaction (Epic 0.3.0.1), and captured new architecture guidance on RecallFlow branding + ingest log surfacing | Keep roadmap aligned with current plan numbering and architectural decisions so downstream agents reference the correct release targets |
+| 2025-11-22 | Added Release v0.3.6 (Reliability & RecallFlow - Alpha) section, created new visibility/validation epic, and resequenced Plan 020 after the visibility milestone | Align roadmap with new business objective (memory validation), formalize alpha release theme, and ensure compaction follows reliability + visibility work per user direction |
 | 2025-11-21 | Added four v0.4.0 epics: Auto-Setup Wizard (0.4.0.2), Memory Browser (0.4.0.3), Context Cards, Graph Export (0.4.0.4) | UX improvement brainstorming identified key onboarding and transparency features. Auto-Setup Wizard reduces friction by guiding Python/venv setup post-install via `Cognee: Initialize Workspace` command + walkthrough (aligns with VS Code 1.106 best practices). Memory Browser and Context Cards make Plan 018 metadata actionable through persistent UI. Graph Export leverages graph backend to visualize knowledge relationships. |
-| 2025-11-21 | Plan 018/019 scope split: Plan 018 = Metadata infrastructure + Ranking + Icons (v0.3.5), Plan 019 = Compaction pipeline (v0.3.6) | User requested separation of compaction work from Plan 018 to reduce plan complexity and enable independent delivery of metadata/ranking features. Plan 018 delivers metadata schema, recency-aware ranking, status filtering, and visual identity. Plan 019 delivers memory compaction pipeline (merge summaries into DecisionRecords, conflict detection, manual/auto-compaction). |
+| 2025-11-21 | Plan 018/019 scope split: Plan 018 = Metadata infrastructure + Ranking + Icons (v0.3.5), Plan 019 = Compaction pipeline (v0.3.6, later renumbered to Plan 020) | User requested separation of compaction work from Plan 018 to reduce plan complexity and enable independent delivery of metadata/ranking features. Plan 018 delivers metadata schema, recency-aware ranking, status filtering, and visual identity. The compaction work (now Plan 020) delivers memory compaction pipeline (merge summaries into DecisionRecords, conflict detection, manual/auto-compaction). |
 | 2025-11-20 | Plan 017/018 sequencing finalized: Plan 017 = Async cognify() optimization (v0.3.4), Plan 018 = Metadata infrastructure + Icons (v0.3.5) | User prioritized async optimization to unblock testing workflows - 73s synchronous ingestion blocks automation testing and would create poor UX during metadata testing. Plan 018 will bundle metadata infrastructure (Epic 0.3.0.1) with icon assets (participant + extension identity). Icons added to implementation mapping as Plan 018 deliverable. |
 | 2025-11-19 | Plan 016 merged scope finalized: Agent retrieval infrastructure + UI-visible extension tools combined into single comprehensive plan targeting v0.3.2 | User clarified that extension tools (not MCP) are the path to Configure Tools UI visibility via `canBeReferencedInPrompt` and `toolReferenceName` flags. Plan 016 now delivers both agent retrieval capabilities (CogneeContextProvider, retrieveForAgent command, structured responses) AND tool UI visibility (`#` autocomplete, `.agent.md` support, Configure Tools appearance) as interdependent features. Epic 0.3.0.3 acceptance criteria updated to reflect merged scope. |
 | 2025-11-19 | Plan 014.1 complete: languageModelTools validated as primary Copilot integration path; Epic 0.3.0.3 unblocked | Plan 014.1 confirmed VS Code's `languageModelTools` API is the officially supported mechanism for Copilot agent integration (vs undocumented command invocation). Architecture updated to contribute Cognee tools that proxy into existing commands, preserving fallback strategies (direct commands, MCP). Epic 0.3.0.3 ready for implementation (Plans 015/016). |
@@ -235,6 +243,7 @@ So that I can take corrective action instead of assuming the extension is broken
 **Status Notes**:
 
 - 2025-11-17: **PROPOSED** - Will be addressed by Plan 016 (separate from Plan 013). Requires system-wide error taxonomy design, structured error propagation, status bar indicators.
+- 2025-11-22: **IN PROGRESS** - Plan 019 retargeted to v0.3.6 to deliver retrieval fabrication scoring fixes, silent background failure notifications (with log surfacing), ingestion timestamps, and RecallFlow rebranding across user-facing UX. Aligns with new architecture guidance to surface `.cognee/logs/ingest.log` via "View Logs" actions and keep internal identifiers as `cognee*`.
 - 2025-11-16: Epic created based on Plans 010-011 findings. CHANGELOG notes "Known Issues: Cognee 0.4.0 file hashing bug affects auto-ingestion" but users have no visibility into whether this is affecting them. Plan 010 fixed 30s timeout issues but didn't add user-facing error reporting. Plan 009 fixed silent activation failure, but pattern of silent failures persists.
 
 ---
@@ -309,7 +318,7 @@ So that I don't waste time sifting through tangential results.
 - [ ] Plan 014 summaries migrated to DataPoints with generated metadata (one-time migration script) (Plan 018)
 - [ ] Retrieval results ranked by recency-aware scoring (exponential decay, configurable alpha and halfLifeDays) (Plan 018)
 - [ ] Status-aware retrieval filters Superseded summaries, prioritizes DecisionRecords (Plan 018)
-- [ ] Compaction pipeline creates DecisionRecords from multiple summaries with conflict detection (Plan 019)
+- [ ] Compaction pipeline creates DecisionRecords from multiple summaries with conflict detection (Plan 020)
 - [ ] Ranking transparency displays relevance scores and metadata in UI (Plan 018)
 
 **Constraints**:
@@ -320,6 +329,7 @@ So that I don't waste time sifting through tangential results.
 **Status Notes**:
 
 - 2025-11-20: **BLOCKED - Plan 017 prerequisite** - Async cognify() optimization required before implementing metadata infrastructure. Current 73s synchronous ingestion blocks testing workflows and would create poor UX during metadata testing. Plan 017 (async optimization) → Plan 018 (metadata infrastructure) sequencing prioritizes practical testing needs.
+- 2025-11-22: **RESEQUENCED** - Compaction now follows the Reliability (Plan 019) and Validation (Plan 021) releases. Plan 020 will target v0.3.8 after the visibility surface proves data integrity, while still coordinating with BackgroundOperationManager and immutable supersedence requirements.
 - 2025-11-17: Epic unblocked after Plans 012/013/013.1 completed installation stability and display transparency.
 - 2025-11-16: DEFERRED - Review of Plans 001-011 revealed users cannot yet discover or reliably use basic retrieval. Ranking optimization premature until foundational UX and error handling delivered in v0.2.x.
 - 2025-11-15: Epic placeholder. Requires research phase to determine ranking approach.
@@ -363,7 +373,7 @@ So that I can store and retrieve organized context (decisions, rationale, refere
 
 **Status Notes**:
 
-- 2025-11-18: **SCOPE NARROWED** - Epic now focuses only on bridge infrastructure (ingestion/retrieval contract). @cognee-memory participant summarization removed from Plan 014 scope due to architectural mismatch: (1) Participant can only summarize its own turns, not broader Copilot agent conversations; (2) Retrieval path currently augments answers with LLM training data instead of constraining to stored memories. Strategic pivot: expose Cognee functions to Copilot agents instead (see Epic 0.3.0.3). Plan 014 Milestones 0/1/3/4 remain (bridge contract, schema, ingestion, retrieval); Milestone 2 (participant summarization) deferred pending Plan 019 feasibility analysis.
+- 2025-11-18: **SCOPE NARROWED** - Epic now focuses only on bridge infrastructure (ingestion/retrieval contract). @cognee-memory participant summarization removed from Plan 014 scope due to architectural mismatch: (1) Participant can only summarize its own turns, not broader Copilot agent conversations; (2) Retrieval path currently augments answers with LLM training data instead of constraining to stored memories. Strategic pivot: expose Cognee functions to Copilot agents instead (see Epic 0.3.0.3). Plan 014 Milestones 0/1/3/4 remain (bridge contract, schema, ingestion, retrieval); Milestone 2 (participant summarization) deferred pending Plan 020 feasibility analysis.
 - 2025-11-17: Epic updated to reflect Plan 014 scope accurately. Plan 014 delivers content structure (schema), Plan 015 delivers metadata infrastructure. Epic 0.3.0.2 focuses on content organization, Epic 0.3.0.1 adds intelligence layer (metadata, ranking, compaction).
 
 ---
@@ -448,6 +458,88 @@ So that agents maintain continuity across sessions without me manually reconstru
   - Plan 015 (agent ingestion) is prerequisite; Plan 014 (bridge contract) is blocking dependency
 - 2025-11-19: Plan 014.1 complete. Architecture updated to adopt `languageModelTools` as primary integration path (ADR: "Copilot Tool Surface vs Direct Commands"). Tool entry command proxies into existing headless commands, preserving command/MCP fallback strategies.
 - 2025-11-18: **EPIC CREATED** - Strategic pivot from @cognee-memory participant-driven summarization to agent-driven memory integration. Addresses two critical issues discovered in v0.3.1 user testing: (1) @cognee-memory cannot summarize conversations it wasn't part of (chatContext.history is participant-scoped); (2) retrieval augments answers with LLM training data instead of constraining to stored memories. Solution: expose Cognee functions so agents manage their own memory.
+
+---
+
+## Release v0.3.6 - Reliability & RecallFlow (Alpha)
+
+**Target Date**: 2025-12-05
+**Strategic Goal**: Ship an alpha-quality build that restores trust in background ingestion, exposes actionable diagnostics, and unifies the RecallFlow brand without regressing workspace compatibility.
+
+### Epic 0.3.6.1: Background Reliability & RecallFlow Rebrand
+
+**Priority**: P0 (Critical - alpha quality expectation)
+**Status**: In Progress (Plan 019)
+
+**User Story**:
+As a developer relying on RecallFlow,
+I want background ingestion, retrieval scoring, and branding to be consistent and observable,
+So that I can trust stored context and present the product confidently to my team.
+
+**Business Value**:
+- Eliminates silent data loss so users know when memories fail to store
+- Aligns all user-facing copy with RecallFlow, reducing confusion between Doc/UX surfaces
+- Transparent logging plus "View Logs" CTA accelerates support and QA triage for this alpha release
+
+**Dependencies**:
+- Plan 017 async ingestion foundation (ready) for BackgroundOperationManager hooks
+- Architectural guidance on RecallFlow naming + log surfacing (2025-11-22)
+
+**Acceptance Criteria** (outcome-focused):
+- [ ] Retrieval scoring never fabricates confidence for unscored results; UI reflects 0.0-score cases as "no relevant context"
+- [ ] Background ingestion writes structured stdout/stderr to `.cognee/logs/ingest.log` with rotation strategy enforced
+- [ ] Failure notifications include "View Logs" action plus Output log pointing to the log path
+- [ ] Background status list shows timestamps for every operation and treats missing stubs as failures with mitigation guidance
+- [ ] All user-visible strings (commands, participant, notifications, docs) use "RecallFlow" while preserving `cognee*` internal IDs
+- [ ] Extension/package version bumped to 0.3.6 with CHANGELOG capturing fixes and rebrand scope
+
+**Constraints**:
+- Internal namespaces/config keys remain `cognee*` to avoid migration risk
+- Logging must avoid leaking sensitive payloads (only status + paths)
+
+**Status Notes**:
+- 2025-11-22: Plan 019 retargeted to v0.3.6 alpha after architectural review flagged missing "View Logs" CTA and Copilot tool metadata. Workstreams: scoring fix, log surfacing, failure toasts, RecallFlow copy, version bump.
+
+---
+
+## Release v0.3.7 - Memory Visibility & Validation (Alpha)
+
+**Target Date**: 2025-12-15 (TBD)
+**Strategic Goal**: Provide first-class smoke-testing and inspection workflows so developers can validate stored context before depending on it in agent flows.
+
+### Epic 0.3.7.1: Memory Validation & Smoke Visibility
+
+**Priority**: P0 (Strategic trust-building follow-up to v0.3.6)
+**Status**: Planned (Plan 021 - drafting)
+
+**User Story**:
+As a developer evaluating RecallFlow,
+I want an easy way to inspect and validate the memories in storage,
+So that I know the data my agents retrieve is accurate before I rely on it in production workflows.
+
+**Business Value**:
+- Boosts user confidence post-rebrand by letting them self-verify stored context
+- Reduces support burden by giving teams a deterministic smoke-test before filing bugs
+- Establishes the transparency surface future compaction/ranking features can plug into
+
+**Dependencies**:
+- Release v0.3.6 must ship background logging so validation UI has a diagnostic source
+- Metadata infrastructure from Plan 018 informs filtering/presentation (even if partial)
+
+**Acceptance Criteria** (outcome-focused):
+- [ ] One-click "Validate Memories" command runs a smoke test (sample retrieval + integrity checks) and reports pass/fail with actionable next steps
+- [ ] Dedicated visibility surface (QuickPick, tree view, or webview) lists stored memories with key metadata and links to source logs/operations
+- [ ] Users can open the underlying `.cognee/logs/ingest.log` and associated operation IDs directly from the validation UI
+- [ ] Validation workflow records audit entries so support can trace which datasets were inspected
+- [ ] Documentation explains when to run validation, what signals to expect, and how to interpret failures
+
+**Constraints**:
+- All validation runs remain local; no telemetry of user data leaves the workspace
+- UI must scale to large workspaces (pagination or filtering required)
+
+**Status Notes**:
+- 2025-11-22: Business objective added to roadmap. Plan 021 to be drafted capturing minimal UI + command needed to let users validate stored context before compaction or ranking adjusts data.
+- 2025-11-22: Sequencing decision: Epic 0.3.7.1 must land before Plan 020 compaction so users can trust underlying data prior to automated merging.
 
 ---
 
@@ -542,7 +634,7 @@ So that I understand what the system knows and can act on context directly.
 
 **Dependencies**:
 - **PREREQUISITE**: Plan 018 (metadata infrastructure) must be complete
-- Ideally delivered after Plan 019 (compaction) to surface DecisionRecords
+- Ideally delivered after Plan 020 (compaction) to surface DecisionRecords
 
 **Acceptance Criteria** (outcome-focused):
 - [ ] `Cognee Memories` tree view groups entries by topic_id/status with expandable metadata
@@ -577,7 +669,7 @@ So that I can see how topics, plans, and decisions connect over time.
 
 **Dependencies**:
 - **PREREQUISITE**: Plan 018 (metadata with topic_id, plan_id references)
-- Optional: Plan 019 (compaction) to include DecisionRecord → original summary edges
+- Optional: Plan 020 (compaction) to include DecisionRecord → original summary edges
 
 **Acceptance Criteria** (outcome-focused):
 - [ ] `Cognee: Export Memory Graph` command walks metadata (topic_id relationships, plan references) and emits HTML/JS bundle

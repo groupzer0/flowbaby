@@ -5,6 +5,32 @@ All notable changes to the Cognee Chat Memory extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6] - 2025-11-22
+
+### Added - Plan 019: Retrieval Fabrication and Silent Failure Fix
+
+**Rebranding to RecallFlow** - The extension has been renamed to "RecallFlow" to better reflect its purpose as a memory and recall layer for AI agents.
+- **User-Facing Changes**:
+  - Extension name: "RecallFlow Chat Memory"
+  - Commands: `RecallFlow: Capture to Memory`, `RecallFlow: Toggle Memory`, etc.
+  - Output Channel: "RecallFlow Agent Activity"
+  - Chat Participant: `@recallflow-memory`
+  - Tools: "Store Memory in RecallFlow", "Retrieve RecallFlow Memory"
+- **Backward Compatibility**:
+  - Internal configuration keys (`cogneeMemory.*`) remain unchanged
+  - File paths (`.cognee/`) remain unchanged
+  - Python package (`cognee`) remains unchanged
+
+**Fixes & Improvements**:
+
+- **Retrieval Fabrication Fix**: Changed default semantic score for unscored results from 0.7 to 0.0. This prevents empty or irrelevant results from appearing with artificially high confidence scores.
+- **Silent Failure Detection**:
+  - Implemented log rotation for background processes (`.cognee/logs/ingest.log`)
+  - Redirected `stdout`/`stderr` of background processes to log files to capture crashes
+  - Added "zombie" detection for processes that exit without writing a status stub
+- **Proactive Prevention**: Enforced 100k character limit on ingestion payloads to prevent bridge crashes and memory exhaustion.
+- **UX Enhancements**: Added timestamps to `RecallFlow: Show Background Operations` quick pick items for better visibility.
+
 ## [0.3.5] - 2025-11-21
 
 ### Added - Plan 018: Metadata Infrastructure and Ranking

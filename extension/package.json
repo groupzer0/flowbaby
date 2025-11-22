@@ -1,8 +1,8 @@
 {
   "name": "cognee-chat-memory",
-  "displayName": "Cognee Chat Memory",
-  "description": "Automatic memory for GitHub Copilot chat using Cognee knowledge graphs",
-  "version": "0.3.5",
+  "displayName": "RecallFlow Chat Memory",
+  "description": "Automatic memory for GitHub Copilot chat using RecallFlow (formerly Cognee) knowledge graphs",
+  "version": "0.3.6",
   "publisher": "cognee",
   "icon": "media/icon.png",
   "engines": {
@@ -14,6 +14,7 @@
     "Machine Learning"
   ],
   "keywords": [
+    "recallflow",
     "cognee",
     "memory",
     "chat",
@@ -33,30 +34,35 @@
     "commands": [
       {
         "command": "cognee.captureMessage",
-        "title": "📥 Capture to Cognee Memory",
-        "category": "Cognee"
+        "title": "📥 Capture to RecallFlow Memory",
+        "category": "RecallFlow"
       },
       {
         "command": "cognee.toggleMemory",
-        "title": "Toggle Memory",
-        "category": "Cognee"
+        "title": "Toggle RecallFlow Memory",
+        "category": "RecallFlow"
       },
       {
         "command": "cognee.clearMemory",
-        "title": "Clear Workspace Memory",
-        "category": "Cognee"
+        "title": "Clear RecallFlow Workspace Memory",
+        "category": "RecallFlow"
       },
       {
         "command": "cogneeMemory.ingestForAgent",
-        "title": "Ingest Summary for Agent",
-        "category": "Cognee",
+        "title": "Ingest Summary for RecallFlow Agent",
+        "category": "RecallFlow",
         "enablement": "cogneeMemory.enabled"
       },
       {
         "command": "cogneeMemory.retrieveForAgent",
-        "title": "Retrieve Context for Agent",
-        "category": "Cognee",
+        "title": "Retrieve Context for RecallFlow Agent",
+        "category": "RecallFlow",
         "enablement": "cogneeMemory.enabled"
+      },
+      {
+        "command": "cognee.backgroundStatus",
+        "title": "View Background Operations",
+        "category": "RecallFlow"
       }
     ],
 
@@ -70,21 +76,21 @@
     ],
     "chatParticipants": [
       {
-        "id": "cognee-memory",
-        "name": "cognee-memory",
-        "description": "Chat with automatic context from Cognee memory",
+        "id": "recallflow-memory",
+        "name": "recallflow-memory",
+        "description": "Chat with automatic context from RecallFlow memory",
         "isSticky": true
       }
     ],
     "languageModelTools": [
       {
         "name": "cognee_storeMemory",
-        "displayName": "Store Memory in Cognee",
+        "displayName": "Store Memory in RecallFlow",
         "toolReferenceName": "cogneeStoreSummary",
         "canBeReferencedInPrompt": true,
         "icon": "$(database)",
-        "modelDescription": "Primary tool for writing episodic long-term memory into Cognee's knowledge graph. Agents should call this after meaningful progress, at the end of multi-step reasoning, or when concluding a task, to persist a rich summary of what was done and why. Use this tool proactively as a state checkpoint; do not wait for the user to explicitly ask to save memory. Summaries should be 300–1500 characters and describe goals, actions, important files, decisions, and rationale. Use it to record durable decisions, plans, and implementation notes that will be useful in future turns in this workspace. Do not use this for trivial or ephemeral chit-chat.\n\nExample usage (conceptual): after completing a refactor or design decision, call this tool with topic=\"Auth refactor step 1\" and context summarizing the work, and include any key decisions and rationale. Data stays in this workspace.",
-        "userDescription": "Store a structured conversation or work summary into Cognee's knowledge graph for future retrieval. Data stays in this workspace.",
+        "modelDescription": "Primary tool for writing episodic long-term memory into RecallFlow's knowledge graph. Agents should call this after meaningful progress, at the end of multi-step reasoning, or when concluding a task, to persist a rich summary of what was done and why. Use this tool proactively as a state checkpoint; do not wait for the user to explicitly ask to save memory. Summaries should be 300–1500 characters and describe goals, actions, important files, decisions, and rationale. Use it to record durable decisions, plans, and implementation notes that will be useful in future turns in this workspace. Do not use this for trivial or ephemeral chit-chat.\n\nExample usage (conceptual): after completing a refactor or design decision, call this tool with topic=\"Auth refactor step 1\" and context summarizing the work, and include any key decisions and rationale. Data stays in this workspace.",
+        "userDescription": "Store a structured conversation or work summary into RecallFlow's knowledge graph for future retrieval. Data stays in this workspace.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -124,16 +130,16 @@
           },
           "required": ["topic", "context"]
         },
-        "tags": ["memory", "knowledge-graph", "persistence", "cognee", "long-term-memory", "state-checkpoint"]
+        "tags": ["memory", "knowledge-graph", "persistence", "recallflow", "long-term-memory", "state-checkpoint"]
       },
       {
         "name": "cognee_retrieveMemory",
-        "displayName": "Retrieve Cognee Memory",
+        "displayName": "Retrieve RecallFlow Memory",
         "toolReferenceName": "cogneeRetrieveMemory",
         "canBeReferencedInPrompt": true,
         "icon": "$(search)",
-        "modelDescription": "Primary mechanism for retrieving past context, decisions, and implementation details from Cognee's knowledge graph. Agents should call this at the start of a turn, or before planning an answer, whenever the user request might relate to prior work, previous discussions, or existing decisions in this workspace. Use a natural-language query that describes the user goal or task (not just keywords), and retrieve a small number of highly relevant memories to ground reasoning. The tool returns human-readable markdown plus structured JSON with topic, context, decisions, rationale, and metadata, which should be used to guide current planning and responses. If no results are relevant, the agent should proceed but note that no prior memory was found.\n\nExample usage (conceptual): when asked \"How did we implement caching?\" call this tool with query=\"Previous decisions and implementation details for redis caching\" and review the returned summaries before answering. Data stays in this workspace.",
-        "userDescription": "Search Cognee knowledge graph for relevant stored summaries, decisions, and context from past work. Data stays in this workspace.",
+        "modelDescription": "Primary mechanism for retrieving past context, decisions, and implementation details from RecallFlow's knowledge graph. Agents should call this at the start of a turn, or before planning an answer, whenever the user request might relate to prior work, previous discussions, or existing decisions in this workspace. Use a natural-language query that describes the user goal or task (not just keywords), and retrieve a small number of highly relevant memories to ground reasoning. The tool returns human-readable markdown plus structured JSON with topic, context, decisions, rationale, and metadata, which should be used to guide current planning and responses. If no results are relevant, the agent should proceed but note that no prior memory was found.\n\nExample usage (conceptual): when asked \"How did we implement caching?\" call this tool with query=\"Previous decisions and implementation details for redis caching\" and review the returned summaries before answering. Data stays in this workspace.",
+        "userDescription": "Search RecallFlow knowledge graph for relevant stored summaries, decisions, and context from past work. Data stays in this workspace.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -151,11 +157,11 @@
           },
           "required": ["query"]
         },
-        "tags": ["memory", "knowledge-graph", "search", "retrieval", "cognee", "context", "long-term-memory"]
+        "tags": ["memory", "knowledge-graph", "search", "retrieval", "recallflow", "context", "long-term-memory"]
       }
     ],
     "configuration": {
-      "title": "Cognee Memory",
+      "title": "RecallFlow Memory",
       "properties": {
         "cogneeMemory.enabled": {
           "type": "boolean",

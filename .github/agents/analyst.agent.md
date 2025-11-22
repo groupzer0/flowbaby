@@ -2,7 +2,7 @@
 description: Research and analysis specialist for pre-implementation investigation.
 name: Analyst
 tools: ['edit/createFile', 'edit/editFiles', 'runNotebooks', 'search', 'runCommands', 'cognee.cognee-chat-memory/cogneeStoreSummary', 'cognee.cognee-chat-memory/cogneeRetrieveMemory', 'usages', 'vscodeAPI', 'problems', 'fetch', 'githubRepo', 'todos']
-model: GPT-5.1-Codex (Preview)
+model: Gemini 3 Pro (Preview)
 handoffs:
   - label: Create Plan
     agent: Planner

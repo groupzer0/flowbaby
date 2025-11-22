@@ -111,15 +111,17 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
         // Force config to disabled for this invocation
         configState.enabled = false;
 
-        const { req, stream, token, outputs } = makeInvocation('What did we do?');
-    const result = await handler!(req, {} as any, stream, token) as vscode.ChatResult;
+        try {
+            const { req, stream, token, outputs } = makeInvocation('What did we do?');
+            const result = await handler!(req, {} as any, stream, token) as vscode.ChatResult;
 
-        assert.ok(outputs.join('\n').includes('Cognee Memory is disabled'));
-        assert.deepStrictEqual(result.metadata && (result.metadata as any).disabled, true);
-        assert.ok(retrieveStub.notCalled, 'retrieve should not be called when disabled');
-
-    // reset for other tests
-    configState.enabled = true;
+            assert.ok(outputs.join('\n').includes('RecallFlow Memory is disabled'));
+            assert.deepStrictEqual(result.metadata && (result.metadata as any).disabled, true);
+            assert.ok(retrieveStub.notCalled, 'retrieve should not be called when disabled');
+        } finally {
+            // reset for other tests
+            configState.enabled = true;
+        }
     });
 
     test('Retrieval failure: degrades gracefully and still generates response', async () => {

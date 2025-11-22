@@ -17,6 +17,7 @@ import asyncio
 import json
 import os
 import sys
+import signal
 import tempfile
 import uuid
 from datetime import datetime
@@ -290,6 +291,22 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
     """
     workspace_dir = Path(workspace_path)
     
+    # Register signal handlers to capture termination
+    def signal_handler(signum, frame):
+        print(f"[ERROR] Process terminated by signal {signum}", file=sys.stderr)
+        write_status_stub(
+            operation_id=operation_id,
+            workspace_dir=workspace_dir,
+            success=False,
+            error_code='PROCESS_TERMINATED',
+            error_message=f'Process terminated by signal {signum}',
+            remediation='Retry the operation.'
+        )
+        sys.exit(1)
+
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
     try:
         print(f"[PROGRESS] Cognify-only mode: operation_id={operation_id}", file=sys.stderr, flush=True)
         overall_start = perf_counter()

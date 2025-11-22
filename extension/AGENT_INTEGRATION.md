@@ -1,15 +1,15 @@
 # Agent Integration Guide
 <!-- markdownlint-disable MD024 MD031 MD032 MD034 MD040 MD060 -->
 
-**Version**: 1.0  
-**Last Updated**: 2025-11-19  
-**Plan**: 015 - Agent Ingestion Command  
+**Version**: 1.1  
+**Last Updated**: 2025-11-22  
+**Plan**: 019 - Rebranding to RecallFlow  
 
 ---
 
 ## Overview
 
-The Cognee Chat Memory extension provides commands for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured conversation summaries. This enables:
+The RecallFlow Chat Memory extension (formerly Cognee) provides commands for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured conversation summaries. This enables:
 
 - **Agent continuity**: Agents can maintain context across sessions without manual capture
 - **Multi-agent collaboration**: Different agents can share memory via a common knowledge base
@@ -21,7 +21,7 @@ The Cognee Chat Memory extension provides commands for GitHub Copilot agents and
 
 ### Configure Tools Authorization Model
 
-⚠️ **IMPORTANT**: Cognee tools are controlled exclusively through VS Code's **Configure Tools** UI. When you enable tools there, they become available to GitHub Copilot and all extensions in the workspace.
+⚠️ **IMPORTANT**: RecallFlow tools are controlled exclusively through VS Code's **Configure Tools** UI. When you enable tools there, they become available to GitHub Copilot and all extensions in the workspace.
 
 **Why Configure Tools?**
 - VS Code native mechanism for tool authorization
@@ -32,7 +32,7 @@ The Cognee Chat Memory extension provides commands for GitHub Copilot agents and
 **Recommendations**:
 - ✅ Enable tools only in workspaces with trusted extensions
 - ✅ Review installed extensions before enabling
-- ✅ Inspect audit logs regularly (`Output` > `Cognee Agent Activity`)
+- ✅ Inspect audit logs regularly (`Output` > `RecallFlow Agent Activity`)
 - ❌ Do NOT enable in untrusted or public workspaces
 - ❌ Do NOT enable if workspace contains sensitive data
 
@@ -40,7 +40,7 @@ The Cognee Chat Memory extension provides commands for GitHub Copilot agents and
 
 All agent ingestion and retrieval attempts are logged:
 
-1. **Output Channel**: `Output` > `Cognee Agent Activity`
+1. **Output Channel**: `Output` > `RecallFlow Agent Activity`
    - Real-time log of all agent commands
    - Shows timestamp, agent name (if provided), topic, and result
    - Example: `[Agent Ingest] 2025-11-19T08:12:44Z - Agent: GitHub Copilot - Topic: Plan 015 Implementation - Status: success`
@@ -56,9 +56,9 @@ All agent ingestion and retrieval attempts are logged:
 
 ### Tool Authorization
 
-Cognee tools are controlled through VS Code's **Configure Tools** UI:
+RecallFlow tools are controlled through VS Code's **Configure Tools** UI:
 1. Open Copilot chat → Click "Tools" (⚙️) → "Configure Tools"
-2. Find "Store Memory in Cognee" and "Retrieve Cognee Memory"
+2. Find "Store Memory in RecallFlow" and "Retrieve RecallFlow Memory"
 3. Toggle tools on/off (disabled by default)
 
 No workspace settings required for authorization.
@@ -201,7 +201,7 @@ if (!response.success) {
       break;
 
     case 'BRIDGE_TIMEOUT':
-      vscode.window.showErrorMessage('Cognee ingestion timed out. Try again later.');
+      vscode.window.showErrorMessage('RecallFlow ingestion timed out. Try again later.');
       break;
 
     default:
@@ -362,11 +362,11 @@ if (response.errorCode === '429_COGNIFY_BACKLOG') {
 
 ---
 
-## Using Cognee Tools with GitHub Copilot and Custom Agents (Plan 016)
+## Using RecallFlow Tools with GitHub Copilot and Custom Agents (Plan 016)
 
 ### Overview
 
-Cognee Chat Memory provides two **Language Model Tools** that appear in VS Code's "Configure Tools" dialog:
+RecallFlow Chat Memory provides two **Language Model Tools** that appear in VS Code's "Configure Tools" dialog:
 
 1. **cognee_storeMemory** (`#cogneeStoreSummary`) - Store conversation summaries
 2. **cognee_retrieveMemory** (`#cogneeRetrieveMemory`) - Retrieve relevant memories
@@ -388,7 +388,7 @@ These expectations mirror the guidance embedded in the tool metadata (e.g., 300�
 1. Open any Copilot chat
 2. Click the "Tools" button (⚙️ icon near input box)
 3. Click "Configure Tools"
-4. Find "Cognee Memory" tools in the list
+4. Find "RecallFlow Memory" tools in the list
 5. Toggle tools on/off individually
 
 **In Chat (`#` Autocomplete)**:
@@ -584,9 +584,9 @@ Always surface a user-facing notice when throttling occurs so developers know wh
 
 ### Transparency Indicators
 
-When agents use Cognee tools, you see:
+When agents use RecallFlow tools, you see:
 
-1. **Output Channel**: `Output` > `Cognee Agent Activity`
+1. **Output Channel**: `Output` > `RecallFlow Agent Activity`
    - Real-time log of all tool invocations
    - Shows timestamp, tool name, query/topic, and result
    - Example: `[Tool Invocation] 2025-11-19T08:12:44Z - cognee_retrieveMemory called`
@@ -598,7 +598,7 @@ When agents use Cognee tools, you see:
 3. **Confirmation Messages** (optional):
    - Tools may show confirmation prompts before execution
    - Depends on user's trust settings for agents
-   - Example: "Store this conversation summary in Cognee knowledge graph?"
+   - Example: "Store this conversation summary in RecallFlow knowledge graph?"
 
 ---
 
@@ -785,7 +785,7 @@ interface CogneeMemoryEntry {
 All tool invocations are logged for transparency. Check the **Output** channel:
 
 1. Open **View → Output**
-2. Select **"Cognee Agent Activity"** from dropdown
+2. Select **"RecallFlow Agent Activity"** from dropdown
 3. View real-time logs of all tool calls with timestamps and results
 
 ---
@@ -858,7 +858,7 @@ const topicId = generateTopicId("Plan 015 Implementation", new Date().toISOStrin
 
 1. Open Copilot chat
 2. Click "Tools" (⚙️) → "Configure Tools"
-3. Enable "Store Memory in Cognee" and "Retrieve Cognee Memory"
+3. Enable "Store Memory in RecallFlow" and "Retrieve RecallFlow Memory"
 
 ### 2. Create Test Script
 
@@ -897,7 +897,7 @@ export async function testIngestion() {
 ### 3. Verify in Output Channel
 
 1. Open `Output` panel (`View` > `Output`)
-2. Select `Cognee Agent Activity` from dropdown
+2. Select `RecallFlow Agent Activity` from dropdown
 3. Look for log entry: `[Agent Ingest] <timestamp> - Agent: <your-agent> - Topic: Test Agent Ingestion - Status: success`
 
 ### 4. Check Audit Log
@@ -919,11 +919,11 @@ Expected output:
 
 **Issue**: `vscode.commands.executeCommand` throws "command not found"
 
-**Solution**: Verify Cognee Chat Memory extension is installed and activated
+**Solution**: Verify RecallFlow Chat Memory extension is installed and activated
 ```typescript
 const extension = vscode.extensions.getExtension('cognee.cognee-chat-memory');
 if (!extension) {
-  throw new Error('Cognee Chat Memory extension not installed');
+  throw new Error('RecallFlow Chat Memory extension not installed');
 }
 await extension.activate();
 ```
@@ -935,7 +935,7 @@ await extension.activate();
 **Solution**: Enable tools via Configure Tools UI
 1. Open Copilot chat
 2. Click "Tools" (⚙️) → "Configure Tools"
-3. Find "Store Memory in Cognee" and "Retrieve Cognee Memory"
+3. Find "Store Memory in RecallFlow" and "Retrieve RecallFlow Memory"
 4. Toggle checkboxes to enable
 5. Return to chat and type `#cognee` to verify autocomplete
 
