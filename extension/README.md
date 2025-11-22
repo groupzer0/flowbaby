@@ -445,24 +445,24 @@ Access settings via **File → Preferences → Settings → Extensions → Cogne
 - To disable memory temporarily, set `cogneeMemory.enabled` to `false` in settings
 - To enable experimental auto-capture of @cognee-memory conversations (feedback loop), set `cogneeMemory.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
 
-## Using Cognee Tools with Custom Agents
+## Using RecallFlow Tools with Custom Agents
 
-Cognee Chat Memory provides **Language Model Tools** that allow GitHub Copilot and custom agents to autonomously access workspace memory. These tools appear in VS Code's "Configure Tools" dialog and can be referenced in custom agent configurations.
+RecallFlow Chat Memory provides **Language Model Tools** that allow GitHub Copilot and custom agents to autonomously access workspace memory. These tools appear in VS Code's "Configure Tools" dialog and can be referenced in custom agent configurations.
 
 ### Quick Start
 
 1. **Enable Tools via Configure Tools UI**:
    - Open Copilot chat → Click "Tools" (⚙️ icon) → "Configure Tools"
-   - Find "Store Memory in Cognee" and "Retrieve Cognee Memory"
+   - Find "Store Memory in RecallFlow" and "Retrieve RecallFlow Memory"
    - Toggle tools on/off individually (disabled by default for privacy)
 
 2. **Use in Chat**:
-   - Type `#cognee` to see autocomplete suggestions
-   - Select `#cogneeStoreSummary` or `#cogneeRetrieveMemory`
+   - Type `#recallflow` to see autocomplete suggestions
+   - Select `#recallflowStoreSummary` or `#recallflowRetrieveMemory`
    - Tools appear only when enabled via Configure Tools
 
 3. **Transparency**:
-   - All tool invocations logged in Output channel ("Cognee Agent Activity")
+   - All tool invocations logged in Output channel ("RecallFlow Agent Activity")
    - Configure Tools UI provides visual feedback for tool state
 
 ### Custom Agent Example
@@ -473,26 +473,26 @@ Create a `.agent.md` file in your workspace to define a memory-aware agent:
 ---
 name: Memory-Aware Code Assistant
 description: Copilot assistant with access to workspace memory
-tools: ['search', 'cogneeStoreSummary', 'cogneeRetrieveMemory']
+tools: ['search', 'recallflowStoreSummary', 'recallflowRetrieveMemory']
 ---
 
 You are a code assistant with access to workspace-specific memory.
 
 When the user asks about past decisions or implementations:
-1. Use #cogneeRetrieveMemory to search for relevant context
+1. Use #recallflowRetrieveMemory to search for relevant context
 2. Ground your answer in the retrieved memories
 3. If no memories exist, use your training data but clarify it's not workspace-specific
 
 When the user completes an important implementation or makes a decision:
-1. Offer to store a summary using #cogneeStoreSummary
+1. Offer to store a summary using #recallflowStoreSummary
 2. Include topic, context, and key decisions in the summary
 ```
 
 ### Available Tools
 
-#### Store Memory Tool (`#cogneeStoreSummary`)
+#### Store Memory Tool (`#recallflowStoreSummary`)
 
-Stores conversation summaries in Cognee knowledge graph.
+Stores conversation summaries in RecallFlow knowledge graph.
 
 **Parameters**:
 - `topic` (required): Summary title
@@ -501,9 +501,9 @@ Stores conversation summaries in Cognee knowledge graph.
 - `rationale` (optional): Reasoning behind decisions
 - `metadata` (optional): Plan ID, status, etc.
 
-#### Retrieve Memory Tool (`#cogneeRetrieveMemory`)
+#### Retrieve Memory Tool (`#recallflowRetrieveMemory`)
 
-Searches Cognee knowledge graph for relevant memories.
+Searches RecallFlow knowledge graph for relevant memories.
 
 **Parameters**:
 - `query` (required): Natural language search query

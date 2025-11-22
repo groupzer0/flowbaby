@@ -125,14 +125,14 @@ function registerLanguageModelTool(context: vscode.ExtensionContext, outputChann
     // Register BOTH tools unconditionally (Configure Tools controls enablement)
     if (cogneeContextProvider) {
         const storeTool = new StoreMemoryTool(outputChannel);
-        storeMemoryToolDisposable = vscode.lm.registerTool('cognee_storeMemory', storeTool);
+        storeMemoryToolDisposable = vscode.lm.registerTool('recallflow_storeMemory', storeTool);
         
         const retrieveTool = new RetrieveMemoryTool(cogneeContextProvider, outputChannel);
-        retrieveMemoryToolDisposable = vscode.lm.registerTool('cognee_retrieveMemory', retrieveTool);
+        retrieveMemoryToolDisposable = vscode.lm.registerTool('recallflow_retrieveMemory', retrieveTool);
         
         outputChannel.appendLine('=== Plan 016.1: Language Model Tools Registered ===');
-        outputChannel.appendLine('✅ cognee_storeMemory registered - Copilot agents can store memories');
-        outputChannel.appendLine('✅ cognee_retrieveMemory registered - Copilot agents can retrieve memories');
+        outputChannel.appendLine('✅ recallflow_storeMemory registered - Copilot agents can store memories');
+        outputChannel.appendLine('✅ recallflow_retrieveMemory registered - Copilot agents can retrieve memories');
         outputChannel.appendLine('ℹ️  Enable/disable tools via Configure Tools UI in GitHub Copilot Chat');
     }
 }

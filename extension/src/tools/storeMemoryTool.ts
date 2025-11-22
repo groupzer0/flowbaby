@@ -35,7 +35,7 @@ export class StoreMemoryTool implements vscode.LanguageModelTool<StoreMemoryTool
     }
 
     /**
-     * Invoked when Copilot agent calls cognee_storeMemory tool
+     * Invoked when Copilot agent calls recallflow_storeMemory tool
      */
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<StoreMemoryToolInput>,
@@ -44,7 +44,7 @@ export class StoreMemoryTool implements vscode.LanguageModelTool<StoreMemoryTool
         const startTime = Date.now();
         
         this.outputChannel.appendLine(
-            `[Tool Invocation] ${new Date().toISOString()} - cognee_storeMemory called`
+            `[Tool Invocation] ${new Date().toISOString()} - recallflow_storeMemory called`
         );
         this.outputChannel.appendLine(`  Topic: ${options.input.topic}`);
         this.outputChannel.appendLine(`  Context length: ${options.input.context.length} chars`);

@@ -5,6 +5,17 @@ All notable changes to the Cognee Chat Memory extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+<!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
+
+## [0.3.7] - 2025-11-22
+
+### Fixed - Plan 019: RecallFlow Rebranding Gaps
+
+- **Publisher Identity**: Marketplace publisher ID now set to `recallflow` with author updated to "RecallFlow Team" so the extension no longer appears under the legacy Cognee brand.
+- **Language Model Tools**: Renamed tool identifiers and reference names to `recallflow_storeMemory` / `recallflow_retrieveMemory` so Configure Tools, chat autocomplete, and `.agent.md` definitions all reflect the RecallFlow brand.
+- **Documentation Alignment**: `README.md` and `AGENT_INTEGRATION.md` now show the correct tool names and usage examples, preventing confusion for agent developers.
+- **Test Coverage**: Integration tests updated to ensure the new tool identifiers register correctly with GitHub Copilot chat and that UI instructions stay in sync.
+
 ## [0.3.6] - 2025-11-22
 
 ### Added - Plan 019: Retrieval Fabrication and Silent Failure Fix
@@ -16,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Output Channel: "RecallFlow Agent Activity"
   - Chat Participant: `@recallflow-memory`
   - Tools: "Store Memory in RecallFlow", "Retrieve RecallFlow Memory"
+  - **Tool Renaming**: `cognee_storeMemory` → `recallflow_storeMemory`, `cognee_retrieveMemory` → `recallflow_retrieveMemory`
 - **Backward Compatibility**:
   - Internal configuration keys (`cogneeMemory.*`) remain unchanged
   - File paths (`.cognee/`) remain unchanged

@@ -34,7 +34,7 @@ export class RetrieveMemoryTool implements vscode.LanguageModelTool<RetrieveMemo
     }
 
     /**
-     * Invoked when Copilot agent calls cognee_retrieveMemory tool
+     * Invoked when Copilot agent calls recallflow_retrieveMemory tool
      */
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<RetrieveMemoryToolInput>,
@@ -43,7 +43,7 @@ export class RetrieveMemoryTool implements vscode.LanguageModelTool<RetrieveMemo
         const startTime = Date.now();
         
         this.outputChannel.appendLine(
-            `[Tool Invocation] ${new Date().toISOString()} - cognee_retrieveMemory called`
+            `[Tool Invocation] ${new Date().toISOString()} - recallflow_retrieveMemory called`
         );
         this.outputChannel.appendLine(`  Query: "${options.input.query.substring(0, 100)}${options.input.query.length > 100 ? '...' : ''}"`);
         this.outputChannel.appendLine(`  Max Results: ${options.input.maxResults || 3}`);

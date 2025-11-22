@@ -368,15 +368,15 @@ if (response.errorCode === '429_COGNIFY_BACKLOG') {
 
 RecallFlow Chat Memory provides two **Language Model Tools** that appear in VS Code's "Configure Tools" dialog:
 
-1. **cognee_storeMemory** (`#cogneeStoreSummary`) - Store conversation summaries
-2. **cognee_retrieveMemory** (`#cogneeRetrieveMemory`) - Retrieve relevant memories
+1. **recallflow_storeMemory** (`#recallflowStoreSummary`) - Store conversation summaries
+2. **recallflow_retrieveMemory** (`#recallflowRetrieveMemory`) - Retrieve relevant memories
 
 These tools allow Copilot and custom agents to autonomously access workspace memory through the standard VS Code tools UI.
 
 ### Recommended Tool Cadence
 
-- **Retrieve before reasoning**: Kick off each turn (or whenever the user references prior work) by calling `#cogneeRetrieveMemory` with a natural-language description of the goal. Reviewing context before planning reduces contradictions and surfaces existing decisions.
-- **Store after meaningful progress**: Use `#cogneeStoreSummary` once a task finishes, a decision is made, or a debugging session concludes. Think of it as a state checkpoint recorded every time the agent would normally summarize work back to the user.
+- **Retrieve before reasoning**: Kick off each turn (or whenever the user references prior work) by calling `#recallflowRetrieveMemory` with a natural-language description of the goal. Reviewing context before planning reduces contradictions and surfaces existing decisions.
+- **Store after meaningful progress**: Use `#recallflowStoreSummary` once a task finishes, a decision is made, or a debugging session concludes. Think of it as a state checkpoint recorded every time the agent would normally summarize work back to the user.
 - **Batch noise, not signal**: Minor clarifications or single-turn answers generally do not warrant their own summary—capture them inside the next substantial summary instead so retrieval stays precise.
 - **Close every session**: End-of-day or pre-handoff recaps greatly improve continuity; default to capturing one summary even if no major event occurred.
 
@@ -392,8 +392,8 @@ These expectations mirror the guidance embedded in the tool metadata (e.g., 300�
 5. Toggle tools on/off individually
 
 **In Chat (`#` Autocomplete)**:
-- Type `#cognee` in chat to see autocomplete suggestions
-- Select `#cogneeStoreSummary` or `#cogneeRetrieveMemory`
+- Type `#recallflow` in chat to see autocomplete suggestions
+- Select `#recallflowStoreSummary` or `#recallflowRetrieveMemory`
 - Tool description appears in autocomplete preview
 
 **In Custom Agent `.agent.md` Files**:
@@ -402,25 +402,25 @@ These expectations mirror the guidance embedded in the tool metadata (e.g., 300�
 ---
 name: Memory-Aware Code Assistant
 description: Copilot assistant with access to workspace memory
-tools: ['search', 'cogneeStoreSummary', 'cogneeRetrieveMemory']
+tools: ['search', 'recallflowStoreSummary', 'recallflowRetrieveMemory']
 ---
 
 You are a code assistant with access to workspace-specific memory.
 
 When the user asks about past decisions or implementations:
-1. Use #cogneeRetrieveMemory to search for relevant context
+1. Use #recallflowRetrieveMemory to search for relevant context
 2. Ground your answer in the retrieved memories
 3. If no memories exist, use your training data but clarify it's not workspace-specific
 
 When the user completes an important implementation or makes a decision:
-1. Offer to store a summary using #cogneeStoreSummary
+1. Offer to store a summary using #recallflowStoreSummary
 2. Include topic, context, and key decisions in the summary
 ```
 
 ### Store Memory Tool
 
-**Tool Name**: `cognee_storeMemory`  
-**Reference Name**: `cogneeStoreSummary` (for `#` autocomplete and `.agent.md` files)  
+**Tool Name**: `recallflow_storeMemory`  
+**Reference Name**: `recallflowStoreSummary` (for `#` autocomplete and `.agent.md` files)  
 **Icon**: `$(database)`
 
 **Input Schema**:
@@ -442,7 +442,7 @@ When the user completes an important implementation or makes a decision:
 **Example Usage in Chat**:
 ```
 User: "Remember that we decided to use Redis for caching"
-Agent: I'll store that decision. #cogneeStoreSummary {
+Agent: I'll store that decision. #recallflowStoreSummary {
   "topic": "Redis Caching Decision",
   "context": "Team decided to use Redis for session caching to improve performance",
   "decisions": ["Use Redis for session cache", "Deploy as Docker container"],
@@ -462,8 +462,8 @@ Agent: I'll store that decision. #cogneeStoreSummary {
 
 ### Retrieve Memory Tool
 
-**Tool Name**: `cognee_retrieveMemory`  
-**Reference Name**: `cogneeRetrieveMemory` (for `#` autocomplete and `.agent.md` files)  
+**Tool Name**: `recallflow_retrieveMemory`  
+**Reference Name**: `recallflowRetrieveMemory` (for `#` autocomplete and `.agent.md` files)  
 **Icon**: `$(search)`
 
 **Input Schema**:
@@ -477,7 +477,7 @@ Agent: I'll store that decision. #cogneeStoreSummary {
 **Example Usage in Chat**:
 ```
 User: "How did we implement caching?"
-Agent: Let me check our memory. #cogneeRetrieveMemory {
+Agent: Let me check our memory. #recallflowRetrieveMemory {
   "query": "caching implementation",
   "maxResults": 3
 }
@@ -589,7 +589,7 @@ When agents use RecallFlow tools, you see:
 1. **Output Channel**: `Output` > `RecallFlow Agent Activity`
    - Real-time log of all tool invocations
    - Shows timestamp, tool name, query/topic, and result
-   - Example: `[Tool Invocation] 2025-11-19T08:12:44Z - cognee_retrieveMemory called`
+   - Example: `[Tool Invocation] 2025-11-19T08:12:44Z - recallflow_retrieveMemory called`
 
 2. **Configure Tools UI**: Visual feedback for tool state
    - Checkboxes show which tools are enabled/disabled
@@ -930,14 +930,14 @@ await extension.activate();
 
 ### Tools not appearing in chat
 
-**Issue**: `#cognee*` commands don't appear in autocomplete
+**Issue**: `#recallflow*` commands don't appear in autocomplete
 
 **Solution**: Enable tools via Configure Tools UI
 1. Open Copilot chat
 2. Click "Tools" (⚙️) → "Configure Tools"
 3. Find "Store Memory in RecallFlow" and "Retrieve RecallFlow Memory"
 4. Toggle checkboxes to enable
-5. Return to chat and type `#cognee` to verify autocomplete
+5. Return to chat and type `#recallflow` to verify autocomplete
 
 ### Payload validation fails
 

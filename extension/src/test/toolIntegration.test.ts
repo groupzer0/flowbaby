@@ -22,8 +22,8 @@ suite('Tool Integration Test Suite', () => {
             await new Promise(resolve => setTimeout(resolve, 1000));
 
             const tools = await vscode.lm.tools;
-            const storeToolExists = tools.some(t => t.name === 'cognee_storeMemory');
-            const retrieveToolExists = tools.some(t => t.name === 'cognee_retrieveMemory');
+            const storeToolExists = tools.some(t => t.name === 'recallflow_storeMemory');
+            const retrieveToolExists = tools.some(t => t.name === 'recallflow_retrieveMemory');
 
             assert.strictEqual(storeToolExists, true, 'Store tool should be registered at activation');
             assert.strictEqual(retrieveToolExists, true, 'Retrieve tool should be registered at activation');
@@ -33,8 +33,8 @@ suite('Tool Integration Test Suite', () => {
             await new Promise(resolve => setTimeout(resolve, 500));
 
             const tools = await vscode.lm.tools;
-            const storeTool = tools.find(t => t.name === 'cognee_storeMemory');
-            const retrieveTool = tools.find(t => t.name === 'cognee_retrieveMemory');
+            const storeTool = tools.find(t => t.name === 'recallflow_storeMemory');
+            const retrieveTool = tools.find(t => t.name === 'recallflow_retrieveMemory');
 
             // Verify store tool metadata
             if (storeTool) {
@@ -95,7 +95,7 @@ suite('Tool Integration Test Suite', () => {
 
         test('Store summary via tool and retrieve via query returns matching results', async () => {
             const tools = await vscode.lm.tools;
-            const storeTool = tools.find(t => t.name === 'cognee_storeMemory');
+            const storeTool = tools.find(t => t.name === 'recallflow_storeMemory');
             assert.ok(storeTool, 'Store tool not registered');
 
             const testTopic = `Test Topic ${Date.now()}`;
