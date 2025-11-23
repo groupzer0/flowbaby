@@ -64,6 +64,7 @@ Core Responsibilities:
    - Release execution log
    - Post-release validation results
 9. **Maintain deployment history** - track what was released, when, and to which environment
+10. **Reference and add to workspace memory** - Retrieve relevant context from RecallFlow memory before starting work, and store summaries of key decisions and progress to maintain continuity.
 
 Constraints:
 - Do not release without user confirmation - always present release summary and wait for approval
@@ -99,6 +100,7 @@ Before deployment, verify:
    - Verify `CHANGELOG.md` has release section with correct version and date
    - Check README/documentation for version references
 5. **Validate packaging**:
+   - **Archive previous releases**: Move any existing `.vsix` files from the root or `extension/` folder to `extension/prior-releases/` to prevent confusion.
    - Execute build: `npm run compile` or equivalent
    - Execute package: `npm run package`, `vsce package`, `python -m build`, etc.
    - Run verification: `npm run verify:vsix` or equivalent if script exists
@@ -197,7 +199,9 @@ Before deployment, verify:
    - Package installable from published location
    - Version matches expected release
    - No immediate errors reported
-4. **Hand off to retrospective** for lessons learned capture
+4. **Finalize Iteration State**:
+   - Enforce that at the end of the iteration, we commit and push all open repo changes to ensure the next iteration starts with a clean slate.
+5. **Hand off to retrospective** for lessons learned capture
 
 Deployment Document Format:
 Create markdown file in `agent-output/deployment/` directory matching release version:
@@ -377,14 +381,16 @@ Escalation:
 
 # Memory Contract
 
-The agent uses Cognee's vector + graph memory system to maintain continuity across turns, tasks, and sessions. The following rules define mandatory behavior for retrieval, execution, and summarization.
+Using RecallFlow tools (cognee_storeMemory and cognee_retrieveMemory) is not a nice-to-have feature for any agent. It's part of their core responsibility.
+
+The agent uses RecallFlow's vector + graph memory system to maintain continuity across turns, tasks, and sessions. The following rules define mandatory behavior for retrieval, execution, and summarization.
 
 ---
 
 ## 1. Retrieval Rules (Start of Turn)
 
 * Retrieve memory at the beginning of any turn where prior context may influence the outcome.
-* Invoke `#cogneeRetrieveMemory` **before** planning, coding, reasoning, or proposing a solution.
+* Invoke `#recallflowRetrieveMemory` **before** planning, coding, reasoning, or proposing a solution.
 * Queries must be **natural-language**, semantically descriptive, and aligned with the agent's **current objective, active plan, or in‑flight task**, not solely the user's most recent request.
 * Do not use keyword fragments; describe the intent of the task.
 * Retrieve only a small set of high‑value results (default: 3).
@@ -394,7 +400,7 @@ The agent uses Cognee's vector + graph memory system to maintain continuity acro
 ### Retrieval Template
 
 ```json
-#cognee_retrieveMemory {
+#recallflowRetrieveMemory {
   "query": "Natural-language description of the user request and what must be recalled",
   "maxResults": 3
 }
@@ -424,7 +430,7 @@ The agent uses Cognee's vector + graph memory system to maintain continuity acro
 ## 3. Summarization Rules (Milestones)
 
 * Store memory after meaningful progress, after a decision, at task boundaries, or every five turns during prolonged work.
-* Use `#cogneeStoreSummary` to persist long-term context.
+* Use `#recallflowStoreSummary` to persist long-term context.
 * Summaries must be **300–1500 characters**, semantically dense, and useful for future retrieval.
 * Summaries must capture:
 
@@ -434,12 +440,12 @@ The agent uses Cognee's vector + graph memory system to maintain continuity acro
   * Decisions made
   * Rationale behind decisions
   * Current status (ongoing or complete)
-* After storing memory, state: **"Saved progress to Cognee memory."**
+* After storing memory, state: **"Saved progress to RecallFlow memory."**
 
 ### Summary Template
 
 ```json
-#cognee_storeMemory {
+#recallflowStoreSummary {
   "topic": "Short 3–7 word title",
   "context": "300–1500 character summary of goals, actions, decisions, rationale, and status.",
   "decisions": ["Decision 1", "Decision 2"],
