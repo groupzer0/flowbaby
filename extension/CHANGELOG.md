@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.3.10] - 2025-11-23
+
+### Fixed - Plan 023: Retrieval Scoring Hotfix
+
+- **Retrieval Regression**: Fixed an issue where valid `GRAPH_COMPLETION` answers (synthesized strings) were discarded because they lacked a semantic score and hit the strict `score <= 0.01` filter introduced in v0.3.9.
+- **Logic Update**: `retrieve.py` now bypasses the strict score filter for synthesized answers (which default to score 0.0) while maintaining the filter for `NO_RELEVANT_CONTEXT` responses.
+
 ## [0.3.9] - 2025-11-23
 
 ### Added - Plan 021: Logging Infrastructure Overhaul

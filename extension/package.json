@@ -2,7 +2,7 @@
   "name": "cognee-chat-memory",
   "displayName": "RecallFlow Chat Memory",
   "description": "Automatic memory for GitHub Copilot chat using RecallFlow knowledge graphs",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "publisher": "recallflow",
   "icon": "media/icon.png",
   "engines": {

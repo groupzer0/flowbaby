@@ -441,14 +441,22 @@ async def retrieve_context(
 
             # Filter out low confidence results to prevent hallucinations
             # Plan 021 Milestone 2: Strict filtering
+            # Plan 023 Hotfix: Bypass strict filter for synthesized graph answers (which have default score 0.0)
+            is_synthesized_answer = (semantic_score == 0.0)
+
             if final_score <= 0.01:
-                filtered_count += 1
-                filtered_reasons.append(f"Low score {final_score:.4f} <= 0.01 (id={i})")
-                logger.debug(f"Filtering result with low score", extra={'data': {
-                    'final_score': final_score,
-                    'semantic_score': semantic_score
-                }})
-                continue
+                if is_synthesized_answer:
+                    logger.debug(f"Bypassing strict filter for synthesized answer", extra={'data': {
+                        'final_score': final_score
+                    }})
+                else:
+                    filtered_count += 1
+                    filtered_reasons.append(f"Low score {final_score:.4f} <= 0.01 (id={i})")
+                    logger.debug(f"Filtering result with low score", extra={'data': {
+                        'final_score': final_score,
+                        'semantic_score': semantic_score
+                    }})
+                    continue
 
             result_text = result_dict.get('summary_text') or result_dict.get('text') or ''
             
