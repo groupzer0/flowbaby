@@ -136,7 +136,9 @@ async def test_retrieve_default_score(temp_workspace, mock_env):
             result = await retrieve_context(str(temp_workspace), "test")
             
             assert result['success'] is True
-            assert len(result['results']) == 0
+            # Plan 023 Hotfix: Synthesized answers (score 0.0) should NOT be filtered
+            assert len(result['results']) == 1
+            assert result['results'][0]['score'] == 0.0
 
 
 @pytest.mark.asyncio
