@@ -18,6 +18,10 @@ import os
 import sys
 import re
 from pathlib import Path
+
+# Add bridge directory to path to import bridge_logger
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import bridge_logger
 from workspace_utils import generate_dataset_name
 
 # Reuse parsing logic from retrieve.py (simplified)
@@ -33,6 +37,10 @@ def parse_metadata(text):
     }
 
 async def list_memories(workspace_path: str, limit: int = 10) -> dict:
+    # Initialize logger
+    logger = bridge_logger.setup_logging(workspace_path, "list_memories")
+    logger.info(f"Listing memories for workspace: {workspace_path}, limit={limit}")
+
     try:
         workspace_dir = Path(workspace_path)
         env_file = workspace_dir / '.env'
@@ -40,11 +48,15 @@ async def list_memories(workspace_path: str, limit: int = 10) -> dict:
         if env_file.exists():
             from dotenv import load_dotenv
             load_dotenv(env_file)
+            logger.debug(f"Loaded .env file from {env_file}")
         
         api_key = os.getenv('LLM_API_KEY')
         if not api_key:
-            return {"success": False, "error": "LLM_API_KEY missing"}
+            error_msg = "LLM_API_KEY missing"
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
 
+        logger.debug("Importing cognee SDK")
         import cognee
         from cognee.modules.search.types import SearchType
         
@@ -54,8 +66,10 @@ async def list_memories(workspace_path: str, limit: int = 10) -> dict:
         cognee.config.set_llm_provider('openai')
         
         dataset_name, _ = generate_dataset_name(workspace_path)
+        logger.info(f"Using dataset: {dataset_name}")
         
         # Broad query to get recent items
+        logger.info("Searching for recent memories")
         results = await cognee.search(
             query_type=SearchType.GRAPH_COMPLETION,
             query_text="list recent summaries and decisions",
@@ -78,6 +92,8 @@ async def list_memories(workspace_path: str, limit: int = 10) -> dict:
                     "preview": text[:100] + "..."
                 })
         
+        logger.info(f"Found {len(memories)} structured memories")
+        
         return {
             "success": True,
             "memories": memories,
@@ -85,7 +101,9 @@ async def list_memories(workspace_path: str, limit: int = 10) -> dict:
         }
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        error_msg = str(e)
+        if logger: logger.error(f"List memories failed: {error_msg}")
+        return {"success": False, "error": error_msg}
 
 def main():
     if len(sys.argv) < 2:

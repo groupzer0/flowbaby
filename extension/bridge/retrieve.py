@@ -25,6 +25,9 @@ from datetime import datetime, timezone
 from math import exp, log
 from pathlib import Path
 
+# Add bridge directory to path to import bridge_logger
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import bridge_logger
 from workspace_utils import generate_dataset_name
 
 
@@ -225,21 +228,25 @@ async def retrieve_context(
     include_superseded: bool = False
 ) -> dict:
     """Retrieve relevant context with recency-aware, status-aware scoring."""
+    
+    # Initialize logger
+    logger = bridge_logger.setup_logging(workspace_path, "retrieve")
+    
     try:
         max_results = max(1, min(50, int(max_results)))
         max_tokens = max(100, int(max_tokens))
         half_life_days = clamp_half_life_days(half_life_days)
 
-        print(
-            f"[PROGRESS] Starting retrieval: query='{query[:50]}...', "
-            f"max_results={max_results}, max_tokens={max_tokens}, "
-            f"half_life_days={half_life_days}, include_superseded={include_superseded}",
-            file=sys.stderr,
-            flush=True
-        )
+        logger.info(f"Starting retrieval", extra={'data': {
+            'query_preview': f"{query[:50]}...",
+            'max_results': max_results,
+            'max_tokens': max_tokens,
+            'half_life_days': half_life_days,
+            'include_superseded': include_superseded
+        }})
         
         # Load workspace .env file
-        print("[PROGRESS] Loading .env file", file=sys.stderr, flush=True)
+        logger.debug("Loading .env file")
         workspace_dir = Path(workspace_path)
         env_file = workspace_dir / '.env'
         
@@ -259,21 +266,21 @@ async def retrieve_context(
                 'remediation': 'Create .env in workspace root with: LLM_API_KEY=your_key_here',
                 'error': 'LLM_API_KEY environment variable is required but not set'
             }
-            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+            logger.error("Missing API key", extra={'data': error_payload})
             return error_payload
         
         # Import cognee
-        print("[PROGRESS] Importing cognee SDK", file=sys.stderr, flush=True)
+        logger.debug("Importing cognee SDK")
         import cognee
         from cognee.modules.search.types import SearchType
         
         # Configure workspace-local storage directories BEFORE any other cognee operations
-        print("[PROGRESS] Configuring workspace storage directories", file=sys.stderr, flush=True)
+        logger.debug("Configuring workspace storage directories")
         cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
         cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
         
         # Configure Cognee with API key
-        print("[PROGRESS] Configuring LLM provider (OpenAI)", file=sys.stderr, flush=True)
+        logger.debug("Configuring LLM provider (OpenAI)")
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
         
@@ -283,7 +290,11 @@ async def retrieve_context(
         # 2. Search within this workspace's dataset only
         # Note: If no data has been ingested yet, search will return empty results
         search_top_k = max(max_results * 3, max_results)
-        print(f"[PROGRESS] Executing Cognee search: dataset={dataset_name}, top_k={search_top_k}", file=sys.stderr, flush=True)
+        logger.info(f"Executing Cognee search", extra={'data': {
+            'dataset': dataset_name,
+            'top_k': search_top_k
+        }})
+        
         try:
             search_results = await cognee.search(
                 query_type=SearchType.GRAPH_COMPLETION,
@@ -292,11 +303,13 @@ async def retrieve_context(
                 top_k=search_top_k,
                 system_prompt=SYSTEM_PROMPT
             )
-            print(f"[PROGRESS] Search completed: {len(search_results) if search_results else 0} results", file=sys.stderr, flush=True)
+            logger.info(f"Search completed", extra={'data': {
+                'result_count': len(search_results) if search_results else 0
+            }})
         except Exception as search_error:
             # If database doesn't exist yet (no data ingested), return empty results
             error_msg = str(search_error)
-            print(f"[WARNING] Search error: {error_msg}", file=sys.stderr)
+            logger.warning(f"Search error: {error_msg}")
             if 'DatabaseNotCreatedError' in error_msg or 'database' in error_msg.lower():
                 return {
                     'success': True,
@@ -311,24 +324,20 @@ async def retrieve_context(
                 'message': str(search_error),
                 'traceback': str(search_error)
             }
-            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+            logger.error("Search exception", extra={'data': error_payload})
             raise
         
-        # This ensures search results only contain data from this workspace,
-        # not from other workspaces or tutorial data.
-        
         # DEBUG: Log search results structure to understand what Cognee returns
-        print(f"DEBUG: search_results type: {type(search_results)}", file=sys.stderr)
-        print(f"DEBUG: search_results length: {len(search_results) if search_results else 0}", file=sys.stderr)
+        logger.debug(f"Search results type: {type(search_results)}")
         if search_results:
-            print(f"DEBUG: first result type: {type(search_results[0])}", file=sys.stderr)
-            print(f"DEBUG: first result: {search_results[0]}", file=sys.stderr)
-            if hasattr(search_results[0], '__dict__'):
-                print(f"DEBUG: first result attributes: {search_results[0].__dict__}", file=sys.stderr)
+            logger.debug(f"First result type: {type(search_results[0])}")
+            # Log first result details for debugging (truncated)
+            first_res = str(search_results[0])
+            logger.debug(f"First result preview: {first_res[:200]}...")
         
         # If no results, return empty
         if not search_results:
-            print("[PROGRESS] No results found, returning empty", file=sys.stderr, flush=True)
+            logger.info("No results found, returning empty")
             return {
                 'success': True,
                 'results': [],
@@ -340,7 +349,7 @@ async def retrieve_context(
             }
         
         # Process and score results
-        print(f"[PROGRESS] Processing {len(search_results)} results", file=sys.stderr, flush=True)
+        logger.info(f"Processing {len(search_results)} results")
 
         def extract_text_and_semantic_score(result_obj) -> tuple[str, float]:
             text_value = ''
@@ -376,8 +385,9 @@ async def retrieve_context(
 
         scored_results: list[dict] = []
         filtered_count = 0
+        filtered_reasons = []
 
-        for result in search_results:
+        for i, result in enumerate(search_results):
             text, semantic_score = extract_text_and_semantic_score(result)
             parsed = parse_enriched_summary(text)
 
@@ -411,17 +421,33 @@ async def retrieve_context(
 
             status = normalize_status(status)
             if not include_superseded and status == 'Superseded':
+                filtered_count += 1
+                filtered_reasons.append(f"Superseded status (id={i})")
                 continue
 
             recency_multiplier = calculate_recency_multiplier(recency_timestamp, half_life_days)
             status_multiplier = get_status_multiplier(status)
             final_score = float(semantic_score) * recency_multiplier * status_multiplier
 
+            # Log detailed scoring for each candidate (DEBUG level)
+            logger.debug(f"Scoring candidate {i}", extra={'data': {
+                'semantic_score': semantic_score,
+                'recency_multiplier': recency_multiplier,
+                'status_multiplier': status_multiplier,
+                'final_score': final_score,
+                'status': status,
+                'timestamp': recency_timestamp
+            }})
+
             # Filter out low confidence results to prevent hallucinations
             # Plan 021 Milestone 2: Strict filtering
             if final_score <= 0.01:
                 filtered_count += 1
-                print(f"[PROGRESS] Filtering result with low score: {final_score:.4f} (semantic: {semantic_score:.4f})", file=sys.stderr)
+                filtered_reasons.append(f"Low score {final_score:.4f} <= 0.01 (id={i})")
+                logger.debug(f"Filtering result with low score", extra={'data': {
+                    'final_score': final_score,
+                    'semantic_score': semantic_score
+                }})
                 continue
 
             result_text = result_dict.get('summary_text') or result_dict.get('text') or ''
@@ -429,7 +455,8 @@ async def retrieve_context(
             # Filter out explicit NO_RELEVANT_CONTEXT responses (case-insensitive)
             if 'no_relevant_context' in result_text.strip().lower():
                 filtered_count += 1
-                print(f"[PROGRESS] Filtering NO_RELEVANT_CONTEXT response", file=sys.stderr)
+                filtered_reasons.append(f"NO_RELEVANT_CONTEXT content (id={i})")
+                logger.debug(f"Filtering NO_RELEVANT_CONTEXT response")
                 continue
 
             tokens = estimate_tokens(result_text)
@@ -449,7 +476,9 @@ async def retrieve_context(
             scored_results.append(result_dict)
 
         if filtered_count > 0:
-            print(f"[PROGRESS] Filtered {filtered_count} results with score <= 0.01", file=sys.stderr, flush=True)
+            logger.info(f"Filtered {filtered_count} results", extra={'data': {
+                'reasons': filtered_reasons[:10] # Log first 10 reasons
+            }})
 
         if not scored_results:
             return {
@@ -468,6 +497,11 @@ async def retrieve_context(
         for result_dict in scored_results:
             tokens = result_dict.get('tokens', 0)
             if total_tokens + tokens > max_tokens and selected_results:
+                logger.debug(f"Skipping result due to token limit", extra={'data': {
+                    'current_tokens': total_tokens,
+                    'item_tokens': tokens,
+                    'max_tokens': max_tokens
+                }})
                 continue
 
             payload = {k: v for k, v in result_dict.items() if not k.startswith('_')}
@@ -476,6 +510,11 @@ async def retrieve_context(
 
             if len(selected_results) >= max_results:
                 break
+
+        logger.info(f"Returning {len(selected_results)} results", extra={'data': {
+            'total_tokens': total_tokens,
+            'top_score': selected_results[0]['final_score'] if selected_results else 0
+        }})
 
         return {
             'success': True,
@@ -496,7 +535,11 @@ async def retrieve_context(
             'traceback': str(e),
             'error': f'Failed to import required module: {str(e)}'
         }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        # We can't use logger here if import failed before logger setup, but we try
+        try:
+            logger.error("Import error", extra={'data': error_payload})
+        except:
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
     except Exception as e:
         import traceback
@@ -508,7 +551,10 @@ async def retrieve_context(
             'traceback': traceback.format_exc(),
             'error': f'Retrieval failed: {str(e)}'
         }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        try:
+            logger.error("Unhandled exception", extra={'data': error_payload})
+        except:
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
 
 

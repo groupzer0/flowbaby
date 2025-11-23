@@ -63,7 +63,7 @@ npm run compile
 vsce package
 ```
 
-This creates `cognee-chat-memory-0.3.8.vsix`.
+This creates `cognee-chat-memory-0.3.9.vsix`.
 
 ### 3. Test VSIX Locally
 
@@ -86,9 +86,9 @@ code --disable-extensions
 1. Navigate to: <https://github.com/lsalsich/cognee/releases>
 2. Click **"Draft a new release"**
 3. **Tag**: `v0.2.0` (must match git tag)
-4. **Title**: "RecallFlow Chat Memory v0.3.8"
+4. **Title**: "RecallFlow Chat Memory v0.3.9"
 5. **Description**: Copy relevant section from CHANGELOG.md
-6. **Attach** `cognee-chat-memory-0.3.8.vsix` file
+6. **Attach** `cognee-chat-memory-0.3.9.vsix` file
 7. Click **"Publish release"**
 
 ### 5. Announce Release

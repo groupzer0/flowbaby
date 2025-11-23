@@ -15,7 +15,7 @@ A VS Code extension that automatically captures GitHub Copilot chat conversation
 
 **Location**: [`extension/`](extension/)  
 **See**: [Extension README](extension/README.md) for installation and configuration  
-**Status**: v0.3.8 Released - [Download VSIX](https://github.com/lsalsich/cognee/releases)  
+**Status**: v0.3.9 Released - [Download VSIX](https://github.com/lsalsich/cognee/releases)  
 **Features**: Automatic memory capture, context retrieval, workspace isolation, hybrid search, custom ontology
 
 ## Prerequisites

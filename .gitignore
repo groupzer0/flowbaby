@@ -49,3 +49,7 @@ extension/test-*.js
 # Logs
 *.log
 .envrc
+
+# Generated agent artifacts
+agent-output/
+agent-outputs/

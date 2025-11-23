@@ -24,6 +24,9 @@ from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 
+# Add bridge directory to path to import bridge_logger
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import bridge_logger
 from workspace_utils import generate_dataset_name
 
 
@@ -161,6 +164,10 @@ async def run_add_only(
     importance: float = 0.0
 ) -> dict:
     """Stage data for ingestion without cognify(). Supports summary and conversation payloads."""
+    
+    # Initialize logger (will be configured with workspace path once known)
+    logger = None
+    
     try:
         payload_type = 'summary' if summary_json else 'conversation'
         if summary_json:
@@ -172,6 +179,9 @@ async def run_add_only(
                 'error_code': 'MISSING_WORKSPACE_PATH',
                 'error': 'Add-only mode requires workspace_path'
             }
+            
+        # Setup logging now that we have workspace_path
+        logger = bridge_logger.setup_logging(workspace_path, "ingest")
         
         if payload_type == 'conversation' and (not user_message or not assistant_message):
             return {
@@ -180,22 +190,18 @@ async def run_add_only(
                 'error': 'Conversation ingestion requires user and assistant messages'
             }
         
-        print(
-            f"[PROGRESS] Add-only mode ({payload_type}): workspace={workspace_path}",
-            file=sys.stderr,
-            flush=True
-        )
+        logger.info(f"Add-only mode ({payload_type})", extra={'data': {'workspace': workspace_path}})
         metrics = {}
         overall_start = perf_counter()
         
         # Step 1: Setup environment
-        print("[PROGRESS] Setting up environment", file=sys.stderr, flush=True)
+        logger.debug("Setting up environment")
         step_start = perf_counter()
         dataset_name, api_key, cognee_config = setup_environment(workspace_path)
         metrics['setup_env_sec'] = perf_counter() - step_start
         
         # Step 2: Import and configure cognee
-        print("[PROGRESS] Importing cognee SDK", file=sys.stderr, flush=True)
+        logger.debug("Importing cognee SDK")
         step_start = perf_counter()
         
         old_stdout = sys.stdout
@@ -221,7 +227,7 @@ async def run_add_only(
         metrics['create_summary_text_sec'] = perf_counter() - step_start
         
         # Step 4: Add enriched summary text to dataset (NO cognify)
-        print(f"[PROGRESS] Add completed: {len(summary_text)} chars staged", file=sys.stderr, flush=True)
+        logger.info(f"Add completed: {len(summary_text)} chars staged")
         step_start = perf_counter()
         
         await cognee.add(
@@ -232,8 +238,7 @@ async def run_add_only(
         metrics['add_sec'] = perf_counter() - step_start
         metrics['total_add_sec'] = perf_counter() - overall_start
         
-        print(f"Add-only duration: {metrics['total_add_sec']:.3f} seconds", file=sys.stderr)
-        print(f"[PROGRESS] Add completed", file=sys.stderr, flush=True)
+        logger.info(f"Add-only duration: {metrics['total_add_sec']:.3f} seconds")
         
         # Return success with staged=True
         return {
@@ -252,7 +257,10 @@ async def run_add_only(
             'error_code': 'MISSING_API_KEY',
             'error': str(e)
         }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        if logger:
+            logger.error("Missing API key", extra={'data': error_payload})
+        else:
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
     except ImportError as e:
         error_payload = {
@@ -262,7 +270,10 @@ async def run_add_only(
             'message': f'Failed to import required module: {str(e)}',
             'error': f'Failed to import required module: {str(e)}'
         }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        if logger:
+            logger.error("Import error", extra={'data': error_payload})
+        else:
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
     except Exception as e:
         import traceback
@@ -274,7 +285,10 @@ async def run_add_only(
             'traceback': traceback.format_exc(),
             'error': f'Add-only failed ({type(e).__name__}): {str(e)}'
         }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        if logger:
+            logger.error("Add-only failed", extra={'data': error_payload})
+        else:
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
 
 
@@ -291,9 +305,12 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
     """
     workspace_dir = Path(workspace_path)
     
+    # Initialize logger
+    logger = bridge_logger.setup_logging(workspace_path, "ingest_bg")
+    
     # Register signal handlers to capture termination
     def signal_handler(signum, frame):
-        print(f"[ERROR] Process terminated by signal {signum}", file=sys.stderr)
+        logger.error(f"Process terminated by signal {signum}")
         write_status_stub(
             operation_id=operation_id,
             workspace_dir=workspace_dir,
@@ -308,15 +325,15 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
     signal.signal(signal.SIGINT, signal_handler)
 
     try:
-        print(f"[PROGRESS] Cognify-only mode: operation_id={operation_id}", file=sys.stderr, flush=True)
+        logger.info(f"Cognify-only mode: operation_id={operation_id}")
         overall_start = perf_counter()
         
         # Step 1: Setup environment
-        print("[PROGRESS] Setting up environment", file=sys.stderr, flush=True)
+        logger.debug("Setting up environment")
         dataset_name, api_key, cognee_config = setup_environment(workspace_path)
         
         # Step 2: Import and configure cognee
-        print("[PROGRESS] Importing cognee SDK", file=sys.stderr, flush=True)
+        logger.debug("Importing cognee SDK")
         old_stdout = sys.stdout
         sys.stdout = sys.stderr
         try:
@@ -330,14 +347,14 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
         cognee.config.set_llm_provider('openai')
         
         # Step 3: Run cognify on dataset
-        print(f"[PROGRESS] Cognify started (this may take 30-90s)", file=sys.stderr, flush=True)
+        logger.info("Cognify started (this may take 30-90s)")
         start_time = perf_counter()
         
         await cognee.cognify(datasets=[dataset_name])
         
         elapsed_ms = int((perf_counter() - start_time) * 1000)
         
-        print(f"[PROGRESS] Cognify completed in {elapsed_ms}ms", file=sys.stderr, flush=True)
+        logger.info(f"Cognify completed in {elapsed_ms}ms")
         
         # Write success stub
         write_status_stub(
@@ -376,7 +393,7 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
             'error_code': error_code,
             'error': error_message
         }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        logger.error("Missing API key", extra={'data': error_payload})
         return error_payload
         
     except ImportError as e:
@@ -400,7 +417,7 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
             'error_code': error_code,
             'error': error_message
         }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        logger.error("Import error", extra={'data': error_payload})
         return error_payload
         
     except Exception as e:
@@ -428,7 +445,7 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
             'traceback': traceback.format_exc(),
             'error': f'Cognify failed ({type(e).__name__}): {error_message}'
         }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        logger.error("Cognify failed", extra={'data': error_payload})
         return error_payload
 
 
@@ -440,6 +457,9 @@ async def run_sync(summary_json: dict = None, workspace_path: str = None,
     
     Supports both summary and conversation modes.
     """
+    # Initialize logger (will be configured with workspace path once known)
+    logger = None
+
     try:
         # Determine mode from arguments
         if summary_json:
@@ -451,21 +471,28 @@ async def run_sync(summary_json: dict = None, workspace_path: str = None,
                     'error': 'Summary JSON must include workspace_path field'
                 }
             
-            print(f"[PROGRESS] Sync mode (summary): topic={summary_json.get('topic', 'unknown')[:50]}", file=sys.stderr, flush=True)
+            # Setup logging now that we have workspace_path
+            logger = bridge_logger.setup_logging(workspace_path, "ingest")
+            logger.info(f"Sync mode (summary): topic={summary_json.get('topic', 'unknown')[:50]}")
         else:
-            print(f"[PROGRESS] Sync mode (conversation): user_msg={user_message[:50]}...", file=sys.stderr, flush=True)
+            # Setup logging now that we have workspace_path
+            if workspace_path:
+                logger = bridge_logger.setup_logging(workspace_path, "ingest")
+            
+            if logger:
+                logger.info(f"Sync mode (conversation): user_msg={user_message[:50]}...")
         
         metrics = {}
         overall_start = perf_counter()
         
         # Step 1: Setup environment
-        print("[PROGRESS] Setting up environment", file=sys.stderr, flush=True)
+        if logger: logger.debug("Setting up environment")
         step_start = perf_counter()
         dataset_name, api_key, cognee_config = setup_environment(workspace_path)
         metrics['setup_env_sec'] = perf_counter() - step_start
         
         # Step 2: Import and configure cognee
-        print("[PROGRESS] Importing cognee SDK", file=sys.stderr, flush=True)
+        if logger: logger.debug("Importing cognee SDK")
         step_start = perf_counter()
         
         old_stdout = sys.stdout
@@ -496,7 +523,7 @@ Metadata: timestamp={timestamp}, importance={importance}"""
         metrics['create_text_sec'] = perf_counter() - step_start
         
         # Step 4: Add to dataset
-        print(f"[PROGRESS] Adding to dataset: {len(text_content)} chars", file=sys.stderr, flush=True)
+        if logger: logger.info(f"Adding to dataset: {len(text_content)} chars")
         step_start = perf_counter()
         
         await cognee.add(
@@ -507,7 +534,7 @@ Metadata: timestamp={timestamp}, importance={importance}"""
         metrics['add_sec'] = perf_counter() - step_start
         
         # Step 5: Cognify
-        print(f"[PROGRESS] Running cognify (this may take 30-90s)", file=sys.stderr, flush=True)
+        if logger: logger.info(f"Running cognify (this may take 30-90s)")
         step_start = perf_counter()
         
         await cognee.cognify(datasets=[dataset_name])
@@ -515,8 +542,9 @@ Metadata: timestamp={timestamp}, importance={importance}"""
         metrics['cognify_sec'] = perf_counter() - step_start
         metrics['total_sync_sec'] = perf_counter() - overall_start
         
-        print(f"Sync ingestion duration: {metrics['total_sync_sec']:.3f} seconds", file=sys.stderr)
-        print(f"Sync ingestion metrics: {json.dumps(metrics)}", file=sys.stderr)
+        if logger:
+            logger.info(f"Sync ingestion duration: {metrics['total_sync_sec']:.3f} seconds")
+            logger.debug(f"Sync ingestion metrics: {json.dumps(metrics)}")
         
         return {
             'success': True,
@@ -533,7 +561,10 @@ Metadata: timestamp={timestamp}, importance={importance}"""
             'error_code': 'MISSING_API_KEY',
             'error': str(e)
         }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        if logger:
+            logger.error("Missing API key", extra={'data': error_payload})
+        else:
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
     except ImportError as e:
         error_payload = {
@@ -543,7 +574,10 @@ Metadata: timestamp={timestamp}, importance={importance}"""
             'message': f'Failed to import required module: {str(e)}',
             'error': f'Failed to import required module: {str(e)}'
         }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        if logger:
+            logger.error("Import error", extra={'data': error_payload})
+        else:
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
     except Exception as e:
         import traceback
@@ -555,7 +589,10 @@ Metadata: timestamp={timestamp}, importance={importance}"""
             'traceback': traceback.format_exc(),
             'error': f'Sync ingestion failed ({type(e).__name__}): {str(e)}'
         }
-        print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        if logger:
+            logger.error("Sync ingestion failed", extra={'data': error_payload})
+        else:
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
 
 
@@ -577,111 +614,127 @@ def main():
                 sys.exit(1)
         
         # Dispatch based on mode
-        if mode == 'cognify-only':
-            # Cognify-only requires --operation-id and workspace_path
-            if '--operation-id' not in sys.argv:
-                result = {'success': False, 'error': 'cognify-only mode requires --operation-id <uuid>'}
-                print(json.dumps(result))
-                sys.exit(1)
-            
-            op_id_idx = sys.argv.index('--operation-id')
-            if op_id_idx + 1 >= len(sys.argv):
-                result = {'success': False, 'error': '--operation-id requires UUID argument'}
-                print(json.dumps(result))
-                sys.exit(1)
-            
-            operation_id = sys.argv[op_id_idx + 1]
-            
-            # Validate UUID format
-            try:
-                uuid.UUID(operation_id)
-            except ValueError:
-                result = {'success': False, 'error': f'Invalid UUID format for operation_id: {operation_id}'}
-                print(json.dumps(result))
-                sys.exit(1)
-            
-            # Get workspace path (first positional arg after all flags)
-            positional_args = [arg for arg in sys.argv[1:] if not arg.startswith('--') and arg != operation_id and arg != mode]
-            if len(positional_args) < 1:
-                result = {'success': False, 'error': 'cognify-only mode requires workspace_path as positional argument'}
-                print(json.dumps(result))
-                sys.exit(1)
-            
-            workspace_path = positional_args[0]
-            if not Path(workspace_path).is_dir():
-                result = {'success': False, 'error': f'Workspace path does not exist: {workspace_path}'}
-                print(json.dumps(result))
-                sys.exit(1)
-            
-            result = asyncio.run(run_cognify_only(workspace_path, operation_id))
-            
-        elif '--summary' in sys.argv:
-            # Summary mode (add-only or sync)
-            if '--summary-json' not in sys.argv:
-                result = {'success': False, 'error': '--summary requires --summary-json <json>'}
-                print(json.dumps(result))
-                sys.exit(1)
-            
-            summary_json_idx = sys.argv.index('--summary-json')
-            if summary_json_idx + 1 >= len(sys.argv):
-                result = {'success': False, 'error': '--summary-json requires JSON string argument'}
-                print(json.dumps(result))
-                sys.exit(1)
-            
-            summary_json_str = sys.argv[summary_json_idx + 1]
-            summary_json = json.loads(summary_json_str)
-            
-            if mode == 'add-only':
-                result = asyncio.run(run_add_only(summary_json=summary_json))
-            else:  # sync
-                result = asyncio.run(run_sync(summary_json=summary_json))
-                
-        else:
-            # Conversation mode (supports add-only + sync)
-            # Get positional args (excluding --mode and mode value)
-            positional_args = [arg for arg in sys.argv[1:] if not arg.startswith('--') and arg != mode]
-            
-            if len(positional_args) < 3:
-                result = {
-                    'success': False,
-                    'error': 'Missing required arguments: workspace_path, user_message, assistant_message'
-                }
-                print(json.dumps(result))
-                sys.exit(1)
-            
-            workspace_path = positional_args[0]
-            user_message = positional_args[1]
-            assistant_message = positional_args[2]
-            
-            importance = 0.0
-            if len(positional_args) >= 4:
-                try:
-                    importance = float(positional_args[3])
-                    importance = max(0.0, min(1.0, importance))
-                except ValueError:
-                    result = {'success': False, 'error': f'Invalid importance value: {positional_args[3]}'}
+        # Redirect stdout to stderr during execution to prevent library output from polluting JSON result
+        old_stdout = sys.stdout
+        sys.stdout = sys.stderr
+        try:
+            if mode == 'cognify-only':
+                # Cognify-only requires --operation-id and workspace_path
+                if '--operation-id' not in sys.argv:
+                    result = {'success': False, 'error': 'cognify-only mode requires --operation-id <uuid>'}
+                    sys.stdout = old_stdout # Restore for print
                     print(json.dumps(result))
                     sys.exit(1)
-            
-            if not Path(workspace_path).is_dir():
-                result = {'success': False, 'error': f'Workspace path does not exist: {workspace_path}'}
-                print(json.dumps(result))
-                sys.exit(1)
-            
-            if mode == 'add-only':
-                result = asyncio.run(run_add_only(
-                    workspace_path=workspace_path,
-                    user_message=user_message,
-                    assistant_message=assistant_message,
-                    importance=importance
-                ))
+                
+                op_id_idx = sys.argv.index('--operation-id')
+                if op_id_idx + 1 >= len(sys.argv):
+                    result = {'success': False, 'error': '--operation-id requires UUID argument'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+                
+                operation_id = sys.argv[op_id_idx + 1]
+                
+                # Validate UUID format
+                try:
+                    uuid.UUID(operation_id)
+                except ValueError:
+                    result = {'success': False, 'error': f'Invalid UUID format for operation_id: {operation_id}'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+                
+                # Get workspace path (first positional arg after all flags)
+                positional_args = [arg for arg in sys.argv[1:] if not arg.startswith('--') and arg != operation_id and arg != mode]
+                if len(positional_args) < 1:
+                    result = {'success': False, 'error': 'cognify-only mode requires workspace_path as positional argument'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+                
+                workspace_path = positional_args[0]
+                if not Path(workspace_path).is_dir():
+                    result = {'success': False, 'error': f'Workspace path does not exist: {workspace_path}'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+                
+                result = asyncio.run(run_cognify_only(workspace_path, operation_id))
+                
+            elif '--summary' in sys.argv:
+                # Summary mode (add-only or sync)
+                if '--summary-json' not in sys.argv:
+                    result = {'success': False, 'error': '--summary requires --summary-json <json>'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+                
+                summary_json_idx = sys.argv.index('--summary-json')
+                if summary_json_idx + 1 >= len(sys.argv):
+                    result = {'success': False, 'error': '--summary-json requires JSON string argument'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+                
+                summary_json_str = sys.argv[summary_json_idx + 1]
+                summary_json = json.loads(summary_json_str)
+                
+                if mode == 'add-only':
+                    result = asyncio.run(run_add_only(summary_json=summary_json))
+                else:  # sync
+                    result = asyncio.run(run_sync(summary_json=summary_json))
+                    
             else:
-                result = asyncio.run(run_sync(
-                    workspace_path=workspace_path,
-                    user_message=user_message,
-                    assistant_message=assistant_message,
-                    importance=importance
-                ))
+                # Conversation mode (supports add-only + sync)
+                # Get positional args (excluding --mode and mode value)
+                positional_args = [arg for arg in sys.argv[1:] if not arg.startswith('--') and arg != mode]
+                
+                if len(positional_args) < 3:
+                    result = {
+                        'success': False,
+                        'error': 'Missing required arguments: workspace_path, user_message, assistant_message'
+                    }
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+                
+                workspace_path = positional_args[0]
+                user_message = positional_args[1]
+                assistant_message = positional_args[2]
+                
+                importance = 0.0
+                if len(positional_args) >= 4:
+                    try:
+                        importance = float(positional_args[3])
+                        importance = max(0.0, min(1.0, importance))
+                    except ValueError:
+                        result = {'success': False, 'error': f'Invalid importance value: {positional_args[3]}'}
+                        sys.stdout = old_stdout
+                        print(json.dumps(result))
+                        sys.exit(1)
+                
+                if not Path(workspace_path).is_dir():
+                    result = {'success': False, 'error': f'Workspace path does not exist: {workspace_path}'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+                
+                if mode == 'add-only':
+                    result = asyncio.run(run_add_only(
+                        workspace_path=workspace_path,
+                        user_message=user_message,
+                        assistant_message=assistant_message,
+                        importance=importance
+                    ))
+                else:
+                    result = asyncio.run(run_sync(
+                        workspace_path=workspace_path,
+                        user_message=user_message,
+                        assistant_message=assistant_message,
+                        importance=importance
+                    ))
+        finally:
+            sys.stdout = old_stdout
         
         # Output JSON result
         print(json.dumps(result))

@@ -952,7 +952,13 @@ export class CogneeClient {
         }
 
         const timestamp = new Date().toISOString();
-        const dataStr = data ? ` ${JSON.stringify(data)}` : '';
+        let dataStr = '';
+        if (data) {
+            const stringified = JSON.stringify(data);
+            // Sanitize and truncate data to prevent UI bloat
+            dataStr = ` ${this.sanitizeOutput(stringified)}`;
+        }
+        
         const logLine = `[${timestamp}] [${level}] ${message}${dataStr}`;
         
         this.outputChannel.appendLine(logLine);
@@ -969,6 +975,65 @@ export class CogneeClient {
      * @param timeoutMs Timeout in milliseconds (default: 10000ms, use 30000ms for ingestion)
      * @returns Promise<CogneeResult> - Parsed JSON result
      */
+    /**
+     * Process a single line of stderr output from the bridge
+     * Handles both structured JSON logs and legacy text markers
+     */
+    private processBridgeLogLine(line: string, scriptName: string): void {
+        if (!line.trim()) return;
+
+        try {
+            // Try parsing as structured JSON log
+            const logEntry = JSON.parse(line);
+            
+            // Validate it looks like our bridge log format
+            if (logEntry.level && logEntry.message) {
+                // Map Python level to VS Code level
+                // Python: DEBUG, INFO, WARNING, ERROR, CRITICAL
+                // VS Code: Debug, Info, Warn, Error
+                let level = logEntry.level.toUpperCase();
+                if (level === 'WARNING') level = 'WARN';
+                if (level === 'CRITICAL') level = 'ERROR';
+                
+                // Log with data if present
+                this.log(level, logEntry.message, logEntry.data);
+                return;
+            }
+        } catch (e) {
+            // Not JSON, fall through to legacy handling
+        }
+
+        // Legacy handling for non-JSON lines
+        if (line.includes('[ERROR]')) {
+            // Extract and parse JSON error payload if present
+            const jsonMatch = line.match(/\[ERROR\]\s*(\{.*\})/);
+            if (jsonMatch) {
+                try {
+                    const errorPayload = JSON.parse(jsonMatch[1]);
+                    this.log('ERROR', 'Bridge script error', {
+                        script: scriptName,
+                        error_code: errorPayload.error_code,
+                        error_type: errorPayload.error_type,
+                        message: errorPayload.message
+                    });
+                } catch {
+                    this.log('ERROR', 'Bridge script error (unparseable)', { line });
+                }
+            } else {
+                this.log('ERROR', 'Bridge script error', { line });
+            }
+        } else if (line.includes('[WARNING]')) {
+            this.log('WARN', 'Bridge script warning', { line });
+        } else if (line.includes('[PROGRESS]')) {
+            this.log('INFO', 'Bridge progress', { line });
+        } else {
+            // Log other stderr output at DEBUG level
+            // But sanitize it first
+            const sanitized = this.sanitizeOutput(line);
+            this.log('DEBUG', `[${scriptName}] ${sanitized}`);
+        }
+    }
+
     private async runPythonScript(
         scriptName: string,
         args: string[],
@@ -999,7 +1064,8 @@ export class CogneeClient {
             });
             
             let stdout = '';
-            let stderr = '';
+            let stderrCaptured = '';
+            let stderrBuffer = '';
 
             // Collect stdout (with buffer limit to prevent memory bloat)
             python.stdout.on('data', (data) => {
@@ -1010,18 +1076,41 @@ export class CogneeClient {
                 }
             });
 
-            // Collect stderr (with buffer limit)
+            // Collect stderr (with buffer limit for error reporting, but stream processing for logs)
             python.stderr.on('data', (data) => {
-                stderr += data.toString();
-                if (stderr.length > 2048) {
-                    stderr = stderr.substring(0, 2048);
+                const chunk = data.toString();
+                
+                // 1. Capture for final error reporting (truncated)
+                if (stderrCaptured.length < 2048) {
+                    stderrCaptured += chunk;
+                    if (stderrCaptured.length > 2048) {
+                        stderrCaptured = stderrCaptured.substring(0, 2048);
+                    }
                 }
+
+                // 2. Stream processing for logs
+                stderrBuffer += chunk;
+                const lines = stderrBuffer.split('\n');
+                
+                // Process all complete lines
+                // The last element is either an empty string (if ended with \n) or a partial line
+                for (let i = 0; i < lines.length - 1; i++) {
+                    this.processBridgeLogLine(lines[i], scriptName);
+                }
+                
+                // Keep the last partial line in the buffer
+                stderrBuffer = lines[lines.length - 1];
             });
 
             // Handle process close
             python.on('close', (code) => {
                 const closeTime = Date.now();
                 
+                // Process any remaining stderr buffer
+                if (stderrBuffer.trim()) {
+                    this.processBridgeLogLine(stderrBuffer, scriptName);
+                }
+
                 this.log('DEBUG', 'Python script completed', {
                     script: scriptName,
                     exit_code: code,
@@ -1053,7 +1142,7 @@ export class CogneeClient {
 
                     // Sanitize outputs before logging
                     const sanitizedStdout = this.sanitizeOutput(stdout);
-                    const sanitizedStderr = this.sanitizeOutput(stderr);
+                    const sanitizedStderr = this.sanitizeOutput(stderrCaptured);
 
                     // Log comprehensive error details
                     this.log('ERROR', 'Python script failed', {
@@ -1071,45 +1160,6 @@ export class CogneeClient {
                     
                     reject(new Error(`${errorMessage}${troubleshootingHint}`));
                     return;
-                }
-
-                // Log stderr even on success (parse diagnostic markers from Milestone 2)
-                if (stderr && stderr.trim()) {
-                    const sanitizedStderr = this.sanitizeOutput(stderr);
-                    
-                    // Parse stderr for diagnostic markers and log at appropriate levels
-                    const stderrLines = stderr.split('\n');
-                    for (const line of stderrLines) {
-                        if (line.includes('[ERROR]')) {
-                            // Extract and parse JSON error payload if present
-                            const jsonMatch = line.match(/\[ERROR\]\s*(\{.*\})/);
-                            if (jsonMatch) {
-                                try {
-                                    const errorPayload = JSON.parse(jsonMatch[1]);
-                                    this.log('ERROR', 'Bridge script error', {
-                                        script: scriptName,
-                                        error_code: errorPayload.error_code,
-                                        error_type: errorPayload.error_type,
-                                        message: errorPayload.message
-                                    });
-                                } catch {
-                                    this.log('ERROR', 'Bridge script error (unparseable)', { line });
-                                }
-                            } else {
-                                this.log('ERROR', 'Bridge script error', { line });
-                            }
-                        } else if (line.includes('[WARNING]')) {
-                            this.log('WARN', 'Bridge script warning', { line });
-                        } else if (line.includes('[PROGRESS]')) {
-                            this.log('INFO', 'Bridge progress', { line });
-                        }
-                    }
-                    
-                    // Also log full stderr at DEBUG for complete diagnostic context
-                    this.log('DEBUG', 'Python script stderr output', {
-                        script: scriptName,
-                        stderr: sanitizedStderr
-                    });
                 }
 
                 // Parse JSON output (success path)
@@ -1146,8 +1196,8 @@ export class CogneeClient {
                 python.kill();
                 
                 // Log any stderr collected before timeout (diagnostic context from Milestone 2)
-                if (stderr && stderr.trim()) {
-                    const stderrLines = stderr.split('\n');
+                if (stderrCaptured && stderrCaptured.trim()) {
+                    const stderrLines = stderrCaptured.split('\n');
                     const lastProgressLine = stderrLines.filter(l => l.includes('[PROGRESS]')).pop();
                     const errorLines = stderrLines.filter(l => l.includes('[ERROR]'));
                     

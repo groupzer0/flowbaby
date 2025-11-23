@@ -20,9 +20,17 @@ import json
 import os
 import sys
 from pathlib import Path
+
+# Add bridge directory to path to import bridge_logger
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import bridge_logger
 from workspace_utils import generate_dataset_name
 
 async def validate_memory(workspace_path: str) -> dict:
+    # Initialize logger
+    logger = bridge_logger.setup_logging(workspace_path, "validate")
+    logger.info(f"Validating memory for workspace: {workspace_path}")
+
     checks = {
         "env_file": False,
         "api_key": False,
@@ -41,16 +49,19 @@ async def validate_memory(workspace_path: str) -> dict:
             checks["env_file"] = True
             from dotenv import load_dotenv
             load_dotenv(env_file)
+            logger.debug(f"Loaded .env file from {env_file}")
         
         api_key = os.getenv('LLM_API_KEY')
         if api_key:
             checks["api_key"] = True
         else:
+            error_msg = "LLM_API_KEY missing in .env"
+            logger.error(error_msg)
             return {
                 "success": False,
                 "checks": checks,
                 "status": "config_error",
-                "error": "LLM_API_KEY missing in .env"
+                "error": error_msg
             }
 
         # 2. Check Ontology File
@@ -61,8 +72,12 @@ async def validate_memory(workspace_path: str) -> dict:
         ontology_file = script_dir / 'ontology.ttl'
         if ontology_file.exists():
             checks["ontology_file"] = True
+            logger.debug(f"Ontology file found at {ontology_file}")
+        else:
+            logger.warning(f"Ontology file not found at {ontology_file}")
         
         # 3. Configure Cognee
+        logger.debug("Importing cognee SDK")
         import cognee
         from cognee.modules.search.types import SearchType
         
@@ -72,10 +87,12 @@ async def validate_memory(workspace_path: str) -> dict:
         cognee.config.set_llm_provider('openai')
         
         dataset_name, _ = generate_dataset_name(workspace_path)
+        logger.info(f"Using dataset: {dataset_name}")
         
         # 4. Smoke Test (Graph Connection & Retrieval)
         try:
             # Search for something generic
+            logger.info("Running smoke test search")
             results = await cognee.search(
                 query_type=SearchType.GRAPH_COMPLETION,
                 query_text="validation smoke test",
@@ -92,17 +109,22 @@ async def validate_memory(workspace_path: str) -> dict:
                 # We can't strictly validate metadata if the result is just a generic chunk
                 # But we can check if we got a result object
                 checks["memory_structure"] = "valid_object"
+                logger.debug("Smoke test returned results")
             else:
                 checks["memory_structure"] = "empty_graph" # Not an error, just empty
+                logger.debug("Smoke test returned no results (empty graph)")
                 
         except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Smoke test failed: {error_msg}")
             return {
                 "success": False,
                 "checks": checks,
                 "status": "connection_error",
-                "error": str(e)
+                "error": error_msg
             }
 
+        logger.info("Validation completed successfully")
         return {
             "success": True,
             "checks": checks,
@@ -110,11 +132,13 @@ async def validate_memory(workspace_path: str) -> dict:
         }
 
     except Exception as e:
+        error_msg = str(e)
+        if logger: logger.error(f"Validation failed: {error_msg}")
         return {
             "success": False,
             "checks": checks,
             "status": "system_error",
-            "error": str(e)
+            "error": error_msg
         }
 
 def main():

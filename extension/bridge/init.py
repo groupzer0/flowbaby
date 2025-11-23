@@ -26,6 +26,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Add bridge directory to path to import bridge_logger
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import bridge_logger
 from workspace_utils import generate_dataset_name
 from ontology_provider import load_ontology, OntologyLoadError
 
@@ -40,6 +43,10 @@ async def initialize_cognee(workspace_path: str) -> dict:
     Returns:
         Dictionary with success status, dataset_name, cognee_dir, ontology info, and migration status
     """
+    # Initialize logger
+    logger = bridge_logger.setup_logging(workspace_path, "init")
+    logger.info(f"Initializing cognee for workspace: {workspace_path}")
+
     try:
         # Load workspace .env file if it exists
         workspace_dir = Path(workspace_path)
@@ -48,21 +55,53 @@ async def initialize_cognee(workspace_path: str) -> dict:
         if env_file.exists():
             from dotenv import load_dotenv
             load_dotenv(env_file)
+            logger.debug(f"Loaded .env file from {env_file}")
         
         # Check for API key
         api_key = os.getenv('LLM_API_KEY')
         if not api_key:
+            error_msg = 'LLM_API_KEY not found in environment or .env file'
+            logger.error(error_msg)
             return {
                 'success': False,
                 'error_code': 'MISSING_API_KEY',
                 'user_message': 'LLM_API_KEY not found. Please add it to your workspace .env file.',
                 'remediation': 'Create .env in workspace root with: LLM_API_KEY=your_key_here',
-                'error': 'LLM_API_KEY environment variable is required but not set'
+                'error': error_msg
             }
         
         # Import cognee
+        logger.debug("Importing cognee SDK")
         import cognee
         
+        # 3. Determine global data directory for atomic marker coordination
+        # We must do this BEFORE setting workspace-local directories to find the shared global location
+        try:
+            from cognee.infrastructure.databases.relational import get_relational_config
+            # Get config before override to find the "real" global location
+            relational_config = get_relational_config()
+            global_data_dir = Path(relational_config.db_path).parent  # .cognee_system directory
+            logger.debug(f"Determined global data directory: {global_data_dir}")
+        except (AttributeError, ImportError, Exception) as e:
+            logger.warning(f"Could not get relational config: {e}")
+            # Fallback to environment variable if API unavailable
+            env_data_dir = os.getenv('COGNEE_DATA_DIR')
+            if not env_data_dir:
+                # If we can't find the global dir, we can't coordinate global prune safely
+                # But we shouldn't fail initialization just for that.
+                # However, the requirement is to perform global prune.
+                # Let's try to use a safe default or fail.
+                # For now, let's assume we can proceed without global prune if we can't find the dir,
+                # but the test expects it.
+                # Let's try to use the site-packages location if possible, or just log error.
+                error_msg = 'Cannot determine Cognee data directory: unable to get relational config and COGNEE_DATA_DIR not set'
+                logger.error(error_msg)
+                return {
+                    'success': False,
+                    'error': error_msg
+                }
+            global_data_dir = Path(env_data_dir)
+
         # Configure Cognee with API key
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
@@ -73,25 +112,11 @@ async def initialize_cognee(workspace_path: str) -> dict:
         
         # 1. Generate unique dataset name for this workspace using canonical path
         dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
+        logger.info(f"Generated dataset name: {dataset_name}")
         
         # 2. Create .cognee directory for local marker files (not database storage)
         cognee_dir = Path(workspace_path) / '.cognee'
         cognee_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 3. Determine global data directory for atomic marker coordination
-        try:
-            from cognee.infrastructure.databases.relational import get_relational_config
-            relational_config = get_relational_config()
-            global_data_dir = Path(relational_config.db_path).parent  # .cognee_system directory
-        except (AttributeError, ImportError, Exception):
-            # Fallback to environment variable if API unavailable
-            env_data_dir = os.getenv('COGNEE_DATA_DIR')
-            if not env_data_dir:
-                return {
-                    'success': False,
-                    'error': 'Cannot determine Cognee data directory: unable to get relational config and COGNEE_DATA_DIR not set'
-                }
-            global_data_dir = Path(env_data_dir)
         
         global_data_dir.mkdir(parents=True, exist_ok=True)
         global_marker_path = global_data_dir / '.migration_v1_complete'
@@ -105,6 +130,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
         
         # Check if global migration already completed
         if not global_marker_path.exists():
+            logger.info("Global migration marker not found, attempting migration")
             # Attempt to atomically create global marker (OS-level exclusivity)
             try:
                 # O_CREAT | O_EXCL ensures only one process can create the file
@@ -118,6 +144,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
                     )
                     
                     # Perform global prune (removes only untagged legacy data)
+                    logger.info("Performing global prune of untagged data")
                     await cognee.prune.prune_system()
                     migration_performed = True
                     
@@ -139,12 +166,14 @@ async def initialize_cognee(workspace_path: str) -> dict:
                     
                     # Write to the already-opened file descriptor
                     os.write(fd, json.dumps(marker_metadata, indent=2).encode())
+                    logger.info("Global migration completed and marker created")
                     
                 finally:
                     os.close(fd)
                     
             except FileExistsError:
                 # Another process created the marker - migration already performed
+                logger.info("Global migration marker created by another process")
                 migration_performed = False
                 
                 # Read existing marker metadata if available
@@ -154,13 +183,16 @@ async def initialize_cognee(workspace_path: str) -> dict:
                         marker_data = json.loads(marker_content)
                         data_dir_size_before = marker_data.get('data_dir_size_before', 0)
                         data_dir_size_after = marker_data.get('data_dir_size_after', 0)
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"Failed to read global marker metadata: {e}")
                     pass  # Non-critical - just for metadata reporting
                     
             except (OSError, PermissionError) as e:
+                error_msg = f'Failed to create global migration marker (permission denied or filesystem error): {e}'
+                logger.error(error_msg)
                 return {
                     'success': False,
-                    'error': f'Failed to create global migration marker (permission denied or filesystem error): {e}'
+                    'error': error_msg
                 }
         else:
             # Global marker already exists - read metadata
@@ -169,7 +201,8 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 marker_data = json.loads(marker_content)
                 data_dir_size_before = marker_data.get('data_dir_size_before', 0)
                 data_dir_size_after = marker_data.get('data_dir_size_after', 0)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Failed to read global marker metadata: {e}")
                 pass  # Non-critical
         
         # 5. Create/update local acknowledgement marker (all processes do this)
@@ -183,23 +216,30 @@ async def initialize_cognee(workspace_path: str) -> dict:
         
         # 6. Load ontology configuration using OntologyProvider
         try:
+            logger.debug("Loading ontology")
             ontology = load_ontology()
         except OntologyLoadError as e:
+            error_msg = str(e)
+            logger.error(f"Ontology load failed: {error_msg}")
             return {
                 'success': False,
                 'error_code': 'ONTOLOGY_LOAD_FAILED',
                 'user_message': 'Failed to load ontology configuration',
                 'remediation': 'Ensure ontology.ttl exists in extension/bridge/ directory and is valid Turtle RDF format',
-                'error': str(e)
+                'error': error_msg
             }
         except Exception as e:
+            error_msg = f'Ontology loading error: {str(e)}'
+            logger.error(error_msg)
             return {
                 'success': False,
                 'error_code': 'ONTOLOGY_LOAD_FAILED',
                 'user_message': 'Unexpected error loading ontology',
                 'remediation': 'Check extension logs for details. File an issue if problem persists.',
-                'error': f'Ontology loading error: {str(e)}'
+                'error': error_msg
             }
+        
+        logger.info("Initialization completed successfully")
         
         # 7. Return extended success JSON with migration metadata
         return {
@@ -217,14 +257,18 @@ async def initialize_cognee(workspace_path: str) -> dict:
         }
         
     except ImportError as e:
+        error_msg = f'Failed to import required module: {str(e)}'
+        if logger: logger.error(error_msg)
         return {
             'success': False,
-            'error': f'Failed to import required module: {str(e)}'
+            'error': error_msg
         }
     except Exception as e:
+        error_msg = f'Initialization failed: {str(e)}'
+        if logger: logger.error(error_msg)
         return {
             'success': False,
-            'error': f'Initialization failed: {str(e)}'
+            'error': error_msg
         }
 
 

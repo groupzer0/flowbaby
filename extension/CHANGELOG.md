@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.3.9] - 2025-11-23
+
+### Added - Plan 021: Logging Infrastructure Overhaul
+
+**Structured Bridge Logging** - Python bridge scripts now use a shared logging utility that emits structured JSON-lines to both the VS Code Output Channel and a persistent workspace log file (`.cognee/logs/bridge.log`).
+- **Rotating Log File**: `bridge_logger.py` writes untruncated diagnostics with 5MB rotation (3 backups) so retrieval and ingestion history is never lost.
+- **Detailed Retrieval Telemetry**: `retrieve.py` logs candidate lists, semantic scores, recency/status multipliers, filtering reasons, and final selections for each query.
+- **Ingestion Metrics**: `ingest.py` reports character counts and stage durations, making performance bottlenecks obvious.
+- **Consistent Formatting**: All bridge scripts (`init.py`, `validate_memories.py`, `list_memories.py`) now produce structured JSON logs for easier parsing and UI rendering.
+- **VS Code Output Contract**: Stderr handler keeps Output Channel entries lightweight (~2KB) while retaining full fidelity in file logs.
+
+### Testing
+- Added `extension/bridge/tests/test_logging_overhaul.py` covering log file creation, ingestion metrics, retrieval scoring telemetry, and stderr formatting.
+
 ## [0.3.8] - 2025-11-22
 
 ### Added - Plan 021: Memory Visibility and Trust
