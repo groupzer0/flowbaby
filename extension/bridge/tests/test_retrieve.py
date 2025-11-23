@@ -84,7 +84,7 @@ async def test_retrieve_with_search_results(temp_workspace, mock_env):
         mock_cognee.config = MagicMock()
         mock_search_result = (
             "[Timestamp: 2025-11-15T10:00:00Z] [Importance: 0.8] This is a test result about Python.",
-            {"metadata": "test"}
+            {"metadata": "test", "score": 0.8}
         )
         mock_cognee.search = AsyncMock(return_value=[mock_search_result])
         mock_cognee.prune.prune_data = AsyncMock()
@@ -136,11 +136,7 @@ async def test_retrieve_default_score(temp_workspace, mock_env):
             result = await retrieve_context(str(temp_workspace), "test")
             
             assert result['success'] is True
-            assert len(result['results']) == 1
-            
-            first_result = result['results'][0]
-            assert 'score' in first_result
-            assert first_result['score'] == 0.0
+            assert len(result['results']) == 0
 
 
 @pytest.mark.asyncio
@@ -154,9 +150,9 @@ async def test_retrieve_token_limit_enforcement(temp_workspace, mock_env):
         # Create results that would exceed token limit
         large_text = "word " * 500  # ~500 tokens
         mock_results = [
-            (f"[Timestamp: 2025-11-15T10:00:00Z] [Importance: 0.8] {large_text}", {}),
-            (f"[Timestamp: 2025-11-15T09:00:00Z] [Importance: 0.7] {large_text}", {}),
-            (f"[Timestamp: 2025-11-15T08:00:00Z] [Importance: 0.6] {large_text}", {})
+            (f"[Timestamp: 2025-11-15T10:00:00Z] [Importance: 0.8] {large_text}", {"score": 0.8}),
+            (f"[Timestamp: 2025-11-15T09:00:00Z] [Importance: 0.7] {large_text}", {"score": 0.7}),
+            (f"[Timestamp: 2025-11-15T08:00:00Z] [Importance: 0.6] {large_text}", {"score": 0.6})
         ]
         mock_cognee.search = AsyncMock(return_value=mock_results)
         mock_cognee.prune.prune_data = AsyncMock()

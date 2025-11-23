@@ -271,9 +271,19 @@ export class CogneeContextProvider {
                 includeSuperseded: request.includeSuperseded,
                 halfLifeDays: request.halfLifeDays
             });
+
+            // Filter out low confidence results (redundant check for safety)
+            const validResults = results.filter(r => (r.score ?? 0) > 0.01);
+            const filteredCount = results.length - validResults.length;
+
+            if (filteredCount > 0) {
+                this.outputChannel.appendLine(
+                    `[CogneeContextProvider] Filtered ${filteredCount} results with score <= 0.01`
+                );
+            }
             
             // Convert RetrievalResult[] to CogneeContextEntry[]
-            const entries: CogneeContextEntry[] = results.map(result => ({
+            const entries: CogneeContextEntry[] = validResults.map(result => ({
                 summaryText: result.summaryText || result.text || '',
                 decisions: result.decisions,
                 rationale: result.rationale,
@@ -294,7 +304,7 @@ export class CogneeContextProvider {
             }));
             
             // Calculate total tokens
-            const tokensUsed = results.reduce((sum, r) => sum + (r.tokens || 0), 0);
+            const tokensUsed = validResults.reduce((sum, r) => sum + (r.tokens || 0), 0);
             
             const duration = Date.now() - startTime;
             this.outputChannel.appendLine(
@@ -304,7 +314,7 @@ export class CogneeContextProvider {
             
             return {
                 entries,
-                totalResults: results.length,
+                totalResults: validResults.length,
                 tokensUsed
             };
             

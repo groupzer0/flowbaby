@@ -28,6 +28,45 @@ from pathlib import Path
 from workspace_utils import generate_dataset_name
 
 
+SYSTEM_PROMPT = """You are a MEMORY RETRIEVAL ASSISTANT for an autonomous coding agent.
+
+Your only job is to answer questions USING THE PROVIDED CONTEXT TEXT.
+You must behave as if you know NOTHING except what appears in that context.
+
+DEFINITIONS
+- "Context" = the text block labeled CONTEXT below.
+- "Outside knowledge" = anything not literally present or directly implied in the context.
+
+ALLOWED BEHAVIOR
+- You may QUOTE, PARAPHRASE, and SUMMARIZE statements from the context.
+- You may COMBINE related pieces of information from different parts of the context.
+- You may resolve simple references (e.g. “we”, “the system”, “this service”) as long as the referent is defined in the context.
+
+FORBIDDEN BEHAVIOR
+- Do NOT introduce new APIs, tools, classes, file names, or configurations that are not in the context.
+- Do NOT fill in missing steps, rationale, or design details using your own knowledge.
+- Do NOT “guess” or “assume” anything that is not clearly supported by the context.
+- Do NOT use general programming knowledge, frameworks, or best practices unless they are explicitly mentioned in the context.
+
+WHEN ANSWERING
+1. If there is enough information in the context to answer:
+   - Provide a concise answer using only information from the context.
+   - It is OK to summarize and compress, but do not add new facts.
+
+2. If the context is only partially relevant:
+   - Answer ONLY the parts that are supported by the context.
+   - Explicitly say what is UNKNOWN or NOT SPECIFIED in the context.
+
+3. If the context does not contain relevant information:
+   - Respond exactly with: `NO_RELEVANT_CONTEXT`
+   - Do not explain, apologize, or add any extra words.
+
+STYLE
+- Answer clearly and directly.
+- Prefer short, factual sentences.
+- Do NOT speculate."""
+
+
 def calculate_recency_multiplier(timestamp_str: str | None, half_life_days: float) -> float:
     """Compute exponential decay multiplier using half-life days setting."""
     if not timestamp_str or timestamp_str == 'N/A':
@@ -251,7 +290,7 @@ async def retrieve_context(
                 query_text=query,
                 datasets=[dataset_name],  # Filter to this workspace only
                 top_k=search_top_k,
-                system_prompt="You are a helpful assistant. Answer the question strictly using ONLY the provided context. If the answer is not contained in the context, state 'I don't know' or 'The information is not available in the provided context'. Do not use outside knowledge or fabricate information."
+                system_prompt=SYSTEM_PROMPT
             )
             print(f"[PROGRESS] Search completed: {len(search_results) if search_results else 0} results", file=sys.stderr, flush=True)
         except Exception as search_error:
@@ -336,6 +375,7 @@ async def retrieve_context(
             return text_value, float(semantic_score)
 
         scored_results: list[dict] = []
+        filtered_count = 0
 
         for result in search_results:
             text, semantic_score = extract_text_and_semantic_score(result)
@@ -377,7 +417,21 @@ async def retrieve_context(
             status_multiplier = get_status_multiplier(status)
             final_score = float(semantic_score) * recency_multiplier * status_multiplier
 
+            # Filter out low confidence results to prevent hallucinations
+            # Plan 021 Milestone 2: Strict filtering
+            if final_score <= 0.01:
+                filtered_count += 1
+                print(f"[PROGRESS] Filtering result with low score: {final_score:.4f} (semantic: {semantic_score:.4f})", file=sys.stderr)
+                continue
+
             result_text = result_dict.get('summary_text') or result_dict.get('text') or ''
+            
+            # Filter out explicit NO_RELEVANT_CONTEXT responses (case-insensitive)
+            if 'no_relevant_context' in result_text.strip().lower():
+                filtered_count += 1
+                print(f"[PROGRESS] Filtering NO_RELEVANT_CONTEXT response", file=sys.stderr)
+                continue
+
             tokens = estimate_tokens(result_text)
 
             result_dict.update({
@@ -393,6 +447,9 @@ async def retrieve_context(
             })
 
             scored_results.append(result_dict)
+
+        if filtered_count > 0:
+            print(f"[PROGRESS] Filtered {filtered_count} results with score <= 0.01", file=sys.stderr, flush=True)
 
         if not scored_results:
             return {

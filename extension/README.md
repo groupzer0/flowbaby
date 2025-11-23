@@ -1,15 +1,15 @@
-# Cognee Chat Memory
+# RecallFlow Chat Memory
 
-> Memory-augmented chat for VS Code using Cognee knowledge graphs
+> Memory-augmented chat for VS Code using RecallFlow knowledge graphs
 
-Cognee Chat Memory is a VS Code extension that lets you selectively capture important chat conversations and retrieve them as context through the `@cognee-memory` participant. Each workspace maintains its own isolated memory, creating a personalized knowledge graph that grows with your project.
+RecallFlow Chat Memory is a VS Code extension that lets you selectively capture important chat conversations and retrieve them as context through the `@recallflow-memory` participant. Each workspace maintains its own isolated memory, creating a personalized knowledge graph that grows with your project.
 
 ## Features
 
 - **Selective Capture** - Use keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C) to capture valuable conversations worth remembering
-- **@cognee-memory Participant** - Retrieves relevant context and generates informed responses when you explicitly invoke it
+- **@recallflow-memory Participant** - Retrieves relevant context and generates informed responses when you explicitly invoke it
 - **Keyboard Shortcut Workflow** - Press Ctrl+Alt+C, paste or type content, instant capture with confirmation
-- **Command Palette Alternative** - Run "Cognee: Capture to Memory" for the same capture workflow
+- **Command Palette Alternative** - Run "RecallFlow: Capture to Memory" for the same capture workflow
 - **Workspace Isolation** - Each workspace has its own separate memory—no cross-project leakage
 - **Hybrid Graph-Vector Search** - Combines relationship traversal with semantic similarity for superior context relevance
 - **User Control** - You decide what gets captured; explicit memory actions put you in full control
@@ -78,8 +78,8 @@ The extension requires a workspace folder (doesn't work in single-file mode). Op
 ### 4. Verify Extension Activation
 
 1. Open the Output panel: **View → Output**
-2. Select **"Cognee Memory"** from the dropdown
-3. You should see **"Cognee initialized successfully"** message
+2. Select **"RecallFlow Memory"** from the dropdown
+3. You should see **"RecallFlow initialized successfully"** message
 
 If you see errors, check the [Troubleshooting](#troubleshooting) section below.
 
@@ -125,7 +125,7 @@ Previously, memory capture blocked for 60-90 seconds while the knowledge graph w
 
 To check all in-flight operations:
 1. Press `Cmd+Shift+P` (or `Ctrl+Shift+P` on Linux/Windows)
-2. Type "Cognee: Background Status"
+2. Type "RecallFlow: View Background Operations"
 3. View pending, running, completed, and failed operations
 
 ### Capturing Conversations
@@ -140,7 +140,7 @@ To check all in-flight operations:
 
 **Command Palette (Alternative)**:
 1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-2. Type "Cognee: Capture to Memory"
+2. Type "RecallFlow: Capture to Memory"
 3. Follow the same workflow as keyboard shortcut
 
 **What Gets Captured**:
@@ -149,11 +149,11 @@ To check all in-flight operations:
 - Code explanations and discussions
 - Only content YOU choose to capture (selective, user-controlled)
 
-### Retrieving Context with @cognee-memory
+### Retrieving Context with @recallflow-memory
 
 **How to Use**:
 1. Open GitHub Copilot Chat (`Ctrl+Alt+I` or click chat icon)
-2. Type: `@cognee-memory How did I implement caching?`
+2. Type: `@recallflow-memory How did I implement caching?`
 3. The participant:
    - Retrieves relevant memories from your workspace knowledge graph
    - Shows previews: "📚 Retrieved 3 memories"
@@ -162,9 +162,9 @@ To check all in-flight operations:
    - Optionally captures the conversation for future retrieval (if enabled via config)
 
 **Example Queries**:
-- `@cognee-memory What problems did we discuss about the authentication system?`
-- `@cognee-memory What solutions did we consider for rate limiting?`
-- `@cognee-memory Summarize our decisions about database architecture`
+- `@recallflow-memory What problems did we discuss about the authentication system?`
+- `@recallflow-memory What solutions did we consider for rate limiting?`
+- `@recallflow-memory Summarize our decisions about database architecture`
 
 ### Creating Conversation Summaries (Plan 014)
 
@@ -240,10 +240,10 @@ Time Scope: Nov 16 10:00-12:30
 **How to Create a Summary**:
 
 1. **Open GitHub Copilot Chat** (`Ctrl+Alt+I` / `Cmd+Alt+I`)
-2. **Start a conversation with @cognee-memory** and type:
-   - `@cognee-memory summarize this conversation`
-   - Or: `@cognee-memory remember this session`
-   - Or: `@cognee-memory create summary`
+2. **Start a conversation with @recallflow-memory** and type:
+   - `@recallflow-memory summarize this conversation`
+   - Or: `@recallflow-memory remember this session`
+   - Or: `@recallflow-memory create summary`
 
 3. **Review the scope preview**:
    - Extension shows: "I'll summarize the last 15 turns (from 5 mins ago)."
@@ -260,7 +260,7 @@ Time Scope: Nov 16 10:00-12:30
    - Shows metadata: Status, timestamps, plan IDs if detected
 
 6. **Confirm storage**:
-   - Extension asks: "Should I store this summary in Cognee memory?"
+   - Extension asks: "Should I store this summary in RecallFlow memory?"
    - Reply `yes`, `store it`, or `save` to confirm
    - Reply `no` or `cancel` to discard
    - Summary is only stored after explicit confirmation
@@ -282,7 +282,7 @@ Time Scope: Nov 16 10:00-12:30
 
 ### Retrieving Summaries
 
-When you query `@cognee-memory`, the extension searches both raw captured conversations and structured summaries. Summaries display with rich metadata when available.
+When you query `@recallflow-memory`, the extension searches both raw captured conversations and structured summaries. Summaries display with rich metadata when available.
 
 **What You'll See in Retrieval Results**:
 
@@ -299,10 +299,10 @@ For legacy memories (captured before Plan 014):
 
 **Example Retrieval Queries**:
 
-- `@cognee-memory What did we decide about Plan 013?` → Retrieves relevant summaries with decisions highlighted
-- `@cognee-memory What questions are still open about memory transparency?` → Finds Open Questions sections from summaries
-- `@cognee-memory What are the next steps for the authentication system?` → Retrieves Next Steps from related summaries
-- `@cognee-memory Show me the rationale for using enriched text format` → Finds Rationale sections explaining design choices
+- `@recallflow-memory What did we decide about Plan 013?` → Retrieves relevant summaries with decisions highlighted
+- `@recallflow-memory What questions are still open about memory transparency?` → Finds Open Questions sections from summaries
+- `@recallflow-memory What are the next steps for the authentication system?` → Retrieves Next Steps from related summaries
+- `@recallflow-memory Show me the rationale for using enriched text format` → Finds Rationale sections explaining design choices
 
 **Retrieval Benefits**:
 
@@ -314,16 +314,16 @@ For legacy memories (captured before Plan 014):
 ### Memory Management Commands
 
 **Toggle Memory On/Off**:
-- Command Palette → "Cognee: Toggle Memory"
+- Command Palette → "RecallFlow: Toggle Memory"
 - Flips `cogneeMemory.enabled` setting
 
 **Clear Workspace Memory**:
-- Command Palette → "Cognee: Clear Workspace Memory"
+- Command Palette → "RecallFlow: Clear Workspace Memory"
 - Deletes all captured conversations for current workspace (requires confirmation)
 
 ## For Agent Developers
 
-Cognee Chat Memory provides an API for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured summaries programmatically.
+RecallFlow Chat Memory provides an API for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured summaries programmatically.
 
 ### Use Cases
 
@@ -333,7 +333,12 @@ Cognee Chat Memory provides an API for GitHub Copilot agents and third-party VS 
 
 ### Agent Ingestion API
 
-The `cogneeMemory.ingestForAgent` command allows agents to write structured summaries to Cognee:
+The `cogneeMemory.ingestForAgent` command allows agents to write structured summaries to RecallFlow:
+
+```typescript
+### Agent Ingestion API
+
+The `cogneeMemory.ingestForAgent` command allows agents to write structured summaries to RecallFlow:
 
 ```typescript
 const payload = {
@@ -367,7 +372,7 @@ if (response.success) {
 
 ### Configuration
 
-Cognee tools are controlled exclusively through VS Code's **Configure Tools** UI (see Quick Start below). No additional workspace settings are required for authorization.
+RecallFlow tools are controlled exclusively through VS Code's **Configure Tools** UI (see Quick Start below). No additional workspace settings are required for authorization.
 
 ### Documentation
 
@@ -414,7 +419,7 @@ Example configuration in VS Code settings:
 
 **Platform-specific examples**:
 - Linux/macOS: `/home/user/project/.venv/bin/python`
-- Windows: `C:\\Users\\user\\project\\.venv\\Scripts\\python.exe`
+- Windows: `C:\Users\user\project\.venv\Scripts\python.exe`
 
 ### Unsupported Contexts (v0.2.0)
 
@@ -428,7 +433,7 @@ Support for these contexts may be added in future releases.
 
 ### Configuration
 
-Access settings via **File → Preferences → Settings → Extensions → Cognee Memory**:
+Access settings via **File → Preferences → Settings → Extensions → RecallFlow Memory**:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
@@ -437,13 +442,13 @@ Access settings via **File → Preferences → Settings → Extensions → Cogne
 | `cogneeMemory.maxContextTokens` | Token budget for retrieved context | `2000` |
 | `cogneeMemory.recencyWeight` | Weight for prioritizing recent conversations (0-1) | `0.3` |
 | `cogneeMemory.importanceWeight` | Weight for prioritizing marked conversations (0-1) | `0.2` |
-| `cogneeMemory.autoIngestConversations` | **Experimental**: Auto-capture @cognee-memory conversations (disabled due to Cognee 0.4.0 bug) | `false` |
+| `cogneeMemory.autoIngestConversations` | **Experimental**: Auto-capture @recallflow-memory conversations (disabled due to Cognee 0.4.0 bug) | `false` |
 | `cogneeMemory.pythonPath` | Path to Python interpreter (must have Cognee installed) | `python3` |
 | `cogneeMemory.logLevel` | Logging verbosity: error, warn, info, debug | `info` |
 
 **Examples**:
 - To disable memory temporarily, set `cogneeMemory.enabled` to `false` in settings
-- To enable experimental auto-capture of @cognee-memory conversations (feedback loop), set `cogneeMemory.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
+- To enable experimental auto-capture of @recallflow-memory conversations (feedback loop), set `cogneeMemory.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
 
 ## Using RecallFlow Tools with Custom Agents
 
@@ -515,11 +520,11 @@ Searches RecallFlow knowledge graph for relevant memories.
 
 ### Transparency
 
-When agents use Cognee, you see:
+When agents use RecallFlow, you see:
 
-- **Output Channel**: All tool invocations logged in "Cognee Agent Activity"
+- **Output Channel**: All tool invocations logged in "RecallFlow Agent Activity"
 - **Configure Tools UI**: Visual feedback for which tools are enabled/disabled
-- **Chat Autocomplete**: `#cognee*` commands only appear when tools are enabled
+- **Chat Autocomplete**: `#recallflow*` commands only appear when tools are enabled
 
 ### For Extension Developers
 
@@ -537,7 +542,7 @@ See [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md) for:
 **Check the Output Channel**:
 
 1. Go to **View → Output**
-2. Select **"Cognee Memory"** from the dropdown
+2. Select **"RecallFlow Memory"** from the dropdown
 3. Look for initialization errors
 
 **Common Issues**:
@@ -582,14 +587,14 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 **Capture Issues**:
 
 1. Verify keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C) is not conflicting with other extensions
-2. Check Command Palette for "Cognee: Capture to Memory" as alternative
+2. Check Command Palette for "RecallFlow: Capture to Memory" as alternative
 3. Ensure you see confirmation message after capture ("✅ Captured to memory")
 4. Check Output Channel logs for ingestion errors
 
 **Retrieval Issues**:
 
 1. Verify `cogneeMemory.enabled` is `true` in settings
-2. Type `@cognee-memory` in chat to invoke the participant explicitly
+2. Type `@recallflow-memory` in chat to invoke the participant explicitly
 3. Check Output Channel logs for retrieval attempts and timing
 4. Remember: The first conversation in a new workspace has no context (memory starts empty)
 5. Each workspace has separate memory—switching workspaces means different context
@@ -602,7 +607,7 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 | "Python script exited with code 1" (empty stderr) | Interpreter mismatch: `cognee` or `python-dotenv` not installed in detected Python environment | Set `cogneeMemory.pythonPath` in VS Code settings to correct interpreter (Linux/macOS: `.venv/bin/python`, Windows: `.venv\Scripts\python.exe`) |
 | "No module named 'cognee'" | Missing `cognee` package in Python environment | Install with: `pip install cognee==0.3.4` (or activate virtual environment first) |
 | "LLM_API_KEY not found" | Missing API key in `.env` file or environment | Create `.env` file in workspace root with valid `LLM_API_KEY`, then reload window |
-| Script timeout (retrieval: 15s, ingestion: 120s) | Network issues, slow LLM provider, or filesystem delay | Ingestion timeout is generous (120s); if timeout occurs but data appears via @cognee-memory, ingestion succeeded in background. Check Output Channel for timing metrics. |
+| Script timeout (retrieval: 15s, ingestion: 120s) | Network issues, slow LLM provider, or filesystem delay | Ingestion timeout is generous (120s); if timeout occurs but data appears via @recallflow-memory, ingestion succeeded in background. Check Output Channel for timing metrics. |
 | JSON parse error in logs | Script produced non-JSON output | Report as bug. Check for conflicting print statements in bridge scripts. |
 
 **Note**: Auto-detection works for standard `.venv` setups on Linux, macOS, and Windows. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, or pyenv, use explicit `cogneeMemory.pythonPath` configuration.
@@ -637,7 +642,7 @@ The extension will reinitialize on next activation, creating a fresh knowledge g
 5. Cognee stores conversation in workspace-specific knowledge graph
 
 **Retrieval Flow**:
-1. User types `@cognee-memory [question]` in chat
+1. User types `@recallflow-memory [question]` in chat
 2. Extension calls Python bridge (`retrieve.py`) via subprocess
 3. Cognee searches knowledge graph using hybrid graph-vector search
 4. Extension formats retrieved context with previews
@@ -665,16 +670,16 @@ rm -rf .cognee/ .cognee_system/ .cognee_data/  # In workspace root
 - **Workspace Required** - Extension doesn't work in single-file mode
 - **Python Dependency** - Python and Cognee must be installed separately (not bundled)
 - **Manual Capture** - Keyboard shortcut requires copy-paste workflow; cannot extract message from chat UI directly (VS Code API limitation)
-- **Explicit Participant Invocation** - Must type `@cognee-memory` to trigger retrieval; cannot inject context into other participants (@workspace, GitHub Copilot, etc.)
+- **Explicit Participant Invocation** - Must type `@recallflow-memory` to trigger retrieval; cannot inject context into other participants (@workspace, GitHub Copilot, etc.)
 - **First Conversation** - The first conversation in a new workspace has no context (memory starts empty)
-- **Step 6 Auto-Ingestion Disabled by Default** - Automatic capture of @cognee-memory conversations (feedback loop) is experimental due to Cognee 0.4.0 file hashing bug; enable via `cogneeMemory.autoIngestConversations` for testing
+- **Step 6 Auto-Ingestion Disabled by Default** - Automatic capture of @recallflow-memory conversations (feedback loop) is experimental due to Cognee 0.4.0 file hashing bug; enable via `cogneeMemory.autoIngestConversations` for testing
 - **Platform Support** - Primarily tested on macOS and Linux; Windows support may require additional configuration
 
 ## Known Issues
 
 ### Cognee 0.4.0 File Hashing Bug (Auto-Ingestion)
 
-**Issue**: Cognee v0.4.0 has an intermittent file hashing bug that causes ingestion to fail unpredictably when the same conversation is ingested multiple times. This affects automatic capture of @cognee-memory conversations (Step 6 feedback loop).
+**Issue**: Cognee v0.4.0 has an intermittent file hashing bug that causes ingestion to fail unpredictably when the same conversation is ingested multiple times. This affects automatic capture of @recallflow-memory conversations (Step 6 feedback loop).
 
 **Symptoms**:
 - Conversations fail to ingest with hash mismatch errors
@@ -744,7 +749,418 @@ For extension developers:
 The extension outputs logs to different locations:
 
 - **Debug Console**: Extension activation and runtime logs (View → Debug Console)
-- **Output Channel**: CogneeClient bridge operations—select "Cognee Memory" from dropdown (View → Output)
+- **Output Channel**: RecallFlowClient bridge operations—select "RecallFlow Memory" from dropdown (View → Output)
+- **Developer Tools**: Extension Host errors—open with Help → Toggle Developer Tools
+
+#### Test Changes
+
+After modifying code:
+
+- **Rebuild**: Run `npm run compile` in the `extension/` directory
+- **Reload**: Press **Ctrl+R** (or **Cmd+R** on Mac) in the Extension Development Host window
+- **Auto-compile**: The `preLaunchTask` in `.vscode/launch.json` auto-compiles when pressing F5
+
+See [SETUP.md](SETUP.md) for complete development environment setup.
+
+## License
+
+This extension is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+## Support
+
+- **Report Bugs**: [GitHub Issues](https://github.com/lsalsich/cognee/issues)
+- **Feature Requests**: [GitHub Discussions](https://github.com/lsalsich/cognee/discussions)
+- **Documentation**: [Cognee Docs](https://docs.cognee.ai)
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
+
+---
+
+**Built with** [Cognee](https://github.com/topoteretes/cognee) - A knowledge graph library for LLM applications.
+```
+
+### Configuration
+
+Cognee tools are controlled exclusively through VS Code's **Configure Tools** UI (see Quick Start below). No additional workspace settings are required for authorization.
+
+### Documentation
+
+- **Complete API Guide**: [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md)
+  - TypeScript examples and error handling
+  - Security model and best practices
+  - Troubleshooting guide
+- **Bridge Contract**: [bridge/INGEST_CONTRACT.md](./bridge/INGEST_CONTRACT.md)
+  - JSON schema specification
+  - Error codes reference
+  - Performance characteristics
+- **Test Agent**: [test-agent/](../test-agent/)
+  - Reference implementation validating all scenarios
+  - Can be used as template for custom agents
+
+## Python Environment
+
+The extension requires Python 3.8+ with the following packages:
+- `cognee` (version 0.3.4 or compatible)
+- `python-dotenv`
+
+### Automatic Detection
+
+The extension automatically detects your Python interpreter in this order:
+1. **Explicit Setting**: `cogneeMemory.pythonPath` if configured (highest priority)
+2. **Workspace Virtual Environment**: `.venv/bin/python` (Linux/macOS) or `.venv/Scripts/python.exe` (Windows)
+3. **System Python**: `python3` as fallback
+
+### When to Configure Manually
+
+Set `cogneeMemory.pythonPath` explicitly if:
+- Virtual environment is outside workspace directory
+- Virtual environment uses non-standard name (not `.venv`)
+- Multiple Python versions installed and specific one required
+- Using conda or pyenv environments (not auto-detected in v0.2.0)
+
+Example configuration in VS Code settings:
+
+```json
+{
+  "cogneeMemory.pythonPath": "/path/to/your/.venv/bin/python"
+}
+```
+
+**Platform-specific examples**:
+- Linux/macOS: `/home/user/project/.venv/bin/python`
+- Windows: `C:\\Users\\user\\project\\.venv\\Scripts\\python.exe`
+
+### Unsupported Contexts (v0.2.0)
+
+The following contexts are **not validated or supported** in this release:
+- **Remote Development**: VS Code Remote-SSH, WSL, Dev Containers
+- **Multi-root Workspaces**: Workspaces with multiple folder roots
+- **Conda Environments**: Automatic detection not implemented (use explicit config)
+- **Pyenv Environments**: Automatic detection not implemented (use explicit config)
+
+Support for these contexts may be added in future releases.
+
+### Configuration
+
+Access settings via **File → Preferences → Settings → Extensions → RecallFlow Memory**:
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `cogneeMemory.enabled` | Toggle memory capture and retrieval on/off | `true` |
+| `cogneeMemory.maxContextResults` | Maximum number of memory results to retrieve | `3` |
+| `cogneeMemory.maxContextTokens` | Token budget for retrieved context | `2000` |
+| `cogneeMemory.recencyWeight` | Weight for prioritizing recent conversations (0-1) | `0.3` |
+| `cogneeMemory.importanceWeight` | Weight for prioritizing marked conversations (0-1) | `0.2` |
+| `cogneeMemory.autoIngestConversations` | **Experimental**: Auto-capture @recallflow-memory conversations (disabled due to Cognee 0.4.0 bug) | `false` |
+| `cogneeMemory.pythonPath` | Path to Python interpreter (must have Cognee installed) | `python3` |
+| `cogneeMemory.logLevel` | Logging verbosity: error, warn, info, debug | `info` |
+
+**Examples**:
+- To disable memory temporarily, set `cogneeMemory.enabled` to `false` in settings
+- To enable experimental auto-capture of @recallflow-memory conversations (feedback loop), set `cogneeMemory.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
+
+## Using RecallFlow Tools with Custom Agents
+
+RecallFlow Chat Memory provides **Language Model Tools** that allow GitHub Copilot and custom agents to autonomously access workspace memory. These tools appear in VS Code's "Configure Tools" dialog and can be referenced in custom agent configurations.
+
+### Quick Start
+
+1. **Enable Tools via Configure Tools UI**:
+   - Open Copilot chat → Click "Tools" (⚙️ icon) → "Configure Tools"
+   - Find "Store Memory in RecallFlow" and "Retrieve RecallFlow Memory"
+   - Toggle tools on/off individually (disabled by default for privacy)
+
+2. **Use in Chat**:
+   - Type `#recallflow` to see autocomplete suggestions
+   - Select `#recallflowStoreSummary` or `#recallflowRetrieveMemory`
+   - Tools appear only when enabled via Configure Tools
+
+3. **Transparency**:
+   - All tool invocations logged in Output channel ("RecallFlow Agent Activity")
+   - Configure Tools UI provides visual feedback for tool state
+
+### Custom Agent Example
+
+Create a `.agent.md` file in your workspace to define a memory-aware agent:
+
+```markdown
+---
+name: Memory-Aware Code Assistant
+description: Copilot assistant with access to workspace memory
+tools: ['search', 'recallflowStoreSummary', 'recallflowRetrieveMemory']
+---
+
+You are a code assistant with access to workspace-specific memory.
+
+When the user asks about past decisions or implementations:
+1. Use #recallflowRetrieveMemory to search for relevant context
+2. Ground your answer in the retrieved memories
+3. If no memories exist, use your training data but clarify it's not workspace-specific
+
+When the user completes an important implementation or makes a decision:
+1. Offer to store a summary using #recallflowStoreSummary
+2. Include topic, context, and key decisions in the summary
+```
+
+### Available Tools
+
+#### Store Memory Tool (`#recallflowStoreSummary`)
+
+Stores conversation summaries in RecallFlow knowledge graph.
+
+**Parameters**:
+- `topic` (required): Summary title
+- `context` (required): Summary description
+- `decisions` (optional): Key decisions made
+- `rationale` (optional): Reasoning behind decisions
+- `metadata` (optional): Plan ID, status, etc.
+
+#### Retrieve Memory Tool (`#recallflowRetrieveMemory`)
+
+Searches RecallFlow knowledge graph for relevant memories.
+
+**Parameters**:
+- `query` (required): Natural language search query
+- `maxResults` (optional): Max results to return (default: 3, max: 10)
+
+**Returns**: Both narrative markdown and structured JSON for agent parsing.
+
+### Agent Integration Settings
+
+### Transparency
+
+When agents use RecallFlow, you see:
+
+- **Output Channel**: All tool invocations logged in "RecallFlow Agent Activity"
+- **Configure Tools UI**: Visual feedback for which tools are enabled/disabled
+- **Chat Autocomplete**: `#recallflow*` commands only appear when tools are enabled
+
+### For Extension Developers
+
+See [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md) for:
+- Complete API documentation with TypeScript examples
+- Command signatures (`cogneeMemory.ingestForAgent`, `cogneeMemory.retrieveForAgent`)
+- Error codes and handling strategies
+- Request/response schemas
+- Testing and troubleshooting guides
+
+## Troubleshooting
+
+### Extension Not Activating
+
+**Check the Output Channel**:
+
+1. Go to **View → Output**
+2. Select **"RecallFlow Memory"** from the dropdown
+3. Look for initialization errors
+
+**Common Issues**:
+
+#### 1. "LLM_API_KEY not found"
+
+**Solution**: Create a `.env` file in your workspace root with:
+
+```env
+LLM_API_KEY=sk-your-key-here
+```
+
+Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
+
+**Note**: As of v0.2.1, `OPENAI_API_KEY` is no longer supported. Use `LLM_API_KEY` to align with Cognee 0.4.0.
+
+#### 2. "Python not found" or "cognee module not found"
+
+**Solution**: 
+
+- Verify Python installation: `python3 --version`
+- Install Cognee: `pip install cognee==0.3.4`
+- If using a virtual environment, set `cogneeMemory.pythonPath` to your venv Python path (e.g., `/path/to/venv/bin/python3`)
+
+#### 3. "No workspace folder open"
+
+**Solution**: The extension requires a workspace (not single-file mode). Open a folder:
+
+- **File → Open Folder**
+- Or use the command: `code /path/to/your/project`
+
+#### 4. Slow Performance
+
+**Solutions**:
+
+- Check that `cogneeMemory.logLevel` is not set to `"debug"` (this slows down operations)
+- Reduce `maxContextResults` to 1-2 for faster retrieval
+- Reduce `maxContextTokens` to 1000 for lighter processing
+
+#### 5. Capture or Retrieval Not Working
+
+**Capture Issues**:
+
+1. Verify keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C) is not conflicting with other extensions
+2. Check Command Palette for "RecallFlow: Capture to Memory" as alternative
+3. Ensure you see confirmation message after capture ("✅ Captured to memory")
+4. Check Output Channel logs for ingestion errors
+
+**Retrieval Issues**:
+
+1. Verify `cogneeMemory.enabled` is `true` in settings
+2. Type `@recallflow-memory` in chat to invoke the participant explicitly
+3. Check Output Channel logs for retrieval attempts and timing
+4. Remember: The first conversation in a new workspace has no context (memory starts empty)
+5. Each workspace has separate memory—switching workspaces means different context
+6. If retrieval fails, you'll see "⚠️ Memory retrieval unavailable" but participant continues without context
+
+### Common Error Patterns
+
+| Symptom | Likely Cause | Recommended Action |
+|---------|--------------|-------------------|
+| "Python script exited with code 1" (empty stderr) | Interpreter mismatch: `cognee` or `python-dotenv` not installed in detected Python environment | Set `cogneeMemory.pythonPath` in VS Code settings to correct interpreter (Linux/macOS: `.venv/bin/python`, Windows: `.venv\Scripts\python.exe`) |
+| "No module named 'cognee'" | Missing `cognee` package in Python environment | Install with: `pip install cognee==0.3.4` (or activate virtual environment first) |
+| "LLM_API_KEY not found" | Missing API key in `.env` file or environment | Create `.env` file in workspace root with valid `LLM_API_KEY`, then reload window |
+| Script timeout (retrieval: 15s, ingestion: 120s) | Network issues, slow LLM provider, or filesystem delay | Ingestion timeout is generous (120s); if timeout occurs but data appears via @recallflow-memory, ingestion succeeded in background. Check Output Channel for timing metrics. |
+| JSON parse error in logs | Script produced non-JSON output | Report as bug. Check for conflicting print statements in bridge scripts. |
+
+**Note**: Auto-detection works for standard `.venv` setups on Linux, macOS, and Windows. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, or pyenv, use explicit `cogneeMemory.pythonPath` configuration.
+
+### Clearing Memory
+
+To reset your workspace memory (e.g., to start fresh or clear sensitive data):
+
+```bash
+rm -rf .cognee/
+```
+
+The extension will reinitialize on next activation, creating a fresh knowledge graph.
+
+## Architecture
+
+**How It Works**:
+
+- **TypeScript Extension** communicates with Python bridge scripts via subprocess calls
+- **Python Bridge Scripts** use the Cognee library for knowledge graph operations
+- **Workspace Isolation** is achieved through unique dataset identifiers (SHA1 hash of workspace path) and workspace-local storage directories
+- **Data Storage** is in workspace-local directories (`.cognee_system/` and `.cognee_data/`) created in each workspace root (v0.2.1+)
+- **Ontology** defines chat-specific entities: User, Question, Answer, Topic, Concept, Problem, Solution, Decision
+
+**Data Flow**:
+
+**Capture Flow**:
+1. User presses Ctrl+Alt+C (or uses Command Palette)
+2. Extension shows input box for content
+3. User pastes chat message or types manually
+4. Extension calls Python bridge (`ingest.py`) via subprocess
+5. Cognee stores conversation in workspace-specific knowledge graph
+
+**Retrieval Flow**:
+1. User types `@recallflow-memory [question]` in chat
+2. Extension calls Python bridge (`retrieve.py`) via subprocess
+3. Cognee searches knowledge graph using hybrid graph-vector search
+4. Extension formats retrieved context with previews
+5. Extension augments user's question with context
+6. Extension sends augmented prompt to language model
+7. Response streams back to user
+8. (Optional) Extension captures Q&A conversation for future retrieval (if `autoIngestConversations` enabled)
+
+## Privacy and Data Storage
+
+- **Local-Only Operation** - All data stays on your local machine; no cloud services involved
+- **No Telemetry** - The extension does not collect analytics or usage data
+- **Workspace Isolation** - Each workspace has isolated memory in its own directories; no cross-project data leakage
+- **API Key Security** - Your API key is never logged or transmitted except to your configured LLM provider
+- **Data Location** - Memory is stored in workspace-local directories: `.cognee_system/` (system data) and `.cognee_data/` (knowledge graph data)
+
+To completely remove all extension data from a workspace:
+
+```bash
+rm -rf .cognee/ .cognee_system/ .cognee_data/  # In workspace root
+```
+
+## Known Limitations
+
+- **Workspace Required** - Extension doesn't work in single-file mode
+- **Python Dependency** - Python and Cognee must be installed separately (not bundled)
+- **Manual Capture** - Keyboard shortcut requires copy-paste workflow; cannot extract message from chat UI directly (VS Code API limitation)
+- **Explicit Participant Invocation** - Must type `@recallflow-memory` to trigger retrieval; cannot inject context into other participants (@workspace, GitHub Copilot, etc.)
+- **First Conversation** - The first conversation in a new workspace has no context (memory starts empty)
+- **Step 6 Auto-Ingestion Disabled by Default** - Automatic capture of @recallflow-memory conversations (feedback loop) is experimental due to Cognee 0.4.0 file hashing bug; enable via `cogneeMemory.autoIngestConversations` for testing
+- **Platform Support** - Primarily tested on macOS and Linux; Windows support may require additional configuration
+
+## Known Issues
+
+### Cognee 0.4.0 File Hashing Bug (Auto-Ingestion)
+
+**Issue**: Cognee v0.4.0 has an intermittent file hashing bug that causes ingestion to fail unpredictably when the same conversation is ingested multiple times. This affects automatic capture of @recallflow-memory conversations (Step 6 feedback loop).
+
+**Symptoms**:
+- Conversations fail to ingest with hash mismatch errors
+- Intermittent failures (some ingests succeed, others fail for identical content)
+- Errors logged in Output Channel: "File not found" or hash-related issues
+
+**Workaround**:
+- **Default**: `cogneeMemory.autoIngestConversations` is set to `false` (auto-ingestion disabled)
+- **Manual Capture**: Use keyboard shortcut (Ctrl+Alt+C) to capture conversations manually—this does NOT trigger the bug
+- **Experimental Testing**: Set `cogneeMemory.autoIngestConversations` to `true` to test feedback loop (may experience intermittent failures)
+- **Graceful Degradation**: Ingestion failures are logged to Output Channel but do NOT crash the extension or interrupt chat participant functionality
+
+**Status**: Monitoring Cognee updates for bug fix; will enable auto-ingestion by default when resolved.
+
+**Reference**: See implementation documentation in `implementation/008-chat-participant-memory-integration-implementation.md` for detailed validation findings and error logs.
+
+## Screenshots
+
+### Automatic Context Retrieval
+
+![Context Retrieval](media/screenshot-retrieval.png)
+
+*Example: The extension automatically retrieves relevant memories before responding*
+
+### Configuration Options
+
+![Settings](media/screenshot-settings.png)
+
+*Configure memory behavior through VS Code settings*
+
+### Initialization Logs
+
+![Output Channel](media/screenshot-output.png)
+
+*Monitor extension activity through the Output Channel*
+
+**Note**: Screenshots will be added before the initial release.
+
+## Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](../CONTRIBUTING.md) for:
+
+- Development setup instructions
+- How to run tests
+- Code style guidelines
+- Pull request process
+
+### Debugging
+
+For extension developers:
+
+#### Launch Extension Development Host
+
+1. Open the `extension/` folder in VS Code (not the repository root)
+2. Press **F5** in VS Code
+3. New window opens with extension loaded
+4. Check Debug Console for activation logs (View → Debug Console)
+
+#### Set Breakpoints
+
+- Click left margin in TypeScript files to set breakpoints
+- Breakpoints pause execution in Extension Host
+- Source maps enable debugging original TypeScript code
+
+#### View Logs
+
+The extension outputs logs to different locations:
+
+- **Debug Console**: Extension activation and runtime logs (View → Debug Console)
+- **Output Channel**: RecallFlowClient bridge operations—select "RecallFlow Memory" from dropdown (View → Output)
 - **Developer Tools**: Extension Host errors—open with Help → Toggle Developer Tools
 
 #### Test Changes

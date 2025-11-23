@@ -30,6 +30,7 @@ extension/node_modules/
 extension/*.vsix
 extension/*.vsix.sha256
 extension/.vscode-test/
+extension/prior-releases/
 
 # Root Node dependencies
 node_modules/

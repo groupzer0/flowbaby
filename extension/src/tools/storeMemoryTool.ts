@@ -1,8 +1,8 @@
 /**
- * Language Model Tool for Cognee Memory Storage (Plan 015)
+ * Language Model Tool for RecallFlow Memory Storage (Plan 015)
  * 
  * Implements VS Code's LanguageModelTool interface to allow Copilot agents
- * to store conversation summaries in Cognee knowledge graph.
+ * to store conversation summaries in RecallFlow knowledge graph.
  * 
  * Tool registration and authorization (Plan 016.1):
  * - Registered unconditionally at extension activation

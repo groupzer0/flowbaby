@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.3.8] - 2025-11-22
+
+### Added - Plan 021: Memory Visibility and Trust
+
+**Zero-Hallucination Retrieval** - Implemented strict filtering to prevent irrelevant memories from polluting context:
+- **Strict Score Threshold**: Retrieval results with distance scores > 0.01 are now filtered out by default.
+- **Explicit "No Context" Signal**: Bridge now returns `NO_RELEVANT_CONTEXT` signal when no memories meet the threshold, preventing hallucinated "matches".
+- **Validation Tools**: New commands for inspecting memory state:
+  - `RecallFlow: Validate Memories` - Runs integrity checks on stored memories.
+  - `RecallFlow: List Memories` - Dumps raw memory content for debugging.
+
+**Fixed**:
+- **Integration Test Stability**: Fixed path resolution errors in integration tests by correctly injecting `extensionPath` into the mock context. All 149 tests now pass.
+- **Branding Cleanup**: Removed "formerly Cognee" references from extension description and UI strings for a cleaner "RecallFlow" identity.
+
 ## [0.3.7] - 2025-11-22
 
 ### Fixed - Plan 019: RecallFlow Rebranding Gaps

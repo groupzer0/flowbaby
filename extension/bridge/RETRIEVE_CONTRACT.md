@@ -1,4 +1,4 @@
-# Retrieval Contract for Cognee Chat Memory (Plan 014)
+# Retrieval Contract for RecallFlow Chat Memory (Plan 014)
 
 This document describes the **structured JSON contract** returned by `extension/bridge/retrieve.py` for use by the VS Code extension and agents.
 

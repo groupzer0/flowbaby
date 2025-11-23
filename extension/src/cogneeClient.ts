@@ -86,7 +86,7 @@ export class CogneeClient {
         this.logLevel = this.parseLogLevel(logLevelStr);
 
         // Create Output Channel for logging
-        this.outputChannel = vscode.window.createOutputChannel('Cognee Memory');
+        this.outputChannel = vscode.window.createOutputChannel('RecallFlow Memory');
 
         // Resolve bridge path (extension/bridge relative to dist/)
         this.bridgePath = path.join(__dirname, '..', 'bridge');
@@ -100,7 +100,7 @@ export class CogneeClient {
             ? 'explicit_config' 
             : 'auto_detected';
 
-        this.log('INFO', 'CogneeClient initialized', {
+        this.log('INFO', 'RecallFlowClient initialized', {
             workspace: workspacePath,
             pythonPath: this.pythonPath,
             pythonSource: detectionSource,
@@ -161,7 +161,7 @@ export class CogneeClient {
      */
     async initialize(): Promise<boolean> {
         const startTime = Date.now();
-        this.log('INFO', 'Initializing Cognee', { workspace: this.workspacePath });
+        this.log('INFO', 'Initializing RecallFlow', { workspace: this.workspacePath });
 
         try {
             const result = await this.runPythonScript('init.py', [this.workspacePath]);
@@ -218,24 +218,24 @@ export class CogneeClient {
 
                 return true;
             } else {
-                this.log('ERROR', 'Cognee initialization failed', {
+                this.log('ERROR', 'RecallFlow initialization failed', {
                     duration,
                     error: result.error
                 });
                 vscode.window.showWarningMessage(
-                    `Cognee initialization failed: ${result.error}`
+                    `RecallFlow initialization failed: ${result.error}`
                 );
                 return false;
             }
         } catch (error) {
             const duration = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.log('ERROR', 'Cognee initialization exception', {
+            this.log('ERROR', 'RecallFlow initialization exception', {
                 duration,
                 error: errorMessage
             });
             vscode.window.showWarningMessage(
-                `Cognee initialization error: ${errorMessage}`
+                `RecallFlow initialization error: ${errorMessage}`
             );
             return false;
         }
@@ -351,7 +351,7 @@ export class CogneeClient {
                 });
                 
                 vscode.window.showWarningMessage(
-                    'Cognee is still working on summary ingestion in the background. ' +
+                    'RecallFlow is still working on summary ingestion in the background. ' +
                     'The extension timed out waiting for a response after 120 seconds. ' +
                     'Your summary may still be ingested; you can check by querying @cognee-memory in a moment.'
                 );
@@ -595,7 +595,7 @@ export class CogneeClient {
                 
                 // User-facing message clarifying background processing
                 vscode.window.showWarningMessage(
-                    'Cognee is still working on ingestion in the background. ' +
+                    'RecallFlow is still working on ingestion in the background. ' +
                     'The extension timed out waiting for a response after 120 seconds. ' +
                     'Your data may still be ingested; you can check by querying @cognee-memory in a moment.'
                 );
@@ -646,7 +646,7 @@ export class CogneeClient {
                 error: interpreterError
             });
             vscode.window.showErrorMessage(
-                'Cognee cannot start background ingestion because no Python interpreter is configured. ' +
+                'RecallFlow cannot start background ingestion because no Python interpreter is configured. ' +
                 'Set cogneeMemory.pythonPath or create a workspace .venv and try again.'
             );
             return {
@@ -866,6 +866,37 @@ export class CogneeClient {
             });
             return [];
         }
+    }
+
+    /**
+     * Validate memory system integrity (Milestone 3)
+     * 
+     * Checks environment, ontology, and graph connection.
+     * 
+     * @returns Promise<{success: boolean, checks: any, status: string, error?: string}>
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async validateMemories(): Promise<{success: boolean, checks: any, status: string, error?: string}> {
+        this.log('DEBUG', 'Validating memory system');
+        const result = await this.runPythonScript('validate_memories.py', [this.workspacePath]);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return result as any;
+    }
+
+    /**
+     * List recent memories (Milestone 3)
+     * 
+     * Retrieves a list of recent summaries and decisions for display.
+     * 
+     * @param limit Maximum number of memories to return
+     * @returns Promise<{success: boolean, memories: any[], error?: string}>
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async listMemories(limit: number = 10): Promise<{success: boolean, memories: any[], error?: string}> {
+        this.log('DEBUG', 'Listing memories', { limit });
+        const result = await this.runPythonScript('list_memories.py', [this.workspacePath, limit.toString()]);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return result as any;
     }
 
     /**

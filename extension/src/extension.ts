@@ -1,13 +1,14 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { CogneeClient, RetrievalResult } from './cogneeClient';
-import { ConversationSummary, formatSummaryAsText, createDefaultSummary, TEMPLATE_VERSION } from './summaryTemplate';
+import { ConversationSummary } from './summaryTemplate';
 import { parseSummaryFromText } from './summaryParser';
 import { registerIngestForAgentCommand } from './commands/ingestForAgent';
 import { registerRetrieveForAgentCommand } from './commands/retrieveForAgent';
 import { StoreMemoryTool } from './tools/storeMemoryTool';
 import { RetrieveMemoryTool } from './tools/retrieveMemoryTool';
 import { CogneeContextProvider } from './cogneeContextProvider';
+import { RecallFlowSetupService } from './setup/RecallFlowSetupService';
 
 // Module-level variable to store client instance
 let cogneeClient: CogneeClient | undefined;
@@ -46,7 +47,7 @@ export async function activate(_context: vscode.ExtensionContext) {
         const initialized = await cogneeClient.initialize();
 
         if (initialized) {
-            console.log('Cognee client initialized successfully');
+            console.log('RecallFlow client initialized successfully');
             
             // Register commands for Milestone 1: Context Menu Capture
             registerCaptureCommands(_context, cogneeClient);
@@ -55,6 +56,27 @@ export async function activate(_context: vscode.ExtensionContext) {
             const agentOutputChannel = vscode.window.createOutputChannel('RecallFlow Agent Activity');
             registerIngestForAgentCommand(_context, cogneeClient, agentOutputChannel);
             
+            // Plan 021 Milestone 4: Initialize Setup Service
+            const setupService = new RecallFlowSetupService(_context, workspacePath, agentOutputChannel);
+            
+            // Register setup environment command (Plan 021 Milestone 4)
+            const setupEnvironmentCommand = vscode.commands.registerCommand(
+                'cognee.setupEnvironment',
+                async () => {
+                    await setupService.createEnvironment();
+                }
+            );
+            _context.subscriptions.push(setupEnvironmentCommand);
+
+            // Register refresh dependencies command
+            const refreshDependenciesCommand = vscode.commands.registerCommand(
+                'cognee.refreshDependencies',
+                async () => {
+                    await setupService.refreshDependencies();
+                }
+            );
+            _context.subscriptions.push(refreshDependenciesCommand);
+
             // Plan 017: Initialize BackgroundOperationManager AFTER output channel creation
             try {
                 const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
@@ -68,6 +90,9 @@ export async function activate(_context: vscode.ExtensionContext) {
             
             // Plan 017: Register backgroundStatus command
             registerBackgroundStatusCommand(_context);
+
+            // Plan 021 Milestone 3: Register validation and listing commands
+            registerValidationCommands(_context, cogneeClient);
             
             // Plan 016 Milestone 1: Initialize CogneeContextProvider
             const { CogneeContextProvider } = await import('./cogneeContextProvider');
@@ -75,7 +100,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             
             // Milestone 2: Register @recallflow-memory chat participant (Plan 016 Milestone 6: now uses provider)
             registerCogneeMemoryParticipant(_context, cogneeClient, cogneeContextProvider);
-            console.log('CogneeContextProvider initialized successfully');
+            console.log('RecallFlowContextProvider initialized successfully');
             
             // Plan 016 Milestone 2: Register agent retrieval command
             registerRetrieveForAgentCommand(_context, cogneeContextProvider, agentOutputChannel);
@@ -83,7 +108,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             // Plan 016.1: Register languageModelTools unconditionally (Configure Tools is sole opt-in)
             registerLanguageModelTool(_context, agentOutputChannel);
         } else {
-            console.warn('Cognee client initialization failed (see Output Channel)');
+            console.warn('RecallFlow client initialization failed (see Output Channel)');
             
             // Check if it's an API key issue and provide helpful guidance
             const outputChannel = vscode.window.createOutputChannel('RecallFlow Memory');
@@ -121,7 +146,7 @@ export async function activate(_context: vscode.ExtensionContext) {
  * Tools register unconditionally at activation; VS Code's Configure Tools UI is the sole opt-in control
  * Both tools (storeMemory and retrieveMemory) register atomically
  */
-function registerLanguageModelTool(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel) {
+function registerLanguageModelTool(_context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel) {
     // Register BOTH tools unconditionally (Configure Tools controls enablement)
     if (cogneeContextProvider) {
         const storeTool = new StoreMemoryTool(outputChannel);
@@ -277,7 +302,7 @@ function registerCaptureCommands(
             // Fallback: Show input box to capture user text or use clipboard
             try {
                 const options: vscode.InputBoxOptions = {
-                    prompt: 'Enter text to capture to Cognee Memory (or leave empty to capture from clipboard)',
+                    prompt: 'Enter text to capture to RecallFlow Memory (or leave empty to capture from clipboard)',
                     placeHolder: 'Example: Discussed Redis caching with 15-minute TTL',
                     ignoreFocusOut: true
                 };
@@ -357,7 +382,7 @@ function registerCaptureCommands(
             const currentState = config.get<boolean>('enabled', true);
             await config.update('enabled', !currentState, vscode.ConfigurationTarget.Workspace);
             vscode.window.showInformationMessage(
-                `Cognee Memory ${!currentState ? 'enabled' : 'disabled'}`
+                `RecallFlow Memory ${!currentState ? 'enabled' : 'disabled'}`
             );
         }
     );
@@ -367,7 +392,7 @@ function registerCaptureCommands(
         'cognee.clearMemory',
         async () => {
             const confirm = await vscode.window.showWarningMessage(
-                'Delete all Cognee memories for this workspace?',
+                'Delete all RecallFlow memories for this workspace?',
                 { modal: true },
                 'Delete'
             );
@@ -389,6 +414,155 @@ function registerCaptureCommands(
 }
 
 /**
+ * Register validation and listing commands for Plan 021 Milestone 3
+ */
+function registerValidationCommands(context: vscode.ExtensionContext, client: CogneeClient) {
+    // Validate Memories
+    const validateCommand = vscode.commands.registerCommand('cognee.validateMemories', async () => {
+        vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Validating RecallFlow Memory System...",
+            cancellable: false
+        }, async (_progress) => {
+            try {
+                const result = await client.validateMemories();
+                
+                const outputChannel = vscode.window.createOutputChannel('RecallFlow Validation');
+                outputChannel.clear();
+                outputChannel.appendLine('=== RecallFlow Memory Validation ===');
+                outputChannel.appendLine(`Status: ${result.status.toUpperCase()}`);
+                outputChannel.appendLine('');
+                
+                const checks = result.checks || {};
+                outputChannel.appendLine('Checks:');
+                outputChannel.appendLine(`- Environment (.env): ${checks.env_file ? '✅ PASS' : '❌ FAIL'}`);
+                outputChannel.appendLine(`- API Key: ${checks.api_key ? '✅ PASS' : '❌ FAIL'}`);
+                outputChannel.appendLine(`- Ontology File: ${checks.ontology_file ? '✅ PASS' : '❌ FAIL'}`);
+                outputChannel.appendLine(`- Graph Connection: ${checks.graph_connection ? '✅ PASS' : '❌ FAIL'}`);
+                outputChannel.appendLine(`- Retrieval Smoke Test: ${checks.retrieval_smoke_test ? '✅ PASS' : '❌ FAIL'}`);
+                outputChannel.appendLine(`- Memory Structure: ${checks.memory_structure}`);
+                
+                if (!result.success) {
+                    outputChannel.appendLine('');
+                    outputChannel.appendLine(`Error: ${result.error}`);
+                    vscode.window.showErrorMessage(`Validation Failed: ${result.status}. See output for details.`);
+                } else {
+                    vscode.window.showInformationMessage(`Validation Passed: System is ${result.status}`);
+                }
+                
+                outputChannel.show();
+            } catch (error) {
+                vscode.window.showErrorMessage(`Validation failed to run: ${error}`);
+            }
+        });
+    });
+
+    // List Memories
+    const listCommand = vscode.commands.registerCommand('cognee.listMemories', async () => {
+        vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Fetching memories...",
+            cancellable: false
+        }, async () => {
+            try {
+                const result = await client.listMemories(20); // Limit 20
+                
+                if (!result.success) {
+                    vscode.window.showErrorMessage(`Failed to list memories: ${result.error}`);
+                    return;
+                }
+                
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const memories = result.memories || [];
+                if (memories.length === 0) {
+                    vscode.window.showInformationMessage("No memories found.");
+                    return;
+                }
+                
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const items = memories.map((m: any) => ({
+                    label: `$(book) ${m.topic}`,
+                    description: `${m.date} - ${m.status}`,
+                    detail: m.preview,
+                    memory: m
+                }));
+                
+                const selected = await vscode.window.showQuickPick(items, {
+                    placeHolder: "Select a memory to view details"
+                });
+                
+                if (selected) {
+                    const m = selected.memory;
+                    const outputChannel = vscode.window.createOutputChannel('RecallFlow Memory Details');
+                    outputChannel.clear();
+                    outputChannel.appendLine(`Topic: ${m.topic}`);
+                    outputChannel.appendLine(`Status: ${m.status}`);
+                    outputChannel.appendLine(`Date: ${m.date}`);
+                    outputChannel.appendLine('');
+                    outputChannel.appendLine('--- Preview ---');
+                    outputChannel.appendLine(m.preview); // In a real app we'd fetch full content
+                    outputChannel.show();
+                }
+                
+            } catch (error) {
+                vscode.window.showErrorMessage(`Failed to list memories: ${error}`);
+            }
+        });
+    });
+
+    // Show Diagnostics (Plan 021 Milestone 5)
+    const diagnosticsCommand = vscode.commands.registerCommand('cognee.showDiagnostics', async () => {
+        vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Running RecallFlow Diagnostics...",
+            cancellable: false
+        }, async () => {
+            try {
+                const validation = await client.validateMemories();
+                const config = await client.validateConfiguration();
+                
+                const docContent = [
+                    '# RecallFlow Diagnostics Report',
+                    `Date: ${new Date().toISOString()}`,
+                    '',
+                    '## System Status',
+                    `Overall Status: ${validation.status.toUpperCase()}`,
+                    `Configuration Valid: ${config.valid ? 'Yes' : 'No'}`,
+                    '',
+                    '## Environment Checks',
+                    `- .env File: ${validation.checks?.env_file ? '✅ Found' : '❌ Missing'}`,
+                    `- API Key: ${validation.checks?.api_key ? '✅ Configured' : '❌ Missing'}`,
+                    `- Ontology: ${validation.checks?.ontology_file ? '✅ Found' : '❌ Missing'}`,
+                    '',
+                    '## Connection Checks',
+                    `- Graph Database: ${validation.checks?.graph_connection ? '✅ Connected' : '❌ Failed'}`,
+                    `- Retrieval Test: ${validation.checks?.retrieval_smoke_test ? '✅ Passed' : '❌ Failed'}`,
+                    '',
+                    '## Configuration Errors',
+                    ...(config.errors.length > 0 ? config.errors.map(e => `- ${e}`) : ['None']),
+                    '',
+                    '## Raw Validation Output',
+                    '```json',
+                    JSON.stringify(validation, null, 2),
+                    '```'
+                ].join('\n');
+
+                const doc = await vscode.workspace.openTextDocument({
+                    content: docContent,
+                    language: 'markdown'
+                });
+                await vscode.window.showTextDocument(doc);
+                
+            } catch (error) {
+                vscode.window.showErrorMessage(`Diagnostics failed: ${error}`);
+            }
+        });
+    });
+
+    context.subscriptions.push(validateCommand, listCommand, diagnosticsCommand);
+}
+
+/**
  * Handle summary generation request (Plan 014 Milestone 2)
  * Implements turn count adjustment, LLM-based generation, and user confirmation flow
  */
@@ -397,7 +571,7 @@ async function handleSummaryGeneration(
     chatContext: vscode.ChatContext,
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken,
-    client: CogneeClient
+    _client: CogneeClient
 ): Promise<vscode.ChatResult> {
     console.log('=== PLAN 014: Handling summary generation request ===');
     
@@ -546,7 +720,7 @@ Create the summary now, following the format exactly. Use markdown formatting.`;
         
         // Ask user for confirmation
         stream.markdown('✅ **Summary generated successfully!**\n\n');
-        stream.markdown('Should I store this summary in Cognee memory? Reply with:\n');
+        stream.markdown('Should I store this summary in RecallFlow memory? Reply with:\n');
         stream.markdown('- `yes` or `store it` to save\n');
         stream.markdown('- `no` or `cancel` to discard\n\n');
         stream.markdown('💡 *Stored summaries can be retrieved later when you ask related questions.*');
@@ -690,7 +864,7 @@ function registerCogneeMemoryParticipant(
                                     };
                                 } else {
                                     stream.markdown('⚠️ **Failed to store summary**\n\n');
-                                    stream.markdown('There was an error storing the summary. Check the Output channel (Cognee Memory) for details.\n\n');
+                                    stream.markdown('There was an error storing the summary. Check the Output channel (RecallFlow Memory) for details.\n\n');
                                     stream.markdown('You can try again by saying "yes" or "store it".');
                                     
                                     return {
@@ -791,7 +965,7 @@ function registerCogneeMemoryParticipant(
                     } as RetrievalResult));
                     
                     const retrievalDuration = Date.now() - retrievalStart;
-                    console.log(`Retrieved ${retrievedMemories.length} memories in ${retrievalDuration}ms (via CogneeContextProvider)`);
+                    console.log(`Retrieved ${retrievedMemories.length} memories in ${retrievalDuration}ms (via RecallFlowContextProvider)`);
                 } catch (error) {
                     retrievalFailed = true;
                     console.error('Retrieval failed:', error);
@@ -990,7 +1164,7 @@ function registerCogneeMemoryParticipant(
     // Set participant description (shows in UI)
     participant.iconPath = vscode.Uri.file(path.join(__dirname, '..', 'media', 'icon.png'));
 
-    console.log('✅ @cognee-memory participant registered successfully');
+    console.log('✅ @recallflow-memory participant registered successfully');
 
     // Add to subscriptions for proper cleanup
     context.subscriptions.push(participant);

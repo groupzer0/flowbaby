@@ -78,7 +78,7 @@ suite('Commands Integration (no production changes)', () => {
         });
 
         // Activate extension to register commands using our stubs
-        await activate({ subscriptions: [] } as any);
+        await activate({ subscriptions: [], extensionPath: '/tmp/vscode-cognee-test-ext' } as any);
     });
 
     teardown(() => {

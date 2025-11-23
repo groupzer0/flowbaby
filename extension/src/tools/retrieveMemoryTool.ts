@@ -1,8 +1,8 @@
 /**
- * Language Model Tool for Cognee Memory Retrieval (Plan 016)
+ * Language Model Tool for RecallFlow Memory Retrieval (Plan 016)
  * 
  * Implements VS Code's LanguageModelTool interface to allow Copilot agents
- * to retrieve structured conversation summaries from Cognee knowledge graph.
+ * to retrieve structured conversation summaries from RecallFlow knowledge graph.
  * 
  * Tool registration and authorization (Plan 016.1):
  * - Registered unconditionally at extension activation
@@ -168,7 +168,7 @@ export class RetrieveMemoryTool implements vscode.LanguageModelTool<RetrieveMemo
 
         // Return prepared invocation with confirmation message
         return {
-            invocationMessage: `Searching Cognee memory: "${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}"`
+            invocationMessage: `Searching RecallFlow memory: "${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}"`
         };
     }
 }

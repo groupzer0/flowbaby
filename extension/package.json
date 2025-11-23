@@ -1,8 +1,8 @@
 {
   "name": "cognee-chat-memory",
   "displayName": "RecallFlow Chat Memory",
-  "description": "Automatic memory for GitHub Copilot chat using RecallFlow (formerly Cognee) knowledge graphs",
-  "version": "0.3.7",
+  "description": "Automatic memory for GitHub Copilot chat using RecallFlow knowledge graphs",
+  "version": "0.3.8",
   "publisher": "recallflow",
   "icon": "media/icon.png",
   "engines": {
@@ -34,34 +34,49 @@
     "commands": [
       {
         "command": "cognee.captureMessage",
-        "title": "📥 Capture to RecallFlow Memory",
+        "title": "RecallFlow: Capture to Memory",
         "category": "RecallFlow"
       },
       {
         "command": "cognee.toggleMemory",
-        "title": "Toggle RecallFlow Memory",
+        "title": "RecallFlow: Toggle Memory",
         "category": "RecallFlow"
       },
       {
         "command": "cognee.clearMemory",
-        "title": "Clear RecallFlow Workspace Memory",
+        "title": "RecallFlow: Clear Workspace Memory",
         "category": "RecallFlow"
       },
       {
         "command": "cogneeMemory.ingestForAgent",
-        "title": "Ingest Summary for RecallFlow Agent",
+        "title": "RecallFlow: Ingest Summary for Agent",
         "category": "RecallFlow",
         "enablement": "cogneeMemory.enabled"
       },
       {
         "command": "cogneeMemory.retrieveForAgent",
-        "title": "Retrieve Context for RecallFlow Agent",
+        "title": "RecallFlow: Retrieve Context for Agent",
         "category": "RecallFlow",
         "enablement": "cogneeMemory.enabled"
       },
       {
         "command": "cognee.backgroundStatus",
-        "title": "View Background Operations",
+        "title": "RecallFlow: View Background Operations",
+        "category": "RecallFlow"
+      },
+      {
+        "command": "cognee.validateMemories",
+        "title": "RecallFlow: Validate Memories",
+        "category": "RecallFlow"
+      },
+      {
+        "command": "cognee.listMemories",
+        "title": "RecallFlow: List Memories",
+        "category": "RecallFlow"
+      },
+      {
+        "command": "cognee.refreshDependencies",
+        "title": "RecallFlow: Refresh Bridge Dependencies",
         "category": "RecallFlow"
       }
     ],
@@ -158,6 +173,51 @@
           "required": ["query"]
         },
         "tags": ["memory", "knowledge-graph", "search", "retrieval", "recallflow", "context", "long-term-memory"]
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "recallflowSetup",
+        "title": "Get Started with RecallFlow",
+        "description": "Set up your environment and start using RecallFlow Memory",
+        "steps": [
+          {
+            "id": "setupPython",
+            "title": "Setup Python Environment",
+            "description": "RecallFlow requires a Python environment with `cognee` installed. We can set this up for you automatically.",
+            "media": {
+              "image": "media/icon.png",
+              "altText": "RecallFlow Logo"
+            },
+            "completionEvents": [
+              "onCommand:cognee.refreshDependencies"
+            ]
+          },
+          {
+            "id": "configureApiKey",
+            "title": "Configure API Key",
+            "description": "Create a `.env` file in your workspace root with your LLM API key:\n\n`LLM_API_KEY=your_key_here`",
+            "media": {
+              "markdown": "media/icon.png"
+            }
+          },
+          {
+            "id": "tryCapture",
+            "title": "Try Capture",
+            "description": "Select text in your editor and press `Ctrl+Alt+C` (or `Cmd+Alt+C` on Mac) to capture it to memory.",
+            "completionEvents": [
+              "onCommand:cognee.captureMessage"
+            ]
+          },
+          {
+            "id": "tryRetrieval",
+            "title": "Try Retrieval",
+            "description": "Open Copilot Chat and ask `@recallflow-memory` a question about your captured context.",
+            "completionEvents": [
+              "onView:recallflow-memory"
+            ]
+          }
+        ]
       }
     ],
     "configuration": {

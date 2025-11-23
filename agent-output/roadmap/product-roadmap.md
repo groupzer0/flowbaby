@@ -56,20 +56,20 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 - **Plan 013.1** ✅ Complete → Epic 0.2.2.3 (Discoverability - ingestion reliability)
 - **Plan 014** (Proposed) → Epic 0.3.0.2 (Structured Summaries) - prerequisite for Plans 015/016
 - **Plan 014.1** ✅ Complete → Epic 0.3.0.3 (feasibility validation for languageModelTools integration)
-- **Plan 015** (Proposed) → Epic 0.3.0.3 (Agent-Driven Memory Integration - ingestion)
+- **Plan 015** ✅ Complete → Epic 0.3.0.3 (Agent-Driven Memory Integration - ingestion)
 - **Plan 016** ✅ Complete → Epic 0.3.0.3 (Agent-Driven Memory Integration - retrieval + UI visibility)
 - **Plan 016.1** ✅ Complete → Epic 0.3.0.3 (Tool lifecycle hotfix)
-- **Plan 017** (Ready for Implementation) → Async cognify() optimization - unblocks testing and Epic 0.3.0.1
-- **Plan 018** (Proposed) → Epic 0.3.0.1 (Metadata infrastructure + Ranking) + Icons (participant + extension)
-- **Plan 019** (In Progress) → Release v0.3.6 Alpha / Epic 0.3.6.1 (Reliability & RecallFlow rebrand: retrieval fabrication fix, silent-failure observability, log surfacing)
-- **Plan 021** (Proposed) → Release v0.3.7 Alpha / Epic 0.3.7.1 (Memory visibility & validation UI/commands for smoke-testing stored context)
-- **Plan 020** (Draft) → Release v0.3.8 / Epic 0.3.0.1 (Compaction pipeline - merge summaries, conflict detection) **after** Plan 021 delivers validation surface
+- **Plan 017** ✅ Complete → Async cognify() optimization - unblocks testing and Epic 0.3.0.1
+- **Plan 018** ✅ Complete → Epic 0.3.0.1 (Metadata infrastructure + Ranking) + Icons (participant + extension)
+- **Plan 019** ✅ Complete → Release v0.3.6 Alpha / Epic 0.3.6.1 (Reliability & RecallFlow rebrand: retrieval fabrication fix, silent-failure observability, log surfacing)
+- **Plan 021** (Proposed) → Release v0.3.8 Alpha / Epic 0.3.8.1 (Memory visibility & validation UI/commands for smoke-testing stored context)
+- **Plan 020** (Draft) → Release v0.3.9 / Epic 0.3.0.1 (Compaction pipeline - merge summaries, conflict detection) **after** Plan 021 delivers validation surface
 - **Plans TBD** → Epic 0.2.3.1 (Error Transparency), Epic 0.4.0.2 (Auto-Setup Wizard), Epic 0.4.0.3 (Memory Browser), Epic 0.4.0.4 (Graph Export)
 
 **Near-Term Alpha Releases**:
 
 - **v0.3.6 – Reliability & RecallFlow**: Complete Plan 019 to eliminate silent failures, surface logs, and align branding.
-- **v0.3.7 – Memory Visibility**: Deliver validation/smoke-testing workflows (Plan 021) so users can inspect stored context before compaction.
+- **v0.3.8 – Memory Visibility**: Deliver validation/smoke-testing workflows (Plan 021) so users can inspect stored context before compaction.
 
 **Strategic Decision**: Plans 012/013/013.1 resolve v0.2.x blockers; v0.3.0 work (Plans 014/015) can now proceed. Remaining v0.2.x epics (Plans 016/017) enhance UX but don't block advanced features—proceed in parallel.
 
@@ -77,6 +77,10 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-23 | Retargeted Memory Visibility/Validation work to Release v0.3.8; added agent structure validation | Version v0.3.7 is already in use. Shifted validation/visibility scope to v0.3.8. Added requirement to validate agent memory submission structure (metadata optimization) as part of the validation epic. |
+| 2025-11-23 | Added Epic 0.3.7.2 (Brand Audit), Epic 0.3.7.3 (Zero-Hallucination), and moved Epic 0.2.3.2 to v0.3.7 (P0) | User feedback identified critical brand inconsistencies, retrieval fabrication risks, and technical debt in Python setup. Prioritized these as P0 for v0.3.7. |
+| 2025-11-23 | Added Local LLM Optimization to Backlog | User request for future local inference support (e.g., Nvidia Nemotron Nano). |
+| 2025-11-23 | Updated status for Plans 015, 016, 017, 018, 019 to "Complete" based on implementation review | Implementation reports confirm these plans are delivered and ready for QA/UAT. Updated corresponding Epics (0.3.0.1, 0.3.0.3, 0.3.6.1) to reflect delivery. |
 | 2025-11-22 | Repositioned Plan 019 (v0.3.6 reliability & RecallFlow rebrand) under Epic 0.2.3.1, introduced Plan 020 for compaction (Epic 0.3.0.1), and captured new architecture guidance on RecallFlow branding + ingest log surfacing | Keep roadmap aligned with current plan numbering and architectural decisions so downstream agents reference the correct release targets |
 | 2025-11-22 | Added Release v0.3.6 (Reliability & RecallFlow - Alpha) section, created new visibility/validation epic, and resequenced Plan 020 after the visibility milestone | Align roadmap with new business objective (memory validation), formalize alpha release theme, and ensure compaction follows reliability + visibility work per user direction |
 | 2025-11-22 | Updated roadmap branding from Cognee to RecallFlow wherever user-facing copy appears, noting that internal identifiers stay `cognee*` for compatibility | Ensure strategic artifacts reflect the RecallFlow brand while setting expectations about untouched internal command IDs |
@@ -274,7 +278,7 @@ So that I can take corrective action instead of assuming the extension is broken
 
 ### Epic 0.2.3.2: Simplified Python Environment Setup
 
-**Priority**: P1 (High - reduces setup friction)
+**Priority**: P0 (Moved to v0.3.7)
 **Status**: Planned
 
 **User Story**:
@@ -310,6 +314,7 @@ So that I can start using memory features without troubleshooting dependency con
 
 **Status Notes**:
 
+- 2025-11-23: **MOVED TO v0.3.7**. See Epic 0.2.3.2 in Release v0.3.7 section for active status.
 - 2025-11-23: **ARCHITECTURE UPDATE** - Section §4.6 now defines RecallFlowSetupService (managed `.venv`, `.cognee/bridge-env.json`, onboarding walkthrough) plus the Refresh Bridge Dependencies command. Epic 0.2.3.2 owns delivering those UX surfaces and enforcement hooks so later releases can trust pinned `cognee` versions per workspace.
 - 2025-11-17: **PROPOSED** - Will be addressed by Plan 017 (separate from Plan 013). Requires platform-specific venv creation, subprocess orchestration, cross-platform testing.
 - 2025-11-16: Epic created based on Plan 007 review. Plan 007 delivered auto-detection of .venv and enhanced error messages, but setup remains manual. SETUP.md requires users to run terminal commands before extension works. This creates multi-step onboarding friction that loses users.
@@ -326,7 +331,7 @@ So that I can start using memory features without troubleshooting dependency con
 ### Epic 0.3.0.1: Context Ranking and Relevance
 
 **Priority**: P1 (High value - deferred until foundational UX delivered)
-**Status**: Backlog (blocked by v0.2.x epics)
+**Status**: ⚠️ Partial (Plan 018 Delivered)
 
 **User Story**:
 As a developer retrieving context,
@@ -343,17 +348,17 @@ So that I don't waste time sifting through tangential results.
 
 - **✅ RESOLVED**: Epic 0.2.2.3 (display transparency, ingestion reliability) - Plans 012/013/013.1 complete
 - **PREREQUISITE**: Epic 0.3.0.2 (structured summaries) - Plan 014 must establish content schema before metadata
-- **PREREQUISITE**: Plan 017 (async cognify optimization) - testing and metadata ingestion blocked by 73s synchronous operations
+- **✅ RESOLVED**: Plan 017 (async cognify optimization) - testing and metadata ingestion blocked by 73s synchronous operations
 - Requires stable v0.2.x foundation with real usage data to inform ranking approach
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] Metadata infrastructure introduced (topic_id, session_id, plan_id, status, timestamps) via RecallFlow DataPoints (Plan 018)
-- [ ] Plan 014 summaries migrated to DataPoints with generated metadata (one-time migration script) (Plan 018)
-- [ ] Retrieval results ranked by recency-aware scoring (exponential decay, configurable alpha and halfLifeDays) (Plan 018)
-- [ ] Status-aware retrieval filters Superseded summaries, prioritizes DecisionRecords (Plan 018)
+- [x] Metadata infrastructure introduced (topic_id, session_id, plan_id, status, timestamps) via RecallFlow DataPoints (Plan 018)
+- [x] Plan 014 summaries migrated to DataPoints with generated metadata (one-time migration script) (Plan 018)
+- [x] Retrieval results ranked by recency-aware scoring (exponential decay, configurable alpha and halfLifeDays) (Plan 018)
+- [x] Status-aware retrieval filters Superseded summaries, prioritizes DecisionRecords (Plan 018)
 - [ ] Compaction pipeline creates DecisionRecords from multiple summaries with conflict detection (Plan 020)
-- [ ] Ranking transparency displays relevance scores and metadata in UI (Plan 018)
+- [x] Ranking transparency displays relevance scores and metadata in UI (Plan 018)
 
 **Constraints**:
 
@@ -363,6 +368,7 @@ So that I don't waste time sifting through tangential results.
 
 **Status Notes**:
 
+- 2025-11-23: **PARTIAL DELIVERY** - Plan 018 (Metadata Infrastructure & Ranking) implementation complete. Metadata schema, migration script, and ranking algorithm delivered. Compaction (Plan 020) remains.
 - 2025-11-20: **BLOCKED - Plan 017 prerequisite** - Async cognify() optimization required before implementing metadata infrastructure. Current 73s synchronous ingestion blocks testing workflows and would create poor UX during metadata testing. Plan 017 (async optimization) → Plan 018 (metadata infrastructure) sequencing prioritizes practical testing needs.
 - 2025-11-22: **RESEQUENCED** - Compaction now follows the Reliability (Plan 019) and Validation (Plan 021) releases. Plan 020 will target v0.3.8 after the visibility surface proves data integrity, while still coordinating with BackgroundOperationManager and immutable supersedence requirements.
 - 2025-11-17: Epic unblocked after Plans 012/013/013.1 completed installation stability and display transparency.
@@ -416,7 +422,7 @@ So that I can store and retrieve organized context (decisions, rationale, refere
 ### Epic 0.3.0.3: Agent-Driven Memory Integration
 
 **Priority**: P0 (Critical - addresses core architectural misalignment)
-**Status**: ✅ Unblocked - Plan 014.1 Complete (languageModelTools validated)
+**Status**: ✅ Delivered (Plans 015/016)
 
 **User Story**:
 As a developer using GitHub Copilot agents (@workspace, coding agent, etc.),
@@ -438,40 +444,40 @@ So that agents maintain continuity across sessions without me manually reconstru
 
 **Tool Visibility & Discovery** (Plan 016 - Milestones 4-5):
 
-- [ ] Both RecallFlow tools (`cognee_storeMemory`, `cognee_retrieveMemory`) appear in VS Code "Configure Tools" dialog
-- [ ] Tools include UI visibility flags: `canBeReferencedInPrompt: true`, `toolReferenceName`, `icon`
-- [ ] Custom agents can reference RecallFlow tools via `#cogneeStoreSummary` and `#cogneeRetrieveMemory` autocomplete
-- [ ] Custom agent `.agent.md` files can declare RecallFlow tools in `tools: ['cogneeStoreSummary', 'cogneeRetrieveMemory']` front-matter
-- [ ] Tool confirmation messages show workspace context and describe operation clearly
+- [x] Both RecallFlow tools (`cognee_storeMemory`, `cognee_retrieveMemory`) appear in VS Code "Configure Tools" dialog
+- [x] Tools include UI visibility flags: `canBeReferencedInPrompt: true`, `toolReferenceName`, `icon`
+- [x] Custom agents can reference RecallFlow tools via `#cogneeStoreSummary` and `#cogneeRetrieveMemory` autocomplete
+- [x] Custom agent `.agent.md` files can declare RecallFlow tools in `tools: ['cogneeStoreSummary', 'cogneeRetrieveMemory']` front-matter
+- [x] Tool confirmation messages show workspace context and describe operation clearly
 
 **Agent Retrieval Infrastructure** (Plan 016 - Milestones 1-3):
 
-- [ ] RecallFlow Context Provider service (`CogneeContextProvider`) centralizes retrieval logic, enforces rate limits (max 2 concurrent, queue size 5, clamped to max 5/30)
-- [ ] `cogneeMemory.retrieveForAgent` command returns structured `CogneeContextEntry` responses (summaryText, decisions, metadata)
-- [ ] Access gated behind `cogneeMemory.agentAccess.enabled` workspace setting (default: disabled)
-- [ ] Enabling agent access registers tool contributions; disabling unregisters them to remove from Copilot's tool selection
-- [ ] Agent commands return structured retrieval results with metadata (topicId, planId, createdAt, score) when available
+- [x] RecallFlow Context Provider service (`CogneeContextProvider`) centralizes retrieval logic, enforces rate limits (max 2 concurrent, queue size 5, clamped to max 5/30)
+- [x] `cogneeMemory.retrieveForAgent` command returns structured `CogneeContextEntry` responses (summaryText, decisions, metadata)
+- [x] Access gated behind `cogneeMemory.agentAccess.enabled` workspace setting (default: disabled)
+- [x] Enabling agent access registers tool contributions; disabling unregisters them to remove from Copilot's tool selection
+- [x] Agent commands return structured retrieval results with metadata (topicId, planId, createdAt, score) when available
 
 **Tool Integration** (Plan 015 + 016):
 
-- [ ] RecallFlow contributes `languageModelTools` (`cognee_storeMemory`, `cognee_retrieveMemory`) via package.json
-- [ ] Tools implement `LanguageModelTool` interface with `prepareInvocation()` and `invoke()` methods
-- [ ] Tools proxy to internal commands (`cogneeMemory.ingestForAgent`, `cogneeMemory.retrieveForAgent`) for business logic
-- [ ] Direct command invocation preserved for non-Copilot VS Code extensions
+- [x] RecallFlow contributes `languageModelTools` (`cognee_storeMemory`, `cognee_retrieveMemory`) via package.json
+- [x] Tools implement `LanguageModelTool` interface with `prepareInvocation()` and `invoke()` methods
+- [x] Tools proxy to internal commands (`cogneeMemory.ingestForAgent`, `cogneeMemory.retrieveForAgent`) for business logic
+- [x] Direct command invocation preserved for non-Copilot VS Code extensions
 
 **Transparency & Audit** (Plan 016 - Milestone 7):
 
-- [ ] All tool invocations logged to Output channel with timestamp, query hash, result count, token usage
-- [ ] Status bar indicator shows "RecallFlow Agent Access: Enabled" when `agentAccess.enabled = true`
-- [ ] Status bar changes icon/color during active agent retrieval; click opens Output channel
-- [ ] Documentation explains tool integration model, privacy controls, opt-in workflow, and fallback support (direct commands for non-Copilot extensions, MCP as contingency)
+- [x] All tool invocations logged to Output channel with timestamp, query hash, result count, token usage
+- [x] Status bar indicator shows "RecallFlow Agent Access: Enabled" when `agentAccess.enabled = true`
+- [x] Status bar changes icon/color during active agent retrieval; click opens Output channel
+- [x] Documentation explains tool integration model, privacy controls, opt-in workflow, and fallback support (direct commands for non-Copilot extensions, MCP as contingency)
 
 **Testing & Documentation** (Plan 016 - Milestones 8-9):
 
-- [ ] Reference test agent extension demonstrates round-trip store/retrieve integration
-- [ ] README includes "Using RecallFlow Tools with Custom Agents" section with `.agent.md` examples
-- [ ] AGENT_INTEGRATION.md provides comprehensive integration guide for third-party extension developers
-- [ ] Integration tests validate tool registration/unregistration, round-trip store→retrieve, error handling
+- [x] Reference test agent extension demonstrates round-trip store/retrieve integration
+- [x] README includes "Using RecallFlow Tools with Custom Agents" section with `.agent.md` examples
+- [x] AGENT_INTEGRATION.md provides comprehensive integration guide for third-party extension developers
+- [x] Integration tests validate tool registration/unregistration, round-trip store→retrieve, error handling
 
 **Constraints**:
 
@@ -490,6 +496,7 @@ So that agents maintain continuity across sessions without me manually reconstru
 
 **Status Notes**:
 
+- 2025-11-23: **DELIVERED** - Plans 015 and 016 implementation complete. Agent ingestion and retrieval infrastructure, UI tools, and transparency indicators delivered.
 - 2025-11-19: **✅ READY FOR IMPLEMENTATION** - Plan 016 merged scope complete (agent retrieval + UI-visible tools), pending critic review. Plan 016 combines:
   - **Agent Retrieval Infrastructure**: RecallFlow Context Provider service (`CogneeContextProvider`), `retrieveForAgent` command, structured `CogneeContextEntry` responses, concurrency/rate limiting
   - **UI-Visible Tools**: Both `storeMemory` and `retrieveMemory` tools configured with `canBeReferencedInPrompt: true`, `toolReferenceName` properties, and `icon` for Configure Tools UI visibility
@@ -509,7 +516,7 @@ So that agents maintain continuity across sessions without me manually reconstru
 ### Epic 0.3.6.1: Background Reliability & RecallFlow Rebrand
 
 **Priority**: P0 (Critical - alpha quality expectation)
-**Status**: In Progress (Plan 019)
+**Status**: ✅ Delivered (Plan 019)
 
 **User Story**:
 As a developer relying on RecallFlow,
@@ -529,12 +536,12 @@ So that I can trust stored context and present the product confidently to my tea
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] Retrieval scoring never fabricates confidence for unscored results; UI reflects 0.0-score cases as "no relevant context"
-- [ ] Background ingestion writes structured stdout/stderr to `.cognee/logs/ingest.log` with rotation strategy enforced
-- [ ] Failure notifications include "View Logs" action plus Output log pointing to the log path
-- [ ] Background status list shows timestamps for every operation and treats missing stubs as failures with mitigation guidance
-- [ ] All user-visible strings (commands, participant, notifications, docs) use "RecallFlow" while preserving `cognee*` internal IDs
-- [ ] Extension/package version bumped to 0.3.6 with CHANGELOG capturing fixes and rebrand scope
+- [x] Retrieval scoring never fabricates confidence for unscored results; UI reflects 0.0-score cases as "no relevant context"
+- [x] Background ingestion writes structured stdout/stderr to `.cognee/logs/ingest.log` with rotation strategy enforced
+- [x] Failure notifications include "View Logs" action plus Output log pointing to the log path
+- [x] Background status list shows timestamps for every operation and treats missing stubs as failures with mitigation guidance
+- [x] All user-visible strings (commands, participant, notifications, docs) use "RecallFlow" while preserving `cognee*` internal IDs
+- [x] Extension/package version bumped to 0.3.6 with CHANGELOG capturing fixes and rebrand scope
 
 **Constraints**:
 
@@ -543,16 +550,17 @@ So that I can trust stored context and present the product confidently to my tea
 
 **Status Notes**:
 
+- 2025-11-23: **DELIVERED** - Plan 019 implementation complete. Rebranding to 'RecallFlow' and reliability fixes applied.
 - 2025-11-22: Plan 019 retargeted to v0.3.6 alpha after architectural review flagged missing "View Logs" CTA and Copilot tool metadata. Workstreams: scoring fix, log surfacing, failure toasts, RecallFlow copy, version bump.
 
 ---
 
-## Release v0.3.7 - Memory Visibility & Validation (Alpha)
+## Release v0.3.8 - Memory Visibility, Validation & Onboarding
 
 **Target Date**: 2025-12-15 (TBD)
-**Strategic Goal**: Provide first-class smoke-testing and inspection workflows so developers can validate stored context before depending on it in agent flows.
+**Strategic Goal**: Provide first-class smoke-testing, ensure brand consistency, and eliminate setup friction to build absolute trust in the system.
 
-### Epic 0.3.7.1: Memory Validation & Smoke Visibility
+### Epic 0.3.8.1: Memory Validation & Smoke Visibility
 
 **Priority**: P0 (Strategic trust-building follow-up to v0.3.6)
 **Status**: Planned (Plan 021 - drafting)
@@ -560,7 +568,7 @@ So that I can trust stored context and present the product confidently to my tea
 **User Story**:
 As a developer evaluating RecallFlow,
 I want an easy way to inspect and validate the memories in storage,
-So that I know the data my agents retrieve is accurate before I rely on it in production workflows.
+So that I can know the data my agents retrieve is accurate before I rely on it in production workflows.
 
 **Business Value**:
 
@@ -579,6 +587,7 @@ So that I know the data my agents retrieve is accurate before I rely on it in pr
 - [ ] Dedicated visibility surface (QuickPick, tree view, or webview) lists stored memories with key metadata and links to source logs/operations
 - [ ] Users can open the underlying `.cognee/logs/ingest.log` and associated operation IDs directly from the validation UI
 - [ ] Validation workflow records audit entries so support can trace which datasets were inspected
+- [ ] **Agent Structure Validation**: Validate that agent memory submissions (via `recallflow_storeMemory`) correctly populate metadata fields and adhere to the optimized schema (checking for rich context, decisions, rationale, and status).
 - [ ] Documentation explains when to run validation, what signals to expect, and how to interpret failures
 
 **Constraints**:
@@ -588,8 +597,130 @@ So that I know the data my agents retrieve is accurate before I rely on it in pr
 
 **Status Notes**:
 
+- 2025-11-23: **RETARGETED TO v0.3.8**. Version v0.3.7 is already in use.
+- 2025-11-23: Added acceptance criterion for validating agent submission structure/metadata optimization.
 - 2025-11-22: Business objective added to roadmap. Plan 021 to be drafted capturing minimal UI + command needed to let users validate stored context before compaction or ranking adjusts data.
-- 2025-11-22: Sequencing decision: Epic 0.3.7.1 must land before Plan 020 compaction so users can trust underlying data prior to automated merging.
+- 2025-11-22: Sequencing decision: Epic 0.3.8.1 must land before Plan 020 compaction so users can trust underlying data prior to automated merging.
+
+---
+
+### Epic 0.3.8.2: Brand Consistency Audit & Cleanup
+
+**Priority**: P0 (Critical - Quality/Polish)
+**Status**: Planned
+
+**User Story**:
+As a user installing "RecallFlow",
+I want all user-facing content (Marketplace details, README, commands, UI) to consistently use the "RecallFlow" brand,
+So that I am not confused by mixed messaging or outdated "Cognee" references.
+
+**Business Value**:
+
+- **User Impact**: Eliminates confusion during onboarding (e.g., "Why does the description say Cognee?").
+- **Strategic Importance**: Incomplete rebranding signals low quality and lack of attention to detail.
+- **Measurable Success**: Zero user-facing instances of "Cognee" (except in unavoidable internal IDs) in the Marketplace page, README, and primary UI.
+
+**Dependencies**:
+
+- None.
+
+**Acceptance Criteria** (outcome-focused):
+
+- [ ] Marketplace `README.md` and `package.json` display fields updated to "RecallFlow".
+- [ ] All command titles in Command Palette use "RecallFlow" prefix.
+- [ ] "Cognee Chat Memory" title in extension details pane replaced with "RecallFlow Chat Memory".
+- [ ] Participant help text and descriptions updated to remove "Cognee" references.
+- [ ] Comprehensive audit of codebase performed to identify and fix remaining string literals in UI.
+
+**Constraints**:
+
+- Internal extension IDs and configuration keys (`cognee.*`) MUST remain unchanged to preserve backward compatibility.
+
+**Status Notes**:
+
+- 2025-11-23: Added as P0 based on user feedback. Screenshot evidence showed "Cognee Chat Memory" still visible in extension details.
+
+---
+
+### Epic 0.3.8.3: Zero-Hallucination Retrieval
+
+**Priority**: P0 (Critical - Trust)
+**Status**: Planned
+
+**User Story**:
+As a user relying on memory,
+I want the system to NEVER return fabricated results, even if it means returning nothing,
+So that I can trust the agent's context implicitly without double-checking every response.
+
+**Business Value**:
+
+- **User Impact**: "Made up" results destroy trust instantly. Eliminating them is existential for the product.
+- **Strategic Importance**: Reliability > Features. A memory tool that "remembers" things that didn't happen is worse than useless.
+- **Measurable Success**: 0% rate of fabricated results in benchmark tests.
+
+**Dependencies**:
+
+- Plan 019 (Reliability) provided the logging infrastructure to detect this.
+
+**Acceptance Criteria** (outcome-focused):
+
+- [ ] Retrieval pipeline strictly filters results with 0.00 relevance score (or low confidence) BEFORE they reach the agent/user.
+- [ ] "No relevant context found" is a valid and preferred state over low-quality results.
+- [ ] Investigation into graph LLM behavior to identify root cause of fabrication.
+- [ ] Implementation of stricter confidence thresholds or alternative retrieval strategies (e.g., exact match fallback) to prevent hallucination.
+
+**Constraints**:
+
+- Must not aggressively filter *valid* but low-scoring results (false negatives).
+
+**Status Notes**:
+
+- 2025-11-23: Added as P0. User emphasized that flagging 0.00 score is insufficient; behavior must be eliminated.
+
+---
+
+### Epic 0.3.8.4: Simplified Python Environment Setup (Moved from v0.2.3)
+
+**Priority**: P0 (Critical - Technical Debt & Onboarding)
+**Status**: Planned
+
+**User Story**:
+As an extension user without a pre-configured Python environment,
+I want the extension to guide me through Python setup or automatically create an isolated environment,
+So that I can start using memory features without troubleshooting dependency conflicts.
+
+**Business Value**:
+
+- **User Impact**: Plan 007 implemented intelligent detection but still requires users to manually create .venv and install dependencies
+- **Strategic Importance**: Every setup step is a drop-off point; reducing from N manual steps to zero dramatically increases adoption. **Technical debt is accumulating** by delaying this.
+- **Measurable Success**: 90% of users never see "Python environment not found" error
+
+**Dependencies**:
+
+- Plan 017 scope extension (RecallFlowSetupService + Refresh Bridge Dependencies) to implement the managed `.venv` architecture defined on 2025-11-23
+
+**Acceptance Criteria** (outcome-focused):
+
+- [ ] Extension detects missing Python and offers to create a workspace-local `.venv` automatically
+- [ ] Workspace Setup Wizard provisions the managed `.venv`, runs `pip install -r extension/bridge/requirements.txt`, writes `.cognee/bridge-env.json`, executes `verify_environment.py`, and blocks capture/retrieve until verification succeeds
+- [ ] Fallback: If auto-setup fails, show step-by-step guided instructions with clipboard-ready commands
+- [ ] `RecallFlow: Refresh Bridge Dependencies` pauses background ingestion, rebuilds the managed `.venv`, re-runs verification, writes `.cognee/bridge-version.json`, and provides actionable guidance when the workspace uses an external interpreter
+- [ ] Activation compares the recorded `requirementsHash` with the extension’s pinned requirements and forces users through the refresh flow whenever they diverge
+- [ ] Status bar shows Python environment health (ready, refreshing, missing dependencies)
+- [ ] Works across Windows, macOS, Linux without platform-specific manual steps
+
+**Constraints**:
+
+- Must respect existing .venv if present (don't override user's environment)
+- Auto-install must use workspace-local .venv, not global site-packages
+- Should validate Python version compatibility (3.8+ required)
+
+**Status Notes**:
+
+- 2025-11-23: **MOVED TO v0.3.8**. See Epic 0.3.8.4 in Release v0.3.8 section for active status.
+- 2025-11-23: **ARCHITECTURE UPDATE** - Section §4.6 now defines RecallFlowSetupService (managed `.venv`, `.cognee/bridge-env.json`, onboarding walkthrough) plus the Refresh Bridge Dependencies command. Epic 0.3.8.4 owns delivering those UX surfaces and enforcement hooks so later releases can trust pinned `cognee` versions per workspace.
+- 2025-11-17: **PROPOSED** - Will be addressed by Plan 017 (separate from Plan 013). Requires platform-specific venv creation, subprocess orchestration, cross-platform testing.
+- 2025-11-16: Epic created based on Plan 007 review. Plan 007 delivered auto-detection of .venv and enhanced error messages, but setup remains manual. SETUP.md requires users to run terminal commands before extension works. This creates multi-step onboarding friction that loses users.
 
 ---
 
@@ -760,6 +891,14 @@ So that I can see how topics, plans, and decisions connect over time.
 
 ## Backlog / Future Consideration
 
+
+### Epic: Local LLM Inference Optimization
+
+**User Story**: As a user with privacy/cost concerns, I want to use local LLMs (e.g., Nvidia Nemotron Nano) for memory operations, so that I don't rely on external APIs.
+
+**Priority**: P3
+**Status**: Future consideration
+**Dependencies**: Requires investigation into local inference performance and resource usage.
 
 ### Epic: Team Context Sharing
 

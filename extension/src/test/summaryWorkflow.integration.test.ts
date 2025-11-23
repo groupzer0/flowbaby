@@ -160,7 +160,7 @@ Nov 18 10:00-11:30`;
         sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'ingest').resolves(true);
         ingestSummaryStub = sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'ingestSummary').resolves(true);
 
-        await activate({ subscriptions: [] } as any);
+        await activate({ subscriptions: [], extensionPath: '/tmp/vscode-cognee-test-ext' } as any);
         assert.ok(handler, 'chat participant handler was not registered');
     });
 

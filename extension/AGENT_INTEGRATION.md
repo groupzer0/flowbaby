@@ -1,4 +1,4 @@
-# Agent Integration Guide
+# Agent Integration Guide: RecallFlow Memory
 <!-- markdownlint-disable MD024 MD031 MD032 MD034 MD040 MD060 -->
 
 **Version**: 1.1  
@@ -9,7 +9,7 @@
 
 ## Overview
 
-The RecallFlow Chat Memory extension (formerly Cognee) provides commands for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured conversation summaries. This enables:
+The RecallFlow Memory extension provides commands for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured conversation summaries. This enables:
 
 - **Agent continuity**: Agents can maintain context across sessions without manual capture
 - **Multi-agent collaboration**: Different agents can share memory via a common knowledge base
@@ -77,12 +77,12 @@ Without this, ingestion will fail with error code `MISSING_API_KEY`.
 
 ## Ingesting Memories from Agents
 
-### Command: `cogneeMemory.ingestForAgent`
+### Command: `recallflowMemory.ingestForAgent`
 
 **Signature**: `(requestJson: string) => Promise<string>`
 
-- **Input**: JSON string containing `CogneeIngestRequest` payload
-- **Output**: JSON string containing `CogneeIngestResponse` result
+- **Input**: JSON string containing `RecallFlowIngestRequest` payload
+- **Output**: JSON string containing `RecallFlowIngestResponse` result
 
 ### TypeScript Example (Minimal)
 
@@ -102,7 +102,7 @@ const payload = {
 
 try {
   const responseJson = await vscode.commands.executeCommand<string>(
-    'cogneeMemory.ingestForAgent',
+    'recallflowMemory.ingestForAgent',
     JSON.stringify(payload)
   );
   
@@ -138,7 +138,7 @@ const payload = {
   rationale: [
     "Commands are accessible to Copilot agents",
     "VS Code doesn't expose caller identity",
-    "Cognee 0.3.4 doesn't expose DataPoint class"
+    "RecallFlow 0.3.8 doesn't expose DataPoint class"
   ],
   openQuestions: [
     "Should topic_id be hash-based or UUID?",
@@ -166,7 +166,7 @@ const payload = {
 };
 
 const responseJson = await vscode.commands.executeCommand<string>(
-  'cogneeMemory.ingestForAgent',
+  'recallflowMemory.ingestForAgent',
   JSON.stringify(payload)
 );
 
@@ -218,8 +218,8 @@ if (!response.success) {
 | `MISSING_API_KEY` | `LLM_API_KEY` not in workspace `.env` | Add API key to `.env` file |
 | `INVALID_WORKSPACE_PATH` | Workspace path invalid or inaccessible | Verify workspace exists |
 | `BRIDGE_TIMEOUT` | Python bridge exceeded timeout | Retry; check bridge logs |
-| `COGNEE_ERROR` | Cognee library threw exception | Check Output channel for details |
-| `429_COGNIFY_BACKLOG` | Background queue full (5 operations max) | Wait 30-60s for queue to clear, then retry |
+| `RECALLFLOW_ERROR` | RecallFlow library threw exception | Check Output channel for details |
+| `429_RECALLFLOW_BACKLOG` | Background queue full (5 operations max) | Wait 30-60s for queue to clear, then retry |
 
 ---
 
@@ -227,7 +227,7 @@ if (!response.success) {
 
 ### Overview
 
-Starting in v0.3.3, the `cogneeMemory.ingestForAgent` command operates **asynchronously** to prevent blocking agent workflows. Previously, ingestion took 60-90 seconds and blocked the agent until completion. With async mode:
+Starting in v0.3.3, the `recallflowMemory.ingestForAgent` command operates **asynchronously** to prevent blocking agent workflows. Previously, ingestion took 60-90 seconds and blocked the agent until completion. With async mode:
 
 - **Agent response**: <10 seconds (returns after data staging)
 - **Background processing**: 60-90 seconds (knowledge graph construction)
@@ -237,8 +237,8 @@ Starting in v0.3.3, the `cogneeMemory.ingestForAgent` command operates **asynchr
 
 **Ingestion Flow Timeline**:
 1. **0-5s**: Extension receives `ingestForAgent` command
-2. **5-10s**: Python bridge stages data (`cognee.add()`), command returns `success`
-3. **10-100s**: Background subprocess builds knowledge graph (`cognee.cognify()`)
+2. **5-10s**: Python bridge stages data (`recallflow.add()`), command returns `success`
+3. **10-100s**: Background subprocess builds knowledge graph (`recallflow.cognify()`)
 4. **100s**: User receives notification (success or failure toast)
 
 **What This Means for Agents**:
@@ -249,10 +249,10 @@ Starting in v0.3.3, the `cogneeMemory.ingestForAgent` command operates **asynchr
 
 ### Response Fields for Async Mode
 
-The `CogneeIngestResponse` includes fields to indicate async processing:
+The `RecallFlowIngestResponse` includes fields to indicate async processing:
 
 ```typescript
-interface CogneeIngestResponse {
+interface RecallFlowIngestResponse {
   success: boolean;
   staged?: boolean;           // true if background processing queued
   operationId?: string;        // UUID for tracking background operation
@@ -280,7 +280,7 @@ To query the status of a background operation:
 
 ```typescript
 const statusJson = await vscode.commands.executeCommand<string>(
-  'cogneeMemory.backgroundStatus',
+  'recallflowMemory.backgroundStatus',
   operationId // optional: specific operation, or omit for all
 );
 
@@ -289,7 +289,7 @@ console.log(`Operation ${operationId}: ${status.status}`);
 // status: 'pending' | 'running' | 'completed' | 'failed' | 'terminated' | 'unknown'
 ```
 
-### Handling 429_COGNIFY_BACKLOG
+### Handling 429_RECALLFLOW_BACKLOG
 
 Async mode enforces concurrency limits to prevent resource exhaustion:
 - **Max concurrent**: 2 cognify() processes running simultaneously
@@ -301,7 +301,7 @@ When capacity is exceeded, `ingestForAgent` returns an error:
 ```json
 {
   "success": false,
-  "errorCode": "429_COGNIFY_BACKLOG",
+  "errorCode": "429_RECALLFLOW_BACKLOG",
   "error": "Background queue full (5 operations max). Wait 30-60s and retry."
 }
 ```
@@ -310,7 +310,7 @@ When capacity is exceeded, `ingestForAgent` returns an error:
 ```typescript
 const response = JSON.parse(responseJson);
 
-if (response.errorCode === '429_COGNIFY_BACKLOG') {
+if (response.errorCode === '429_RECALLFLOW_BACKLOG') {
   // Option 1: Inform user and defer ingestion
   vscode.window.showWarningMessage(
     'Memory storage queue full. Capturing conversation later when capacity available.'
@@ -366,7 +366,7 @@ if (response.errorCode === '429_COGNIFY_BACKLOG') {
 
 ### Overview
 
-RecallFlow Chat Memory provides two **Language Model Tools** that appear in VS Code's "Configure Tools" dialog:
+RecallFlow Memory provides two **Language Model Tools** that appear in VS Code's "Configure Tools" dialog:
 
 1. **recallflow_storeMemory** (`#recallflowStoreSummary`) - Store conversation summaries
 2. **recallflow_retrieveMemory** (`#recallflowRetrieveMemory`) - Retrieve relevant memories
@@ -549,7 +549,7 @@ Both tools register at extension activation. VS Code manages tool enablement thr
 
 ### Rate Limits and Throttling
 
-- **Retrieval concurrency**: `CogneeContextProvider` executes up to **2** retrievals at once (user setting can lower this; any value above 5 is clamped). Additional requests queue up to 5 deep before being rejected.
+- **Retrieval concurrency**: `RecallFlowContextProvider` executes up to **2** retrievals at once (user setting can lower this; any value above 5 is clamped). Additional requests queue up to 5 deep before being rejected.
 - **Requests per minute**: By default only **10** retrievals may start per 60-second window. Raising the workspace setting above 30 still clamps at **30/min** to stay within architectural guarantees.
 - **Ingestion backlog**: Async ingestion shares the same 2-active / 3-queued limits via `BackgroundOperationManager`. When the queue fills, `ingestForAgent` returns `429_COGNIFY_BACKLOG` without staging the summary.
 
@@ -557,12 +557,12 @@ Both retrieval and ingestion communicate throttling with HTTP-style 429 messages
 
 | Surface | Error Code | When it fires | Recommended agent behavior |
 |---------|------------|---------------|----------------------------|
-| Retrieval | `RATE_LIMIT_EXCEEDED` *(surfaced as `429_AGENT_THROTTLED`)* | More than `cogneeMemory.agentAccess.rateLimitPerMinute` requests in last 60s | Wait 2s, retry; increase delay exponentially up to ~15s on repeated 429s |
+| Retrieval | `RATE_LIMIT_EXCEEDED` *(surfaced as `429_AGENT_THROTTLED`)* | More than `recallflowMemory.agentAccess.rateLimitPerMinute` requests in last 60s | Wait 2s, retry; increase delay exponentially up to ~15s on repeated 429s |
 | Retrieval | `QUEUE_FULL` *(also surfaced as `429_AGENT_THROTTLED`)* | >2 concurrent requests and 5 queued | Inform user queue is saturated, then retry with exponential backoff |
-| Ingestion | `429_COGNIFY_BACKLOG` | 2 background `cognify()` jobs + 3 queued (max 5) | Offer to retry later or skip low-priority summary |
+| Ingestion | `429_RECALLFLOW_BACKLOG` | 2 background `cognify()` jobs + 3 queued (max 5) | Offer to retry later or skip low-priority summary |
 
 ```typescript
-async function safeRetrieve(request: CogneeContextRequest) {
+async function safeRetrieve(request: RecallFlowContextRequest) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const response = await provider.retrieveContext(request);
     if (!('error' in response)) {
@@ -604,12 +604,12 @@ When agents use RecallFlow tools, you see:
 
 ## Retrieving Memories for Agents
 
-### Command: `cogneeMemory.retrieveForAgent`
+### Command: `recallflowMemory.retrieveForAgent`
 
 **Signature**: `(requestJson: string) => Promise<string>`
 
-- **Input**: JSON string containing `CogneeContextRequest` payload
-- **Output**: JSON string containing `CogneeContextResponse` or `AgentErrorResponse`
+- **Input**: JSON string containing `RecallFlowContextRequest` payload
+- **Output**: JSON string containing `RecallFlowContextResponse` or `AgentErrorResponse`
 
 ### TypeScript Example
 
@@ -624,7 +624,7 @@ const request = {
 
 try {
   const responseJson = await vscode.commands.executeCommand<string>(
-    'cogneeMemory.retrieveForAgent',
+    'recallflowMemory.retrieveForAgent',
     JSON.stringify(request)
   );
   
@@ -673,10 +673,10 @@ try {
 
 ## Schema Reference
 
-### CogneeIngestRequest
+### RecallFlowIngestRequest
 
 ```typescript
-interface CogneeIngestRequest {
+interface RecallFlowIngestRequest {
   // Required fields
   topic: string;                    // Summary title
   context: string;                  // Summary description
@@ -709,10 +709,10 @@ interface SummaryMetadata {
 }
 ```
 
-### CogneeIngestResponse
+### RecallFlowIngestResponse
 
 ```typescript
-interface CogneeIngestResponse {
+interface RecallFlowIngestResponse {
   success: boolean;
 
   // On success
@@ -735,10 +735,10 @@ interface CogneeIngestResponse {
 }
 ```
 
-### CogneeContextRequest
+### RecallFlowContextRequest
 
 ```typescript
-interface CogneeContextRequest {
+interface RecallFlowContextRequest {
   // Required fields
   query: string;                    // Natural language search query
 
@@ -751,14 +751,14 @@ interface CogneeContextRequest {
 }
 ```
 
-### CogneeContextResponse
+### RecallFlowContextResponse
 
 ```typescript
-interface CogneeContextResponse {
+interface RecallFlowContextResponse {
   success: boolean;
 
   // On success
-  entries: CogneeMemoryEntry[];
+  entries: RecallFlowMemoryEntry[];
   totalResults: number;
   tokensUsed: number;
 
@@ -767,7 +767,7 @@ interface CogneeContextResponse {
   errorCode?: string;               // Error code
 }
 
-interface CogneeMemoryEntry {
+interface RecallFlowMemoryEntry {
   summaryText: string;              // Summary text
   topic?: string;                   // Topic (optional)
   topicId?: string;                 // Topic ID (optional)
@@ -878,7 +878,7 @@ export async function testIngestion() {
   };
 
   const responseJson = await vscode.commands.executeCommand<string>(
-    'cogneeMemory.ingestForAgent',
+    'recallflowMemory.ingestForAgent',
     JSON.stringify(payload)
   );
 
@@ -919,11 +919,11 @@ Expected output:
 
 **Issue**: `vscode.commands.executeCommand` throws "command not found"
 
-**Solution**: Verify RecallFlow Chat Memory extension is installed and activated
+**Solution**: Verify RecallFlow Memory extension is installed and activated
 ```typescript
 const extension = vscode.extensions.getExtension('cognee.cognee-chat-memory');
 if (!extension) {
-  throw new Error('RecallFlow Chat Memory extension not installed');
+  throw new Error('RecallFlow Memory extension not installed');
 }
 await extension.activate();
 ```
@@ -958,7 +958,7 @@ if (response.errorCode === 'INVALID_PAYLOAD') {
 **Solution**:
 1. Check if LLM API key is valid
 2. Check network connectivity
-3. Verify Cognee installation: `pip list | grep cognee`
+3. Verify RecallFlow installation: `pip list | grep cognee`
 4. Check bridge logs in Output channel
 
 ---
@@ -990,7 +990,7 @@ if (!validation.valid) {
 
 // Validation passed; proceed with command
 const responseJson = await vscode.commands.executeCommand<string>(
-  'cogneeMemory.ingestForAgent',
+  'recallflowMemory.ingestForAgent',
   JSON.stringify(payload)
 );
 ```

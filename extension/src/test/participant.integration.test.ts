@@ -98,7 +98,7 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
         retrieveStub = sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'retrieve');
         ingestStub = sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'ingest').resolves(true);
 
-        await activate({ subscriptions: [] } as any);
+        await activate({ subscriptions: [], extensionPath: '/tmp/vscode-cognee-test-ext' } as any);
         assert.ok(handler, 'chat participant handler was not registered');
     });
 

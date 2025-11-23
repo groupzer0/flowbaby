@@ -1,21 +1,21 @@
-# Cognee Project
+# RecallFlow Project (formerly Cognee)
 
-This repository contains both a **Cognee learning tutorial** and a **VS Code extension** for automatic chat memory integration with GitHub Copilot.
+This repository contains both a **RecallFlow learning tutorial** and a **VS Code extension** for automatic chat memory integration with GitHub Copilot.
 
 ## Contents
 
 ### 📚 Tutorial (Learning Materials)
-Interactive examples demonstrating Cognee's knowledge graph capabilities. Perfect for understanding how Cognee works before diving into the extension.
+Interactive examples demonstrating RecallFlow's knowledge graph capabilities. Perfect for understanding how RecallFlow works before diving into the extension.
 
 **Location**: [`tutorial/`](tutorial/)  
 **See**: [Tutorial README](tutorial/README.md) for setup and usage
 
 ### 🔌 Extension (VS Code Integration)
-A VS Code extension that automatically captures GitHub Copilot chat conversations and retrieves relevant context from Cognee memory.
+A VS Code extension that automatically captures GitHub Copilot chat conversations and retrieves relevant context from RecallFlow memory.
 
 **Location**: [`extension/`](extension/)  
 **See**: [Extension README](extension/README.md) for installation and configuration  
-**Status**: v0.1.0 Released - [Download VSIX](https://github.com/lsalsich/cognee/releases)  
+**Status**: v0.3.8 Released - [Download VSIX](https://github.com/lsalsich/cognee/releases)  
 **Features**: Automatic memory capture, context retrieval, workspace isolation, hybrid search, custom ontology
 
 ## Prerequisites
@@ -23,17 +23,17 @@ A VS Code extension that automatically captures GitHub Copilot chat conversation
 - **Python 3.8+** with pip
 - **Node.js 18+** with npm (for extension development)
 - **VS Code 1.85+** (for extension usage)
-- **OpenAI API key** (required for Cognee operations)
+- **LLM API key** (required for RecallFlow operations)
 
 ## Quick Start
 
-### Option 1: Learn Cognee (Tutorial)
+### Option 1: Learn RecallFlow (Tutorial)
 ```bash
 cd tutorial/
 python3 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env  # Add your OpenAI API key
+cp .env.example .env  # Add your LLM API key
 python examples/cognee_walkthrough.py
 ```
 
@@ -47,7 +47,7 @@ python examples/cognee_walkthrough.py
 
 ```
 cognee/
-├── tutorial/              # Cognee learning materials
+├── tutorial/              # RecallFlow learning materials
 │   ├── examples/          # Walkthrough scripts
 │   ├── data/              # Sample data files
 │   ├── artifacts/         # Generated visualizations
@@ -62,7 +62,7 @@ cognee/
 
 ## Development Workflow
 
-1. **Start with Tutorial**: Learn Cognee basics by running `tutorial/examples/cognee_walkthrough.py`
+1. **Start with Tutorial**: Learn RecallFlow basics by running `tutorial/examples/cognee_walkthrough.py`
 2. **Review Plan 002**: Read [Planning/002-automatic-context-retrieval.md](Planning/002-automatic-context-retrieval.md) for extension design
 3. **Develop Extension**: Follow extension README for development setup
 4. **Test Integration**: Use extension with real GitHub Copilot chats
@@ -75,7 +75,7 @@ cognee/
 - [Extension CHANGELOG](extension/CHANGELOG.md) - Version history and release notes
 - [Extension Distribution Guide](extension/DISTRIBUTION.md) - Release and packaging process
 - [Planning Documents](planning/) - Implementation plans and architecture decisions
-- [Official Cognee Docs](https://docs.cognee.ai)
+- [Official RecallFlow Docs](https://docs.cognee.ai)
 
 ## License
 

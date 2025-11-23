@@ -38,6 +38,7 @@ test-output.txt
 *.backup
 *_old.py
 *.sha256
+prior-releases/**
 
 # Git files
 .git/**
