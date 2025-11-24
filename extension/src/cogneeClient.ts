@@ -60,6 +60,7 @@ export class CogneeClient {
     private readonly bridgePath: string;
     private readonly maxContextResults: number;
     private readonly maxContextTokens: number;
+    private readonly searchTopK: number;
     private readonly rankingHalfLifeDays: number;
     private readonly logLevel: LogLevel;
     private readonly outputChannel: vscode.OutputChannel;
@@ -76,7 +77,8 @@ export class CogneeClient {
         // Load configuration from VS Code settings
         const config = vscode.workspace.getConfiguration('cogneeMemory');
         this.maxContextResults = config.get<number>('maxContextResults', 3);
-        this.maxContextTokens = config.get<number>('maxContextTokens', 2000);
+        this.maxContextTokens = config.get<number>('maxContextTokens', 32000);
+        this.searchTopK = config.get<number>('searchTopK', 10);
         const rankingConfig = vscode.workspace.getConfiguration('cogneeMemory.ranking');
         const halfLifeSetting = rankingConfig.get<number>('halfLifeDays', 7);
         this.rankingHalfLifeDays = this.clampHalfLifeDays(halfLifeSetting);
@@ -106,6 +108,7 @@ export class CogneeClient {
             pythonSource: detectionSource,
             maxContextResults: this.maxContextResults,
             maxContextTokens: this.maxContextTokens,
+            searchTopK: this.searchTopK,
             rankingHalfLifeDays: this.rankingHalfLifeDays,
             bridgePath: this.bridgePath
         });
@@ -770,12 +773,14 @@ export class CogneeClient {
         const maxTokens = options?.maxTokens ?? this.maxContextTokens;
         const halfLifeDays = this.clampHalfLifeDays(options?.halfLifeDays ?? this.rankingHalfLifeDays);
         const includeSuperseded = options?.includeSuperseded ?? false;
+        const searchTopK = this.searchTopK;
 
         this.log('DEBUG', 'Retrieving context', {
             query_length: query.length,
             query_preview: query.length > 200 ? query.substring(0, 200) + `... (${query.length} chars total)` : query,
             max_results: maxResults,
             max_tokens: maxTokens,
+            search_top_k: searchTopK,
             half_life_days: halfLifeDays,
             include_superseded: includeSuperseded
         });
@@ -788,7 +793,8 @@ export class CogneeClient {
                 maxResults.toString(),
                 maxTokens.toString(),
                 halfLifeDays.toString(),
-                includeSuperseded ? 'true' : 'false'
+                includeSuperseded ? 'true' : 'false',
+                searchTopK.toString()
             ], 15000);
 
             const duration = Date.now() - startTime;

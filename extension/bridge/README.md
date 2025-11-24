@@ -198,7 +198,7 @@ python ingest.py <workspace_path> <user_message> <assistant_message> [importance
 **Usage**:
 
 ```bash
-python retrieve.py <workspace_path> <query> [max_results] [max_tokens] [half_life_days] [include_superseded]
+python retrieve.py <workspace_path> <query> [max_results] [max_tokens] [half_life_days] [include_superseded] [top_k]
 ```
 
 **Arguments**:
@@ -206,15 +206,16 @@ python retrieve.py <workspace_path> <query> [max_results] [max_tokens] [half_lif
 - `workspace_path`: Absolute path to workspace root
 - `query`: Search query string (user's question or topic)
 - `max_results`: (Optional) Maximum number of results, defaults to 3 (clamped 1-50)
-- `max_tokens`: (Optional) Maximum total tokens across results, defaults to 2000 (minimum 100)
+- `max_tokens`: (Optional) Maximum total tokens across results, defaults to 2000 (clamped to 100-100000)
 - `half_life_days`: (Optional) Recency half-life (days) controlling decay rate, defaults to 7 (clamped 0.5-90)
 - `include_superseded`: (Optional) Whether to include Superseded summaries (`true`/`false`), defaults to `false`
+- `top_k`: (Optional) Number of candidates to request from the RecallFlow search engine before ranking. If omitted, defaults to `max_results * 3`. The effective value is always normalized to be at least `max_results` and hard-clamped to 100.
 
 **Behavior**:
 
 1. Loads `.env` and configures Cognee
 
-1. Executes hybrid search:
+1. Executes hybrid search (with normalized and clamped `top_k`):
 
    ```python
    cognee.search(

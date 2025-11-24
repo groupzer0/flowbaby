@@ -2,7 +2,7 @@
   "name": "cognee-chat-memory",
   "displayName": "RecallFlow Chat Memory",
   "description": "Automatic memory for GitHub Copilot chat using RecallFlow knowledge graphs",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "publisher": "recallflow",
   "icon": "media/icon.png",
   "engines": {
@@ -237,10 +237,17 @@
         },
         "cogneeMemory.maxContextTokens": {
           "type": "number",
-          "default": 2000,
+          "default": 32000,
           "minimum": 100,
-          "maximum": 10000,
-          "description": "Maximum token budget for retrieved context"
+          "maximum": 100000,
+          "description": "Maximum token budget for retrieved context (higher values may increase latency and memory usage; hard-clamped to 100k in the bridge)"
+        },
+        "cogneeMemory.searchTopK": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Maximum number of candidates to request from the RecallFlow search engine before ranking. Values are normalized so they are never lower than maxContextResults and are hard-clamped to 100 in the bridge."
         },
         "cogneeMemory.ranking.halfLifeDays": {
           "type": "number",

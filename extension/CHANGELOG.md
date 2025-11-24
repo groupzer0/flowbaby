@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.3.13] - 2025-11-24
+
+### Added - Plan 024: Configurable Search Parameters
+
+- **Configurable Search Depth (`searchTopK`)**: Added new `cogneeMemory.searchTopK` setting (default 10, range 1–100) to control how many candidates the RecallFlow search engine returns before ranking.
+- **Higher Context Token Budget**: Increased `cogneeMemory.maxContextTokens` default from 2000 to 32000 and maximum to 100000 to better support large-context models.
+- **Bridge Safeguards**: `retrieve.py` now clamps `max_tokens` into the [100, 100000] window, normalizes `top_k` so it is never lower than `max_results`, and hard-clamps `top_k` to 100 to prevent runaway latency.
+- **Normalization & Logging**: When a user-provided `top_k` is raised to meet `max_results` or clamped to the ceiling, the bridge logs a structured warning with both requested and effective values for easier debugging.
+- **Client Logging & Truncation**: `CogneeClient` logs the configured `searchTopK` value on each retrieval and passes it through to the bridge. Output-channel payloads remain truncated to keep the VS Code UI responsive.
+
 ## [0.3.12] - 2025-11-24
 
 ### Fixed - Plan 022: Retrieval Filtering and Truncation

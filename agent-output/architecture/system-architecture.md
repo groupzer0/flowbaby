@@ -28,6 +28,8 @@
 | 2025-11-22 09:40 | Documented RecallFlow user-facing branding shift + background log capture surfacing | Keep UX terminology consistent while exposing new ingest log diagnostics | Plan 019 |
 | 2025-11-23 10:35 | Defined managed workspace setup + automated bridge dependency refresh contract | Ensure installs/upgrades pin `cognee` versions per workspace and provide deterministic refresh workflow | Plan 017 / Epic 0.4.0.2 |
 | 2025-11-24 14:20 | Clarified retrieval filtering for synthesized-answer sentinel (score 0.0) | Align Epic 0.3.8.3 zero-hallucination mandate with Plan 021 bug fix | Plan 021 |
+| 2025-11-24 16:05 | Documented retrieval token/top_k configuration limits and safeguards | Guide Plan 024 configuration changes | Plan 024 |
+| 2025-11-24 18:05 | Verified Plan 024 revisions include required safeguards; no new architectural changes needed | Record final approval context for planners/critics | Plan 024 |
 
 
 ## 1. Purpose and Scope
@@ -84,6 +86,7 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 - Offers a **Refresh Bridge Dependencies** command that pauses BackgroundOperationManager, rebuilds the managed `.venv` with the pinned `requirements.txt`, reruns `verify_environment.py`, writes `.cognee/bridge-version.json` (`requirementsHash`, `cogneeVersion`, `updatedAt`), and only resumes capture/retrieval once hashes match. Workspaces marked `ownership="external"` receive guidance instead of automation to avoid touching user-managed interpreters.
 - Provides a unified validation/auditing pipeline: every agent command invocation is logged (timestamp, workspace, caller hint) and rejected unless workspace access is enabled. Future capability tokens can plug into this layer without touching bridge scripts.
 - Logs every agent-initiated retrieval to the Output channel and structured diagnostics to satisfy transparency requirements from Plans 013/016.
+- Exposes retrieval tuning knobs through workspace settings: `cogneeMemory.maxContextResults` (1–10), `cogneeMemory.maxContextTokens` (defaults to 32 k, capped at 100 k), and the newly planned `cogneeMemory.searchTopK` (defaults to 10, capped at 100). `CogneeClient` logs the effective values on each call so oversized budgets or shallow searches can be diagnosed quickly, and UI surfaces must truncate previews once the returned payload exceeds 8 k characters to keep Output traffic manageable.
 - Implements the Plan 014 summary template + parser helpers so TypeScript can (a) render structured markdown with embedded metadata for ingestion and (b) validate/round-trip summaries when RecallFlow DataPoints (exposed via the `cognee` SDK) are unavailable.
 
 ### 3.2 Bridge Execution Layer (Python)
@@ -93,6 +96,7 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 - Maintains ontology assets (currently `ontology.ttl`) and dataset naming strategy.
 - Handles Terraform-style migration markers to coordinate one-time pruning.
 - Emits JSON envelopes for success/error, plus structured stderr for diagnostics.
+- `retrieve.py` normalizes retrieval limits: it clamps `max_tokens` to the 100–100 k window, enforces `top_k >= max_results` (while respecting the user-configured `searchTopK` and capping it at 100), and logs whenever inputs are clamped so QA can correlate retrieval latency with configuration.
 - `ingest.py` now supports explicit modes: `sync` (legacy fallback / tests), `add-only` (stage data, return immediately), and `cognify-only` (background graph construction). All UI/agent flows call `add-only`, then spawn a detached `cognify-only` subprocess identified by `operation_id`. Manual capture no longer waits for `sync`; it shares the same async orchestration contract and relies on toast notifications for completion. Each invocation writes a status stub to `.cognee/background_ops/<operation_id>.json` so TypeScript can correlate exit codes with persisted entries.
 - Implements the enriched-text fallback for Plan 014 summaries: `ingest.py` accepts `--summary-json`, renders metadata-rich markdown, and `retrieve.py` parses metadata via regex before producing structured JSON. Bridge unit tests MUST cover both enriched and legacy text paths until the RecallFlow SDK (`cognee`) exposes DataPoint APIs. These scripts are the only sanctioned entry points for agents; `retrieveForAgent` and `ingestForAgent` commands ultimately call them so ontology wiring and dataset isolation remain consistent.
 

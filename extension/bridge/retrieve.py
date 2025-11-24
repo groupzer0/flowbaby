@@ -2,7 +2,7 @@
 """
 Cognee Context Retrieval Script for VS Code Extension
 
-Usage: python retrieve.py <workspace_path> <query> [max_results] [max_tokens] [half_life_days] [include_superseded]
+Usage: python retrieve.py <workspace_path> <query> [max_results] [max_tokens] [half_life_days] [include_superseded] [top_k]
 
 Retrieves relevant context from Cognee using hybrid graph-vector search with workspace isolation:
 1. Loads API key from workspace .env
@@ -225,7 +225,8 @@ async def retrieve_context(
     max_results: int = 3,
     max_tokens: int = 2000,
     half_life_days: float = 7.0,
-    include_superseded: bool = False
+    include_superseded: bool = False,
+    top_k: int | None = None
 ) -> dict:
     """Retrieve relevant context with recency-aware, status-aware scoring."""
     
@@ -234,15 +235,24 @@ async def retrieve_context(
     
     try:
         max_results = max(1, min(50, int(max_results)))
-        max_tokens = max(100, int(max_tokens))
+        # Clamp max_tokens into architectural window [100, 100000]
+        max_tokens = max(100, min(100_000, int(max_tokens)))
         half_life_days = clamp_half_life_days(half_life_days)
+
+        # Normalize and clamp top_k: never below max_results, capped at 100
+        user_top_k = int(top_k) if top_k is not None else max_results * 3
+        normalized_top_k = max(user_top_k, max_results)
+        final_top_k = min(normalized_top_k, 100)
 
         logger.info(f"Starting retrieval", extra={'data': {
             'query_preview': f"{query[:50]}...",
             'max_results': max_results,
             'max_tokens': max_tokens,
             'half_life_days': half_life_days,
-            'include_superseded': include_superseded
+            'include_superseded': include_superseded,
+            'user_top_k': user_top_k,
+            'normalized_top_k': normalized_top_k,
+            'final_top_k': final_top_k
         }})
         
         # Load workspace .env file
@@ -289,10 +299,17 @@ async def retrieve_context(
         
         # 2. Search within this workspace's dataset only
         # Note: If no data has been ingested yet, search will return empty results
-        search_top_k = max(max_results * 3, max_results)
+        if user_top_k != final_top_k:
+            logger.warning("Adjusted top_k to satisfy normalization/clamping rules", extra={'data': {
+                'requested_top_k': user_top_k,
+                'normalized_top_k': normalized_top_k,
+                'final_top_k': final_top_k,
+                'max_results': max_results
+            }})
+
         logger.info(f"Executing Cognee search", extra={'data': {
             'dataset': dataset_name,
-            'top_k': search_top_k
+            'top_k': final_top_k
         }})
         
         try:
@@ -300,7 +317,7 @@ async def retrieve_context(
                 query_type=SearchType.GRAPH_COMPLETION,
                 query_text=query,
                 datasets=[dataset_name],  # Filter to this workspace only
-                top_k=search_top_k,
+                top_k=final_top_k,
                 system_prompt=SYSTEM_PROMPT
             )
             logger.info(f"Search completed", extra={'data': {
@@ -587,6 +604,7 @@ def main():
     max_tokens = 2000
     half_life_days = 7.0
     include_superseded = False
+    top_k = None
     
     # Parse optional arguments
     if len(sys.argv) >= 4:
@@ -624,6 +642,17 @@ def main():
     
     if len(sys.argv) >= 7:
         include_superseded = parse_bool_arg(sys.argv[6], default=False)
+
+    if len(sys.argv) >= 8:
+        try:
+            top_k = int(sys.argv[7])
+        except ValueError:
+            result = {
+                'success': False,
+                'error': f'Invalid top_k: {sys.argv[7]} (must be integer)'
+            }
+            print(json.dumps(result))
+            sys.exit(1)
     
     # Validate workspace path
     if not Path(workspace_path).is_dir():
@@ -641,7 +670,8 @@ def main():
         max_results,
         max_tokens,
         half_life_days,
-        include_superseded
+        include_superseded,
+        top_k
     ))
     
     # Output JSON result
