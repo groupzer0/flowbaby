@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as sinon from 'sinon';
+import * as child_process from 'child_process';
+import { EventEmitter } from 'events';
 import mock = require('mock-fs');
 import { CogneeClient } from '../cogneeClient';
 
@@ -810,6 +812,152 @@ suite('CogneeClient Test Suite', () => {
             assert.ok(failureCall, 'Failure log missing');
             assert.strictEqual(failureCall!.args[2].topic, 'Invalid Summary');
             assert.match(failureCall!.args[2].error as string, /Failed to parse summary metadata/);
+        });
+    });
+
+    suite('Plan 022: Retrieval Filtering and Truncation', () => {
+        const workspacePath = '/tmp/test-workspace-plan022';
+        let sandbox: sinon.SinonSandbox;
+
+        function stubSharedDependencies() {
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: (_key: string, defaultValue?: any) => defaultValue
+            } as vscode.WorkspaceConfiguration);
+            sandbox.stub(vscode.window, 'createOutputChannel').returns({
+                name: 'Cognee Memory',
+                appendLine: () => void 0,
+                append: () => void 0,
+                replace: () => void 0,
+                clear: () => void 0,
+                dispose: () => void 0,
+                hide: () => void 0,
+                show: () => void 0
+            } as unknown as vscode.LogOutputChannel);
+        }
+
+        setup(() => {
+            sandbox = sinon.createSandbox();
+        });
+
+        teardown(() => {
+            sandbox.restore();
+        });
+
+        test('retrieve logs filtered_count from bridge', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+
+            const mockProcess = new EventEmitter() as any;
+            mockProcess.stdout = new EventEmitter();
+            mockProcess.stderr = new EventEmitter();
+            mockProcess.kill = sandbox.stub();
+            
+            // Stub protected spawnProcess method
+            sandbox.stub(client as any, 'spawnProcess').returns(mockProcess);
+
+            const retrievePromise = client.retrieve('test query');
+
+            // Simulate bridge output
+            const result = {
+                success: true,
+                results: [],
+                result_count: 0,
+                filtered_count: 5,
+                total_tokens: 100
+            };
+            
+            // Emit data asynchronously to simulate process
+            setTimeout(() => {
+                mockProcess.stdout.emit('data', JSON.stringify(result));
+                mockProcess.emit('close', 0);
+            }, 10);
+
+            await retrievePromise;
+
+            // Verify log call contains filtered_count
+            const successCall = logStub.getCalls().find((call) => call.args[1] === 'Context retrieved');
+            assert.ok(successCall, 'Should log "Context retrieved"');
+            assert.strictEqual(successCall!.args[2].filtered_count, 5, 'Log should include filtered_count: 5');
+        });
+
+        test('runPythonScript handles large buffer (1MB limit)', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+
+            const mockProcess = new EventEmitter() as any;
+            mockProcess.stdout = new EventEmitter();
+            mockProcess.stderr = new EventEmitter();
+            mockProcess.kill = sandbox.stub();
+            
+            // Stub protected spawnProcess method
+            sandbox.stub(client as any, 'spawnProcess').returns(mockProcess);
+
+            // Access private method via casting to any
+            const runScriptPromise = (client as any).runPythonScript('test.py', []);
+
+            // Emit 1.5MB of data
+            // We emit in chunks
+            const chunk = 'a'.repeat(1024 * 100); // 100KB
+            
+            setTimeout(() => {
+                for (let i = 0; i < 15; i++) {
+                    mockProcess.stdout.emit('data', chunk);
+                }
+                mockProcess.emit('close', 0);
+            }, 10);
+
+            try {
+                await runScriptPromise;
+                assert.fail('Should have failed due to invalid JSON (truncated)');
+            } catch (error: any) {
+                assert.ok(error.message.includes('Failed to parse JSON'), 'Should fail to parse truncated JSON');
+            }
+            
+            // Verify log shows JSON parse failure
+            const errorCall = logStub.getCalls().find((call) => call.args[1] === 'JSON parse failed');
+            assert.ok(errorCall, 'Should log JSON parse failure');
+            
+            // Check that stdout_preview is present and truncated to 1024 chars (by sanitizeOutput)
+            assert.ok(errorCall!.args[2].stdout_preview, 'Should have stdout_preview');
+        });
+
+        test('runPythonScript captures stderr on JSON parse failure', async () => {
+            stubSharedDependencies();
+            const client = new CogneeClient(workspacePath);
+            const logStub = sandbox.stub(client as any, 'log');
+
+            const mockProcess = new EventEmitter() as any;
+            mockProcess.stdout = new EventEmitter();
+            mockProcess.stderr = new EventEmitter();
+            mockProcess.kill = sandbox.stub();
+            
+            // Stub protected spawnProcess method
+            sandbox.stub(client as any, 'spawnProcess').returns(mockProcess);
+
+            const runScriptPromise = (client as any).runPythonScript('test.py', []);
+
+            setTimeout(() => {
+                // Emit invalid JSON
+                mockProcess.stdout.emit('data', 'invalid json');
+                
+                // Emit stderr
+                mockProcess.stderr.emit('data', 'Error details in stderr');
+                
+                mockProcess.emit('close', 0);
+            }, 10);
+
+            try {
+                await runScriptPromise;
+                assert.fail('Should have failed');
+            } catch (error: any) {
+                assert.ok(error.message.includes('Failed to parse JSON'));
+            }
+
+            const errorCall = logStub.getCalls().find((call) => call.args[1] === 'JSON parse failed');
+            assert.ok(errorCall, 'Should log JSON parse failure');
+            assert.strictEqual(errorCall!.args[2].stderr_preview, 'Error details in stderr', 'Log should include stderr preview');
         });
     });
 });

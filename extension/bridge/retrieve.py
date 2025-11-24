@@ -461,10 +461,11 @@ async def retrieve_context(
             result_text = result_dict.get('summary_text') or result_dict.get('text') or ''
             
             # Filter out explicit NO_RELEVANT_CONTEXT responses (case-insensitive)
-            if 'no_relevant_context' in result_text.strip().lower():
+            # Plan 022: Use exact match to avoid filtering valid results that mention the phrase
+            if result_text.strip().lower() == 'no_relevant_context':
                 filtered_count += 1
-                filtered_reasons.append(f"NO_RELEVANT_CONTEXT content (id={i})")
-                logger.debug(f"Filtering NO_RELEVANT_CONTEXT response")
+                filtered_reasons.append(f"NO_RELEVANT_CONTEXT sentinel (id={i})")
+                logger.debug(f"Filtering NO_RELEVANT_CONTEXT sentinel")
                 continue
 
             tokens = estimate_tokens(result_text)
@@ -529,6 +530,7 @@ async def retrieve_context(
             'results': selected_results,
             'result_count': len(selected_results),
             'total_results': len(scored_results),
+            'filtered_count': filtered_count,
             'total_tokens': total_tokens,
             'half_life_days': half_life_days,
             'include_superseded': include_superseded

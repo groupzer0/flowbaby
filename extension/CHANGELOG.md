@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.3.12] - 2025-11-24
+
+### Fixed - Plan 022: Retrieval Filtering and Truncation
+
+- **Retrieval Filtering**: Fixed aggressive filtering of "no_relevant_context" responses. The bridge now uses an exact match check instead of a substring match, preventing valid answers that quote the sentinel value from being discarded.
+- **Client Truncation**: Increased `CogneeClient` stdout buffer from 2KB to 1MB. This fixes JSON parse errors when retrieval results exceed the default buffer size.
+- **Error Logging**: Improved error reporting to capture and log both stdout and stderr when JSON parsing fails, aiding in debugging bridge issues.
+- **Telemetry**: Added `filtered_count` to retrieval telemetry to track how many items are filtered by the bridge.
+
 ## [0.3.11] - 2025-11-24
 
 ### Fixed - Plan 021: Retrieval Display for Synthesized Answers

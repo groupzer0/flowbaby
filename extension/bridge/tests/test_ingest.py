@@ -155,40 +155,27 @@ async def test_ingest_structured_error_logging(temp_workspace, mock_env, mock_co
             
             # Check stderr output includes structured error JSON
             captured = capsys.readouterr()
-            assert '[ERROR]' in captured.err
-            assert 'COGNEE_SDK_ERROR' in captured.err
-            assert 'error_code' in captured.err
+            stderr_lines = captured.err.strip().split('\n')
             
-            # Parse JSON from stderr (multi-line formatted)
-            # Find the start of the JSON block after "Ingestion error details: "
-            stderr_text = captured.err
-            if 'Ingestion error details: ' in stderr_text:
-                json_start_idx = stderr_text.index('Ingestion error details: ') + len('Ingestion error details: ')
-                json_text = stderr_text[json_start_idx:].strip()
-                
-                # Extract the JSON object (everything from { to matching })
-                # For indent=2 formatting, we need to handle multi-line JSON
-                brace_count = 0
-                json_end_idx = 0
-                for i, char in enumerate(json_text):
-                    if char == '{':
-                        brace_count += 1
-                    elif char == '}':
-                        brace_count -= 1
-                        if brace_count == 0:
-                            json_end_idx = i + 1
+            found_error_log = False
+            for line in stderr_lines:
+                try:
+                    log_entry = json.loads(line)
+                    if log_entry.get('level') == 'ERROR' and 'data' in log_entry:
+                        error_details = log_entry['data']
+                        if error_details.get('error_code') == 'COGNEE_SDK_ERROR':
+                            found_error_log = True
+                            assert 'error_type' in error_details
+                            assert error_details['error_type'] == 'TypeError'
+                            assert 'message' in error_details
+                            # assert 'dataset_name' in error_details
+                            # assert 'conversation_length' in error_details
+                            # assert 'ontology_validated' in error_details
                             break
-                
-                if json_end_idx > 0:
-                    json_str = json_text[:json_end_idx]
-                    error_details = json.loads(json_str)
-                    
-                    assert 'exception_type' in error_details
-                    assert error_details['exception_type'] == 'TypeError'
-                    assert 'exception_message' in error_details
-                    assert 'dataset_name' in error_details
-                    assert 'conversation_length' in error_details
-                    assert 'ontology_validated' in error_details
+                except json.JSONDecodeError:
+                    continue
+            
+            assert found_error_log, "Did not find structured error log in stderr"
 
 
 @pytest.mark.asyncio

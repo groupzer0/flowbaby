@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 
 /**
  * Result structure from Python bridge scripts
@@ -829,6 +829,7 @@ export class CogneeClient {
                 
                 this.log('INFO', 'Context retrieved', {
                     result_count: result.result_count || 0,
+                    filtered_count: result.filtered_count || 0,
                     enriched_count: enrichedCount,
                     legacy_count: legacyCount,
                     total_tokens: result.total_tokens || 0,
@@ -1034,6 +1035,13 @@ export class CogneeClient {
         }
     }
 
+    /**
+     * Spawn a child process (wrapper for testing)
+     */
+    protected spawnProcess(command: string, args: string[], options: any): ChildProcess {
+        return spawn(command, args, options);
+    }
+
     private async runPythonScript(
         scriptName: string,
         args: string[],
@@ -1058,11 +1066,16 @@ export class CogneeClient {
             // Spawn Python process with workspace as working directory
             // This ensures relative paths in scripts resolve from workspace root
             // Set PYTHONUNBUFFERED=1 to ensure stderr [PROGRESS] markers appear immediately
-            const python = spawn(this.pythonPath, [scriptPath, ...args], {
+            const python = this.spawnProcess(this.pythonPath, [scriptPath, ...args], {
                 cwd: this.workspacePath,
                 env: { ...process.env, PYTHONUNBUFFERED: '1' }
             });
             
+            if (!python.stdout || !python.stderr) {
+                reject(new Error('Failed to spawn Python process: stdout/stderr not available'));
+                return;
+            }
+
             let stdout = '';
             let stderrCaptured = '';
             let stderrBuffer = '';
@@ -1070,9 +1083,9 @@ export class CogneeClient {
             // Collect stdout (with buffer limit to prevent memory bloat)
             python.stdout.on('data', (data) => {
                 stdout += data.toString();
-                // Truncate if exceeding 2KB during collection (streaming truncation)
-                if (stdout.length > 2048) {
-                    stdout = stdout.substring(0, 2048);
+                // Truncate if exceeding 1MB during collection (streaming truncation)
+                if (stdout.length > 1048576) {
+                    stdout = stdout.substring(0, 1048576);
                 }
             });
 
@@ -1081,10 +1094,10 @@ export class CogneeClient {
                 const chunk = data.toString();
                 
                 // 1. Capture for final error reporting (truncated)
-                if (stderrCaptured.length < 2048) {
+                if (stderrCaptured.length < 1048576) {
                     stderrCaptured += chunk;
-                    if (stderrCaptured.length > 2048) {
-                        stderrCaptured = stderrCaptured.substring(0, 2048);
+                    if (stderrCaptured.length > 1048576) {
+                        stderrCaptured = stderrCaptured.substring(0, 1048576);
                     }
                 }
 
@@ -1169,10 +1182,12 @@ export class CogneeClient {
                 } catch (error) {
                     // Sanitize before logging parse failure
                     const sanitizedStdout = this.sanitizeOutput(stdout);
+                    const sanitizedStderr = this.sanitizeOutput(stderrCaptured);
                     
                     this.log('ERROR', 'JSON parse failed', {
                         script: scriptName,
                         stdout_preview: sanitizedStdout,
+                        stderr_preview: sanitizedStderr,
                         error: error instanceof Error ? error.message : String(error)
                     });
                     reject(new Error(`Failed to parse JSON output: ${error}`));
