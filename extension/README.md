@@ -43,18 +43,17 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for developer setup instructions.
 
 After installation, configure your workspace:
 
-### 1. Verify Python and Cognee Installation
+### 1. Initialize Workspace (Automated)
 
-```bash
-python3 --version  # Should be 3.8 or higher
-python3 -c "import cognee; print(cognee.__version__)"  # Should print "0.3.4"
-```
+RecallFlow now manages its own Python environment automatically.
 
-If Cognee is not installed:
-
-```bash
-pip install cognee==0.3.4
-```
+1. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+2. Run **"RecallFlow: Initialize Workspace"**
+3. The extension will:
+   - Check for Python 3.8+
+   - Create a dedicated `.venv` in your workspace
+   - Install `cognee` and dependencies
+   - Verify the environment is ready
 
 ### 2. Configure API Key
 
@@ -71,19 +70,21 @@ export LLM_API_KEY=sk-your-key-here
 code .
 ```
 
-### 3. Open a Workspace
+### 3. Verify Extension Activation
 
-The extension requires a workspace folder (doesn't work in single-file mode). Open any folder in VS Code to create a workspace.
-
-### 4. Verify Extension Activation
-
-1. Open the Output panel: **View → Output**
-2. Select **"RecallFlow Memory"** from the dropdown
-3. You should see **"RecallFlow initialized successfully"** message
-
-If you see errors, check the [Troubleshooting](#troubleshooting) section below.
+1. Check the status bar for **"RecallFlow: Ready"** (green checkmark)
+2. If you see **"RecallFlow: Setup Required"** (yellow warning), click it to run setup
+3. Open the Output panel (**View → Output**) and select **"RecallFlow Memory"** to see logs
 
 ## Usage
+
+### Environment Management (v0.3.14+)
+
+RecallFlow includes tools to keep your environment healthy:
+
+- **Status Bar**: Shows real-time health (Ready, Setup Required, Refreshing, Error)
+- **Refresh Dependencies**: If you encounter issues, run **"RecallFlow: Refresh Bridge Dependencies"** to safely reinstall the environment without losing data.
+- **Background Safety**: Refresh operations automatically pause background tasks to prevent conflicts.
 
 ### Async Ingestion Behavior (v0.3.3+)
 

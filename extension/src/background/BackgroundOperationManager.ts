@@ -79,6 +79,33 @@ export class BackgroundOperationManager {
     private defaultPythonPath: string | null = null;
     private defaultBridgeScriptPath: string | null = null;
     
+    private _isPaused: boolean = false;
+
+    public get isPaused(): boolean {
+        return this._isPaused;
+    }
+
+    public async pause(timeoutMs: number = 10000): Promise<boolean> {
+        this._isPaused = true;
+        this.outputChannel.appendLine('[BACKGROUND] Pausing operations...');
+        
+        // Wait for running jobs to complete or timeout
+        const start = Date.now();
+        while (this.getRunningCount() > 0) {
+            if (Date.now() - start > timeoutMs) {
+                return false; // Timed out waiting for jobs
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        return true;
+    }
+
+    public resume(): void {
+        this._isPaused = false;
+        this.outputChannel.appendLine('[BACKGROUND] Resuming operations...');
+        void this.dequeueNext();
+    }
+
     private constructor(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel) {
         this.context = context;
         this.outputChannel = outputChannel;
@@ -142,6 +169,10 @@ export class BackgroundOperationManager {
         bridgeScriptPath: string,
         payload: OperationRetryPayload
     ): Promise<string> {
+        if (this._isPaused) {
+             throw new Error('Background operations are paused. Please try again later.');
+        }
+
         const operationId = this.generateOperationId();
         const summaryDigest = summaryText.substring(0, 50);
         
@@ -669,6 +700,11 @@ export class BackgroundOperationManager {
     }
 
     private async retryOperation(entry: OperationEntry): Promise<void> {
+        if (this._isPaused) {
+             vscode.window.showErrorMessage('Cannot retry: background operations are paused.');
+             return;
+        }
+
         const runningCount = this.getRunningCount();
         const queuedCount = this.getQueuedCount();
         if (runningCount + queuedCount >= this.maxConcurrent + this.maxQueued) {

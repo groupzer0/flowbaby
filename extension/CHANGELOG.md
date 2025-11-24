@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.3.14] - 2025-11-24
+
+### Added - Plan 025: Simplified Python Environment Setup
+
+- **Managed Python Environment**: RecallFlow now automatically creates and manages a dedicated `.venv` virtual environment in your workspace, eliminating manual setup steps.
+- **One-Click Setup**: New "Initialize Workspace" command handles Python version checks (3.8+), virtual environment creation, and dependency installation in a single click.
+- **Status Bar Indicator**: Added a status bar item showing environment health (Ready, Setup Required, Refreshing, Error) with quick access to repair actions.
+- **Dependency Management**: New "Refresh Dependencies" command safely updates the bridge environment, coordinating with background operations to prevent conflicts.
+- **Smart Precedence**: Automatically detects existing `.venv` or configured Python paths, but prioritizes the managed environment for reliability.
+- **Enhanced Walkthrough**: The "Get Started" walkthrough now guides users through the automated setup process with context-aware completion steps.
+- **Robust Metadata**: Tracks environment state and version compatibility in `.cognee/bridge-env.json` to ensure stability across updates.
+
 ## [0.3.13] - 2025-11-24
 
 ### Added - Plan 024: Configurable Search Parameters

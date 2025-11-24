@@ -9,6 +9,7 @@ import { StoreMemoryTool } from './tools/storeMemoryTool';
 import { RetrieveMemoryTool } from './tools/retrieveMemoryTool';
 import { CogneeContextProvider } from './cogneeContextProvider';
 import { RecallFlowSetupService } from './setup/RecallFlowSetupService';
+import { RecallFlowStatusBar } from './statusBar/RecallFlowStatusBar';
 
 // Module-level variable to store client instance
 let cogneeClient: CogneeClient | undefined;
@@ -56,8 +57,11 @@ export async function activate(_context: vscode.ExtensionContext) {
             const agentOutputChannel = vscode.window.createOutputChannel('RecallFlow Agent Activity');
             registerIngestForAgentCommand(_context, cogneeClient, agentOutputChannel);
             
+            // Plan 025 Milestone 6: Initialize Status Bar
+            const statusBar = new RecallFlowStatusBar(_context);
+
             // Plan 021 Milestone 4: Initialize Setup Service
-            const setupService = new RecallFlowSetupService(_context, workspacePath, agentOutputChannel);
+            const setupService = new RecallFlowSetupService(_context, workspacePath, agentOutputChannel, undefined, undefined, statusBar);
             
             // Register setup environment command (Plan 021 Milestone 4)
             const setupEnvironmentCommand = vscode.commands.registerCommand(

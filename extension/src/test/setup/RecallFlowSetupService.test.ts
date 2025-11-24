@@ -4,8 +4,8 @@ import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as child_process from 'child_process';
-import { RecallFlowSetupService } from '../../setup/RecallFlowSetupService';
+import { RecallFlowSetupService, BridgeEnvMetadata } from '../../setup/RecallFlowSetupService';
+import { BackgroundOperationManager } from '../../background/BackgroundOperationManager';
 import { EventEmitter } from 'events';
 
 suite('RecallFlowSetupService Test Suite', () => {
@@ -15,6 +15,7 @@ suite('RecallFlowSetupService Test Suite', () => {
     let mockConfig: any;
     let spawnStub: sinon.SinonStub;
     let mockFs: { existsSync: sinon.SinonStub };
+    let bgManagerStub: any;
 
     const workspacePath = '/test/workspace';
 
@@ -39,13 +40,27 @@ suite('RecallFlowSetupService Test Suite', () => {
         };
         sandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig);
 
-        // Mock fs
+        // Mock fs.promises
+        sandbox.stub(fs.promises, 'readFile');
+        sandbox.stub(fs.promises, 'writeFile');
+        sandbox.stub(fs.promises, 'mkdir');
+        sandbox.stub(fs.promises, 'rm');
+        sandbox.stub(fs.promises, 'rename');
+
+        // Mock fs.existsSync (passed via constructor)
         mockFs = {
             existsSync: sandbox.stub()
         };
 
         // Mock spawn
         spawnStub = sandbox.stub();
+
+        // Mock BackgroundOperationManager
+        bgManagerStub = {
+            pause: sandbox.stub().resolves(true),
+            resume: sandbox.stub()
+        };
+        sandbox.stub(BackgroundOperationManager, 'getInstance').returns(bgManagerStub);
 
         // Mock vscode.window
         sandbox.stub(vscode.window, 'showInformationMessage');
@@ -54,6 +69,7 @@ suite('RecallFlowSetupService Test Suite', () => {
         sandbox.stub(vscode.window, 'withProgress').callsFake(async (options, task) => {
             return task({ report: sandbox.stub() }, new vscode.CancellationTokenSource().token);
         });
+        sandbox.stub(vscode.commands, 'executeCommand');
 
         service = new RecallFlowSetupService(
             { extensionPath: '/ext' } as any, 
@@ -62,6 +78,9 @@ suite('RecallFlowSetupService Test Suite', () => {
             mockFs,
             spawnStub as any
         );
+        
+        // Stub computeRequirementsHash to return a fixed hash by default
+        sandbox.stub(service, 'computeRequirementsHash').resolves('fixed-hash');
     });
 
     teardown(() => {
@@ -83,87 +102,112 @@ suite('RecallFlowSetupService Test Suite', () => {
         return processMock;
     }
 
-    test('initializeWorkspace uses configured python path if set', async () => {
-        mockConfig.get.withArgs('pythonPath').returns('/custom/python');
+    test('initializeWorkspace: Managed environment healthy', async () => {
+        // Setup: bridge-env.json exists and is managed
+        const metadata: BridgeEnvMetadata = {
+            pythonPath: '/test/workspace/.venv/bin/python',
+            ownership: 'managed',
+            requirementsHash: 'fixed-hash',
+            createdAt: '2025-01-01T00:00:00Z',
+            platform: 'linux'
+        };
         
-        await service.initializeWorkspace();
-
-        assert.ok((outputChannel.appendLine as sinon.SinonStub).calledWith(sinon.match(/Using configured Python path/)));
-        assert.ok(spawnStub.notCalled);
-    });
-
-    test('initializeWorkspace offers to create venv if missing', async () => {
-        mockConfig.get.withArgs('pythonPath').returns('python3'); // Default
-        mockFs.existsSync.returns(false);
-        (vscode.window.showInformationMessage as sinon.SinonStub).resolves('Create Environment');
+        mockFs.existsSync.withArgs(sinon.match(/bridge-env.json/)).returns(true);
+        (fs.promises.readFile as sinon.SinonStub).resolves(JSON.stringify(metadata));
         
-        // Mock spawn for venv creation and pip install
-        const venvMock = createMockProcess(0);
-        const pipMock = createMockProcess(0);
-        
-        spawnStub.onCall(0).returns(venvMock);
-        spawnStub.onCall(1).returns(pipMock);
-
-        await service.initializeWorkspace();
-
-        assert.ok((vscode.window.showInformationMessage as sinon.SinonStub).calledWith(sinon.match(/RecallFlow requires a Python environment/)));
-        assert.ok(spawnStub.calledTwice); // venv + pip
-    });
-
-    test('initializeWorkspace verifies existing venv', async () => {
-        mockConfig.get.withArgs('pythonPath').returns('python3');
-        mockFs.existsSync.returns(true);
-        
-        // Mock verify_environment.py output
+        // Mock verification success
         const verifyMock = createMockProcess(0, JSON.stringify({ status: 'ok', details: {} }));
         spawnStub.returns(verifyMock);
 
         await service.initializeWorkspace();
 
-        assert.ok((outputChannel.appendLine as sinon.SinonStub).calledWith(sinon.match(/Found existing .venv/)));
-        assert.ok(spawnStub.calledOnce); // verify
+        assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'cogneeMemory.environmentVerified', true));
+        assert.ok((outputChannel.appendLine as sinon.SinonStub).calledWith(sinon.match(/Found managed environment/)));
     });
 
-    test('createEnvironment uses platform specific python command', async () => {
-        // Force platform to win32
-        const originalPlatform = process.platform;
-        Object.defineProperty(process, 'platform', { value: 'win32' });
+    test('initializeWorkspace: Managed environment outdated hash', async () => {
+        // Setup: bridge-env.json exists but hash mismatch
+        const metadata: BridgeEnvMetadata = {
+            pythonPath: '/test/workspace/.venv/bin/python',
+            ownership: 'managed',
+            requirementsHash: 'old-hash',
+            createdAt: '2025-01-01T00:00:00Z',
+            platform: 'linux'
+        };
+        
+        mockFs.existsSync.withArgs(sinon.match(/bridge-env.json/)).returns(true);
+        (fs.promises.readFile as sinon.SinonStub).resolves(JSON.stringify(metadata));
+        
+        // Mock verification success (env is valid, just outdated deps)
+        const verifyMock = createMockProcess(0, JSON.stringify({ status: 'ok', details: {} }));
+        spawnStub.returns(verifyMock);
 
-        try {
-            const venvMock = createMockProcess(0);
-            const pipMock = createMockProcess(0);
-            
-            spawnStub.onCall(0).returns(venvMock);
-            spawnStub.onCall(1).returns(pipMock);
+        // Mock showWarningMessage to return undefined (user ignores)
+        (vscode.window.showWarningMessage as sinon.SinonStub).resolves(undefined);
 
-            await service.createEnvironment();
+        await service.initializeWorkspace();
 
-            const venvCall = spawnStub.firstCall;
-            assert.strictEqual(venvCall.args[0], 'python');
-            assert.deepStrictEqual(venvCall.args[1], ['-m', 'venv', '.venv']);
-        } finally {
-            Object.defineProperty(process, 'platform', { value: originalPlatform });
-        }
+        assert.ok((vscode.window.showWarningMessage as sinon.SinonStub).calledWith(sinon.match(/outdated/)));
+        // Should still verify if it works, but warn
+        assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'cogneeMemory.environmentVerified', true));
     });
 
-    test('createEnvironment uses python3 on non-windows', async () => {
-        // Force platform to linux
-        const originalPlatform = process.platform;
-        Object.defineProperty(process, 'platform', { value: 'linux' });
+    test('initializeWorkspace: No metadata, offers setup', async () => {
+        mockFs.existsSync.returns(false); // No metadata
+        mockConfig.get.withArgs('pythonPath').returns('python3'); // Default
+        
+        (vscode.window.showInformationMessage as sinon.SinonStub).resolves('Initialize Workspace');
+        
+        // Mock createEnvironment flow
+        // 1. Check version
+        const versionMock = createMockProcess(0, 'Python 3.10.0');
+        // 2. Create venv
+        const venvMock = createMockProcess(0);
+        // 3. Install deps
+        const pipMock = createMockProcess(0);
+        // 4. Verify
+        const verifyMock = createMockProcess(0, JSON.stringify({ status: 'ok' }));
+        
+        spawnStub.onCall(0).returns(versionMock);
+        spawnStub.onCall(1).returns(venvMock);
+        spawnStub.onCall(2).returns(pipMock);
+        spawnStub.onCall(3).returns(verifyMock);
 
-        try {
-            const venvMock = createMockProcess(0);
-            const pipMock = createMockProcess(0);
-            
-            spawnStub.onCall(0).returns(venvMock);
-            spawnStub.onCall(1).returns(pipMock);
+        await service.initializeWorkspace();
 
-            await service.createEnvironment();
+        assert.ok((vscode.window.showInformationMessage as sinon.SinonStub).calledWith(sinon.match(/RecallFlow requires a Python environment/)));
+        assert.ok(spawnStub.callCount >= 4);
+        assert.ok((fs.promises.writeFile as sinon.SinonStub).calledWith(sinon.match(/bridge-env.json/)));
+    });
 
-            const venvCall = spawnStub.firstCall;
-            assert.strictEqual(venvCall.args[0], 'python3');
-        } finally {
-            Object.defineProperty(process, 'platform', { value: originalPlatform });
-        }
+    test('refreshDependencies: Pauses background ops and refreshes', async () => {
+        // Setup: managed env
+        const metadata: BridgeEnvMetadata = {
+            pythonPath: '/test/workspace/.venv/bin/python',
+            ownership: 'managed',
+            requirementsHash: 'old-hash',
+            createdAt: '2025-01-01T00:00:00Z',
+            platform: 'linux'
+        };
+        mockFs.existsSync.withArgs(sinon.match(/bridge-env.json/)).returns(true);
+        (fs.promises.readFile as sinon.SinonStub).resolves(JSON.stringify(metadata));
+        mockFs.existsSync.withArgs(sinon.match(/\.venv/)).returns(true);
+
+        // Mock processes
+        const venvMock = createMockProcess(0);
+        const pipMock = createMockProcess(0);
+        const verifyMock = createMockProcess(0, JSON.stringify({ status: 'ok' }));
+        
+        spawnStub.onCall(0).returns(venvMock);
+        spawnStub.onCall(1).returns(pipMock);
+        spawnStub.onCall(2).returns(verifyMock);
+
+        await service.refreshDependencies();
+
+        assert.ok(bgManagerStub.pause.called);
+        assert.ok((fs.promises.rename as sinon.SinonStub).called); // Backup
+        assert.ok(spawnStub.calledThrice);
+        assert.ok(bgManagerStub.resume.called);
+        assert.ok((vscode.window.showInformationMessage as sinon.SinonStub).calledWith(sinon.match(/refreshed successfully/)));
     });
 });
