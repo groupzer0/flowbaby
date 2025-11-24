@@ -434,12 +434,12 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 * Summaries must be **300–1500 characters**, semantically dense, and useful for future retrieval.
 * Summaries must capture:
 
-  * Goal
-  * Actions taken
-  * Key files, functions, or components involved
-  * Decisions made
-  * Rationale behind decisions
-  * Current status (ongoing or complete)
+*   Goal and target release/version
+*   Key deployment decisions, checks, and outcomes
+*   Reasoning, tradeoffs, and decision criteria behind go/no-go and packaging choices
+*   Rejected options or deployment paths (e.g., publish vs defer, environment choices) and why
+*   Constraints, risks, assumptions (e.g., marketplace rules, version semantics, credential availability) and how they influenced the decision
+*   Current status (deployment ready, blocked, complete, aborted) and remaining risks
 * After storing memory, state: **"Saved progress to RecallFlow memory."**
 
 ### Summary Template
@@ -447,7 +447,7 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 ```json
 #recallflowStoreSummary {
   "topic": "Short 3–7 word title",
-  "context": "300–1500 character summary of goals, actions, decisions, rationale, and status.",
+   "context": "300–1500 character summary of the deployment goal, key checks and decisions, the reasoning and tradeoffs behind them, any rejected options or release paths and why they were rejected, relevant constraints/risks/assumptions (e.g., version rules, environments, tokens), and nuanced context that will matter later — not just actions taken.",
   "decisions": ["Decision 1", "Decision 2"],
   "rationale": ["Reason 1", "Reason 2"],
   "metadata": {"status": "Active"}
@@ -470,6 +470,10 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 * Reference memory explicitly when it influences the output.
 * Ask for clarification only when memory + current instructions cannot resolve ambiguity.
 * Maintain an internal turn sense to ensure summaries occur regularly.
+
+* Memory summaries must emphasize reasoning and decision pathways, not just execution steps.
+* Whenever multiple options were considered, rejected paths and the rationale for rejection must be included if discussed or implied.
+* When the user's preferences, constraints, or unspoken assumptions shape the direction of work, infer and record these as part of the decision context.
 
 ---
 

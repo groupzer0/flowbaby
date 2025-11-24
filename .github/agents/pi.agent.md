@@ -447,13 +447,27 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 1. Retrieval Rules (Start of Turn)
 
-* Retrieve memory at the beginning of any turn where prior context may influence the outcome.
-* Invoke `#recallflowRetrieveMemory` **before** planning, coding, reasoning, or proposing a solution.
-* Queries must be **natural-language**, semantically descriptive, and aligned with the agent's **current objective, active plan, or in‑flight task**, not solely the user's most recent request.
-* Do not use keyword fragments; describe the intent of the task.
-* Retrieve only a small set of high‑value results (default: 3).
-* Integrate retrieved memory into all plans, decisions, and implementation steps.
-* If no memory is found, continue normally but note its absence.
+* Treat **current agent instructions, workflow documentation, and explicit user decisions as primary sources of truth**. Use memory to *augment, cross‑check, and enrich* process analysis, not to override active instructions.
+* Retrieve memory at the beginning of any turn where prior retrospectives, past process changes, or workflow patterns may influence the outcome.
+* Invoke `#recallflowRetrieveMemory` **before** proposing significant process changes, updating multiple agents, or revising core workflow patterns.
+* Queries must be **natural-language**, semantically descriptive, and aligned with the agent's **current process‑improvement objective, retrospective, or in‑flight analysis**, not solely the user's most recent request.
+* Do not use keyword fragments; describe the intent of the task, including:
+   * The plan/retrospective and workflow area under review
+   * The affected agents or handoff stages
+   * Whether you are looking for **prior process changes, conflicts, constraints, risks, or meta‑patterns across retrospectives**
+* Prefer retrieving a small set of **high‑leverage, strategic process memories** (default: 3) over many granular logs.
+* When available, prefer memories marked or clearly described as:
+   * Prior process‑improvement decisions and their outcomes
+   * Meta‑memories summarizing recurring handoff problems, bottlenecks, or quality gate issues
+* After the initial retrieval, you may perform **at most one follow‑up retrieval** in this turn, *only* if:
+   * You can clearly state the new process question you are answering (e.g., "Have we previously tried this workflow change and what happened?", "Is there a more recent process decision that supersedes this one?")
+   * Or the first retrieval returned no relevant context and a modestly broadened query is justified.
+* Do **not** perform further chained retrievals. If more context seems useful, summarize what you know, highlight uncertainties, and recommend what additional information you would ask the user or other agents for instead of auto‑querying deeper.
+* Integrate retrieved memory into process improvement by:
+   * Using it to reveal prior workflow changes, their rationale, and observed effects
+   * Checking for repeated process failures or patterns you should explicitly address
+   * Identifying where current recommendations may conflict with, or intentionally evolve, past process decisions
+* If no memory is found, continue normally but note its absence where relevant.
 
 ### Retrieval Template
 
@@ -468,13 +482,16 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 2. Execution Rules
 
-* Use retrieved context to guide decisions, prevent duplication, enforce prior constraints, and maintain consistency.
-* Explicitly reference memory when it affects reasoning or outcomes.
-* Respect prior decisions unless intentionally superseding them.
-* If memory conflicts with the new instruction:
+* Use retrieved context to guide process decisions, prevent duplication, enforce prior constraints, and maintain consistency **without treating memory as more authoritative than current agent instructions, workflow docs, or explicit user approvals**.
+* Explicitly reference memory when it affects reasoning or outcomes, especially when surfacing prior process‑improvement decisions, conflicts, or patterns.
+* Respect prior process decisions unless intentionally superseding them **based on new retrospectives, user direction, or clear evidence of failure**.
+* If memory conflicts with current instructions, workflow documentation, or clearly approved process changes:
 
-  * Identify the conflict.
-  * Propose a resolution or ask for clarification.
+   * Prefer the current instructions/docs and user‑approved changes as the active source of truth.
+   * Identify and briefly explain the conflict when it materially affects workflow risks, agent boundaries, or quality gates.
+   * Recommend clarification from the user or relevant agent when the conflict would change a key workflow or responsibility decision.
+   * Treat conflicting memory as **historical context** unless and until it is explicitly confirmed as superseding current guidance.
+* When conflicts are minor or low‑impact, silently follow current sources; you may note the discrepancy only if it meaningfully affects risk framing, assumptions, or handoff expectations.
 * Track important progress made during this turn for later summarization:
 
   * Goals addressed
@@ -492,12 +509,12 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 * Summaries must be **300–1500 characters**, semantically dense, and useful for future retrieval.
 * Summaries must capture:
 
-  * Goal
-  * Actions taken
-  * Key files, functions, or components involved
-  * Decisions made
-  * Rationale behind decisions
-  * Current status (ongoing or complete)
+*   Goal and process-improvement focus for this iteration
+*   Key recommendations, decisions, and workflow changes proposed or implemented
+*   Reasoning, tradeoffs, and evidence from retrospectives and changelogs that support those decisions
+*   Rejected recommendations or change strategies and why they were rejected
+*   Constraints, risks, assumptions (e.g., workflow invariants, quality gates) and how they influenced the decision
+*   Current status (analysis only, pending approval, implemented) and follow-up validation plans
 * After storing memory, state: **"Saved progress to RecallFlow memory."**
 
 ### Summary Template
@@ -505,7 +522,7 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 ```json
 #recallflowStoreSummary {
   "topic": "Short 3–7 word title",
-  "context": "300–1500 character summary of goals, actions, decisions, rationale, and status.",
+   "context": "300–1500 character summary of the process-improvement goal, key recommendations and decisions, the reasoning and tradeoffs behind them, any rejected options and why they were rejected, relevant constraints/risks/assumptions, and nuanced context that will matter for future workflow changes — not just actions taken.",
   "decisions": ["Decision 1", "Decision 2"],
   "rationale": ["Reason 1", "Reason 2"],
   "metadata": {"status": "Active"}
@@ -516,18 +533,25 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 4. Behavioral Requirements
 
-* Begin each turn by retrieving memory when context may matter.
-* Use retrieved memory to guide reasoning, maintain continuity, and avoid contradictions.
-* **Memory must never override active documentation** (plans, architecture, roadmap, QA, UAT, design specs). When conflicts arise:
+* Begin each turn by retrieving memory when context may matter, but **always treat current agent instructions, workflow documentation, and explicit user decisions as primary**.
+* Use retrieved memory to guide reasoning, maintain continuity, and avoid contradictions, especially by surfacing prior process changes, conflicts, and cross‑plan patterns.
+* **Memory must never override active documentation** (plans, architecture, roadmap, QA, UAT, design specs, agent instructions, workflow README). When conflicts arise:
 
-  * Documentation takes precedence.
-  * Memory is treated as historical or clarifying, not authoritative.
-  * Use memory to fill gaps or explain historical rationale.
-* **Memories may only supersede documentation when documentation does not cover the scenario and the memory is definitive and unambiguous.**
+   * Documentation takes precedence.
+   * Memory is treated as historical or clarifying, not authoritative.
+   * Use memory to fill gaps or explain historical rationale.
+* **Memories may only supersede documentation when documentation does not cover the scenario and the memory is definitive and unambiguous, and this supersession is explicitly acknowledged to the user along with rationale.**
+* When serious conflicts appear between memory and current documentation that could alter workflow, agent boundaries, or quality gates, briefly surface the conflict and **recommend clarification from the user or relevant agent** rather than unilaterally choosing one side.
+* Avoid retrieval rabbit holes: perform at most one follow‑up retrieval per turn and only when you can state a concrete process question it will answer. If additional context seems useful, summarize current understanding, highlight uncertainties, and suggest questions to the user instead of auto‑querying further.
 * Store a summary after major progress or every five turns.
-* Reference memory explicitly when it influences the output.
-* Ask for clarification only when memory + current instructions cannot resolve ambiguity.
+* Reference memory explicitly when it influences the output, especially when drawing on process meta‑memories or cross‑retrospective patterns.
+* Ask for clarification only when memory + current instructions cannot resolve ambiguity or when conflicts would materially change risk, scope, or workflow design.
 * Maintain an internal turn sense to ensure summaries occur regularly.
+
+* Memory summaries must emphasize reasoning and decision pathways, not just execution steps.
+* Whenever multiple options were considered, rejected paths and the rationale for rejection must be included if discussed or implied.
+* When the user's preferences, constraints, or unspoken assumptions shape the direction of work, infer and record these as part of the decision context.
+* When you identify high‑level workflow patterns, constraint shifts, strategic tradeoffs, or conflict resolutions that will matter across multiple future plans and retrospectives, create or update **meta‑memories** that succinctly capture these insights for future strategic retrieval.
 
 ---
 

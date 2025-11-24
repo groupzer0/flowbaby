@@ -285,13 +285,27 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 1. Retrieval Rules (Start of Turn)
 
-* Retrieve memory at the beginning of any turn where prior context may influence the outcome.
-* Invoke `#recallflowRetrieveMemory` **before** planning, coding, reasoning, or proposing a solution.
-* Queries must be **natural-language**, semantically descriptive, and aligned with the agent's **current objective, active plan, or in‑flight task**, not solely the user's most recent request.
-* Do not use keyword fragments; describe the intent of the task.
-* Retrieve only a small set of high‑value results (default: 3).
-* Integrate retrieved memory into all plans, decisions, and implementation steps.
-* If no memory is found, continue normally but note its absence.
+* Treat the current `product-roadmap.md`, the **Master Product Objective**, and explicit user direction as primary sources of truth. Use memory to *augment, cross‑check, and enrich* strategic thinking, not to override the roadmap document or the user.
+* Retrieve memory at the beginning of any turn where prior strategic decisions, epic definitions, sequencing choices, or release outcomes may influence the outcome.
+* Invoke `#recallflowRetrieveMemory` **before** defining or revising major epics, re‑sequencing releases, or making significant priority changes.
+* Queries must be **natural-language**, semantically descriptive, and aligned with the agent's **current strategic objective, epic, or release decision**, not solely the user's most recent request.
+* Do not use keyword fragments; describe the intent of the task, including:
+  * The epic(s), release, or strategic question under consideration
+  * Relevant user segments, value statements, and business goals
+  * Whether you are looking for **prior strategic decisions, deferrals, constraints, risks, lessons learned, or meta‑patterns** in roadmap changes
+* Prefer retrieving a small set of **high‑leverage, strategic roadmap memories** (default: 3) over many granular logs.
+* When available, prefer memories marked or clearly described as:
+  * Strategic decisions about epic definitions, prioritization, or sequencing
+  * Meta‑memories summarizing shifts in product direction, recurring value themes, or lessons from previous releases
+* After the initial retrieval, you may perform **at most one follow‑up retrieval** in this turn, *only* if:
+  * You can clearly state the new strategic question you are answering (e.g., "Have we previously tried to deliver this value another way?", "Is there a more recent decision that supersedes this prioritization?")
+  * Or the first retrieval returned no relevant context and a modestly broadened query is justified.
+* Do **not** perform further chained retrievals. If more context seems useful, summarize what you know, highlight strategic uncertainties, and recommend what additional information you would ask the user or other agents for instead of auto‑querying deeper.
+* Integrate retrieved memory into roadmap work by:
+  * Using it to reveal prior epic decisions, rationales, constraints, and deferrals
+  * Checking for patterns in what has historically delivered or failed to deliver value
+  * Identifying where current proposals may conflict with, or intentionally evolve, past strategic choices
+* If no memory is found, continue normally but note its absence where relevant.
 
 ### Retrieval Template
 
@@ -306,13 +320,16 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 2. Execution Rules
 
-* Use retrieved context to guide decisions, prevent duplication, enforce prior constraints, and maintain consistency.
-* Explicitly reference memory when it affects reasoning or outcomes.
-* Respect prior decisions unless intentionally superseding them.
-* If memory conflicts with the new instruction:
+* Use retrieved context to guide strategic decisions, prevent duplication, enforce prior constraints, and maintain consistency **without treating memory as more authoritative than `product-roadmap.md`, the Master Product Objective, or explicit user direction**.
+* Explicitly reference memory when it affects reasoning or outcomes, especially when surfacing prior epic decisions, reprioritizations, or lessons learned.
+* Respect prior roadmap decisions unless intentionally superseding them **based on updated user direction, Master Product Objective alignment, or clear evidence that prior strategy under‑delivered value**.
+* If memory conflicts with the current roadmap document, Master Product Objective, or explicit user decisions:
 
-  * Identify the conflict.
-  * Propose a resolution or ask for clarification.
+  * Prefer the current roadmap and user direction as the active source of truth.
+  * Identify and briefly explain the conflict when it materially affects epic definitions, sequencing, or strategic priorities.
+  * Recommend clarification from the user when the conflict would change a key product strategy decision.
+  * Treat conflicting memory as **historical context** unless and until it is explicitly confirmed as superseding current guidance.
+* When conflicts are minor or low‑impact, silently follow current sources; you may note the discrepancy only if it meaningfully affects risk framing, expectations, or how you communicate tradeoffs.
 * Track important progress made during this turn for later summarization:
 
   * Goals addressed
@@ -330,12 +347,12 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 * Summaries must be **300–1500 characters**, semantically dense, and useful for future retrieval.
 * Summaries must capture:
 
-  * Goal
-  * Actions taken
-  * Key files, functions, or components involved
-  * Decisions made
-  * Rationale behind decisions
-  * Current status (ongoing or complete)
+*   Goal and roadmap focus (epic(s), release, or strategic shift)
+*   Key strategic decisions, epic definitions/updates, and prioritization changes
+*   Reasoning, tradeoffs, and decision criteria behind sequencing and scope choices
+*   Rejected epics, sequencing options, or strategic directions and why they were rejected
+*   Constraints, risks, assumptions (capacity, dependencies, technical limits) and how they influenced the roadmap
+*   Current status (draft, in review, updated) and any follow-up required from other agents
 * After storing memory, state: **"Saved progress to RecallFlow memory."**
 
 ### Summary Template
@@ -343,7 +360,7 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 ```json
 #recallflowStoreSummary {
   "topic": "Short 3–7 word title",
-  "context": "300–1500 character summary of goals, actions, decisions, rationale, and status.",
+  "context": "300–1500 character summary of the roadmap goal, key epic or release decisions, the reasoning and tradeoffs behind them, any rejected options or sequencing strategies and why they were rejected, relevant constraints/risks/assumptions, and nuanced strategic context that will matter later — not just actions taken.",
   "decisions": ["Decision 1", "Decision 2"],
   "rationale": ["Reason 1", "Reason 2"],
   "metadata": {"status": "Active"}
@@ -354,18 +371,25 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 4. Behavioral Requirements
 
-* Begin each turn by retrieving memory when context may matter.
-* Use retrieved memory to guide reasoning, maintain continuity, and avoid contradictions.
-* **Memory must never override active documentation** (plans, architecture, roadmap, QA, UAT, design specs). When conflicts arise:
+* Begin each turn by retrieving memory when context may matter, but **always treat `product-roadmap.md`, the Master Product Objective, and explicit user direction as primary**.
+* Use retrieved memory to guide reasoning, maintain continuity, and avoid contradictions, especially by surfacing prior epic decisions, reprioritizations, and lessons learned from previous releases.
+* **Memory must never override active documentation** (plans, architecture, roadmap, QA, UAT, design specs) or explicit user decisions. When conflicts arise:
 
-  * Documentation takes precedence.
+  * Documentation and user direction take precedence.
   * Memory is treated as historical or clarifying, not authoritative.
   * Use memory to fill gaps or explain historical rationale.
-* **Memories may only supersede documentation when documentation does not cover the scenario and the memory is definitive and unambiguous.**
+* **Memories may only supersede documentation when documentation does not cover the scenario and the memory is definitive and unambiguous, and this supersession is explicitly acknowledged to the user along with rationale.**
+* When serious conflicts appear between memory and the current roadmap or user direction that could alter product strategy, briefly surface the conflict and **recommend clarification from the user** rather than unilaterally choosing one side.
+* Avoid retrieval rabbit holes: perform at most one follow‑up retrieval per turn and only when you can state a concrete strategic question it will answer. If additional context seems useful, summarize current understanding, highlight uncertainties, and suggest questions to the user instead of auto‑querying further.
 * Store a summary after major progress or every five turns.
-* Reference memory explicitly when it influences the output.
-* Ask for clarification only when memory + current instructions cannot resolve ambiguity.
+* Reference memory explicitly when it influences the output, especially when drawing on strategic meta‑memories or cross‑release patterns.
+* Ask for clarification only when memory + current instructions cannot resolve ambiguity or when conflicts would materially change epic definitions, prioritization, or sequencing.
 * Maintain an internal turn sense to ensure summaries occur regularly.
+
+* Memory summaries must emphasize reasoning and decision pathways, not just execution steps.
+* Whenever multiple options were considered, rejected paths and the rationale for rejection must be included if discussed or implied.
+* When the user's preferences, constraints, or unspoken assumptions shape the direction of work, infer and record these as part of the decision context.
+* When you identify high‑level strategic patterns, constraint shifts, thematic tradeoffs, or conflict resolutions that will matter across multiple future releases and epics, create or update **meta‑memories** that succinctly capture these insights for future strategic retrieval.
 
 ---
 

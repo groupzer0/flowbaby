@@ -219,13 +219,28 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 1. Retrieval Rules (Start of Turn)
 
-* Retrieve memory at the beginning of any turn where prior context may influence the outcome.
-* Invoke `#recallflowRetrieveMemory` **before** planning, coding, reasoning, or proposing a solution.
-* Queries must be **natural-language**, semantically descriptive, and aligned with the agent's **current objective, active plan, or in‑flight task**, not solely the user's most recent request.
-* Do not use keyword fragments; describe the intent of the task.
-* Retrieve only a small set of high‑value results (default: 3).
-* Integrate retrieved memory into all plans, decisions, and implementation steps.
-* If no memory is found, continue normally but note its absence.
+* Treat **current roadmap, architecture documentation, and explicit user instructions as primary sources of truth**. Use memory to *augment, cross‑check, and enrich* planning, not to override active specs.
+* Retrieve memory at the beginning of any turn where prior context, prior plans, decisions, constraints, or patterns may influence the outcome.
+* Invoke `#recallflowRetrieveMemory` **before** drafting or revising a significant plan, restructuring milestones, or changing scope.
+* Queries must be **natural-language**, semantically descriptive, and aligned with the agent's **current planning objective, epic, or in‑flight plan**, not solely the user's most recent request.
+* Do not use keyword fragments; describe the intent of the task, including:
+  * The value statement and epic being planned
+  * Relevant modules, features, or areas of the workflow
+  * Key constraints (e.g., timeline, risk tolerance, quality gates)
+  * Whether you are looking for **prior plans, decisions, assumptions, constraints, risks, or meta‑patterns in planning failures/successes**
+* Prefer retrieving a small set of **high‑leverage, strategic planning memories** (default: 3) over many granular logs.
+* When available, prefer memories marked or clearly described as:
+  * Prior plans for similar epics, scope decisions, or versioning strategies
+  * Meta‑memories summarizing recurring planning pitfalls, scope issues, or handoff problems
+* After the initial retrieval, you may perform **at most one follow‑up retrieval** in this turn, *only* if:
+  * You can clearly state the new planning question you are answering (e.g., "How was scope split when we last tackled a similar epic?", "Is there a more recent plan that supersedes this approach?")
+  * Or the first retrieval returned no relevant context and a modestly broadened query is justified.
+* Do **not** perform further chained retrievals. If more context seems useful, summarize what you know, highlight uncertainties, and recommend what additional information you would ask the user or other agents for instead of auto‑querying deeper.
+* Integrate retrieved memory into planning by:
+  * Using it to reveal prior scope choices, dependency handling, and risk mitigation patterns
+  * Checking for repeated planning failures or successful patterns you should reuse
+  * Identifying where current work may conflict with, or intentionally evolve, past plan decisions
+* If no memory is found, continue normally but note its absence where relevant.
 
 ### Retrieval Template
 
@@ -240,13 +255,16 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 2. Execution Rules
 
-* Use retrieved context to guide decisions, prevent duplication, enforce prior constraints, and maintain consistency.
-* Explicitly reference memory when it affects reasoning or outcomes.
-* Respect prior decisions unless intentionally superseding them.
-* If memory conflicts with the new instruction:
+* Use retrieved context to guide planning decisions, prevent duplication, enforce prior constraints, and maintain consistency **without treating memory as more authoritative than current roadmap, architecture documentation, or explicit user instructions**.
+* Explicitly reference memory when it affects reasoning or outcomes, especially when surfacing prior planning decisions, scope choices, or risk patterns.
+* Respect prior decisions unless intentionally superseding them **based on updated roadmap direction, architectural guidance, or explicit user choice**.
+* If memory conflicts with current instructions, roadmap, architecture, or clearly approved plans:
 
-  * Identify the conflict.
-  * Propose a resolution or ask for clarification.
+  * Prefer the current documentation and explicit decisions as the active source of truth.
+  * Identify and briefly explain the conflict when it materially affects scope, risk, or versioning decisions.
+  * Recommend clarification from the user or relevant agent when the conflict would change a key planning or sequencing decision.
+  * Treat conflicting memory as **historical context** unless and until it is explicitly confirmed as superseding current guidance.
+* When conflicts are minor or low‑impact, silently follow current sources; you may note the discrepancy only if it meaningfully affects risk framing, assumptions, or scope boundaries.
 * Track important progress made during this turn for later summarization:
 
   * Goals addressed
@@ -264,12 +282,12 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 * Summaries must be **300–1500 characters**, semantically dense, and useful for future retrieval.
 * Summaries must capture:
 
-  * Goal
-  * Actions taken
-  * Key files, functions, or components involved
-  * Decisions made
-  * Rationale behind decisions
-  * Current status (ongoing or complete)
+*   Goal and the plan’s value statement and epic alignment
+*   Key planning decisions, structure, and milestones defined
+*   Reasoning, tradeoffs, and decision criteria that shaped the plan
+*   Rejected approaches or scopes (e.g., split vs combined plans, deferred ideas) and why
+*   Constraints, risks, assumptions, and how they influenced the plan design
+*   Current status (draft, revised, approved) and outstanding open questions
 * After storing memory, state: **"Saved progress to RecallFlow memory."**
 
 ### Summary Template
@@ -277,7 +295,7 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 ```json
 #recallflowStoreSummary {
   "topic": "Short 3–7 word title",
-  "context": "300–1500 character summary of goals, actions, decisions, rationale, and status.",
+  "context": "300–1500 character summary of the planning goal, key structure and decisions, the reasoning and tradeoffs behind them, any rejected options or scopes and why they were rejected, relevant constraints/risks/assumptions, and nuanced context that will matter to downstream agents — not just actions taken.",
   "decisions": ["Decision 1", "Decision 2"],
   "rationale": ["Reason 1", "Reason 2"],
   "metadata": {"status": "Active"}
@@ -288,18 +306,25 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 4. Behavioral Requirements
 
-* Begin each turn by retrieving memory when context may matter.
-* Use retrieved memory to guide reasoning, maintain continuity, and avoid contradictions.
+* Begin each turn by retrieving memory when context may matter, but **always treat current roadmap, architecture documentation, and explicit user instructions as primary**.
+* Use retrieved memory to guide reasoning, maintain continuity, and avoid contradictions, especially by surfacing prior plans, scope decisions, patterns, and constraints.
 * **Memory must never override active documentation** (plans, architecture, roadmap, QA, UAT, design specs). When conflicts arise:
 
   * Documentation takes precedence.
   * Memory is treated as historical or clarifying, not authoritative.
   * Use memory to fill gaps or explain historical rationale.
-* **Memories may only supersede documentation when documentation does not cover the scenario and the memory is definitive and unambiguous.**
+* **Memories may only supersede documentation when documentation does not cover the scenario and the memory is definitive and unambiguous, and this supersession is explicitly acknowledged to the user along with rationale.**
+* When serious conflicts appear between memory and current documentation that could alter planning scope, sequencing, or versioning, briefly surface the conflict and **recommend clarification from the user or relevant agent** rather than unilaterally choosing one side.
+* Avoid retrieval rabbit holes: perform at most one follow‑up retrieval per turn and only when you can state a concrete planning question it will answer. If additional context seems useful, summarize current understanding, highlight uncertainties, and suggest questions to the user instead of auto‑querying further.
 * Store a summary after major progress or every five turns.
-* Reference memory explicitly when it influences the output.
-* Ask for clarification only when memory + current instructions cannot resolve ambiguity.
+* Reference memory explicitly when it influences the output, especially when drawing on planning meta‑memories or cross‑plan patterns.
+* Ask for clarification only when memory + current instructions cannot resolve ambiguity or when conflicts would materially change risk, scope, or release decisions.
 * Maintain an internal turn sense to ensure summaries occur regularly.
+
+* Memory summaries must emphasize reasoning and decision pathways, not just execution steps.
+* Whenever multiple options were considered, rejected paths and the rationale for rejection must be included if discussed or implied.
+* When the user's preferences, constraints, or unspoken assumptions shape the direction of work, infer and record these as part of the decision context.
+* When you identify high‑level planning patterns, shifts in constraints, strategic tradeoffs, or conflict resolutions that will matter across multiple future plans or releases, create or update **meta‑memories** that succinctly capture these insights for future strategic retrieval.
 
 ---
 

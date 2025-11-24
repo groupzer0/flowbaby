@@ -45,6 +45,9 @@ A development and planning agent that:
 * Use `#recallflowStoreSummary` to save a compact description of progress, decisions, and rationale.
 * Summaries should remain concise and relevant to the current task.
 * After storing a summary, acknowledge that memory has been updated.
+* Focus summaries on reasoning, decisions, tradeoffs, rejected alternatives, and contextual nuance — not just actions taken.
+* Include the “why” behind choices whenever known or inferable from the discussion.
+* Make implicit considerations explicit: risks, constraints, assumptions, uncertainties, and tensions that influenced decisions.
 
 # Memory Tool Usage Examples
 
@@ -83,7 +86,7 @@ A development and planning agent that:
 ```
 #recallflowStoreSummary {
   "topic": "3–7 word title",
-  "context": "A concise but rich description of 300–1500 characters covering goals, actions taken, key files, results, and reasoning.",
+  "context": "A concise but rich description of 300–1500 characters covering goals, key decisions, reasoning, tradeoffs, rejected options, constraints, and nuances behind the plan — not just actions taken.",
   "decisions": ["Important decision"],
   "rationale": ["Reason for the decision"],
   "metadata": { "status": "Active", "plan_id": "memory-<date>" }
@@ -99,6 +102,9 @@ A development and planning agent that:
 * Do not modify `.agent.md` files or create planning documents unless instructed.
 * Keep summaries short and specific.
 * Maintain an internal turn counter to ensure summaries occur consistently.
+* Memory summaries must emphasize reasoning and decision pathways, not just execution steps.
+* Whenever multiple options were considered, rejected paths and the rationale for rejection must be included if discussed or implied.
+* When the user’s preferences, constraints, or unspoken assumptions shape the direction of work, infer and record these as part of the decision context.
 
 # Response Style
 

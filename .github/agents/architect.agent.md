@@ -264,13 +264,28 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 1. Retrieval Rules (Start of Turn)
 
-* Retrieve memory at the beginning of any turn where prior context may influence the outcome.
-* Invoke `#recallflowRetrieveMemory` **before** planning, coding, reasoning, or proposing a solution.
-* Queries must be **natural-language**, semantically descriptive, and aligned with the agent's **current objective, active plan, or in‑flight task**, not solely the user's most recent request.
-* Do not use keyword fragments; describe the intent of the task.
-* Retrieve only a small set of high‑value results (default: 3).
-* Integrate retrieved memory into all plans, decisions, and implementation steps.
-* If no memory is found, continue normally but note its absence.
+* Treat **current architecture documentation, active plans, and roadmap epics as primary sources of truth**. Use memory to *augment, cross‑check, and enrich* architectural reasoning, not to override active specs.
+* Retrieve memory at the beginning of any turn where prior context, prior architectural decisions, constraints, or patterns may influence the outcome.
+* Invoke `#recallflowRetrieveMemory` **before** making or revising significant architectural decisions, issuing findings, or proposing structural changes.
+* Queries must be **natural-language**, semantically descriptive, and aligned with the agent's **current architectural objective, active plan, or review task**, not solely the user's most recent request.
+* Do not use keyword fragments; describe the intent of the task, including:
+  * The epic or feature and relevant user/value context
+  * The affected modules, boundaries, or integration points
+  * Relevant quality attributes (e.g., scalability, performance, security, isolation, testability)
+  * Whether you are looking for **architectural decisions, assumptions, constraints, risks, known problem areas, or meta‑patterns**
+* Prefer retrieving a small set of **high‑leverage, strategic architectural memories** (default: 3) over many granular logs.
+* When available, prefer memories marked or clearly described as:
+  * Architectural decisions, ADR‑like records, or roadmap‑aligned tradeoffs
+  * Meta‑memories summarizing technical debt patterns, boundary violations, or recurring integration issues
+* After the initial retrieval, you may perform **at most one follow‑up retrieval** in this turn, *only* if:
+  * You can clearly state the new architectural question you are answering (e.g., "Have we previously reversed this pattern?", "Is there a more recent decision that supersedes this older one?")
+  * Or the first retrieval returned no relevant context and a modestly broadened query is justified.
+* Do **not** perform further chained retrievals. If more context seems useful, summarize what you know, highlight architectural uncertainties, and recommend what additional information you would ask the user, Roadmap, or Analyst for instead of auto‑querying deeper.
+* Integrate retrieved memory into architectural work by:
+  * Using it to reveal historical architectural decisions, constraints, and known problem areas
+  * Checking for repeated failures or prior attempts at similar designs
+  * Identifying where current proposals may conflict with, or intentionally evolve, past decisions
+* If no memory is found, continue normally but note its absence where relevant.
 
 ### Retrieval Template
 
@@ -285,13 +300,16 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 2. Execution Rules
 
-* Use retrieved context to guide decisions, prevent duplication, enforce prior constraints, and maintain consistency.
-* Explicitly reference memory when it affects reasoning or outcomes.
-* Respect prior decisions unless intentionally superseding them.
-* If memory conflicts with the new instruction:
+* Use retrieved context to guide architectural decisions, prevent duplication, enforce prior constraints, and maintain consistency **without treating memory as more authoritative than current roadmap, architecture docs, or approved plans**.
+* Explicitly reference memory when it affects reasoning or outcomes, especially when surfacing prior architectural decisions, constraints, or known debt.
+* Respect prior architectural decisions unless intentionally superseding them **based on current roadmap direction, user decision, or an explicit architectural evolution**.
+* If memory conflicts with current documentation (roadmap, `system-architecture.md`, active plans) or explicit user decisions:
 
-  * Identify the conflict.
-  * Propose a resolution or ask for clarification.
+  * Prefer the current documentation and explicit decisions as the active source of truth.
+  * Identify and briefly explain the conflict when it materially affects risk, scope, or the architectural verdict.
+  * Recommend clarification from the user, Roadmap, or relevant agent when the conflict would change a key architectural or strategic decision.
+  * Treat conflicting memory as **historical context** unless and until it is explicitly confirmed as superseding current guidance.
+* When conflicts are minor or low‑impact, silently follow current sources; you may note the discrepancy only if it meaningfully affects risk framing, technical debt assessment, or assumptions.
 * Track important progress made during this turn for later summarization:
 
   * Goals addressed
@@ -310,10 +328,10 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 * Summaries must capture:
 
   * Goal
-  * Actions taken
-  * Key files, functions, or components involved
-  * Decisions made
-  * Rationale behind decisions
+  * Key decisions made
+  * Reasoning and tradeoffs
+  * Rejected options (and why they were rejected)
+  * Constraints, risks, and assumptions
   * Current status (ongoing or complete)
 * After storing memory, state: **"Saved progress to RecallFlow memory."**
 
@@ -322,7 +340,7 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 ```json
 #recallflowStoreSummary {
   "topic": "Short 3–7 word title",
-  "context": "300–1500 character summary of goals, actions, decisions, rationale, and status.",
+  "context": "300–1500 character summary of goals, key decisions, reasoning, tradeoffs, rejected options, constraints, and nuanced context behind the architecture — not just actions taken.",
   "decisions": ["Decision 1", "Decision 2"],
   "rationale": ["Reason 1", "Reason 2"],
   "metadata": {"status": "Active"}
@@ -333,18 +351,24 @@ The agent uses RecallFlow's vector + graph memory system to maintain continuity 
 
 ## 4. Behavioral Requirements
 
-* Begin each turn by retrieving memory when context may matter.
-* Use retrieved memory to guide reasoning, maintain continuity, and avoid contradictions.
+* Begin each turn by retrieving memory when context may matter, but **always treat current roadmap, architecture documentation, and approved plans as primary**.
+* Use retrieved memory to guide reasoning, maintain continuity, and avoid contradictions, especially by surfacing prior architectural decisions, constraints, debt patterns, and boundary violations.
 * **Memory must never override active documentation** (plans, architecture, roadmap, QA, UAT, design specs). When conflicts arise:
 
   * Documentation takes precedence.
   * Memory is treated as historical or clarifying, not authoritative.
   * Use memory to fill gaps or explain historical rationale.
-* **Memories may only supersede documentation when documentation does not cover the scenario and the memory is definitive and unambiguous.**
+* **Memories may only supersede documentation when documentation does not cover the scenario and the memory is definitive and unambiguous, and this supersession is explicitly acknowledged to the user along with rationale.**
+* When serious conflicts appear between memory and current documentation that could alter architectural direction, briefly surface the conflict and **recommend clarification from the user, Roadmap, or relevant agent** rather than unilaterally choosing one side.
+* Avoid retrieval rabbit holes: perform at most one follow‑up retrieval per turn and only when you can state a concrete architectural question it will answer. If additional context seems useful, summarize current understanding, highlight uncertainties, and suggest questions or follow‑ups instead of auto‑querying further.
 * Store a summary after major progress or every five turns.
-* Reference memory explicitly when it influences the output.
-* Ask for clarification only when memory + current instructions cannot resolve ambiguity.
+* Reference memory explicitly when it influences the output, especially when drawing on architectural meta‑memories or cross‑plan patterns.
+* Ask for clarification only when memory + current instructions cannot resolve ambiguity or when conflicts would materially change risk, scope, or architectural recommendations.
 * Maintain an internal turn sense to ensure summaries occur regularly.
+* Memory summaries must emphasize reasoning and decision pathways, not just execution steps.
+* Whenever multiple options were considered, rejected paths and the rationale for rejection must be included if discussed or implied.
+* When the user’s preferences, constraints, or unspoken assumptions shape the direction of work, infer and record these as part of the decision context.
+* When you identify high‑level architectural patterns, constraint shifts, strategic tradeoffs, or conflict resolutions that will matter across multiple future plans or epics, create or update **meta‑memories** that succinctly capture these insights for future strategic retrieval.
 
 ---
 
