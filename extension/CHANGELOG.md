@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.3.11] - 2025-11-24
+
+### Fixed - Plan 021: Retrieval Display for Synthesized Answers
+
+- **Retrieval Display Bug**: Fixed a regression where synthesized answers (score 0.0) were silently filtered out by the client-side safety check.
+- **Sentinel-Aware Filter**: Updated `CogneeContextProvider` to explicitly allow results with `score === 0.0` (sentinel for synthesized answers) while maintaining strict filtering for low-confidence noise (e.g., 0.001 - 0.009).
+- **Logging**: Added debug logging to indicate when synthesized answers are included in retrieval results.
+
 ## [0.3.10] - 2025-11-23
 
 ### Fixed - Plan 023: Retrieval Scoring Hotfix

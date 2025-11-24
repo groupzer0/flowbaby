@@ -77,6 +77,7 @@ This master objective defines the fundamental value proposition of Cognee Chat M
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-24 | Refined Epic 0.3.8.3 Acceptance Criteria | Clarified that "Zero-Hallucination" filtering must distinguish between low-relevance noise and valid synthesized answers (score 0.0 sentinel). |
 | 2025-11-23 | Retargeted Memory Visibility/Validation work to Release v0.3.8; added agent structure validation | Version v0.3.7 is already in use. Shifted validation/visibility scope to v0.3.8. Added requirement to validate agent memory submission structure (metadata optimization) as part of the validation epic. |
 | 2025-11-23 | Added Epic 0.3.7.2 (Brand Audit), Epic 0.3.7.3 (Zero-Hallucination), and moved Epic 0.2.3.2 to v0.3.7 (P0) | User feedback identified critical brand inconsistencies, retrieval fabrication risks, and technical debt in Python setup. Prioritized these as P0 for v0.3.7. |
 | 2025-11-23 | Added Local LLM Optimization to Backlog | User request for future local inference support (e.g., Nvidia Nemotron Nano). |
@@ -664,7 +665,7 @@ So that I can trust the agent's context implicitly without double-checking every
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] Retrieval pipeline strictly filters results with 0.00 relevance score (or low confidence) BEFORE they reach the agent/user.
+- [ ] Retrieval pipeline strictly filters low-confidence results BEFORE they reach the agent/user, while preserving valid synthesized answers (which may use 0.0 as a sentinel).
 - [ ] "No relevant context found" is a valid and preferred state over low-quality results.
 - [ ] Investigation into graph LLM behavior to identify root cause of fabrication.
 - [ ] Implementation of stricter confidence thresholds or alternative retrieval strategies (e.g., exact match fallback) to prevent hallucination.

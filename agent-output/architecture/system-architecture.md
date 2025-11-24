@@ -1,6 +1,6 @@
 # RecallFlow Chat Memory System Architecture
 
-**Last Updated**: 2025-11-23 10:35
+**Last Updated**: 2025-11-24 14:20
 **Owner**: architect agent
 
 ## Change Log
@@ -27,6 +27,7 @@
 | 2025-11-21 15:15 | Captured Plan 019 compaction queue + conflict-store requirements | Prevent compaction jobs from violating background limits and ensure conflict review has durable state | Plan 019 |
 | 2025-11-22 09:40 | Documented RecallFlow user-facing branding shift + background log capture surfacing | Keep UX terminology consistent while exposing new ingest log diagnostics | Plan 019 |
 | 2025-11-23 10:35 | Defined managed workspace setup + automated bridge dependency refresh contract | Ensure installs/upgrades pin `cognee` versions per workspace and provide deterministic refresh workflow | Plan 017 / Epic 0.4.0.2 |
+| 2025-11-24 14:20 | Clarified retrieval filtering for synthesized-answer sentinel (score 0.0) | Align Epic 0.3.8.3 zero-hallucination mandate with Plan 021 bug fix | Plan 021 |
 
 
 ## 1. Purpose and Scope
@@ -74,6 +75,7 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 - Delegates all knowledge operations to Python bridge via `CogneeClient` helper and the shared RecallFlow Context Provider (`CogneeContextProvider` service). The provider centralizes retrieval logic, enforces concurrency/rate limits, and emits telemetry consumed by both UI surfaces and agent commands.
 - User-facing copy (commands, notifications, chat participant name) ships under the **RecallFlow** brand starting v0.3.6, while internal namespaces (`cogneeMemory.*`, `CogneeClient`, command IDs) remain unchanged for backward compatibility.
 - Hosts the RecallFlow Context Provider (`CogneeContextProvider`), a singleton service that normalizes retrieval responses (structured metadata once Plan 014 migration lands), enforces rate limiting/back-pressure, and feeds both the chat participant and public agent commands.
+- The provider enforces zero-hallucination filtering by passing through only results with `score > 0.01` **or** the bridge-defined synthesized-answer sentinel `score === 0.0`; this guards against low-confidence noise while preserving intentional synthesized answers (Plan 021 / Epic 0.3.8.3).
 - Provides a **Workspace Setup Wizard** (`RecallFlowSetupService`) that creates or validates a workspace-local `.venv`, records ownership metadata in `.cognee/bridge-env.json`, walks users through API-key entry plus onboarding actions, and flags custom interpreters as `ownership="external"` so automation knows not to mutate them.
 - Hosts the `BackgroundOperationManager`, a singleton service that coordinates async cognify() runs introduced in Plan 017. The manager owns a volatile in-memory map plus a persisted ledger at `.cognee/background_ops.json` (mirrored to VS Code `globalState`) so extension reloads can reconcile orphaned work. It enforces a hard limit of 2 concurrent background cognify() processes, maintains a FIFO queue of 3 pending jobs, exposes the `cognee.backgroundStatus` command for visibility, and publishes lifecycle events (start/complete/fail) to both the Output channel and notification pipeline (info-level success toast, warning-level failure toast, each throttled to ≤1 per 5 minutes per workspace). Any surface that returns immediately after `add-only` (agent tool response, command output, etc.) MUST state that the memory was staged, that cognify() will finish within ~1–2 minutes, and that a toast will confirm completion—never display “Done” while the background job still runs.
 - Background processes now pipe `stdout`/`stderr` into `.cognee/logs/ingest.log` (rotated/truncated on startup). Failure notifications include a **View Logs** action that opens this file, and Output-channel entries record the log path alongside the `operationId` so QA can correlate ledger entries with raw diagnostics.
@@ -122,6 +124,7 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 2. Participant handler checks `cogneeMemory.enabled`, calls `CogneeClient.retrieve(query)`.
 3. `retrieve.py` (not shown here but present) performs hybrid search and returns ranked memories.
 4. Participant previews retrieved context, augments prompt, streams LLM response, and optionally re-ingests conversation (feedback loop disabled by default).
+5. Before surfacing results, `CogneeContextProvider` filters out low-confidence noise (`score <= 0.01`) while explicitly allowing the synthesized-answer sentinel (`score === 0.0`). This satisfies Epic 0.3.8.3's zero-hallucination requirement without hiding intentional synthesis.
 
 **Plan 013 Adjustment (Pending)**: Replace the hardcoded 150-character preview with either full memory text or a configurable limit (≥1000 chars) plus explicit truncation indicator. This preserves user trust and aligns with “Zero Cognitive Overhead”. Update `CogneeClient` logging to either record full queries or clearly flag truncation length.
 

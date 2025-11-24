@@ -273,12 +273,21 @@ export class CogneeContextProvider {
             });
 
             // Filter out low confidence results (redundant check for safety)
-            const validResults = results.filter(r => (r.score ?? 0) > 0.01);
+            // Allow score 0.0 (sentinel for synthesized answers) but filter noise (e.g. 0.005)
+            const validResults = results.filter(r => (r.score ?? 0) > 0.01 || r.score === 0.0);
             const filteredCount = results.length - validResults.length;
 
             if (filteredCount > 0) {
                 this.outputChannel.appendLine(
-                    `[CogneeContextProvider] Filtered ${filteredCount} results with score <= 0.01`
+                    `[CogneeContextProvider] Filtered ${filteredCount} results with score <= 0.01 (excluding 0.0 sentinel)`
+                );
+            }
+
+            // Log if synthesized answers are present
+            const synthesizedCount = validResults.filter(r => r.score === 0.0).length;
+            if (synthesizedCount > 0) {
+                this.outputChannel.appendLine(
+                    `[CogneeContextProvider] Included ${synthesizedCount} synthesized answers (score 0.0)`
                 );
             }
             
