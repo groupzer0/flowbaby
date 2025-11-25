@@ -9,7 +9,7 @@ import { StoreMemoryTool } from './tools/storeMemoryTool';
 import { RetrieveMemoryTool } from './tools/retrieveMemoryTool';
 import { CogneeContextProvider } from './cogneeContextProvider';
 import { RecallFlowSetupService } from './setup/RecallFlowSetupService';
-import { RecallFlowStatusBar } from './statusBar/RecallFlowStatusBar';
+import { RecallFlowStatusBar, RecallFlowStatus } from './statusBar/RecallFlowStatusBar';
 
 // Module-level variable to store client instance
 let cogneeClient: CogneeClient | undefined;
@@ -77,7 +77,7 @@ export async function activate(_context: vscode.ExtensionContext) {
 
         if (initialized) {
             console.log('RecallFlow client initialized successfully');
-            statusBar.updateState('ready');
+            statusBar.setStatus(RecallFlowStatus.Ready);
             
             // Register commands for Milestone 1: Context Menu Capture
             registerCaptureCommands(_context, cogneeClient);
@@ -117,7 +117,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             registerLanguageModelTool(_context, agentOutputChannel);
         } else {
             console.warn('RecallFlow client initialization failed (see Output Channel)');
-            statusBar.updateState('setup_required');
+            statusBar.setStatus(RecallFlowStatus.SetupRequired);
             
             // Check if it's an API key issue and provide helpful guidance
             const outputChannel = vscode.window.createOutputChannel('RecallFlow Memory');

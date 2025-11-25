@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.3.16] - 2025-11-25
+
+### Fixed - Plan 027: Migration Marker Data Loss Bug
+
+- **Critical P0 Bug Fix**: Fixed a bug that caused 96% data loss when the cognee Python package was reinstalled. The migration marker was being written to the volatile venv location instead of the workspace-local `.cognee_system/` directory.
+- **Root Cause**: `get_relational_config()` was called BEFORE `cognee.config.system_root_directory()`, returning the venv path instead of the configured workspace path.
+- **Reordered Initialization**: Workspace directories are now configured FIRST, and the marker path is derived directly from the workspace path (never querying SDK config).
+- **Safety Check**: Added `workspace_has_data()` function that refuses to prune if existing LanceDB or Kuzu data is detected, preventing accidental data loss.
+- **Prominent Warnings**: Added visual warning separators (`====`) before any prune operation to make the action obvious in logs.
+- **Data Integrity Health Check**: Added `get_data_integrity_status()` function to compare SQLite vs LanceDB counts for consistency monitoring.
+
+### Testing
+- Added `extension/bridge/tests/test_init_migration.py` with 15 test cases covering marker location, safety checks, and integrity status.
+
 ## [0.3.15] - 2025-11-25
 
 ### Fixed - Plan 026: Path Canonicalization and Retrieval Scoring

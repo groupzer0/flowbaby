@@ -2,7 +2,7 @@
 description: Execution-focused coding agent that implements approved plans.
 name: Implementer
 tools: ['edit', 'runNotebooks', 'search', 'runCommands', 'runTasks', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'fetch', 'githubRepo', 'ms-python.python/getPythonEnvironmentInfo', 'ms-python.python/getPythonExecutableCommand', 'ms-python.python/installPythonPackage', 'ms-python.python/configurePythonEnvironment', 'recallflow.cognee-chat-memory/recallflowStoreSummary', 'recallflow.cognee-chat-memory/recallflowRetrieveMemory', 'todos', 'runTests']
-model: Gemini 3 Pro (Preview)
+model: Claude Opus 4.5 (Preview)
 handoffs:
   - label: Request Analysis
     agent: Analyst

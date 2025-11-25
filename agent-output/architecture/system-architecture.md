@@ -1,12 +1,13 @@
 # RecallFlow Chat Memory System Architecture
 
-**Last Updated**: 2025-11-25 12:15
+**Last Updated**: 2025-11-25 14:30
 **Owner**: architect agent
 
 ## Change Log
 
 | Date & Time | Change | Rationale | Related Epic/Plan |
 |-------------|--------|-----------|-------------------|
+| 2025-11-25 14:30 | Added §8.11 (Migration Marker Data Loss) and §9 ADR for workspace-local marker location; documented data stability requirements | Critical bug in `init.py` causes silent data loss on package reinstall - marker location must be workspace-local, not venv-internal | Analysis 027 / Plan 027 |
 | 2025-11-15 09:10 | Created baseline system architecture document covering Plans 001-011 | Establish single source of truth for planners/critics per updated architect instructions | Plans 001-011 summary |
 | 2025-11-15 09:45 | Added forward-looking architecture mapping for roadmap epics | Provide planners with architecture guidance for v0.2.2, v0.2.3, v0.3.0, v0.4.0 | Roadmap epics 0.2.2.x-0.4.0 |
 | 2025-11-16 12:30 | Incorporated Plan 013/014 analyses (memory display transparency, chat summary schema, compaction pipeline) | Document UX transparency fixes and long-term memory management to guide planning/QA | Plans 013-014 |
@@ -317,6 +318,14 @@ Roadmap alignment:
 
 Enabling agent access grants every extension in the workspace the ability to read/write RecallFlow memories because VS Code does not expose caller identity. Without loud warnings and audit logs, users could unintentionally leak context to untrusted extensions. Capability-token research (Plan 019) is required before we can offer finer-grained authorization.
 
+11. **Migration Marker Data Loss (Analysis 027) - CRITICAL**
+   - The `init.py` migration marker check uses a volatile location inside the Python package directory (`site-packages/cognee/.cognee_system/`) rather than the workspace-local `.cognee_system/` directory.
+   - When `cognee` is reinstalled via pip, the marker disappears, triggering `prune_system()` which wipes all vector embeddings.
+   - **Impact**: 96% data loss observed on Nov 24, 2025 after routine pip install.
+   - **Root cause**: `get_relational_config()` is called BEFORE `cognee.config.system_root_directory()`, returning the package default instead of workspace location.
+   - **Fix required**: Reorder initialization to configure workspace directories first, then check marker in workspace location. Add safety check to refuse prune if workspace data exists.
+   - **Architectural principle violated**: §5 Data & Storage Boundaries requires workspace-local storage; volatile venv-based markers contradict this.
+
 ## 9. Architectural Decisions
 
 ### Decision: Baseline Three-Layer Architecture (2025-11-15 09:10)
@@ -463,6 +472,18 @@ Enabling agent access grants every extension in the workspace the ability to rea
 **Consequences**: (+) Aligns UX terminology with branding/legal requirements without breaking configuration contracts; (+) provides deterministic log access paths tied to operation IDs, improving troubleshooting; (-) requires documentation (AGENT_INTEGRATION.md, Configure Tools descriptions, architecture diagram) to be updated during implementation to avoid mixed branding. Implementers must ensure `.cognee/logs` is created lazily and log rotation prevents unbounded growth.
 
 **Related**: Plan 019, §3.1, §4.5.1, Roadmap Epic 0.2.3.1.
+
+### Decision: Workspace-Local Migration Marker Location (2025-11-25 14:30)
+
+**Context**: Analysis 027 discovered that the migration marker check in `init.py` uses a volatile location inside the Python package directory (`site-packages/cognee/.cognee_system/`) because `get_relational_config()` is called before workspace directories are configured. When `cognee` is reinstalled via pip, the marker disappears, triggering `prune_system()` which wipes all vector embeddings. This caused 96% data loss on Nov 24, 2025.
+
+**Choice**: Reorder `init.py` initialization to configure workspace directories FIRST, then check for the migration marker in the workspace `.cognee_system/.migration_v1_complete` location. Add a safety check that refuses to prune if the workspace database contains existing data (row count > 0), regardless of marker presence. Log a prominent warning before any prune operation.
+
+**Alternatives Considered**: (1) Keep marker in venv but copy to workspace on first init—rejected because reinstall still wipes venv marker, requiring complex reconciliation. (2) Remove auto-prune entirely—deferred to future plan, but the immediate fix must prevent data loss while preserving cleanup for users with genuine legacy data. (3) Check both venv and workspace markers—acceptable as transitional fallback, but workspace location must take precedence.
+
+**Consequences**: (+) Eliminates silent data loss on package reinstall, restoring trust in the "Automatic Context Capture" promise. (+) Aligns with §5 Data & Storage Boundaries principle of workspace-local storage. (+) Safety check provides defense-in-depth against any future marker bugs. (-) Users with legitimate legacy untagged data may need explicit cleanup command (future work). (-) Transitional period where both marker locations may exist.
+
+**Related**: Analysis 027, Plan 027 (TBD), §8 Known Problem Area 11, §5 Data & Storage Boundaries.
 
 ## 10. Roadmap Architecture Outlook
 

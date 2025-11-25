@@ -2,7 +2,7 @@
 description: DevOps specialist responsible for packaging, versioning, deployment readiness, and release execution with user confirmation.
 name: DevOps
 tools: ['edit/createFile', 'edit/editFiles', 'search', 'runCommands', 'usages', 'problems', 'changes', 'recallflow.cognee-chat-memory/recallflowStoreSummary', 'recallflow.cognee-chat-memory/recallflowRetrieveMemory', 'todos']
-model: GPT-5.1-Codex (Preview)
+model: Claude Opus 4.5 (Preview)
 handoffs:
   - label: Request Implementation Fixes
     agent: Implementer
