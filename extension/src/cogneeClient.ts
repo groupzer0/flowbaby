@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
+import { getRecallFlowOutputChannel, debugLog } from './outputChannels';
 
 /**
  * Result structure from Python bridge scripts
@@ -66,14 +67,17 @@ export class CogneeClient {
     private readonly logLevel: LogLevel;
     private readonly outputChannel: vscode.OutputChannel;
     private readonly MAX_PAYLOAD_CHARS = 100000;
+    private readonly context: vscode.ExtensionContext;  // Plan 028 M5
 
     /**
      * Constructor - Load configuration and initialize output channel
      * 
      * @param workspacePath Absolute path to workspace root
+     * @param context VS Code extension context for SecretStorage access (Plan 028 M5)
      */
-    constructor(workspacePath: string) {
+    constructor(workspacePath: string, context: vscode.ExtensionContext) {
         this.workspacePath = workspacePath;
+        this.context = context;
 
         // Load configuration from VS Code settings
         const config = vscode.workspace.getConfiguration('cogneeMemory');
@@ -88,8 +92,8 @@ export class CogneeClient {
         const logLevelStr = config.get<string>('logLevel', 'info');
         this.logLevel = this.parseLogLevel(logLevelStr);
 
-        // Create Output Channel for logging
-        this.outputChannel = vscode.window.createOutputChannel('RecallFlow Memory');
+        // Use singleton Output Channel for logging (Plan 028 M1)
+        this.outputChannel = getRecallFlowOutputChannel();
 
         // Resolve bridge path (extension/bridge relative to dist/)
         this.bridgePath = path.join(__dirname, '..', 'bridge');
@@ -116,12 +120,13 @@ export class CogneeClient {
     }
 
     /**
-     * Detect Python interpreter with auto-detection fallback chain
+     * Detect Python interpreter with auto-detection fallback chain (Plan 028 M3)
      * 
      * Priority order:
      * 1. Explicit cogneeMemory.pythonPath setting (if not default)
-     * 2. Workspace .venv virtual environment (platform-specific paths)
-     * 3. System python3 fallback
+     * 2. .cognee/venv virtual environment (managed environment - preferred)
+     * 3. Workspace .venv virtual environment (legacy/fallback)
+     * 4. System python3 fallback
      * 
      * @returns string - Path to Python interpreter
      */
@@ -129,30 +134,51 @@ export class CogneeClient {
         const config = vscode.workspace.getConfiguration('cogneeMemory');
         const configuredPath = config.get<string>('pythonPath', 'python3');
 
-        // Explicit config always wins (user override is sacred)
+        // Priority 1: Explicit config always wins (user override is sacred)
         if (configuredPath !== 'python3' && configuredPath !== '') {
+            debugLog('Python interpreter: using explicit config', { pythonPath: configuredPath });
             return configuredPath;
         }
 
-        // Auto-detect workspace .venv (platform-specific)
         const isWindows = process.platform === 'win32';
+        
+        // Priority 2: Check .cognee/venv (managed environment - preferred)
+        const cogneePath = isWindows
+            ? path.join(this.workspacePath, '.cognee', 'venv', 'Scripts', 'python.exe')
+            : path.join(this.workspacePath, '.cognee', 'venv', 'bin', 'python');
+
+        try {
+            if (fs.existsSync(cogneePath)) {
+                debugLog('Python interpreter: using .cognee/venv', { pythonPath: cogneePath });
+                return cogneePath;
+            }
+        } catch (error) {
+            this.log('DEBUG', '.cognee/venv detection failed', {
+                cogneePath,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+
+        // Priority 3: Auto-detect legacy workspace .venv (for backward compatibility)
         const venvPath = isWindows
             ? path.join(this.workspacePath, '.venv', 'Scripts', 'python.exe')
             : path.join(this.workspacePath, '.venv', 'bin', 'python');
 
         try {
             if (fs.existsSync(venvPath)) {
+                debugLog('Python interpreter: using legacy .venv', { pythonPath: venvPath });
                 return venvPath;
             }
         } catch (error) {
             // Permission error, missing directory, etc. - fall through to system Python
-            this.log('DEBUG', 'Virtual environment detection failed', {
+            this.log('DEBUG', 'Legacy virtual environment detection failed', {
                 venvPath,
                 error: error instanceof Error ? error.message : String(error)
             });
         }
 
-        // Fall back to system Python
+        // Priority 4: Fall back to system Python
+        debugLog('Python interpreter: using system python3');
         return 'python3';
     }
 
@@ -1064,6 +1090,15 @@ export class CogneeClient {
             script: scriptName,
             args: sanitizedArgs
         });
+        
+        // Plan 028 M2: Debug logging for bridge spawn events
+        debugLog('Python bridge spawn', {
+            script: scriptName,
+            pythonPath: this.pythonPath,
+            bridgePath: this.bridgePath,
+            workingDirectory: this.workspacePath,
+            timeout_ms: timeoutMs
+        });
 
         return new Promise((resolve, reject) => {
             // Milestone 5: Track process timing to distinguish timeout vs exit timing
@@ -1071,22 +1106,32 @@ export class CogneeClient {
             const requestStart = Date.now();
             let timeoutFiredAt: number | null = null;
             
-            // Spawn Python process with workspace as working directory
-            // This ensures relative paths in scripts resolve from workspace root
-            // Set PYTHONUNBUFFERED=1 to ensure stderr [PROGRESS] markers appear immediately
-            const python = this.spawnProcess(this.pythonPath, [scriptPath, ...args], {
-                cwd: this.workspacePath,
-                env: { ...process.env, PYTHONUNBUFFERED: '1' }
-            });
-            
-            if (!python.stdout || !python.stderr) {
-                reject(new Error('Failed to spawn Python process: stdout/stderr not available'));
-                return;
-            }
+            // Plan 028 M5/M6: Get LLM environment async and spawn process
+            // Note: We have to wrap the spawn in an async IIFE since Promise executor can't be async
+            (async () => {
+                const llmEnv = await this.getLLMEnvironment();
+                
+                // Spawn Python process with workspace as working directory
+                // This ensures relative paths in scripts resolve from workspace root
+                // Set PYTHONUNBUFFERED=1 to ensure stderr [PROGRESS] markers appear immediately
+                // Plan 028 M5: Inject LLM environment variables (API key, provider, model, endpoint)
+                const python = this.spawnProcess(this.pythonPath, [scriptPath, ...args], {
+                    cwd: this.workspacePath,
+                    env: { 
+                        ...process.env, 
+                        PYTHONUNBUFFERED: '1',
+                        ...llmEnv 
+                    }
+                });
+                
+                if (!python.stdout || !python.stderr) {
+                    reject(new Error('Failed to spawn Python process: stdout/stderr not available'));
+                    return;
+                }
 
-            let stdout = '';
-            let stderrCaptured = '';
-            let stderrBuffer = '';
+                let stdout = '';
+                let stderrCaptured = '';
+                let stderrBuffer = '';
 
             // Collect stdout (with buffer limit to prevent memory bloat)
             python.stdout.on('data', (data) => {
@@ -1138,6 +1183,14 @@ export class CogneeClient {
                     close_duration_ms: closeTime - requestStart,
                     timed_out: timedOut,
                     timeout_fired_ms: timeoutFiredAt ? timeoutFiredAt - requestStart : null
+                });
+                
+                // Plan 028 M2: Debug logging for bridge exit
+                debugLog('Python bridge exit', {
+                    script: scriptName,
+                    exit_code: code,
+                    duration_ms: closeTime - requestStart,
+                    timed_out: timedOut
                 });
                 
                 // If we already timed out, process completed after promise rejection
@@ -1265,6 +1318,7 @@ export class CogneeClient {
                     clearTimeout(timeout);
                 }
             });
+            })().catch(reject);  // Close async IIFE and forward any errors to reject
         });
     }
 
@@ -1321,6 +1375,89 @@ export class CogneeClient {
         }
 
         return sanitized;
+    }
+
+    /**
+     * Resolve LLM API key with priority order (Plan 028 M5)
+     * 
+     * Priority:
+     * 1. Workspace .env file LLM_API_KEY (explicit workspace override)
+     * 2. SecretStorage global key (recallflow.llmApiKey)
+     * 3. System environment LLM_API_KEY (fallback)
+     * 
+     * @returns Promise<string | undefined> - Resolved API key or undefined
+     */
+    private async resolveApiKey(): Promise<string | undefined> {
+        // Priority 1: Check workspace .env file
+        const envPath = path.join(this.workspacePath, '.env');
+        try {
+            if (fs.existsSync(envPath)) {
+                const envContent = fs.readFileSync(envPath, 'utf8');
+                const match = envContent.match(/^LLM_API_KEY\s*=\s*(.+)$/m);
+                if (match && match[1].trim()) {
+                    debugLog('API key resolved from workspace .env');
+                    return match[1].trim();
+                }
+            }
+        } catch (error) {
+            this.log('DEBUG', 'Failed to read workspace .env', {
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+        
+        // Priority 2: Check SecretStorage
+        try {
+            const secretKey = await this.context.secrets.get('recallflow.llmApiKey');
+            if (secretKey) {
+                debugLog('API key resolved from SecretStorage');
+                return secretKey;
+            }
+        } catch (error) {
+            this.log('DEBUG', 'Failed to read from SecretStorage', {
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+        
+        // Priority 3: System environment variable
+        if (process.env.LLM_API_KEY) {
+            debugLog('API key resolved from system environment');
+            return process.env.LLM_API_KEY;
+        }
+        
+        debugLog('No API key found in any source');
+        return undefined;
+    }
+
+    /**
+     * Get LLM environment variables for bridge subprocess (Plan 028 M5/M6)
+     * 
+     * Returns environment variables to inject into Python bridge process
+     * for API key and LLM configuration.
+     * 
+     * @returns Promise<Record<string, string>> - Environment variables to inject
+     */
+    private async getLLMEnvironment(): Promise<Record<string, string>> {
+        const env: Record<string, string> = {};
+        
+        // Resolve and inject API key
+        const apiKey = await this.resolveApiKey();
+        if (apiKey) {
+            env['LLM_API_KEY'] = apiKey;
+        }
+        
+        // Plan 028 M6: Get LLM provider settings
+        const config = vscode.workspace.getConfiguration('cogneeMemory');
+        const provider = config.get<string>('llm.provider', 'openai');
+        const model = config.get<string>('llm.model', 'gpt-4o-mini');
+        const endpoint = config.get<string>('llm.endpoint', '');
+        
+        env['LLM_PROVIDER'] = provider;
+        env['LLM_MODEL'] = model;
+        if (endpoint) {
+            env['LLM_ENDPOINT'] = endpoint;
+        }
+        
+        return env;
     }
 
     /**

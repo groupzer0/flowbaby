@@ -10,6 +10,7 @@ import { RetrieveMemoryTool } from './tools/retrieveMemoryTool';
 import { CogneeContextProvider } from './cogneeContextProvider';
 import { RecallFlowSetupService } from './setup/RecallFlowSetupService';
 import { RecallFlowStatusBar, RecallFlowStatus } from './statusBar/RecallFlowStatusBar';
+import { getRecallFlowOutputChannel, getRecallFlowDebugChannel, disposeOutputChannels, debugLog } from './outputChannels';
 
 // Module-level variable to store client instance
 let cogneeClient: CogneeClient | undefined;
@@ -29,7 +30,11 @@ const pendingSummaries = new Map<string, PendingSummary>();
  * Called when VS Code activates the extension (onStartupFinished)
  */
 export async function activate(_context: vscode.ExtensionContext) {
+    const activationStart = Date.now();
     console.log('RecallFlow Chat Memory extension activated');
+    
+    // Plan 028 M2: Debug logging for activation lifecycle
+    debugLog('Extension activation started', { timestamp: new Date().toISOString() });
     
     // Get workspace folder
     const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -44,13 +49,82 @@ export async function activate(_context: vscode.ExtensionContext) {
 
     // Initialize Cognee client
     try {
-        cogneeClient = new CogneeClient(workspacePath);
+        cogneeClient = new CogneeClient(workspacePath, _context);
         
         // Plan 015: Create output channel early
         const agentOutputChannel = vscode.window.createOutputChannel('RecallFlow Agent Activity');
         
         // Plan 025 Milestone 6: Initialize Status Bar EARLY
         const statusBar = new RecallFlowStatusBar(_context);
+        
+        // Plan 028 M2: Register Show Debug Logs command
+        const showDebugLogsCommand = vscode.commands.registerCommand(
+            'cognee.showDebugLogs',
+            () => {
+                const debugChannel = getRecallFlowDebugChannel();
+                if (debugChannel) {
+                    debugChannel.show();
+                } else {
+                    vscode.window.showInformationMessage(
+                        'Debug logging is disabled. Enable it in settings: cogneeMemory.debugLogging',
+                        'Enable Debug Logging'
+                    ).then(selection => {
+                        if (selection === 'Enable Debug Logging') {
+                            vscode.workspace.getConfiguration('cogneeMemory')
+                                .update('debugLogging', true, vscode.ConfigurationTarget.Workspace);
+                        }
+                    });
+                }
+            }
+        );
+        _context.subscriptions.push(showDebugLogsCommand);
+        
+        // Plan 028 M5: Register Set API Key command
+        const setApiKeyCommand = vscode.commands.registerCommand(
+            'cognee.setApiKey',
+            async () => {
+                const apiKey = await vscode.window.showInputBox({
+                    prompt: 'Enter your LLM API Key (e.g., OpenAI, Anthropic)',
+                    placeHolder: 'sk-...',
+                    password: true,
+                    ignoreFocusOut: true,
+                    validateInput: (value) => {
+                        if (!value || value.trim().length < 10) {
+                            return 'API key appears too short. Please enter a valid key.';
+                        }
+                        return null;
+                    }
+                });
+                
+                if (apiKey) {
+                    await _context.secrets.store('recallflow.llmApiKey', apiKey.trim());
+                    vscode.window.showInformationMessage(
+                        'API key stored securely. It will be used for all workspaces without a .env file.'
+                    );
+                    debugLog('API key stored via SecretStorage');
+                }
+            }
+        );
+        _context.subscriptions.push(setApiKeyCommand);
+        
+        // Plan 028 M5: Register Clear API Key command
+        const clearApiKeyCommand = vscode.commands.registerCommand(
+            'cognee.clearApiKey',
+            async () => {
+                const confirm = await vscode.window.showWarningMessage(
+                    'Clear the stored API key? You will need to create a .env file or set the key again.',
+                    { modal: true },
+                    'Clear Key'
+                );
+                
+                if (confirm === 'Clear Key') {
+                    await _context.secrets.delete('recallflow.llmApiKey');
+                    vscode.window.showInformationMessage('API key cleared.');
+                    debugLog('API key cleared from SecretStorage');
+                }
+            }
+        );
+        _context.subscriptions.push(clearApiKeyCommand);
 
         // Plan 021 Milestone 4: Initialize Setup Service EARLY
         const setupService = new RecallFlowSetupService(_context, workspacePath, agentOutputChannel, undefined, undefined, statusBar);
@@ -76,7 +150,9 @@ export async function activate(_context: vscode.ExtensionContext) {
         const initialized = await cogneeClient.initialize();
 
         if (initialized) {
+            const initDuration = Date.now() - activationStart;
             console.log('RecallFlow client initialized successfully');
+            debugLog('Client initialization successful', { duration_ms: initDuration });
             statusBar.setStatus(RecallFlowStatus.Ready);
             
             // Register commands for Milestone 1: Context Menu Capture
@@ -116,16 +192,20 @@ export async function activate(_context: vscode.ExtensionContext) {
             // Plan 016.1: Register languageModelTools unconditionally (Configure Tools is sole opt-in)
             registerLanguageModelTool(_context, agentOutputChannel);
         } else {
+            const initDuration = Date.now() - activationStart;
             console.warn('RecallFlow client initialization failed (see Output Channel)');
+            debugLog('Client initialization failed', { duration_ms: initDuration });
             statusBar.setStatus(RecallFlowStatus.SetupRequired);
             
             // Check if it's an API key issue and provide helpful guidance
-            const outputChannel = vscode.window.createOutputChannel('RecallFlow Memory');
+            // Use singleton output channel (Plan 028 M1)
+            const outputChannel = getRecallFlowOutputChannel();
             outputChannel.appendLine('Failed to initialize RecallFlow. Common issues:');
             outputChannel.appendLine('');
             outputChannel.appendLine('1. Missing LLM API Key:');
             outputChannel.appendLine('   - Create a .env file in your workspace root');
             outputChannel.appendLine('   - Add: LLM_API_KEY=your_key_here');
+            outputChannel.appendLine('   - Or use "RecallFlow: Set API Key" command for global setup');
             outputChannel.appendLine('');
             outputChannel.appendLine('2. Missing Python dependencies:');
             outputChannel.appendLine('   - Ensure cognee and python-dotenv are installed');
@@ -135,11 +215,14 @@ export async function activate(_context: vscode.ExtensionContext) {
             const action = await vscode.window.showWarningMessage(
                 'RecallFlow initialization failed. Check Output > RecallFlow Memory for setup instructions.',
                 'Open Output',
+                'Set API Key',
                 'Dismiss'
             );
             
             if (action === 'Open Output') {
                 outputChannel.show();
+            } else if (action === 'Set API Key') {
+                vscode.commands.executeCommand('cognee.setApiKey');
             }
         }
     } catch (error) {
@@ -280,6 +363,10 @@ export async function deactivate() {
         retrieveMemoryToolDisposable.dispose();
         retrieveMemoryToolDisposable = undefined;
     }
+    
+    // Plan 028 M1: Dispose singleton output channels
+    disposeOutputChannels();
+    
     cogneeClient = undefined;
     cogneeContextProvider = undefined;
 }

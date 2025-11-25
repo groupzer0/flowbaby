@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.3.17] - 2025-11-25
+
+### Fixed - Plan 028: Post-v0.3.16 Bug Fixes and Developer Experience
+
+- **Duplicate Output Channels**: Fixed issue where multiple "RecallFlow Memory" output channels were created. Implemented singleton pattern in `outputChannels.ts`.
+- **Status Bar Unclickable**: Fixed status bar command registration timing issue. Commands are now registered early in activation with try/catch error handling.
+
+### Added
+
+- **Debug Logging Channel**: New opt-in debug output channel for troubleshooting. Enable via `cogneeMemory.debugLogging` setting and use "RecallFlow: Show Debug Logs" command.
+- **Isolated Python Environment**: venv moved from `.venv` to `.cognee/venv` to prevent conflicts with project virtual environments and Python language servers (e.g., Pylance/Jedi).
+- **venv Conflict Detection**: When an existing `.venv` is detected, users are offered a choice between the isolated `.cognee/venv` (recommended) or using the existing `.venv` (advanced).
+- **Global API Key via SecretStorage**: New "RecallFlow: Set API Key" command stores API keys securely via VS Code's SecretStorage API. Keys are shared across all workspaces.
+- **API Key Priority**: Resolution order is now workspace `.env` > SecretStorage (global) > system environment variable.
+- **Global LLM Configuration**: New settings `cogneeMemory.llm.provider`, `cogneeMemory.llm.model`, and `cogneeMemory.llm.endpoint` for configuring LLM providers without per-workspace `.env` files.
+- **Clear API Key Command**: New "RecallFlow: Clear API Key" command to remove stored SecretStorage key.
+
+### Changed
+
+- **Python Interpreter Detection**: Priority order updated to: explicit setting > `.cognee/venv` > `.venv` (legacy) > system python3.
+- **Documentation**: Updated README and SETUP docs to reflect new setup flow, removed global pip install requirement, documented new features and troubleshooting steps.
+
 ## [0.3.16] - 2025-11-25
 
 ### Fixed - Plan 027: Migration Marker Data Loss Bug

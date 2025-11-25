@@ -21,8 +21,8 @@ Before installing the extension, ensure you have:
 
 - **VS Code** 1.85.0 or higher
 - **Python** 3.8+ installed and available in PATH
-- **Cognee Library** 0.3.4 installed: `pip install cognee==0.3.4`
-- **OpenAI API Key** (or compatible LLM provider) set as `LLM_API_KEY` in your workspace `.env` file
+
+**Note**: RecallFlow now manages its own Python environment automatically. You no longer need to manually install `cognee` globally.
 
 ## Installation
 
@@ -51,24 +51,31 @@ RecallFlow now manages its own Python environment automatically.
 2. Run **"RecallFlow: Initialize Workspace"**
 3. The extension will:
    - Check for Python 3.8+
-   - Create a dedicated `.venv` in your workspace
+   - Create a dedicated `.cognee/venv` in your workspace (isolated from project venvs)
    - Install `cognee` and dependencies
    - Verify the environment is ready
 
 ### 2. Configure API Key
 
-Create a `.env` file in your workspace root:
+**Recommended: Global API Key (Stored Securely)**
+
+Use the built-in command to set your API key once, securely stored via VS Code's SecretStorage:
+
+1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+2. Run **"RecallFlow: Set API Key"**
+3. Enter your API key when prompted
+
+This stores the key securely and applies to all workspaces automatically.
+
+**Alternative: Workspace-Specific `.env` File**
+
+For per-workspace configuration, create a `.env` file in your workspace root:
 
 ```env
 LLM_API_KEY=sk-your-key-here
 ```
 
-Or set as an environment variable before launching VS Code:
-
-```bash
-export LLM_API_KEY=sk-your-key-here
-code .
-```
+**Priority Order**: Workspace `.env` file > SecretStorage (global) > System environment variable
 
 ### 3. Verify Extension Activation
 
@@ -399,28 +406,30 @@ The extension requires Python 3.8+ with the following packages:
 
 The extension automatically detects your Python interpreter in this order:
 1. **Explicit Setting**: `cogneeMemory.pythonPath` if configured (highest priority)
-2. **Workspace Virtual Environment**: `.venv/bin/python` (Linux/macOS) or `.venv/Scripts/python.exe` (Windows)
-3. **System Python**: `python3` as fallback
+2. **RecallFlow Environment**: `.cognee/venv/bin/python` (isolated from project venvs)
+3. **Legacy Location**: `.venv/bin/python` (Linux/macOS) or `.venv/Scripts/python.exe` (Windows)
+4. **System Python**: `python3` as fallback
+
+**Why `.cognee/venv`?** This location prevents conflicts with project virtual environments (e.g., Python Jedi language server overwriting RecallFlow's dependencies). The `.cognee/` directory is also automatically added to `.gitignore`.
 
 ### When to Configure Manually
 
 Set `cogneeMemory.pythonPath` explicitly if:
 - Virtual environment is outside workspace directory
-- Virtual environment uses non-standard name (not `.venv`)
-- Multiple Python versions installed and specific one required
-- Using conda or pyenv environments (not auto-detected in v0.2.0)
+- Using conda or pyenv environments (not auto-detected)
+- Want to share a Python environment across multiple workspaces
 
 Example configuration in VS Code settings:
 
 ```json
 {
-  "cogneeMemory.pythonPath": "/path/to/your/.venv/bin/python"
+  "cogneeMemory.pythonPath": "/path/to/your/.cognee/venv/bin/python"
 }
 ```
 
 **Platform-specific examples**:
-- Linux/macOS: `/home/user/project/.venv/bin/python`
-- Windows: `C:\Users\user\project\.venv\Scripts\python.exe`
+- Linux/macOS: `/home/user/project/.cognee/venv/bin/python`
+- Windows: `C:\Users\user\project\.cognee\venv\Scripts\python.exe`
 
 ### Unsupported Contexts (v0.2.0)
 
@@ -446,8 +455,24 @@ Access settings via **File → Preferences → Settings → Extensions → Recal
 | `cogneeMemory.autoIngestConversations` | **Experimental**: Auto-capture @recallflow-memory conversations (disabled due to Cognee 0.4.0 bug) | `false` |
 | `cogneeMemory.pythonPath` | Path to Python interpreter (must have Cognee installed) | `python3` |
 | `cogneeMemory.logLevel` | Logging verbosity: error, warn, info, debug | `info` |
+| `cogneeMemory.debugLogging` | Show debug output channel (for troubleshooting) | `false` |
 
-**Examples**:
+### LLM Configuration
+
+Configure your LLM provider via **File → Preferences → Settings → Extensions → RecallFlow Memory**:
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `cogneeMemory.llm.provider` | LLM provider (openai, anthropic, ollama, etc.) | `openai` |
+| `cogneeMemory.llm.model` | Model name (e.g., gpt-4o-mini, claude-3-opus) | `gpt-4o-mini` |
+| `cogneeMemory.llm.endpoint` | Custom API endpoint (for self-hosted models) | *(empty)* |
+
+**Provider Examples**:
+- **OpenAI (default)**: Leave provider as `openai`, model as `gpt-4o-mini`
+- **Anthropic Claude**: Set provider to `anthropic`, model to `claude-3-opus-20240229`
+- **Local Ollama**: Set provider to `ollama`, model to your model name, endpoint to `http://localhost:11434`
+
+**Additional Examples**:
 - To disable memory temporarily, set `cogneeMemory.enabled` to `false` in settings
 - To enable experimental auto-capture of @recallflow-memory conversations (feedback loop), set `cogneeMemory.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
 
@@ -546,11 +571,13 @@ See [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md) for:
 2. Select **"RecallFlow Memory"** from the dropdown
 3. Look for initialization errors
 
+**Enable Debug Logging**: If you need more detailed information, enable `cogneeMemory.debugLogging` in settings and use **"RecallFlow: Show Debug Logs"** command.
+
 **Common Issues**:
 
 #### 1. "LLM_API_KEY not found"
 
-**Solution**: Create a `.env` file in your workspace root with:
+**Solution**: Use the **"RecallFlow: Set API Key"** command (recommended), or create a `.env` file in your workspace root with:
 
 ```env
 LLM_API_KEY=sk-your-key-here
@@ -564,9 +591,8 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 
 **Solution**: 
 
-- Verify Python installation: `python3 --version`
-- Install Cognee: `pip install cognee==0.3.4`
-- If using a virtual environment, set `cogneeMemory.pythonPath` to your venv Python path (e.g., `/path/to/venv/bin/python3`)
+- Run **"RecallFlow: Initialize Workspace"** to set up the environment automatically
+- If using a custom Python environment, set `cogneeMemory.pythonPath` to your Python path
 
 #### 3. "No workspace folder open"
 
@@ -583,418 +609,20 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 - Reduce `maxContextResults` to 1-2 for faster retrieval
 - Reduce `maxContextTokens` to 1000 for lighter processing
 
-#### 5. Capture or Retrieval Not Working
+#### 5. Python Jedi Language Server Conflict
 
-**Capture Issues**:
+**Symptom**: RecallFlow stops working after using Python IntelliSense; the `.venv` or Python environment gets overwritten with different packages.
 
-1. Verify keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C) is not conflicting with other extensions
-2. Check Command Palette for "RecallFlow: Capture to Memory" as alternative
-3. Ensure you see confirmation message after capture ("✅ Captured to memory")
-4. Check Output Channel logs for ingestion errors
+**Cause**: The Python Jedi language server (Pylance) may modify or replace packages in the active virtual environment.
 
-**Retrieval Issues**:
+**Solution**: RecallFlow now uses an isolated environment at `.cognee/venv` (instead of `.venv`) to prevent conflicts:
 
-1. Verify `cogneeMemory.enabled` is `true` in settings
-2. Type `@recallflow-memory` in chat to invoke the participant explicitly
-3. Check Output Channel logs for retrieval attempts and timing
-4. Remember: The first conversation in a new workspace has no context (memory starts empty)
-5. Each workspace has separate memory—switching workspaces means different context
-6. If retrieval fails, you'll see "⚠️ Memory retrieval unavailable" but participant continues without context
+1. Run **"RecallFlow: Initialize Workspace"** to create the isolated environment
+2. If prompted about an existing `.venv`, choose "Use RecallFlow's .cognee/venv (Recommended)"
 
-### Common Error Patterns
+**Advanced**: If you prefer to use your existing `.venv`, choose "Use existing .venv (Advanced)" when prompted.
 
-| Symptom | Likely Cause | Recommended Action |
-|---------|--------------|-------------------|
-| "Python script exited with code 1" (empty stderr) | Interpreter mismatch: `cognee` or `python-dotenv` not installed in detected Python environment | Set `cogneeMemory.pythonPath` in VS Code settings to correct interpreter (Linux/macOS: `.venv/bin/python`, Windows: `.venv\Scripts\python.exe`) |
-| "No module named 'cognee'" | Missing `cognee` package in Python environment | Install with: `pip install cognee==0.3.4` (or activate virtual environment first) |
-| "LLM_API_KEY not found" | Missing API key in `.env` file or environment | Create `.env` file in workspace root with valid `LLM_API_KEY`, then reload window |
-| Script timeout (retrieval: 15s, ingestion: 120s) | Network issues, slow LLM provider, or filesystem delay | Ingestion timeout is generous (120s); if timeout occurs but data appears via @recallflow-memory, ingestion succeeded in background. Check Output Channel for timing metrics. |
-| JSON parse error in logs | Script produced non-JSON output | Report as bug. Check for conflicting print statements in bridge scripts. |
-
-**Note**: Auto-detection works for standard `.venv` setups on Linux, macOS, and Windows. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, or pyenv, use explicit `cogneeMemory.pythonPath` configuration.
-
-### Clearing Memory
-
-To reset your workspace memory (e.g., to start fresh or clear sensitive data):
-
-```bash
-rm -rf .cognee/
-```
-
-The extension will reinitialize on next activation, creating a fresh knowledge graph.
-
-## Architecture
-
-**How It Works**:
-
-- **TypeScript Extension** communicates with Python bridge scripts via subprocess calls
-- **Python Bridge Scripts** use the Cognee library for knowledge graph operations
-- **Workspace Isolation** is achieved through unique dataset identifiers (SHA1 hash of workspace path) and workspace-local storage directories
-- **Data Storage** is in workspace-local directories (`.cognee_system/` and `.cognee_data/`) created in each workspace root (v0.2.1+)
-- **Ontology** defines chat-specific entities: User, Question, Answer, Topic, Concept, Problem, Solution, Decision
-
-**Data Flow**:
-
-**Capture Flow**:
-1. User presses Ctrl+Alt+C (or uses Command Palette)
-2. Extension shows input box for content
-3. User pastes chat message or types manually
-4. Extension calls Python bridge (`ingest.py`) via subprocess
-5. Cognee stores conversation in workspace-specific knowledge graph
-
-**Retrieval Flow**:
-1. User types `@recallflow-memory [question]` in chat
-2. Extension calls Python bridge (`retrieve.py`) via subprocess
-3. Cognee searches knowledge graph using hybrid graph-vector search
-4. Extension formats retrieved context with previews
-5. Extension augments user's question with context
-6. Extension sends augmented prompt to language model
-7. Response streams back to user
-8. (Optional) Extension captures Q&A conversation for future retrieval (if `autoIngestConversations` enabled)
-
-## Privacy and Data Storage
-
-- **Local-Only Operation** - All data stays on your local machine; no cloud services involved
-- **No Telemetry** - The extension does not collect analytics or usage data
-- **Workspace Isolation** - Each workspace has isolated memory in its own directories; no cross-project data leakage
-- **API Key Security** - Your API key is never logged or transmitted except to your configured LLM provider
-- **Data Location** - Memory is stored in workspace-local directories: `.cognee_system/` (system data) and `.cognee_data/` (knowledge graph data)
-
-To completely remove all extension data from a workspace:
-
-```bash
-rm -rf .cognee/ .cognee_system/ .cognee_data/  # In workspace root
-```
-
-## Known Limitations
-
-- **Workspace Required** - Extension doesn't work in single-file mode
-- **Python Dependency** - Python and Cognee must be installed separately (not bundled)
-- **Manual Capture** - Keyboard shortcut requires copy-paste workflow; cannot extract message from chat UI directly (VS Code API limitation)
-- **Explicit Participant Invocation** - Must type `@recallflow-memory` to trigger retrieval; cannot inject context into other participants (@workspace, GitHub Copilot, etc.)
-- **First Conversation** - The first conversation in a new workspace has no context (memory starts empty)
-- **Step 6 Auto-Ingestion Disabled by Default** - Automatic capture of @recallflow-memory conversations (feedback loop) is experimental due to Cognee 0.4.0 file hashing bug; enable via `cogneeMemory.autoIngestConversations` for testing
-- **Platform Support** - Primarily tested on macOS and Linux; Windows support may require additional configuration
-
-## Known Issues
-
-### Cognee 0.4.0 File Hashing Bug (Auto-Ingestion)
-
-**Issue**: Cognee v0.4.0 has an intermittent file hashing bug that causes ingestion to fail unpredictably when the same conversation is ingested multiple times. This affects automatic capture of @recallflow-memory conversations (Step 6 feedback loop).
-
-**Symptoms**:
-- Conversations fail to ingest with hash mismatch errors
-- Intermittent failures (some ingests succeed, others fail for identical content)
-- Errors logged in Output Channel: "File not found" or hash-related issues
-
-**Workaround**:
-- **Default**: `cogneeMemory.autoIngestConversations` is set to `false` (auto-ingestion disabled)
-- **Manual Capture**: Use keyboard shortcut (Ctrl+Alt+C) to capture conversations manually—this does NOT trigger the bug
-- **Experimental Testing**: Set `cogneeMemory.autoIngestConversations` to `true` to test feedback loop (may experience intermittent failures)
-- **Graceful Degradation**: Ingestion failures are logged to Output Channel but do NOT crash the extension or interrupt chat participant functionality
-
-**Status**: Monitoring Cognee updates for bug fix; will enable auto-ingestion by default when resolved.
-
-**Reference**: See implementation documentation in `implementation/008-chat-participant-memory-integration-implementation.md` for detailed validation findings and error logs.
-
-## Screenshots
-
-### Automatic Context Retrieval
-
-![Context Retrieval](media/screenshot-retrieval.png)
-
-*Example: The extension automatically retrieves relevant memories before responding*
-
-### Configuration Options
-
-![Settings](media/screenshot-settings.png)
-
-*Configure memory behavior through VS Code settings*
-
-### Initialization Logs
-
-![Output Channel](media/screenshot-output.png)
-
-*Monitor extension activity through the Output Channel*
-
-**Note**: Screenshots will be added before the initial release.
-
-## Contributing
-
-We welcome contributions! See [CONTRIBUTING.md](../CONTRIBUTING.md) for:
-
-- Development setup instructions
-- How to run tests
-- Code style guidelines
-- Pull request process
-
-### Debugging
-
-For extension developers:
-
-#### Launch Extension Development Host
-
-1. Open the `extension/` folder in VS Code (not the repository root)
-2. Press **F5** in VS Code
-3. New window opens with extension loaded
-4. Check Debug Console for activation logs (View → Debug Console)
-
-#### Set Breakpoints
-
-- Click left margin in TypeScript files to set breakpoints
-- Breakpoints pause execution in Extension Host
-- Source maps enable debugging original TypeScript code
-
-#### View Logs
-
-The extension outputs logs to different locations:
-
-- **Debug Console**: Extension activation and runtime logs (View → Debug Console)
-- **Output Channel**: RecallFlowClient bridge operations—select "RecallFlow Memory" from dropdown (View → Output)
-- **Developer Tools**: Extension Host errors—open with Help → Toggle Developer Tools
-
-#### Test Changes
-
-After modifying code:
-
-- **Rebuild**: Run `npm run compile` in the `extension/` directory
-- **Reload**: Press **Ctrl+R** (or **Cmd+R** on Mac) in the Extension Development Host window
-- **Auto-compile**: The `preLaunchTask` in `.vscode/launch.json` auto-compiles when pressing F5
-
-See [SETUP.md](SETUP.md) for complete development environment setup.
-
-## License
-
-This extension is licensed under the MIT License. See [LICENSE](LICENSE) for details.
-
-## Support
-
-- **Report Bugs**: [GitHub Issues](https://github.com/lsalsich/cognee/issues)
-- **Feature Requests**: [GitHub Discussions](https://github.com/lsalsich/cognee/discussions)
-- **Documentation**: [Cognee Docs](https://docs.cognee.ai)
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
-
----
-
-**Built with** [Cognee](https://github.com/topoteretes/cognee) - A knowledge graph library for LLM applications.
-```
-
-### Configuration
-
-Cognee tools are controlled exclusively through VS Code's **Configure Tools** UI (see Quick Start below). No additional workspace settings are required for authorization.
-
-### Documentation
-
-- **Complete API Guide**: [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md)
-  - TypeScript examples and error handling
-  - Security model and best practices
-  - Troubleshooting guide
-- **Bridge Contract**: [bridge/INGEST_CONTRACT.md](./bridge/INGEST_CONTRACT.md)
-  - JSON schema specification
-  - Error codes reference
-  - Performance characteristics
-- **Test Agent**: [test-agent/](../test-agent/)
-  - Reference implementation validating all scenarios
-  - Can be used as template for custom agents
-
-## Python Environment
-
-The extension requires Python 3.8+ with the following packages:
-- `cognee` (version 0.3.4 or compatible)
-- `python-dotenv`
-
-### Automatic Detection
-
-The extension automatically detects your Python interpreter in this order:
-1. **Explicit Setting**: `cogneeMemory.pythonPath` if configured (highest priority)
-2. **Workspace Virtual Environment**: `.venv/bin/python` (Linux/macOS) or `.venv/Scripts/python.exe` (Windows)
-3. **System Python**: `python3` as fallback
-
-### When to Configure Manually
-
-Set `cogneeMemory.pythonPath` explicitly if:
-- Virtual environment is outside workspace directory
-- Virtual environment uses non-standard name (not `.venv`)
-- Multiple Python versions installed and specific one required
-- Using conda or pyenv environments (not auto-detected in v0.2.0)
-
-Example configuration in VS Code settings:
-
-```json
-{
-  "cogneeMemory.pythonPath": "/path/to/your/.venv/bin/python"
-}
-```
-
-**Platform-specific examples**:
-- Linux/macOS: `/home/user/project/.venv/bin/python`
-- Windows: `C:\\Users\\user\\project\\.venv\\Scripts\\python.exe`
-
-### Unsupported Contexts (v0.2.0)
-
-The following contexts are **not validated or supported** in this release:
-- **Remote Development**: VS Code Remote-SSH, WSL, Dev Containers
-- **Multi-root Workspaces**: Workspaces with multiple folder roots
-- **Conda Environments**: Automatic detection not implemented (use explicit config)
-- **Pyenv Environments**: Automatic detection not implemented (use explicit config)
-
-Support for these contexts may be added in future releases.
-
-### Configuration
-
-Access settings via **File → Preferences → Settings → Extensions → RecallFlow Memory**:
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `cogneeMemory.enabled` | Toggle memory capture and retrieval on/off | `true` |
-| `cogneeMemory.maxContextResults` | Maximum number of memory results to retrieve | `3` |
-| `cogneeMemory.maxContextTokens` | Token budget for retrieved context | `2000` |
-| `cogneeMemory.recencyWeight` | Weight for prioritizing recent conversations (0-1) | `0.3` |
-| `cogneeMemory.importanceWeight` | Weight for prioritizing marked conversations (0-1) | `0.2` |
-| `cogneeMemory.autoIngestConversations` | **Experimental**: Auto-capture @recallflow-memory conversations (disabled due to Cognee 0.4.0 bug) | `false` |
-| `cogneeMemory.pythonPath` | Path to Python interpreter (must have Cognee installed) | `python3` |
-| `cogneeMemory.logLevel` | Logging verbosity: error, warn, info, debug | `info` |
-
-**Examples**:
-- To disable memory temporarily, set `cogneeMemory.enabled` to `false` in settings
-- To enable experimental auto-capture of @recallflow-memory conversations (feedback loop), set `cogneeMemory.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
-
-## Using RecallFlow Tools with Custom Agents
-
-RecallFlow Chat Memory provides **Language Model Tools** that allow GitHub Copilot and custom agents to autonomously access workspace memory. These tools appear in VS Code's "Configure Tools" dialog and can be referenced in custom agent configurations.
-
-### Quick Start
-
-1. **Enable Tools via Configure Tools UI**:
-   - Open Copilot chat → Click "Tools" (⚙️ icon) → "Configure Tools"
-   - Find "Store Memory in RecallFlow" and "Retrieve RecallFlow Memory"
-   - Toggle tools on/off individually (disabled by default for privacy)
-
-2. **Use in Chat**:
-   - Type `#recallflow` to see autocomplete suggestions
-   - Select `#recallflowStoreSummary` or `#recallflowRetrieveMemory`
-   - Tools appear only when enabled via Configure Tools
-
-3. **Transparency**:
-   - All tool invocations logged in Output channel ("RecallFlow Agent Activity")
-   - Configure Tools UI provides visual feedback for tool state
-
-### Custom Agent Example
-
-Create a `.agent.md` file in your workspace to define a memory-aware agent:
-
-```markdown
----
-name: Memory-Aware Code Assistant
-description: Copilot assistant with access to workspace memory
-tools: ['search', 'recallflowStoreSummary', 'recallflowRetrieveMemory']
----
-
-You are a code assistant with access to workspace-specific memory.
-
-When the user asks about past decisions or implementations:
-1. Use #recallflowRetrieveMemory to search for relevant context
-2. Ground your answer in the retrieved memories
-3. If no memories exist, use your training data but clarify it's not workspace-specific
-
-When the user completes an important implementation or makes a decision:
-1. Offer to store a summary using #recallflowStoreSummary
-2. Include topic, context, and key decisions in the summary
-```
-
-### Available Tools
-
-#### Store Memory Tool (`#recallflowStoreSummary`)
-
-Stores conversation summaries in RecallFlow knowledge graph.
-
-**Parameters**:
-- `topic` (required): Summary title
-- `context` (required): Summary description
-- `decisions` (optional): Key decisions made
-- `rationale` (optional): Reasoning behind decisions
-- `metadata` (optional): Plan ID, status, etc.
-
-#### Retrieve Memory Tool (`#recallflowRetrieveMemory`)
-
-Searches RecallFlow knowledge graph for relevant memories.
-
-**Parameters**:
-- `query` (required): Natural language search query
-- `maxResults` (optional): Max results to return (default: 3, max: 10)
-
-**Returns**: Both narrative markdown and structured JSON for agent parsing.
-
-### Agent Integration Settings
-
-### Transparency
-
-When agents use RecallFlow, you see:
-
-- **Output Channel**: All tool invocations logged in "RecallFlow Agent Activity"
-- **Configure Tools UI**: Visual feedback for which tools are enabled/disabled
-- **Chat Autocomplete**: `#recallflow*` commands only appear when tools are enabled
-
-### For Extension Developers
-
-See [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md) for:
-- Complete API documentation with TypeScript examples
-- Command signatures (`cogneeMemory.ingestForAgent`, `cogneeMemory.retrieveForAgent`)
-- Error codes and handling strategies
-- Request/response schemas
-- Testing and troubleshooting guides
-
-## Troubleshooting
-
-### Extension Not Activating
-
-**Check the Output Channel**:
-
-1. Go to **View → Output**
-2. Select **"RecallFlow Memory"** from the dropdown
-3. Look for initialization errors
-
-**Common Issues**:
-
-#### 1. "LLM_API_KEY not found"
-
-**Solution**: Create a `.env` file in your workspace root with:
-
-```env
-LLM_API_KEY=sk-your-key-here
-```
-
-Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
-
-**Note**: As of v0.2.1, `OPENAI_API_KEY` is no longer supported. Use `LLM_API_KEY` to align with Cognee 0.4.0.
-
-#### 2. "Python not found" or "cognee module not found"
-
-**Solution**: 
-
-- Verify Python installation: `python3 --version`
-- Install Cognee: `pip install cognee==0.3.4`
-- If using a virtual environment, set `cogneeMemory.pythonPath` to your venv Python path (e.g., `/path/to/venv/bin/python3`)
-
-#### 3. "No workspace folder open"
-
-**Solution**: The extension requires a workspace (not single-file mode). Open a folder:
-
-- **File → Open Folder**
-- Or use the command: `code /path/to/your/project`
-
-#### 4. Slow Performance
-
-**Solutions**:
-
-- Check that `cogneeMemory.logLevel` is not set to `"debug"` (this slows down operations)
-- Reduce `maxContextResults` to 1-2 for faster retrieval
-- Reduce `maxContextTokens` to 1000 for lighter processing
-
-#### 5. Capture or Retrieval Not Working
+#### 6. Capture or Retrieval Not Working
 
 **Capture Issues**:
 

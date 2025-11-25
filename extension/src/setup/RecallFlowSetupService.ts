@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 import { RecallFlowStatusBar, RecallFlowStatus } from '../statusBar/RecallFlowStatusBar';
+import { debugLog } from '../outputChannels';
 
 export interface BridgeEnvMetadata {
     pythonPath: string;
@@ -166,17 +167,89 @@ export class RecallFlowSetupService {
     }
 
     /**
-     * Create .venv and install dependencies
+     * Create .cognee/venv and install dependencies (Plan 028 M3)
+     * Uses isolated .cognee/venv path to avoid conflicts with user's workspace .venv
      */
     async createEnvironment(): Promise<boolean> {
         if (this.statusBar) this.statusBar.setStatus(RecallFlowStatus.Refreshing, 'Creating environment...');
+        
+        // Plan 028 M2: Debug logging for setup operations
+        debugLog('Creating Python environment', { workspacePath: this.workspacePath });
+        
+        // Plan 028 M7: Detect existing workspace .venv and offer choices
+        const existingVenvPath = path.join(this.workspacePath, '.venv');
+        if (this.fs.existsSync(existingVenvPath)) {
+            debugLog('Existing workspace .venv detected', { existingVenvPath });
+            
+            const choice = await vscode.window.showInformationMessage(
+                'Your workspace has an existing .venv folder. **Recommended**: RecallFlow will create its own isolated environment in .cognee/venv to avoid dependency conflicts.',
+                { modal: true },
+                'Use .cognee/venv (Recommended)',
+                'Use existing .venv (Advanced)'
+            );
+            
+            if (!choice) {
+                // User cancelled
+                debugLog('User cancelled environment setup due to venv conflict');
+                return false;
+            }
+            
+            if (choice === 'Use existing .venv (Advanced)') {
+                // User chose to use existing .venv - warn about conflicts
+                debugLog('User chose to use existing .venv (advanced option)');
+                
+                const confirmConflict = await vscode.window.showWarningMessage(
+                    'Using your existing .venv may cause version conflicts with your project. RecallFlow will install cognee and its dependencies into this environment.',
+                    { modal: true },
+                    'Proceed',
+                    'Cancel'
+                );
+                
+                if (confirmConflict !== 'Proceed') {
+                    return false;
+                }
+                
+                // Install into existing .venv using legacy path
+                return this.installIntoExistingVenv();
+            }
+            // Otherwise, continue with .cognee/venv (recommended)
+        }
+        
+        // Plan 028 M3: Check BackgroundOperationManager queue before proceeding
+        try {
+            const bgManager = BackgroundOperationManager.getInstance();
+            const operations = bgManager.getStatus();
+            const runningOps = Array.isArray(operations) 
+                ? operations.filter(op => op.status === 'running' || op.status === 'pending')
+                : [];
+            
+            if (runningOps.length > 0) {
+                const proceed = await vscode.window.showWarningMessage(
+                    `RecallFlow has ${runningOps.length} pending operation(s). Creating a new environment may disrupt them.`,
+                    'Wait for Completion',
+                    'Create Anyway'
+                );
+                
+                if (proceed !== 'Create Anyway') {
+                    debugLog('Environment creation cancelled due to pending operations', { count: runningOps.length });
+                    return false;
+                }
+                
+                debugLog('User chose to create environment despite pending operations', { count: runningOps.length });
+            }
+        } catch {
+            // BackgroundOperationManager not initialized yet - proceed
+            debugLog('BackgroundOperationManager not initialized - proceeding with environment creation');
+        }
         
         return vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: "Setting up RecallFlow Environment...",
             cancellable: false
         }, async (progress) => {
-            const venvPath = path.join(this.workspacePath, '.venv');
+            // Plan 028 M3: Use isolated .cognee/venv path
+            const cogneeDir = path.join(this.workspacePath, '.cognee');
+            const venvPath = path.join(cogneeDir, 'venv');
             
             try {
                 // 1. Check Python Version
@@ -188,23 +261,29 @@ export class RecallFlowSetupService {
                     throw new Error('PYTHON_VERSION_UNSUPPORTED: Python 3.8+ is required.');
                 }
 
-                // 2. Create venv
-                progress.report({ message: "Creating virtual environment..." });
-                this.log('Creating virtual environment...');
-                await this.runCommand(pythonCommand, ['-m', 'venv', '.venv'], this.workspacePath);
+                // 2. Ensure .cognee directory exists
+                if (!this.fs.existsSync(cogneeDir)) {
+                    await fs.promises.mkdir(cogneeDir, { recursive: true });
+                }
 
-                // 3. Install dependencies
+                // 3. Create venv in .cognee/venv
+                progress.report({ message: "Creating virtual environment..." });
+                this.log('Creating virtual environment in .cognee/venv...');
+                debugLog('Creating venv', { venvPath });
+                await this.runCommand(pythonCommand, ['-m', 'venv', venvPath], this.workspacePath);
+
+                // 4. Install dependencies
                 progress.report({ message: "Installing dependencies (this may take 1-2 minutes)..." });
                 await this.installDependencies();
 
-                // 4. Verify installation
+                // 5. Verify installation
                 progress.report({ message: "Verifying installation..." });
                 const verified = await this.verifyEnvironment();
                 if (!verified) {
                     throw new Error('VERIFICATION_FAILED: Environment verification script failed.');
                 }
 
-                // 5. Write Metadata
+                // 6. Write Metadata atomically AFTER success
                 const pythonPath = this.getPythonPath();
                 const requirementsHash = await this.computeRequirementsHash();
                 
@@ -219,9 +298,11 @@ export class RecallFlowSetupService {
                 await this.setVerified(true);
 
                 vscode.window.showInformationMessage('RecallFlow environment setup complete!');
+                debugLog('Environment creation successful', { venvPath });
                 return true;
             } catch (error: any) {
                 this.log('Setup failed: ' + error);
+                debugLog('Environment creation failed', { error: String(error), venvPath });
                 
                 // Rollback
                 if (this.fs.existsSync(venvPath)) {
@@ -246,6 +327,70 @@ export class RecallFlowSetupService {
     }
 
     /**
+     * Install into existing workspace .venv (Plan 028 M7 - Advanced option)
+     * Used when user chooses to use their existing .venv instead of .cognee/venv
+     */
+    private async installIntoExistingVenv(): Promise<boolean> {
+        if (this.statusBar) this.statusBar.setStatus(RecallFlowStatus.Refreshing, 'Installing into existing .venv...');
+        
+        return vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Installing RecallFlow into existing .venv...",
+            cancellable: false
+        }, async (progress) => {
+            const venvPath = path.join(this.workspacePath, '.venv');
+            
+            try {
+                // 1. Install dependencies into existing venv
+                progress.report({ message: "Installing dependencies..." });
+                
+                // Get pip path for existing venv
+                const isWindows = process.platform === 'win32';
+                const pipPath = isWindows
+                    ? path.join(venvPath, 'Scripts', 'pip.exe')
+                    : path.join(venvPath, 'bin', 'pip');
+                
+                const requirementsPath = path.join(this.bridgePath, 'requirements.txt');
+                await this.runCommand(pipPath, ['install', '-r', requirementsPath], this.workspacePath);
+
+                // 2. Verify installation
+                progress.report({ message: "Verifying installation..." });
+                const verified = await this.verifyEnvironment();
+                if (!verified) {
+                    throw new Error('VERIFICATION_FAILED: Environment verification script failed.');
+                }
+
+                // 3. Write Metadata
+                const pythonPath = isWindows
+                    ? path.join(venvPath, 'Scripts', 'python.exe')
+                    : path.join(venvPath, 'bin', 'python');
+                const requirementsHash = await this.computeRequirementsHash();
+                
+                await this.writeBridgeEnv({
+                    pythonPath: pythonPath,
+                    ownership: 'managed',  // Still managed, but using legacy location
+                    requirementsHash: requirementsHash,
+                    createdAt: new Date().toISOString(),
+                    platform: process.platform
+                });
+
+                await this.setVerified(true);
+
+                vscode.window.showInformationMessage('RecallFlow installed into existing .venv');
+                debugLog('Environment setup completed using existing .venv', { venvPath });
+                return true;
+            } catch (error: any) {
+                this.log('Setup into existing .venv failed: ' + error);
+                debugLog('Setup into existing .venv failed', { error: String(error) });
+
+                vscode.window.showErrorMessage('Failed to install into existing .venv. Check output for details.');
+                if (this.statusBar) this.statusBar.setStatus(RecallFlowStatus.Error, 'Setup failed');
+                return false;
+            }
+        });
+    }
+
+    /**
      * Install dependencies from requirements.txt
      */
     async installDependencies(): Promise<void> {
@@ -253,10 +398,19 @@ export class RecallFlowSetupService {
         const pipPath = this.getPipPath();
         
         this.log(`Installing dependencies from ${requirementsPath}...`);
+        
+        // Plan 028 M2: Debug logging for pip install
+        debugLog('Installing pip dependencies', { 
+            requirementsPath, 
+            pipPath 
+        });
+        
         try {
             await this.runCommand(pipPath, ['install', '-r', requirementsPath], this.workspacePath);
             this.log('Dependencies installed successfully.');
+            debugLog('Pip install completed successfully');
         } catch (e) {
+            debugLog('Pip install failed', { error: String(e) });
             throw new Error(`PIP_INSTALL_FAILED: ${e}`);
         }
     }
@@ -330,25 +484,44 @@ export class RecallFlowSetupService {
             title: "Refreshing RecallFlow Dependencies...",
             cancellable: false
         }, async (progress) => {
-            const venvPath = path.join(this.workspacePath, '.venv');
-            const backupPath = path.join(this.workspacePath, '.venv.backup');
+            // Plan 028 M3: Use .cognee/venv path, with fallback to legacy .venv
+            const cogneeDir = path.join(this.workspacePath, '.cognee');
+            const venvPath = path.join(cogneeDir, 'venv');
+            const backupPath = path.join(cogneeDir, 'venv.backup');
+            
+            // Check if we need to use legacy path (existing .venv with no .cognee/venv)
+            const useLegacyPath = !this.fs.existsSync(venvPath) && 
+                                  this.fs.existsSync(path.join(this.workspacePath, '.venv'));
+            
+            const actualVenvPath = useLegacyPath ? path.join(this.workspacePath, '.venv') : venvPath;
+            const actualBackupPath = useLegacyPath ? path.join(this.workspacePath, '.venv.backup') : backupPath;
+            
+            debugLog('Refreshing dependencies', { 
+                venvPath: actualVenvPath, 
+                useLegacyPath 
+            });
 
             try {
                 progress.report({ message: "Quiescing background operations..." });
                 
-                // 2. Backup .venv
-                if (this.fs.existsSync(venvPath)) {
+                // Ensure .cognee directory exists for new installs
+                if (!useLegacyPath && !this.fs.existsSync(cogneeDir)) {
+                    await fs.promises.mkdir(cogneeDir, { recursive: true });
+                }
+                
+                // 2. Backup venv
+                if (this.fs.existsSync(actualVenvPath)) {
                     progress.report({ message: "Backing up environment..." });
-                    if (this.fs.existsSync(backupPath)) {
-                        await fs.promises.rm(backupPath, { recursive: true, force: true });
+                    if (this.fs.existsSync(actualBackupPath)) {
+                        await fs.promises.rm(actualBackupPath, { recursive: true, force: true });
                     }
-                    await fs.promises.rename(venvPath, backupPath);
+                    await fs.promises.rename(actualVenvPath, actualBackupPath);
                 }
 
                 // 3. Recreate and Install
                 progress.report({ message: "Recreating environment..." });
                 const pythonCommand = this.getSystemPythonCommand();
-                await this.runCommand(pythonCommand, ['-m', 'venv', '.venv'], this.workspacePath);
+                await this.runCommand(pythonCommand, ['-m', 'venv', actualVenvPath], this.workspacePath);
                 
                 progress.report({ message: "Installing dependencies..." });
                 await this.installDependencies();
@@ -359,25 +532,27 @@ export class RecallFlowSetupService {
                 
                 if (verified) {
                     // Success
-                    if (this.fs.existsSync(backupPath)) {
-                        await fs.promises.rm(backupPath, { recursive: true, force: true });
+                    if (this.fs.existsSync(actualBackupPath)) {
+                        await fs.promises.rm(actualBackupPath, { recursive: true, force: true });
                     }
                     await this.setVerified(true);
                     vscode.window.showInformationMessage('Dependencies refreshed successfully.');
+                    debugLog('Dependencies refresh completed successfully');
                 } else {
                     throw new Error('VERIFICATION_FAILED');
                 }
 
             } catch (error: any) {
                 this.log(`Refresh failed: ${error}`);
+                debugLog('Dependencies refresh failed', { error: String(error) });
                 
                 // Restore backup
-                if (this.fs.existsSync(backupPath)) {
+                if (this.fs.existsSync(actualBackupPath)) {
                     this.log('Restoring backup...');
-                    if (this.fs.existsSync(venvPath)) {
-                        await fs.promises.rm(venvPath, { recursive: true, force: true });
+                    if (this.fs.existsSync(actualVenvPath)) {
+                        await fs.promises.rm(actualVenvPath, { recursive: true, force: true });
                     }
-                    await fs.promises.rename(backupPath, venvPath);
+                    await fs.promises.rename(actualBackupPath, actualVenvPath);
                 }
                 
                 let msg = 'Refresh failed.';
@@ -399,15 +574,43 @@ export class RecallFlowSetupService {
         return process.platform === 'win32' ? 'python' : 'python3';
     }
 
+    /**
+     * Get Python path for managed environment (Plan 028 M3)
+     * Priority: .cognee/venv > .venv (legacy fallback)
+     */
     private getPythonPath(): string {
         const isWindows = process.platform === 'win32';
+        const cogneeVenv = isWindows
+            ? path.join(this.workspacePath, '.cognee', 'venv', 'Scripts', 'python.exe')
+            : path.join(this.workspacePath, '.cognee', 'venv', 'bin', 'python');
+        
+        // Check .cognee/venv first (preferred)
+        if (this.fs.existsSync(cogneeVenv)) {
+            return cogneeVenv;
+        }
+        
+        // Fallback to legacy .venv (for backward compatibility)
         return isWindows
             ? path.join(this.workspacePath, '.venv', 'Scripts', 'python.exe')
             : path.join(this.workspacePath, '.venv', 'bin', 'python');
     }
 
+    /**
+     * Get pip path for managed environment (Plan 028 M3)
+     * Priority: .cognee/venv > .venv (legacy fallback)
+     */
     private getPipPath(): string {
         const isWindows = process.platform === 'win32';
+        const cogneePip = isWindows
+            ? path.join(this.workspacePath, '.cognee', 'venv', 'Scripts', 'pip.exe')
+            : path.join(this.workspacePath, '.cognee', 'venv', 'bin', 'pip');
+        
+        // Check .cognee/venv first (preferred)
+        if (this.fs.existsSync(cogneePip)) {
+            return cogneePip;
+        }
+        
+        // Fallback to legacy .venv (for backward compatibility)
         return isWindows
             ? path.join(this.workspacePath, '.venv', 'Scripts', 'pip.exe')
             : path.join(this.workspacePath, '.venv', 'bin', 'pip');

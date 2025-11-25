@@ -8,6 +8,7 @@
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-25 | Added Release v0.3.17 (Isolation & Configuration) and Epic 0.3.17.1 | Plan 028 delivers critical isolation fixes (`.cognee/venv`) and global configuration (SecretStorage, LLM settings) that warrant a dedicated release. |
 | 2025-11-24 | Marked Epic 0.3.15.3 as Delivered; Downgraded Epic 0.3.15.1 to P1 | Verified strict filtering implementation in `retrieve.py` (Plan 021/023). User requested P1 for validation to prioritize other P0s. |
 | 2025-11-24 | Added Epic 0.3.15.6 (Flowbaby Rebranding) | User requested a complete rebranding from RecallFlow to Flowbaby across all user-visible surfaces (tools, commands, logs, docs). |
 | 2025-11-24 | Added Epic 0.3.15.5 (Move Data to Workspace Storage) | User requested moving `.cognee*` folders out of workspace root to reduce clutter and align with VS Code best practices. |
@@ -280,7 +281,7 @@ So that I can take corrective action instead of assuming the extension is broken
 
 - 2025-11-17: **PROPOSED** - Will be addressed by Plan 016 (separate from Plan 013). Requires system-wide error taxonomy design, structured error propagation, status bar indicators.
 - 2025-11-22: **IN PROGRESS** - Plan 019 retargeted to v0.3.6 to deliver retrieval fabrication scoring fixes, silent background failure notifications (with log surfacing), ingestion timestamps, and RecallFlow rebranding across user-facing UX. Aligns with new architecture guidance to surface `.cognee/logs/ingest.log` via "View Logs" actions and keep internal identifiers as `cognee*`.
-- 2025-11-16: Epic created based on Plans 010-011 findings. CHANGELOG notes "Known Issues: RecallFlow SDK `cognee` 0.4.0 file hashing bug affects auto-ingestion" but users have no visibility into whether this is affecting them. Plan 010 fixed 30s timeout issues but didn't add user-facing error reporting. Plan 009 fixed silent activation failure, but pattern of silent failures persists.
+- 2025-11-16: Epic created based on Plans 010-011 findings. CHANGELOG notes "Known Issues: RecallFlow SDK `cognee` 0.4 file hashing bug affects auto-ingestion" but users have no visibility into whether this is affecting them. Plan 010 fixed 30s timeout issues but didn't add user-facing error reporting. Plan 009 fixed silent activation failure, but pattern of silent failures persists.
 
 ---
 
@@ -1119,3 +1120,48 @@ So that changes don't break initialization or ingestion workflows.
 
 - Test fixtures can mask packaging issues if they create assets that production expects from package
 - Need end-to-end smoke tests with actual packaged VSIX, not just unit tests (see Epic 0.2.2.2)
+
+---
+
+## Release v0.3.17 - Isolation & Configuration
+
+**Target Date**: 2025-11-26
+**Strategic Goal**: Eliminate configuration friction and environment conflicts to support multi-workspace usage and "Zero Cognitive Overhead".
+
+### Epic 0.3.17.1: Global Configuration & Security
+
+**Priority**: P0 (Critical - UX/Security)
+**Status**: Planned (Plan 028)
+
+**User Story**:
+As a user working across multiple projects,
+I want to configure my API key and LLM preferences once globally,
+So that I don't have to create `.env` files for every new workspace.
+
+**Business Value**:
+
+- **User Impact**: Removes the #1 friction point for creating new workspaces (copy-pasting API keys).
+- **Strategic Importance**: "Zero Cognitive Overhead" requires configuration to be "set and forget".
+- **Security**: Moving API keys from plain-text `.env` files to OS-encrypted storage improves security posture.
+
+**Dependencies**:
+
+- None.
+
+**Acceptance Criteria** (outcome-focused):
+
+- [ ] **Global API Key**: Users can set API key once via `RecallFlow: Set API Key` command; stored securely in VS Code SecretStorage.
+- [ ] **Global LLM Settings**: Users can configure Provider, Model, and Endpoint in VS Code User Settings; applies to all workspaces.
+- [ ] **Workspace Overrides**: Workspace-specific `.env` files take precedence over global settings (for power users).
+- [ ] **Security**: API keys are never written to `settings.json` or synced to the cloud.
+
+**Constraints**:
+
+- Must support all Cognee SDK configuration options (Provider, Model, Endpoint).
+- Must fallback gracefully if SecretStorage is unavailable.
+
+**Status Notes**:
+
+- 2025-11-25: **ADDED** - Plan 028 defines the implementation for global config and security.
+
+---

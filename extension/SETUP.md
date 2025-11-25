@@ -5,71 +5,52 @@
 1. **Python 3.8+** with pip
 2. **Node.js 18+** with npm
 3. **VS Code** 1.105 or later
-4. **OpenAI API Key**
+4. **LLM API Key** (OpenAI, Anthropic, or other supported provider)
 
 ---
 
-## ⚠️ Important: Per-Workspace Setup Required
+## Quick Start (Automatic Setup)
 
-**This extension uses a workspace-specific Python virtual environment model.** Each workspace where you use the Cognee extension must have its own `.venv` with `cognee` and `python-dotenv` installed.
+**RecallFlow v0.3.17+ manages its own Python environment automatically.** You no longer need to manually create virtual environments or install packages.
 
-**Why per-workspace?**
-- Follows Python best practices for project isolation
-- Ensures proper version control and dependency management
-- Already implemented and working in extension's Python auto-detection
+### 1. Initialize Workspace
 
-**Setup time**: ~2-3 minutes per workspace
+1. Open your project folder in VS Code
+2. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+3. Run **"RecallFlow: Initialize Workspace"**
+4. The extension will automatically:
+   - Create an isolated `.cognee/venv` environment
+   - Install `cognee` and `python-dotenv`
+   - Verify the environment is ready
 
----
+### 2. Configure API Key
 
-## Setup Instructions
+**Option A: Global API Key (Recommended)**
+1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+2. Run **"RecallFlow: Set API Key"**
+3. Enter your API key when prompted
 
-### 1. Create Workspace Virtual Environment
+This stores the key securely via VS Code's SecretStorage and applies to all workspaces.
 
-**For each workspace where you'll use the extension:**
+**Option B: Workspace-Specific `.env` File**
 
-```bash
-# Navigate to your workspace root
-cd /path/to/your/workspace
-
-# Create virtual environment
-python3 -m venv .venv
-
-# Activate virtual environment
-source .venv/bin/activate  # Linux/Mac
-# OR
-.venv\Scripts\activate     # Windows
-```
-
-### 2. Install Python Dependencies in Workspace
-
-**With the virtual environment activated:**
-
-```bash
-pip install cognee python-dotenv
-```
-
-**Verify installation:**
-```bash
-pip list | grep cognee
-# Should show: cognee 0.4.0 (or similar version)
-```
-
-### 3. Configure OpenAI API Key
-
-Create a `.env` file in your **workspace root**:
-
+Create a `.env` file in your workspace root:
 ```env
 LLM_API_KEY=sk-your-key-here
 ```
 
-**Important**: The `.env` file should be in the workspace root, NOT in the extension directory.
+**Priority Order**: Workspace `.env` > Global SecretStorage > System environment
 
-**Migration Note**: If upgrading from v0.2.0, rename `OPENAI_API_KEY` to `LLM_API_KEY` in your `.env` file.
+### 3. Verify Setup
+
+- Check status bar for **"RecallFlow: Ready"** (green checkmark)
+- If you see **"RecallFlow: Setup Required"**, click it to run initialization
 
 ---
 
-## Extension Development Setup (One-Time)
+## Manual Setup (Advanced)
+
+If you prefer to manage your own Python environment:
 
 ### 4. Install Extension Dependencies
 
@@ -257,10 +238,11 @@ This creates a `.vsix` file you can install or distribute.
 The extension automatically detects your Python interpreter in this order:
 
 1. **Explicit configuration**: `cogneeMemory.pythonPath` setting
-2. **Workspace venv**: `.venv/bin/python` (Linux/Mac) or `.venv\Scripts\python.exe` (Windows)
-3. **System Python**: `python3` command (will fail if cognee not installed globally)
+2. **RecallFlow environment**: `.cognee/venv/bin/python` (isolated from project venvs)
+3. **Legacy workspace venv**: `.venv/bin/python` (Linux/Mac) or `.venv\Scripts\python.exe` (Windows)
+4. **System Python**: `python3` command (will fail if cognee not installed globally)
 
-**Recommended**: Use workspace `.venv` (option 2) for proper isolation and dependency management.
+**Recommended**: Use the automatic **"RecallFlow: Initialize Workspace"** command, which creates an isolated environment at `.cognee/venv` to avoid conflicts with project virtual environments or language servers.
 
 ---
 
@@ -268,7 +250,7 @@ The extension automatically detects your Python interpreter in this order:
 
 **Per-Workspace Isolation**:
 - Each workspace gets a unique dataset name (hashed from workspace path)
-- Workspace marker: `.cognee/.dataset_migration_complete` (metadata only)
+- RecallFlow environment: `.cognee/venv/` (isolated Python environment)
 - Your conversations are isolated per workspace
 
 **Global Data Storage** (per Python install):

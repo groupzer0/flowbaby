@@ -199,9 +199,26 @@ async def initialize_cognee(workspace_path: str) -> dict:
         # Instead, derive global_data_dir directly from the workspace path.
         # ============================================================================
         
-        # Configure Cognee with API key
-        cognee.config.set_llm_api_key(api_key)
-        cognee.config.set_llm_provider('openai')
+        # Plan 028 M6: Read LLM configuration from environment with workspace .env fallback
+        # Priority: Environment variable (from TypeScript) > workspace .env > default
+        llm_api_key = os.environ.get('LLM_API_KEY') or api_key  # api_key loaded from .env earlier
+        llm_provider = os.environ.get('LLM_PROVIDER') or os.getenv('LLM_PROVIDER') or 'openai'
+        llm_model = os.environ.get('LLM_MODEL') or os.getenv('LLM_MODEL') or 'gpt-4o-mini'
+        llm_endpoint = os.environ.get('LLM_ENDPOINT') or os.getenv('LLM_ENDPOINT') or ''
+        
+        logger.debug(f"LLM configuration: provider={llm_provider}, model={llm_model}, endpoint={'<set>' if llm_endpoint else '<default>'}")
+        
+        # Configure Cognee with LLM settings in the correct order (per architecture review §2.6)
+        # 1. Set API key first
+        cognee.config.set_llm_api_key(llm_api_key)
+        # 2. Set provider
+        cognee.config.set_llm_provider(llm_provider)
+        # 3. Set model
+        cognee.config.set_llm_model(llm_model)
+        # 4. Set endpoint only if non-empty
+        if llm_endpoint:
+            cognee.config.set_llm_endpoint(llm_endpoint)
+            logger.debug(f"Custom LLM endpoint configured: {llm_endpoint}")
         
         # Configure workspace-local storage directories FIRST (before any marker checks)
         cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))

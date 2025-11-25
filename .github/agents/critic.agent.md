@@ -2,7 +2,7 @@
 description: Constructive reviewer and program manager that stress-tests planning documents.
 name: Critic
 tools: ['edit', 'search', 'runCommands', 'usages', 'fetch', 'githubRepo', 'recallflow.cognee-chat-memory/recallflowStoreSummary', 'recallflow.cognee-chat-memory/recallflowRetrieveMemory', 'todos']
-model: Gemini 3 Pro (Preview)
+model: GPT-5.1 (Preview)
 handoffs:
   - label: Revise Plan
     agent: Planner

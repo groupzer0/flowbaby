@@ -2,7 +2,7 @@
   "name": "cognee-chat-memory",
   "displayName": "RecallFlow Chat Memory",
   "description": "Automatic memory for GitHub Copilot chat using RecallFlow knowledge graphs",
-  "version": "0.3.16",
+  "version": "0.3.17",
   "publisher": "recallflow",
   "icon": "media/icon.png",
   "engines": {
@@ -92,6 +92,21 @@
       {
         "command": "cognee.configureApiKey",
         "title": "RecallFlow: Configure API Key",
+        "category": "RecallFlow"
+      },
+      {
+        "command": "cognee.setApiKey",
+        "title": "RecallFlow: Set API Key",
+        "category": "RecallFlow"
+      },
+      {
+        "command": "cognee.clearApiKey",
+        "title": "RecallFlow: Clear API Key",
+        "category": "RecallFlow"
+      },
+      {
+        "command": "cognee.showDebugLogs",
+        "title": "RecallFlow: Show Debug Logs",
         "category": "RecallFlow"
       }
     ],
@@ -294,6 +309,27 @@
           ],
           "default": "info",
           "description": "Logging verbosity level"
+        },
+        "cogneeMemory.debugLogging": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Enable debug output channel for extension diagnostics. Shows detailed logs for activation, Python bridge communication, setup operations, and status bar events. Use this when troubleshooting issues."
+        },
+        "cogneeMemory.llm.provider": {
+          "type": "string",
+          "enum": ["openai", "anthropic", "azure", "ollama", "custom"],
+          "default": "openai",
+          "markdownDescription": "LLM provider for memory processing. Non-OpenAI providers may require additional configuration in the endpoint field."
+        },
+        "cogneeMemory.llm.model": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "markdownDescription": "LLM model name (e.g., gpt-4o-mini, claude-3-haiku-20240307, llama2)"
+        },
+        "cogneeMemory.llm.endpoint": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Custom LLM endpoint URL (for Ollama, Azure, or self-hosted). Leave empty for default provider endpoints."
         }
       }
     }

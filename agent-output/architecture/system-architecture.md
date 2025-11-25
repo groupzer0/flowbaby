@@ -7,6 +7,7 @@
 
 | Date & Time | Change | Rationale | Related Epic/Plan |
 |-------------|--------|-----------|-------------------|
+| 2025-11-25 17:30 | Reviewed Plan 028 (Extension Isolation, Logging, Global Config); approved with 4 required changes; venv moves to `.cognee/venv`, SecretStorage for API keys, global LLM settings | Post-v0.3.16 user bugs require isolation fixes and config improvements; aligns with three-layer architecture and privacy principles | Plan 028 / Epic 0.3.15.4 |
 | 2025-11-25 14:30 | Added §8.11 (Migration Marker Data Loss) and §9 ADR for workspace-local marker location; documented data stability requirements | Critical bug in `init.py` causes silent data loss on package reinstall - marker location must be workspace-local, not venv-internal | Analysis 027 / Plan 027 |
 | 2025-11-15 09:10 | Created baseline system architecture document covering Plans 001-011 | Establish single source of truth for planners/critics per updated architect instructions | Plans 001-011 summary |
 | 2025-11-15 09:45 | Added forward-looking architecture mapping for roadmap epics | Provide planners with architecture guidance for v0.2.2, v0.2.3, v0.3.0, v0.4.0 | Roadmap epics 0.2.2.x-0.4.0 |
