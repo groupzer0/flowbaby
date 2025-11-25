@@ -137,8 +137,10 @@ async def test_retrieve_default_score(temp_workspace, mock_env):
             
             assert result['success'] is True
             # Plan 023 Hotfix: Synthesized answers (score 0.0) should NOT be filtered
+            # Plan 026: Synthesized answers (score 0.0) are mapped to 1.0 with high confidence label
             assert len(result['results']) == 1
-            assert result['results'][0]['score'] == 0.0
+            assert result['results'][0]['score'] == 1.0
+            assert result['results'][0]['confidenceLabel'] == 'synthesized_high'
 
 
 @pytest.mark.asyncio

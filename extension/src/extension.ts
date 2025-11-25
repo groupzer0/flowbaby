@@ -45,41 +45,45 @@ export async function activate(_context: vscode.ExtensionContext) {
     // Initialize Cognee client
     try {
         cogneeClient = new CogneeClient(workspacePath);
+        
+        // Plan 015: Create output channel early
+        const agentOutputChannel = vscode.window.createOutputChannel('RecallFlow Agent Activity');
+        
+        // Plan 025 Milestone 6: Initialize Status Bar EARLY
+        const statusBar = new RecallFlowStatusBar(_context);
+
+        // Plan 021 Milestone 4: Initialize Setup Service EARLY
+        const setupService = new RecallFlowSetupService(_context, workspacePath, agentOutputChannel, undefined, undefined, statusBar);
+        
+        // Register setup environment command (Plan 021 Milestone 4)
+        const setupEnvironmentCommand = vscode.commands.registerCommand(
+            'cognee.setupEnvironment',
+            async () => {
+                await setupService.createEnvironment();
+            }
+        );
+        _context.subscriptions.push(setupEnvironmentCommand);
+
+        // Register refresh dependencies command
+        const refreshDependenciesCommand = vscode.commands.registerCommand(
+            'cognee.refreshDependencies',
+            async () => {
+                await setupService.refreshDependencies();
+            }
+        );
+        _context.subscriptions.push(refreshDependenciesCommand);
+
         const initialized = await cogneeClient.initialize();
 
         if (initialized) {
             console.log('RecallFlow client initialized successfully');
+            statusBar.updateState('ready');
             
             // Register commands for Milestone 1: Context Menu Capture
             registerCaptureCommands(_context, cogneeClient);
             
             // Plan 015: Register agent ingestion command
-            const agentOutputChannel = vscode.window.createOutputChannel('RecallFlow Agent Activity');
             registerIngestForAgentCommand(_context, cogneeClient, agentOutputChannel);
-            
-            // Plan 025 Milestone 6: Initialize Status Bar
-            const statusBar = new RecallFlowStatusBar(_context);
-
-            // Plan 021 Milestone 4: Initialize Setup Service
-            const setupService = new RecallFlowSetupService(_context, workspacePath, agentOutputChannel, undefined, undefined, statusBar);
-            
-            // Register setup environment command (Plan 021 Milestone 4)
-            const setupEnvironmentCommand = vscode.commands.registerCommand(
-                'cognee.setupEnvironment',
-                async () => {
-                    await setupService.createEnvironment();
-                }
-            );
-            _context.subscriptions.push(setupEnvironmentCommand);
-
-            // Register refresh dependencies command
-            const refreshDependenciesCommand = vscode.commands.registerCommand(
-                'cognee.refreshDependencies',
-                async () => {
-                    await setupService.refreshDependencies();
-                }
-            );
-            _context.subscriptions.push(refreshDependenciesCommand);
 
             // Plan 017: Initialize BackgroundOperationManager AFTER output channel creation
             try {
@@ -113,6 +117,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             registerLanguageModelTool(_context, agentOutputChannel);
         } else {
             console.warn('RecallFlow client initialization failed (see Output Channel)');
+            statusBar.updateState('setup_required');
             
             // Check if it's an API key issue and provide helpful guidance
             const outputChannel = vscode.window.createOutputChannel('RecallFlow Memory');

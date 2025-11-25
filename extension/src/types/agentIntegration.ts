@@ -386,6 +386,9 @@ export interface CogneeContextEntry {
     /** @deprecated Use finalScore instead */
     score?: number;
 
+    /** Confidence label for qualitative display */
+    confidenceLabel?: 'synthesized_high' | 'normal';
+
     /** Estimated tokens consumed by this entry */
     tokens?: number;
 }

@@ -2,7 +2,7 @@
 description: Maintains architectural coherence across features and reviews technical debt accumulation.
 name: Architect
 tools: ['edit/createFile', 'edit/editFiles', 'search', 'runCommands', 'usages', 'problems', 'fetch', 'githubRepo', 'recallflow.cognee-chat-memory/recallflowStoreSummary', 'recallflow.cognee-chat-memory/recallflowRetrieveMemory', 'todos']
-model: GPT-5.1-Codex (Preview)
+model: Claude Opus 4.5 (Preview)
 handoffs:
   - label: Validate Roadmap Alignment
     agent: Roadmap

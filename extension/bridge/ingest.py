@@ -27,7 +27,7 @@ from time import perf_counter
 # Add bridge directory to path to import bridge_logger
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import bridge_logger
-from workspace_utils import generate_dataset_name
+from workspace_utils import generate_dataset_name, canonicalize_workspace_path
 
 
 def setup_environment(workspace_path: str):
@@ -653,6 +653,14 @@ def main():
                     sys.exit(1)
                 
                 workspace_path = positional_args[0]
+                try:
+                    workspace_path = canonicalize_workspace_path(workspace_path)
+                except FileNotFoundError:
+                    result = {'success': False, 'error': f'Workspace path does not exist: {positional_args[0]}'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+
                 if not Path(workspace_path).is_dir():
                     result = {'success': False, 'error': f'Workspace path does not exist: {workspace_path}'}
                     sys.stdout = old_stdout
@@ -699,6 +707,14 @@ def main():
                     sys.exit(1)
                 
                 workspace_path = positional_args[0]
+                try:
+                    workspace_path = canonicalize_workspace_path(workspace_path)
+                except FileNotFoundError:
+                    result = {'success': False, 'error': f'Workspace path does not exist: {positional_args[0]}'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+
                 user_message = positional_args[1]
                 assistant_message = positional_args[2]
                 

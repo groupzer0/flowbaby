@@ -28,7 +28,7 @@ from pathlib import Path
 # Add bridge directory to path to import bridge_logger
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import bridge_logger
-from workspace_utils import generate_dataset_name
+from workspace_utils import generate_dataset_name, canonicalize_workspace_path
 
 
 SYSTEM_PROMPT = """You are a MEMORY RETRIEVAL ASSISTANT for an autonomous coding agent.
@@ -444,7 +444,17 @@ async def retrieve_context(
 
             recency_multiplier = calculate_recency_multiplier(recency_timestamp, half_life_days)
             status_multiplier = get_status_multiplier(status)
-            final_score = float(semantic_score) * recency_multiplier * status_multiplier
+            
+            # Handle synthesized graph answers: 0.00 sentinel → high confidence
+            # This occurs when cognee's GRAPH_COMPLETION synthesizes an answer
+            # rather than returning a raw vector similarity score
+            confidence_label = "normal"
+            if semantic_score == 0.0:
+                final_score = 1.0  # High score for ranking
+                confidence_label = "synthesized_high"
+                logger.debug(f"Handled synthesized answer: score 0.00 → final_score 1.0, confidenceLabel=synthesized_high", extra={'data': {'original_score': semantic_score}})
+            else:
+                final_score = float(semantic_score) * recency_multiplier * status_multiplier
 
             # Log detailed scoring for each candidate (DEBUG level)
             logger.debug(f"Scoring candidate {i}", extra={'data': {
@@ -458,22 +468,15 @@ async def retrieve_context(
 
             # Filter out low confidence results to prevent hallucinations
             # Plan 021 Milestone 2: Strict filtering
-            # Plan 023 Hotfix: Bypass strict filter for synthesized graph answers (which have default score 0.0)
-            is_synthesized_answer = (semantic_score == 0.0)
-
+            # Plan 026: Trust final_score (which is 1.0 for synthesized answers)
             if final_score <= 0.01:
-                if is_synthesized_answer:
-                    logger.debug(f"Bypassing strict filter for synthesized answer", extra={'data': {
-                        'final_score': final_score
-                    }})
-                else:
-                    filtered_count += 1
-                    filtered_reasons.append(f"Low score {final_score:.4f} <= 0.01 (id={i})")
-                    logger.debug(f"Filtering result with low score", extra={'data': {
-                        'final_score': final_score,
-                        'semantic_score': semantic_score
-                    }})
-                    continue
+                filtered_count += 1
+                filtered_reasons.append(f"Low score {final_score:.4f} <= 0.01 (id={i})")
+                logger.debug(f"Filtering result with low score", extra={'data': {
+                    'final_score': final_score,
+                    'semantic_score': semantic_score
+                }})
+                continue
 
             result_text = result_dict.get('summary_text') or result_dict.get('text') or ''
             
@@ -495,6 +498,7 @@ async def retrieve_context(
                 'semantic_score': round(semantic_score, 4),
                 'recency_multiplier': round(recency_multiplier, 4),
                 'status_multiplier': round(status_multiplier, 4),
+                'confidenceLabel': confidence_label,
                 'tokens': tokens,
                 '_status_rank': get_status_rank(status)
             })
@@ -597,6 +601,16 @@ def main():
         sys.exit(1)
     
     workspace_path = sys.argv[1]
+    try:
+        workspace_path = canonicalize_workspace_path(workspace_path)
+    except FileNotFoundError:
+        result = {
+            'success': False,
+            'error': f'Workspace path does not exist: {sys.argv[1]}'
+        }
+        print(json.dumps(result))
+        sys.exit(1)
+    
     query = sys.argv[2]
     
     # Optional parameters with defaults

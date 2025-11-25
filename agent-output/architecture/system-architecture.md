@@ -1,6 +1,6 @@
 # RecallFlow Chat Memory System Architecture
 
-**Last Updated**: 2025-11-24 14:20
+**Last Updated**: 2025-11-25 12:15
 **Owner**: architect agent
 
 ## Change Log
@@ -30,6 +30,8 @@
 | 2025-11-24 14:20 | Clarified retrieval filtering for synthesized-answer sentinel (score 0.0) | Align Epic 0.3.8.3 zero-hallucination mandate with Plan 021 bug fix | Plan 021 |
 | 2025-11-24 16:05 | Documented retrieval token/top_k configuration limits and safeguards | Guide Plan 024 configuration changes | Plan 024 |
 | 2025-11-24 18:05 | Verified Plan 024 revisions include required safeguards; no new architectural changes needed | Record final approval context for planners/critics | Plan 024 |
+| 2025-11-24 19:30 | Expanded §4.6 metadata schemas (createdAt, platform, bridgeVersion, extensionVersion, lastVerifiedAt) and added environment setup error codes to §10.2 | Align architecture with Plan 025 (Simplified Python Environment Setup) approved findings | Plan 025 / Epic 0.3.15.4 |
+| 2025-11-25 12:15 | Clarified retrieval sentinel handling, added qualitative relevance labels, and documented bridge-wide path canonicalization for Plan 026 | Align architecture with Plan 026 (path fixes and scoring UX) and avoid overloading numeric scores | Plan 026 / Epic 0.3.15.3 |
 
 
 ## 1. Purpose and Scope
@@ -96,7 +98,7 @@ The Mermaid diagram in `agent-output/architecture/system-architecture.mmd` mirro
 - Maintains ontology assets (currently `ontology.ttl`) and dataset naming strategy.
 - Handles Terraform-style migration markers to coordinate one-time pruning.
 - Emits JSON envelopes for success/error, plus structured stderr for diagnostics.
-- `retrieve.py` normalizes retrieval limits: it clamps `max_tokens` to the 100–100 k window, enforces `top_k >= max_results` (while respecting the user-configured `searchTopK` and capping it at 100), and logs whenever inputs are clamped so QA can correlate retrieval latency with configuration.
+- `retrieve.py` normalizes retrieval limits: it clamps `max_tokens` to the 100–100 k window, enforces `top_k >= max_results` (while respecting the user-configured `searchTopK` and capping it at 100), and logs whenever inputs are clamped so QA can correlate retrieval latency with configuration. It also interprets a `semantic_score` sentinel of exactly `0.0` from the RecallFlow SDK as a **synthesized high-confidence answer** rather than a low-relevance hit. That sentinel is handled entirely in the bridge: `retrieve.py` assigns a high `final_score` and sets a categorical confidence label before emitting JSON, so TypeScript never needs to special-case raw `0.0` values.
 - `ingest.py` now supports explicit modes: `sync` (legacy fallback / tests), `add-only` (stage data, return immediately), and `cognify-only` (background graph construction). All UI/agent flows call `add-only`, then spawn a detached `cognify-only` subprocess identified by `operation_id`. Manual capture no longer waits for `sync`; it shares the same async orchestration contract and relies on toast notifications for completion. Each invocation writes a status stub to `.cognee/background_ops/<operation_id>.json` so TypeScript can correlate exit codes with persisted entries.
 - Implements the enriched-text fallback for Plan 014 summaries: `ingest.py` accepts `--summary-json`, renders metadata-rich markdown, and `retrieve.py` parses metadata via regex before producing structured JSON. Bridge unit tests MUST cover both enriched and legacy text paths until the RecallFlow SDK (`cognee`) exposes DataPoint APIs. These scripts are the only sanctioned entry points for agents; `retrieveForAgent` and `ingestForAgent` commands ultimately call them so ontology wiring and dataset isolation remain consistent.
 
@@ -217,9 +219,28 @@ RecallFlow must control the Python environment it ships against to prevent silen
 
 #### 4.6.1 Managed Workspace Setup (First-Run)
 
-1. **Detection & Ownership** – On first activation `RecallFlowSetupService` looks for `.cognee/bridge-env.json`. If absent, it offers to create a workspace-local `.venv` at `${workspace}/.venv`. Accepting creation writes `{ "pythonPath": "<abs>", "ownership": "managed", "requirementsHash": null }`. If the user selects an external interpreter, the wizard records `ownership="external"`, and all automation treats the environment as read-only.
+1. **Detection & Ownership** – On first activation `RecallFlowSetupService` looks for `.cognee/bridge-env.json`. If absent, it offers to create a workspace-local `.venv` at `${workspace}/.venv`. Accepting creation writes:
+   ```json
+   {
+     "pythonPath": "<absolute-path-to-python>",
+     "ownership": "managed" | "external",
+     "requirementsHash": "<sha256-of-requirements.txt>",
+     "createdAt": "<ISO-8601-timestamp>",
+     "platform": "linux" | "darwin" | "win32"
+   }
+   ```
+   If the user selects an external interpreter, the wizard records `ownership="external"`, and all automation treats the environment as read-only.
 2. **Environment Creation** – Managed mode runs `python -m venv .venv`, upgrades `pip`, and executes `pip install -r extension/bridge/requirements.txt`, guaranteeing every workspace installs the exact dependency set (including `cognee`) committed with the extension.
-3. **Verification** – Immediately after install the wizard executes `bridge/verify_environment.py` to confirm `cognee` imports, ontology assets resolve, and required native deps exist. Structured JSON output is logged to the Output channel and persisted to `.cognee/bridge-version.json` alongside the current `requirements.txt` SHA256.
+3. **Verification** – Immediately after install the wizard executes `bridge/verify_environment.py` to confirm `cognee` imports, ontology assets resolve, and required native deps exist. Structured JSON output is logged to the Output channel and persisted to `.cognee/bridge-version.json`:
+   ```json
+   {
+     "bridgeVersion": "<bridge-script-version>",
+     "extensionVersion": "<extension-package-version>",
+     "cogneeVersion": "<installed-cognee-sdk-version>",
+     "requirementsHash": "<sha256-of-requirements.txt>",
+     "lastVerifiedAt": "<ISO-8601-timestamp>"
+   }
+   ```
 4. **Walkthrough Integration** – Successful setup launches the onboarding walkthrough promised in the roadmap (Epics 0.2.2.3, 0.4.0.2). The walkthrough captures API keys, explains capture/retrieve commands, and links to agent tool opt-in so new workspaces become useful immediately.
 5. **Failure Handling** – Verification failures emit actionable error codes (`PYTHON_UNSUPPORTED`, `DEPENDENCY_BUILD_FAILED`, etc.) plus ready-to-run shell commands. The extension refuses to register capture/retrieve commands until a managed environment passes validation, preventing partially configured workspaces from operating in an undefined state.
 
@@ -453,7 +474,18 @@ Enabling agent access grants every extension in the workspace the ability to rea
 
 ### 10.2 v0.2.3 – Operational Reliability (Epics 0.2.3.1-0.2.3.2)
 
-- **Error Taxonomy (0.2.3.1)**: modify all bridge scripts to emit structured payloads: `{ success, error_code, user_message, remediation }`. Define canonical codes (e.g., `MISSING_API_KEY`, `PYTHON_DEP_NOT_FOUND`, `COGNEE_TIMEOUT`) and document mappings in this file. TypeScript layer should translate codes into actionable notifications (toast, inline message, Output log) while also logging the raw payload. Introduce a shared `ErrorMapper` module to avoid duplicated switch statements.
+- **Error Taxonomy (0.2.3.1)**: modify all bridge scripts to emit structured payloads: `{ success, error_code, user_message, remediation }`. Define canonical codes and document mappings in this file. TypeScript layer should translate codes into actionable notifications (toast, inline message, Output log) while also logging the raw payload. Introduce a shared `ErrorMapper` module to avoid duplicated switch statements.
+
+  **Canonical Error Codes**:
+  | Code | Category | Description |
+  |------|----------|-------------|
+  | `MISSING_API_KEY` | Config | `LLM_API_KEY` not set in `.env` |
+  | `PYTHON_DEP_NOT_FOUND` | Environment | Required Python dependency missing |
+  | `COGNEE_TIMEOUT` | Runtime | Bridge operation exceeded timeout |
+  | `PYTHON_VERSION_UNSUPPORTED` | Environment | Python version < 3.8 detected |
+  | `VENV_CREATION_FAILED` | Environment | `python -m venv` failed (permissions, disk space) |
+  | `PIP_INSTALL_FAILED` | Environment | `pip install -r requirements.txt` failed |
+  | `VERIFICATION_FAILED` | Environment | `verify_environment.py` returned errors |
 - **Operational Signals**: extend `CogneeClient` to publish events (success/failure) to the status service. Consider a small circular buffer persisted via VS Code `Memento` storing last N operations for QA verification.
 - **Python Environment Bootstrap (0.2.3.2)**: add a new orchestrator (`extension/src/pythonSetup.ts`) that can (a) detect absence of `.venv`, (b) run `python -m venv` via VS Code terminal, (c) execute `pip install -r requirements.txt`, and (d) update `cogneeMemory.pythonPath`. For automation, introduce a helper bridge script `verify_environment.py` to validate interpreter + dependencies without altering user environments. All automation must operate within workspace directory to avoid privilege escalations.
 

@@ -1,9 +1,0 @@
-{
-  "migrated_at": "2025-11-15T06:35:18.174968",
-  "workspace_id": "ws_a29a37e6a1e029b6",
-  "workspace_path": "/home/luke/Documents/Github-projects/cognee",
-  "data_dir_size_before": 0,
-  "data_dir_size_after": 0,
-  "version": "v1",
-  "note": "Global prune of untagged data performed by this process"
-}

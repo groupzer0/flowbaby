@@ -309,6 +309,7 @@ export class CogneeContextProvider {
                 updatedAt: result.updatedAt ? result.updatedAt.toISOString() : null,
                 finalScore: result.score,
                 score: result.score,
+                confidenceLabel: result.confidenceLabel,
                 tokens: result.tokens
             }));
             

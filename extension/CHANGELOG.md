@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.3.15] - 2025-11-25
+
+### Fixed - Plan 026: Path Canonicalization and Retrieval Scoring
+
+- **Path Canonicalization**: All 5 Python bridge scripts (`ingest.py`, `retrieve.py`, `init.py`, `list_memories.py`, `validate_memories.py`) now strictly canonicalize workspace paths at entry. This fixes `IngestionError 415` when opening workspaces with relative paths (e.g., `code .`).
+- **UI Initialization**: Fixed a "chicken-and-egg" bug where the Status Bar and Setup Service were only created *after* successful initialization. They now appear immediately, ensuring the "Setup Required" indicator is visible in fresh workspaces.
+- **Synthesized Answer Scoring**: Fixed confusing display of synthesized graph answers (which have a raw score of 0.00). The bridge now detects this sentinel, assigns a high ranking score, and attaches a `confidenceLabel="synthesized_high"` metadata field.
+- **Qualitative UI Labels**: The UI now displays "High relevance (synthesized)" for graph completions instead of overloading the numeric score or showing 0.00.
+
 ## [0.3.14] - 2025-11-24
 
 ### Added - Plan 025: Simplified Python Environment Setup

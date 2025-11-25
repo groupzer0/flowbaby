@@ -24,7 +24,7 @@ from pathlib import Path
 # Add bridge directory to path to import bridge_logger
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import bridge_logger
-from workspace_utils import generate_dataset_name
+from workspace_utils import generate_dataset_name, canonicalize_workspace_path
 
 async def validate_memory(workspace_path: str) -> dict:
     # Initialize logger
@@ -147,6 +147,11 @@ def main():
         sys.exit(1)
         
     workspace_path = sys.argv[1]
+    try:
+        workspace_path = canonicalize_workspace_path(workspace_path)
+    except FileNotFoundError:
+        print(json.dumps({"success": False, "error": f"Workspace path does not exist: {sys.argv[1]}"}))
+        sys.exit(1)
     
     if not Path(workspace_path).is_dir():
         print(json.dumps({"success": False, "error": f"Invalid workspace path: {workspace_path}"}))

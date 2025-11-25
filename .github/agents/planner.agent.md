@@ -2,7 +2,7 @@
 description: High-rigor planning assistant for upcoming feature changes.
 name: Planner
 tools: ['edit', 'search', 'runCommands', 'usages', 'fetch', 'githubRepo', 'recallflow.cognee-chat-memory/recallflowStoreSummary', 'recallflow.cognee-chat-memory/recallflowRetrieveMemory', 'todos']
-model: Gemini 3 Pro (Preview)
+model: Claude Opus 4.5 (Preview)
 handoffs:
   - label: Validate Roadmap Alignment
     agent: Roadmap

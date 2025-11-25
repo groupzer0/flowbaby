@@ -30,6 +30,7 @@ export interface RetrievalResult {
     updatedAt?: Date;
     score: number;
     finalScore?: number;
+    confidenceLabel?: 'synthesized_high' | 'normal';
     decisions?: string[];
     rationale?: string[];
     openQuestions?: string[];
@@ -821,6 +822,7 @@ export class CogneeClient {
                         updatedAt: r.updated_at ? new Date(r.updated_at) : undefined,
                         score: r.score ?? r.final_score ?? r.relevance_score ?? 0,
                         finalScore: r.final_score ?? r.relevance_score ?? r.score ?? 0,
+                        confidenceLabel: r.confidenceLabel || undefined,
                         decisions: r.decisions || [],
                         rationale: r.rationale || [],
                         openQuestions: r.open_questions || [],

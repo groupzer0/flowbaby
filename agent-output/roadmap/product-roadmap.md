@@ -1,11 +1,18 @@
 # RecallFlow Chat Memory - Product Roadmap
 
-**Last Updated**: 2025-11-22 (Roadmap Agent)
+**Last Updated**: 2025-11-24 (Roadmap Agent)
 **Roadmap Owner**: roadmap agent
+**Strategic Vision**: [One-paragraph master vision for the product]
 
----
+## Change Log (Recent)
 
-## 🎯 Master Product Objective
+| Date | Change | Rationale |
+|------|--------|-----------|
+| 2025-11-24 | Marked Epic 0.3.15.3 as Delivered; Downgraded Epic 0.3.15.1 to P1 | Verified strict filtering implementation in `retrieve.py` (Plan 021/023). User requested P1 for validation to prioritize other P0s. |
+| 2025-11-24 | Added Epic 0.3.15.6 (Flowbaby Rebranding) | User requested a complete rebranding from RecallFlow to Flowbaby across all user-visible surfaces (tools, commands, logs, docs). |
+| 2025-11-24 | Added Epic 0.3.15.5 (Move Data to Workspace Storage) | User requested moving `.cognee*` folders out of workspace root to reduce clutter and align with VS Code best practices. |
+| 2025-11-24 | Added Release v0.3.13 section; renamed v0.3.8 to v0.3.15 | Documented delivery of Plans 021-024 (configuration, safeguards, truncation fixes) and fixed version drift where released version (0.3.13) exceeded planned milestone (0.3.8). |
+| 2025-11-24 | Refined Epic 0.3.8.3 Acceptance Criteria | Clarified that "Zero-Hallucination" filtering must distinguish between low-relevance noise and valid synthesized answers (score 0.0 sentinel). |
 
 ### ⚠️ IMMUTABLE - USER MODIFICATION ONLY ⚠️
 
@@ -556,14 +563,84 @@ So that I can trust stored context and present the product confidently to my tea
 
 ---
 
-## Release v0.3.8 - Memory Visibility, Validation & Onboarding
+## Release v0.3.13 - Configuration & Reliability
+
+**Target Date**: 2025-11-24 (Delivered)
+**Strategic Goal**: Harden the retrieval pipeline with configurable parameters, strict safeguards, and fix critical truncation/filtering bugs to support large workspaces.
+
+### Epic 0.3.13.1: Configurable Search Parameters
+
+**Priority**: P0 (Critical - Scalability)
+**Status**: ✅ Delivered (Plan 024)
+
+**User Story**:
+As a developer with a large codebase,
+I want to configure search depth and token budgets,
+So that I can retrieve deeper context without hitting arbitrary defaults.
+
+**Business Value**:
+
+- **User Impact**: Unblocks users with large context needs (up to 100k tokens).
+- **Strategic Importance**: Essential for "Power User" adoption.
+- **Measurable Success**: Users can retrieve >32k tokens without UI freeze.
+
+**Dependencies**:
+
+- None.
+
+**Acceptance Criteria** (outcome-focused):
+
+- [x] `cogneeMemory.searchTopK` setting (1-100) exposed (Plan 024)
+- [x] `cogneeMemory.maxContextTokens` limit increased to 100k (Plan 024)
+- [x] Bridge safeguards (clamping, normalization) prevent instability (Plan 024)
+- [x] Client logging reflects configured values (Plan 024)
+
+**Status Notes**:
+
+- 2025-11-24: **DELIVERED** - Plan 024 implementation complete. Version bumped to 0.3.13.
+
+---
+
+### Epic 0.3.13.2: Retrieval Reliability & Truncation Fixes
+
+**Priority**: P0 (Critical - Quality)
+**Status**: ✅ Delivered (Plans 021, 022, 023)
+
+**User Story**:
+As a user,
+I want retrieval to be robust and error-free,
+So that I don't miss context due to silent truncation or aggressive filtering.
+
+**Business Value**:
+
+- **User Impact**: Eliminates "silent failure" modes where context was dropped.
+- **Strategic Importance**: Reliability is a prerequisite for trust.
+
+**Dependencies**:
+
+- None.
+
+**Acceptance Criteria** (outcome-focused):
+
+- [x] Stdout buffer increased to 1MB to prevent JSON truncation (Plan 022)
+- [x] Retrieval filtering fixed to allow synthesized answers (score 0.0) (Plan 023)
+- [x] Logging overhaul for bridge diagnostics (Plan 021)
+- [x] Strict filtering of low-confidence noise (Plan 021)
+
+**Status Notes**:
+
+- 2025-11-24: **DELIVERED** - Plans 021, 022, 023 implemented across v0.3.8-v0.3.12.
+
+---
+
+## Release v0.3.15 - Memory Visibility, Validation & Onboarding
 
 **Target Date**: 2025-12-15 (TBD)
 **Strategic Goal**: Provide first-class smoke-testing, ensure brand consistency, and eliminate setup friction to build absolute trust in the system.
 
-### Epic 0.3.8.1: Memory Validation & Smoke Visibility
+### Epic 0.3.15.1: Memory Validation & Smoke Visibility
 
-**Priority**: P0 (Strategic trust-building follow-up to v0.3.6)
+**Priority**: P1 (Strategic trust-building follow-up to v0.3.6)
 **Status**: Planned (Plan 021 - drafting)
 
 **User Story**:
@@ -605,7 +682,7 @@ So that I can know the data my agents retrieve is accurate before I rely on it i
 
 ---
 
-### Epic 0.3.8.2: Brand Consistency Audit & Cleanup
+### Epic 0.3.15.2: Brand Consistency Audit & Cleanup
 
 **Priority**: P0 (Critical - Quality/Polish)
 **Status**: Planned
@@ -643,10 +720,10 @@ So that I am not confused by mixed messaging or outdated "Cognee" references.
 
 ---
 
-### Epic 0.3.8.3: Zero-Hallucination Retrieval
+### Epic 0.3.15.3: Zero-Hallucination Retrieval
 
 **Priority**: P0 (Critical - Trust)
-**Status**: Planned
+**Status**: ✅ Delivered (Plans 021, 023)
 
 **User Story**:
 As a user relying on memory,
@@ -665,10 +742,10 @@ So that I can trust the agent's context implicitly without double-checking every
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] Retrieval pipeline strictly filters low-confidence results BEFORE they reach the agent/user, while preserving valid synthesized answers (which may use 0.0 as a sentinel).
-- [ ] "No relevant context found" is a valid and preferred state over low-quality results.
-- [ ] Investigation into graph LLM behavior to identify root cause of fabrication.
-- [ ] Implementation of stricter confidence thresholds or alternative retrieval strategies (e.g., exact match fallback) to prevent hallucination.
+- [x] Retrieval pipeline strictly filters low-confidence results BEFORE they reach the agent/user, while preserving valid synthesized answers (which may use 0.0 as a sentinel).
+- [x] "No relevant context found" is a valid and preferred state over low-quality results.
+- [x] Investigation into graph LLM behavior to identify root cause of fabrication.
+- [x] Implementation of stricter confidence thresholds or alternative retrieval strategies (e.g., exact match fallback) to prevent hallucination.
 
 **Constraints**:
 
@@ -676,11 +753,12 @@ So that I can trust the agent's context implicitly without double-checking every
 
 **Status Notes**:
 
+- 2025-11-24: **DELIVERED** - Verified implementation in `retrieve.py`. Strict filtering (score <= 0.01) and sentinel handling (score 0.0) are active.
 - 2025-11-23: Added as P0. User emphasized that flagging 0.00 score is insufficient; behavior must be eliminated.
 
 ---
 
-### Epic 0.3.8.4: Simplified Python Environment Setup (Moved from v0.2.3)
+### Epic 0.3.15.4: Simplified Python Environment Setup (Moved from v0.2.3)
 
 **Priority**: P0 (Critical - Technical Debt & Onboarding)
 **Status**: Planned
@@ -722,6 +800,86 @@ So that I can start using memory features without troubleshooting dependency con
 - 2025-11-23: **ARCHITECTURE UPDATE** - Section §4.6 now defines RecallFlowSetupService (managed `.venv`, `.cognee/bridge-env.json`, onboarding walkthrough) plus the Refresh Bridge Dependencies command. Epic 0.3.8.4 owns delivering those UX surfaces and enforcement hooks so later releases can trust pinned `cognee` versions per workspace.
 - 2025-11-17: **PROPOSED** - Will be addressed by Plan 017 (separate from Plan 013). Requires platform-specific venv creation, subprocess orchestration, cross-platform testing.
 - 2025-11-16: Epic created based on Plan 007 review. Plan 007 delivered auto-detection of .venv and enhanced error messages, but setup remains manual. SETUP.md requires users to run terminal commands before extension works. This creates multi-step onboarding friction that loses users.
+
+---
+
+### Epic 0.3.15.5: Move Cognee Data to Workspace Storage
+
+**Priority**: P1 (High - DX improvement)
+**Status**: Planned
+
+**User Story**:
+As a user,
+I want my project root to remain clean of extension-generated data folders,
+So that my file explorer isn't cluttered and I don't accidentally commit internal data.
+
+**Business Value**:
+
+- **User Impact**: Reduces clutter in the file explorer; prevents accidental git commits of large database files.
+- **Strategic Importance**: Aligns with VS Code extension best practices; improves "Zero Cognitive Overhead" by hiding implementation details.
+- **Measurable Success**: Zero `.cognee*` folders in user workspace roots for new installations.
+
+**Dependencies**:
+
+- Epic 0.3.15.4 (Simplified Python Setup) - The managed bridge environment should also live in storage.
+
+**Acceptance Criteria** (outcome-focused):
+
+- [ ] `.cognee`, `.cognee_data`, and `.cognee_system` are created in `context.storageUri` instead of workspace root.
+- [ ] `init.py` accepts a storage path argument and configures Cognee SDK accordingly.
+- [ ] Existing data in workspace root is detected and either migrated or ignored (with a fresh start prompt).
+- [ ] "View Logs" command opens the correct log folder in the storage directory.
+- [ ] `.gitignore` no longer needs to be modified by the user (since data is outside the repo).
+
+**Constraints**:
+
+- Must handle the case where `context.storageUri` is undefined (e.g., no workspace open).
+- Must provide a migration path or clear messaging for existing users.
+
+**Status Notes**:
+
+- 2025-11-24: **ADDED** - User requested moving data folders to workspace storage to improve DX.
+
+---
+
+### Epic 0.3.15.6: Flowbaby Rebranding
+
+**Priority**: P0 (Critical - Brand Identity)
+**Status**: Planned
+
+**User Story**:
+As a user,
+I want to interact with "Flowbaby" consistently across all tools, commands, and documentation,
+So that the product identity is unified and I am not confused by legacy "RecallFlow" or "Cognee" references.
+
+**Business Value**:
+
+- **User Impact**: Eliminates brand confusion; establishes the new "Flowbaby" identity.
+- **Strategic Importance**: Complete rebranding signals a fresh direction and commitment to the new identity.
+- **Measurable Success**: Zero user-facing instances of "RecallFlow" or "Cognee" in the UI, logs, or documentation.
+
+**Dependencies**:
+
+- None.
+
+**Acceptance Criteria** (outcome-focused):
+
+- [ ] **Tool Names**: `cognee_storeMemory` renamed to `flowbaby_storeMemory`, `cognee_retrieveMemory` renamed to `flowbaby_retrieveMemory`. (Breaking change for agents).
+- [ ] **Command Titles**: All Command Palette entries updated to start with "Flowbaby: ...".
+- [ ] **Documentation**: `README.md`, `CHANGELOG.md`, and `package.json` metadata updated to "Flowbaby".
+- [ ] **Logs & Output**: Output channel renamed to "Flowbaby Memory"; log messages updated to "Flowbaby initialized...", etc.
+- [ ] **Participant**: Chat participant renamed/aliased to `@flowbaby` (if possible) or help text updated to reflect Flowbaby identity.
+- [ ] **Status Bar**: Status bar text updated to "Flowbaby".
+- [ ] **Notifications**: All toast notifications updated to use "Flowbaby".
+
+**Constraints**:
+
+- **Internal IDs**: Internal extension IDs (`publisher.name`) and configuration keys (`cognee.*`) SHOULD remain unchanged to preserve user settings and keybindings, unless explicitly decided otherwise.
+- **Breaking Change**: Renaming tool names (`cognee_storeMemory` -> `flowbaby_storeMemory`) will break existing agents using the old names. A migration strategy or dual-support period may be considered but the goal is "complete replacement".
+
+**Status Notes**:
+
+- 2025-11-24: **ADDED** - User requested a complete rebranding to Flowbaby.
 
 ---
 
