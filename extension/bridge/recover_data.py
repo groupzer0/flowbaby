@@ -21,8 +21,14 @@ from typing import List, Tuple
 
 
 def configure_workspace(workspace_path: Path) -> None:
-    """Configure cognee to use workspace-local storage directories."""
-    import cognee
+    """
+    Configure cognee to use workspace-local storage directories.
+    
+    Plan 033: Sets environment variables BEFORE importing cognee SDK.
+    The Cognee SDK uses pydantic-settings with @lru_cache, which reads
+    environment variables at import time and caches them permanently.
+    """
+    import os
     
     system_dir = workspace_path / '.flowbaby/system'
     data_dir = workspace_path / '.flowbaby/data'
@@ -31,6 +37,18 @@ def configure_workspace(workspace_path: Path) -> None:
     print(f"  System dir: {system_dir}")
     print(f"  Data dir: {data_dir}")
     
+    # Create directories BEFORE setting env vars
+    system_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Set environment variables BEFORE importing cognee
+    os.environ['SYSTEM_ROOT_DIRECTORY'] = str(system_dir)
+    os.environ['DATA_ROOT_DIRECTORY'] = str(data_dir)
+    
+    # NOW import cognee
+    import cognee
+    
+    # Belt-and-suspenders: Also call config methods (redundant but safe)
     cognee.config.system_root_directory(str(system_dir))
     cognee.config.data_root_directory(str(data_dir))
 

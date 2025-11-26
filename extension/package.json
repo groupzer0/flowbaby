@@ -2,7 +2,7 @@
   "name": "flowbaby",
   "displayName": "Flowbaby",
   "description": "Automatic memory for GitHub Copilot chat using Flowbaby knowledge graphs",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "publisher": "flowbaby",
   "icon": "media/icon.png",
   "engines": {

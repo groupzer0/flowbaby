@@ -12,7 +12,7 @@ Initializes Cognee for a workspace by:
 5. Performing one-time global data prune if needed (with safety checks)
 
 Returns JSON to stdout:
-  Success: {"success": true, "dataset_name": "ws_abc123...", "flowbaby_dir": "/path/to/.cognee", 
+  Success: {"success": true, "dataset_name": "ws_abc123...", "flowbaby_dir": "/path/to/.flowbaby", 
             "ontology_loaded": true, "ontology_entities": 8, "ontology_relationships": 12,
             "migration_performed": false, "global_marker_location": "/path/to/marker",
             "data_dir_size_before": 12345, "data_dir_size_after": 6789,
@@ -187,16 +187,38 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 'error': error_msg
             }
         
-        # Import cognee
+        # ============================================================================
+        # PLAN 033 FIX: Set environment variables BEFORE importing cognee SDK
+        # ============================================================================
+        # CRITICAL: The Cognee SDK uses pydantic-settings with @lru_cache, which reads
+        # environment variables at import time and caches them permanently. Setting
+        # cognee.config.system_root_directory() after import is ineffective.
+        #
+        # This is the same pattern used in ingest.py and retrieve.py (Plan 032).
+        # ============================================================================
+        
+        # Calculate workspace-local storage paths
+        system_root = str(workspace_dir / '.flowbaby/system')
+        data_root = str(workspace_dir / '.flowbaby/data')
+        
+        # Create directories BEFORE setting env vars (ensures paths exist)
+        Path(system_root).mkdir(parents=True, exist_ok=True)
+        Path(data_root).mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Created storage directories: {system_root}, {data_root}")
+        
+        # Set environment variables BEFORE importing cognee
+        # CRITICAL: Use DATA_ROOT_DIRECTORY and SYSTEM_ROOT_DIRECTORY (no COGNEE_ prefix!)
+        os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
+        os.environ['DATA_ROOT_DIRECTORY'] = data_root
+        logger.debug(f"Set environment variables: SYSTEM_ROOT_DIRECTORY={system_root}, DATA_ROOT_DIRECTORY={data_root}")
+        
+        # NOW import cognee - it will read the env vars we just set
         logger.debug("Importing cognee SDK")
         import cognee
         
         # ============================================================================
-        # PLAN 027 FIX: Configure workspace directories FIRST, BEFORE any marker check
-        # ============================================================================
-        # CRITICAL: Do NOT call get_relational_config() to determine marker location!
-        # The SDK may cache config state or return the package default location.
-        # Instead, derive global_data_dir directly from the workspace path.
+        # Belt-and-suspenders: Also call cognee.config methods after import
+        # These are redundant since env vars are set before import, but kept for safety
         # ============================================================================
         
         # Plan 028 M6: Read LLM configuration from environment with workspace .env fallback
@@ -220,18 +242,11 @@ async def initialize_cognee(workspace_path: str) -> dict:
             cognee.config.set_llm_endpoint(llm_endpoint)
             logger.debug(f"Custom LLM endpoint configured: {llm_endpoint}")
         
-        # Configure workspace-local storage directories FIRST (before any marker checks)
-        cognee.config.system_root_directory(str(workspace_dir / '.flowbaby/system'))
-        cognee.config.data_root_directory(str(workspace_dir / '.flowbaby/data'))
-        logger.debug(f"Configured workspace-local storage: {workspace_dir / '.flowbaby/system'}")
-        
-        # Plan 032 M2: Ensure both storage directories exist immediately
-        # This prevents Cognee SDK from falling back to global ~/.cognee_data location
-        system_storage_dir = workspace_dir / '.flowbaby/system'
-        data_storage_dir = workspace_dir / '.flowbaby/data'
-        system_storage_dir.mkdir(parents=True, exist_ok=True)
-        data_storage_dir.mkdir(parents=True, exist_ok=True)
-        logger.debug(f"Created storage directories: {system_storage_dir}, {data_storage_dir}")
+        # Belt-and-suspenders: Also call config methods (redundant but safe)
+        # Plan 033: Env vars are set before import, so these are now confirmatory
+        cognee.config.system_root_directory(system_root)
+        cognee.config.data_root_directory(data_root)
+        logger.debug(f"Confirmed workspace-local storage via config API: {system_root}")
         
         # PLAN 027: Derive global_data_dir directly from workspace path
         # NEVER query get_relational_config() for marker location - it may return stale/wrong path
@@ -244,8 +259,9 @@ async def initialize_cognee(workspace_path: str) -> dict:
         dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
         logger.info(f"Generated dataset name: {dataset_name}")
         
-        # 2. Create .cognee directory for local marker files (not database storage)
-        flowbaby_dir = Path(workspace_path) / '.cognee'
+        # 2. Create .flowbaby directory for local marker files (not database storage)
+        # Note: The data/system storage directories are already created earlier
+        flowbaby_dir = Path(workspace_path) / '.flowbaby'
         flowbaby_dir.mkdir(parents=True, exist_ok=True)
         
         local_marker_path = flowbaby_dir / '.dataset_migration_complete'

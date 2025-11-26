@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.4.4] - 2025-11-26
+
+### Fixed - Plan 033: Complete Environment Variable Hotfix
+
+**Hotfix** - Completes the v0.4.3 environment variable fix that missed `init.py`, preventing "still initializing" hang and `.cognee` folder creation.
+
+#### Root Cause
+v0.4.3 correctly fixed `ingest.py` and `retrieve.py` to set `SYSTEM_ROOT_DIRECTORY` and `DATA_ROOT_DIRECTORY` before importing Cognee SDK. However, **`init.py` was missed**, causing:
+1. Creation of orphan `.cognee` folder in workspace root
+2. Missing `.flowbaby/data` directory
+3. "Flowbaby is still initializing..." hang on first activation
+4. Retrieval failures ("no relevant memories found")
+
+#### Fix Applied
+- Set `SYSTEM_ROOT_DIRECTORY` and `DATA_ROOT_DIRECTORY` environment variables **before** `import cognee` in `init.py` (lines 178-215)
+- Changed legacy `.cognee` directory creation to `.flowbaby` for marker files (line 263)
+- Conducted bridge-wide import audit - all 8 scripts now follow the "env vars before import" invariant
+- Fixed additional non-compliant scripts: `list_memories.py`, `validate_memories.py`, `recover_data.py`
+
+#### Bridge-Wide Invariant (Documented)
+All bridge entrypoints must now follow this sequence:
+1. Compute `.flowbaby/system` and `.flowbaby/data` paths
+2. Create directories with `Path.mkdir(parents=True, exist_ok=True)`
+3. Set `os.environ['SYSTEM_ROOT_DIRECTORY']` and `os.environ['DATA_ROOT_DIRECTORY']`
+4. **Only then** `import cognee`
+
+This invariant is enforced because Cognee SDK uses `pydantic-settings` with `@lru_cache`, reading environment variables at import time.
+
+#### Test Coverage Added
+- `test_sets_env_vars_before_cognee_import` - verifies env var values
+- `test_creates_flowbaby_dirs_not_cognee_dirs` - filesystem regression test
+- `test_env_vars_contain_flowbaby_path` - path validation
+
 ## [0.4.3] - 2025-11-27
 
 ### Fixed - Hotfix: Cognee SDK Environment Variable Names

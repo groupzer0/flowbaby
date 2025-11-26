@@ -76,13 +76,33 @@ async def validate_memory(workspace_path: str) -> dict:
         else:
             logger.warning(f"Ontology file not found at {ontology_file}")
         
+        # ============================================================================
+        # PLAN 033 FIX: Set environment variables BEFORE importing cognee SDK
+        # ============================================================================
+        # CRITICAL: The Cognee SDK uses pydantic-settings with @lru_cache, which reads
+        # environment variables at import time and caches them permanently.
+        # ============================================================================
+        
+        # Calculate workspace-local storage paths
+        system_root = str(workspace_dir / '.flowbaby/system')
+        data_root = str(workspace_dir / '.flowbaby/data')
+        
+        # Create directories BEFORE setting env vars
+        Path(system_root).mkdir(parents=True, exist_ok=True)
+        Path(data_root).mkdir(parents=True, exist_ok=True)
+        
+        # Set environment variables BEFORE importing cognee
+        os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
+        os.environ['DATA_ROOT_DIRECTORY'] = data_root
+        
         # 3. Configure Cognee
         logger.debug("Importing cognee SDK")
         import cognee
         from cognee.modules.search.types import SearchType
         
-        cognee.config.system_root_directory(str(workspace_dir / '.flowbaby/system'))
-        cognee.config.data_root_directory(str(workspace_dir / '.flowbaby/data'))
+        # Belt-and-suspenders: Also call config methods (redundant but safe)
+        cognee.config.system_root_directory(system_root)
+        cognee.config.data_root_directory(data_root)
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
         
