@@ -225,6 +225,14 @@ async def initialize_cognee(workspace_path: str) -> dict:
         cognee.config.data_root_directory(str(workspace_dir / '.flowbaby/data'))
         logger.debug(f"Configured workspace-local storage: {workspace_dir / '.flowbaby/system'}")
         
+        # Plan 032 M2: Ensure both storage directories exist immediately
+        # This prevents Cognee SDK from falling back to global ~/.cognee_data location
+        system_storage_dir = workspace_dir / '.flowbaby/system'
+        data_storage_dir = workspace_dir / '.flowbaby/data'
+        system_storage_dir.mkdir(parents=True, exist_ok=True)
+        data_storage_dir.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Created storage directories: {system_storage_dir}, {data_storage_dir}")
+        
         # PLAN 027: Derive global_data_dir directly from workspace path
         # NEVER query get_relational_config() for marker location - it may return stale/wrong path
         global_data_dir = workspace_dir / '.flowbaby/system'

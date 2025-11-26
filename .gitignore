@@ -11,9 +11,9 @@ ENV/
 
 # Flowbaby/Cognee data (workspace-local)
 .flowbaby/
-.cognee/
-.cognee_data/
-.cognee_system/
+.cognee-old/
+.cognee_data-old/
+.cognee_system-old/
 cognee_db
 cognee_graph_kuzu
 
@@ -54,3 +54,4 @@ extension/test-*.js
 # Generated agent artifacts
 agent-output/
 agent-outputs/
+.cognee/

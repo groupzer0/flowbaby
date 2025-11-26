@@ -17,6 +17,8 @@ let flowbabyClient: FlowbabyClient | undefined;
 let flowbabyContextProvider: FlowbabyContextProvider | undefined; // Plan 016 Milestone 1
 let storeMemoryToolDisposable: vscode.Disposable | undefined;
 let retrieveMemoryToolDisposable: vscode.Disposable | undefined; // Plan 016 Milestone 5
+// Plan 032: Flag to track initialization state for graceful degradation
+let clientInitialized: boolean = false;
 
 // Module-level storage for pending summary confirmations (Plan 014 Milestone 2)
 interface PendingSummary {
@@ -147,6 +149,12 @@ export async function activate(_context: vscode.ExtensionContext) {
         );
         _context.subscriptions.push(refreshDependenciesCommand);
 
+        // Plan 032 M1: Register @flowbaby chat participant EARLY (before initialization)
+        // This ensures the participant shows in the chat UI immediately, with graceful
+        // degradation when the backend is still initializing
+        registerFlowbabyParticipant(_context);
+        console.log('@flowbaby chat participant registered (pending initialization)');
+
         const initialized = await flowbabyClient.initialize();
 
         if (initialized) {
@@ -154,6 +162,9 @@ export async function activate(_context: vscode.ExtensionContext) {
             console.log('Flowbaby client initialized successfully');
             debugLog('Client initialization successful', { duration_ms: initDuration });
             statusBar.setStatus(FlowbabyStatus.Ready);
+            
+            // Plan 032 M1: Mark client as initialized for graceful degradation
+            clientInitialized = true;
             
             // Register commands for Milestone 1: Context Menu Capture
             registerCaptureCommands(_context, flowbabyClient);
@@ -178,12 +189,9 @@ export async function activate(_context: vscode.ExtensionContext) {
             // Plan 021 Milestone 3: Register validation and listing commands
             registerValidationCommands(_context, flowbabyClient);
             
-            // Plan 016 Milestone 1: Initialize FlowbabyContextProvider
+            // Plan 016 Milestone 1: Initialize FlowbabyContextProvider (now that client is ready)
             const { FlowbabyContextProvider } = await import('./flowbabyContextProvider');
             flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient, agentOutputChannel);
-            
-            // Milestone 2: Register @flowbaby chat participant (Plan 016 Milestone 6: now uses provider)
-            registerFlowbabyParticipant(_context, flowbabyClient, flowbabyContextProvider);
             console.log('FlowbabyContextProvider initialized successfully');
             
             // Plan 016 Milestone 2: Register agent retrieval command
@@ -868,11 +876,10 @@ function extractPlanIdFromConversation(text: string): string | null {
  * Register @flowbaby chat participant for Milestone 2
  * Implements 6-step flow: retrieval → format display → augment prompt → generate response → capture conversation
  * Plan 016 Milestone 6: Refactored to use FlowbabyContextProvider instead of direct client.retrieve
+ * Plan 032 M1: Refactored to use module-level state and graceful degradation during initialization
  */
 function registerFlowbabyParticipant(
-    context: vscode.ExtensionContext,
-    client: FlowbabyClient,
-    provider: FlowbabyContextProvider
+    context: vscode.ExtensionContext
 ) {
     console.log('=== MILESTONE 2: Registering @flowbaby Chat Participant ===');
 
@@ -889,6 +896,14 @@ function registerFlowbabyParticipant(
             console.log('User query:', request.prompt);
 
             try {
+                // Plan 032 M1: Graceful degradation if client not yet initialized
+                if (!clientInitialized || !flowbabyClient || !flowbabyContextProvider) {
+                    stream.markdown('⏳ **Flowbaby is still initializing...**\n\n');
+                    stream.markdown('The memory system is starting up. Please wait a moment and try again.\n\n');
+                    stream.markdown('💡 *This usually takes just a few seconds on first use.*');
+                    return { metadata: { initializing: true } };
+                }
+                
                 // Check if memory is enabled
                 const config = vscode.workspace.getConfiguration('Flowbaby');
                 const memoryEnabled = config.get<boolean>('enabled', true);
@@ -944,7 +959,7 @@ function registerFlowbabyParticipant(
                             stream.markdown('📝 **Storing summary...**\n\n');
                             
                             try {
-                                const success = await client.ingestSummary(pending.summary);
+                                const success = await flowbabyClient.ingestSummary(pending.summary);
                                 
                                 if (success) {
                                     stream.markdown(`✅ **Summary stored successfully!**\n\n`);
@@ -1011,7 +1026,7 @@ function registerFlowbabyParticipant(
 
                 if (isSummaryRequest) {
                     // PLAN 014 MILESTONE 2: Summary Generation Flow
-                    return await handleSummaryGeneration(request, _chatContext, stream, token, client);
+                    return await handleSummaryGeneration(request, _chatContext, stream, token, flowbabyClient);
                 }
 
                 // Check cancellation before expensive operations
@@ -1026,7 +1041,7 @@ function registerFlowbabyParticipant(
 
                 try {
                     // Use shared FlowbabyContextProvider for concurrency/rate limiting
-                    const contextResponse = await provider.retrieveContext({
+                    const contextResponse = await flowbabyContextProvider.retrieveContext({
                         query: request.prompt,
                         maxResults: config.get<number>('maxContextResults', 3),
                         maxTokens: config.get<number>('maxContextTokens', 2000)
@@ -1211,7 +1226,7 @@ function registerFlowbabyParticipant(
                     
                     if (autoIngest) {
                         // Fire-and-forget ingestion (don't block return)
-                        client.ingest(userMessage, assistantMessage)
+                        flowbabyClient.ingest(userMessage, assistantMessage)
                             .then((success) => {
                                 if (success) {
                                     console.log('✅ Conversation captured for feedback loop');

@@ -306,6 +306,11 @@ export class BackgroundOperationManager {
     
     /**
      * Spawn cognify-only subprocess
+     * 
+     * Plan 032 M3: Removed logFd file descriptor passing to prevent TypeScript from
+     * holding the log file open. Python bridge_logger.py handles its own log rotation
+     * using RotatingFileHandler. With TS holding the fd open, Python cannot rotate
+     * logs properly, resulting in writes to .log.1 or rotation failures.
      */
     private async spawnCognifyProcess(
         operationId: string,
@@ -334,15 +339,10 @@ export class BackgroundOperationManager {
             workspacePath
         ];
         
-        let stdio: any = 'ignore';
-        if (this.logFilePath) {
-            try {
-                const logFd = fs.openSync(this.logFilePath, 'a');
-                stdio = ['ignore', logFd, logFd];
-            } catch (err) {
-                this.outputChannel.appendLine(`[ERROR] Failed to open log file: ${err}`);
-            }
-        }
+        // Plan 032 M3: Use 'ignore' for stdio instead of opening log file descriptor.
+        // Python bridge_logger.py writes directly to flowbaby.log using RotatingFileHandler.
+        // By not holding the file open from TypeScript, we allow Python to rotate logs properly.
+        const stdio = 'ignore' as const;
 
         // Get LLM environment variables for the subprocess
         const llmEnv = await this.getLLMEnvironment(workspacePath);
@@ -443,7 +443,7 @@ export class BackgroundOperationManager {
         
         await this.saveLedger();
         
-        this.outputChannel.appendLine(`[ERROR] ${new Date().toISOString()} - Cognify failed (operationId=${operationId}, errorCode=${error.code}, message=${error.message})`);
+        this.outputChannel.appendLine(`[ERROR] ${new Date().toISOString()} - Flowbaby processing failed (operationId=${operationId}, errorCode=${error.code}, message=${error.message})`);
         
         // Schedule failure notification (always shown, throttled)
         await this.scheduleFailureNotification(entry, error.remediation);
@@ -451,7 +451,8 @@ export class BackgroundOperationManager {
     
     /**
      * Schedule success notification (info-level, throttled)
-     * Per Plan 017 architecture: "✅ Cognify finished" with workspace, summary, time, entity count
+     * Plan 017 architecture: "✅ Flowbaby processing finished" with workspace, summary, time, entity count
+     * Plan 032 M4: Updated branding from "Cognify" to "Flowbaby"
      */
     private async scheduleSuccessNotification(entry: OperationEntry): Promise<void> {
         const workspaceName = path.basename(entry.datasetPath);
@@ -472,7 +473,7 @@ export class BackgroundOperationManager {
         const message = `Workspace: ${workspaceName}\nSummary: ${entry.summaryDigest || 'N/A'}\nCompleted in ${elapsedSec}s (${entityCount} entities)`;
         
         const action = await vscode.window.showInformationMessage(
-            '✅ Cognify finished',
+            '✅ Flowbaby processing finished',
             { detail: message, modal: false },
             'View Status'
         );
@@ -484,7 +485,8 @@ export class BackgroundOperationManager {
     
     /**
      * Schedule failure notification (warning-level, throttled)
-     * Per Plan 017 architecture: "⚠️ Cognify failed" with workspace, summary, remediation
+     * Plan 017 architecture: "⚠️ Flowbaby processing failed" with workspace, summary, remediation
+     * Plan 032 M4: Updated branding from "Cognify" to "Flowbaby"
      */
     private async scheduleFailureNotification(entry: OperationEntry, remediation: string): Promise<void> {
         const workspaceName = path.basename(entry.datasetPath);
@@ -506,7 +508,7 @@ export class BackgroundOperationManager {
         }
 
         const action = await vscode.window.showWarningMessage(
-            '⚠️ Cognify failed',
+            '⚠️ Flowbaby processing failed',
             { detail: message, modal: false },
             'Retry',
             'View Logs'
@@ -568,7 +570,7 @@ export class BackgroundOperationManager {
             } else {
                 await this.failOperation(operationId, {
                     code: stub.error_code || 'UNKNOWN_ERROR',
-                    message: stub.error_message || 'Cognify failed',
+                    message: stub.error_message || 'Background processing failed',
                     remediation: stub.remediation || 'Check logs for details'
                 });
             }

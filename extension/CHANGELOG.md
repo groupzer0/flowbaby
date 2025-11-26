@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.4.2] - 2025-11-27
+
+### Fixed - Plan 032: Activation and Background Processing Bugs
+
+**Maintenance Release** - Resolves 6 bugs affecting extension activation, database generation, log rotation, and branding consistency.
+
+#### Chat Agent Registration (#1)
+- **Bug**: @flowbaby chat participant only appeared after extension fully initialized, requiring user to reload window
+- **Root Cause**: `registerFlowbabyParticipant()` was called inside `if (initialized)` block, delaying UI registration
+- **Fix**: Moved chat participant registration BEFORE `flowbabyClient.initialize()` with graceful degradation - handler shows "⏳ Flowbaby is still initializing..." message while backend completes setup
+
+#### Cognee SDK Storage Pathing (#2)
+- **Bug**: Database files created in `~/.cognee_data` instead of workspace-local `.flowbaby/data`
+- **Root Cause**: Cognee SDK may cache paths on import; environment variables were set after import in bridge scripts
+- **Fix**: 
+  - Added explicit `.flowbaby/data` directory creation in `init.py` alongside `.flowbaby/system`
+  - Restructured `ingest.py` and `retrieve.py` to set `COGNEE_SYSTEM_ROOT_DIRECTORY` and `COGNEE_DATA_ROOT_DIRECTORY` environment variables BEFORE `import cognee`
+  - Safety check `workspace_has_data()` already existed and continues to prevent accidental data loss
+
+#### Log Rotation Fix (#3)
+- **Bug**: Python RotatingFileHandler writing to `.log.1` instead of `.log` after rotation
+- **Root Cause**: TypeScript `BackgroundOperationManager` was opening log file descriptor and passing it to spawned Python process; TypeScript holding the fd prevented Python from rotating properly
+- **Fix**: Removed `logFd` file descriptor passing in `spawnCognifyProcess()`. Python `bridge_logger.py` now handles all log rotation independently using its own RotatingFileHandler
+
+#### Branding Consistency (#4)
+- **Bug**: Toast notifications showed "⚠️ Cognify failed" and "✅ Cognify finished" instead of Flowbaby branding
+- **Fix**: Updated all user-facing toast messages in `BackgroundOperationManager.ts`:
+  - `'✅ Cognify finished'` → `'✅ Flowbaby processing finished'`
+  - `'⚠️ Cognify failed'` → `'⚠️ Flowbaby processing failed'`
+  - Updated corresponding internal log messages for consistency
+
+### Technical Notes
+- Plan 032 follows architectural guidance from Plan 031 and maintains backward compatibility
+- No migration required from v0.4.1; users can update seamlessly
+- Log file location unchanged: `.flowbaby/logs/flowbaby.log`
+
 ## [0.4.1] - 2025-11-26
 
 ### Fixed - Plan 031: Background API Key and Logging Consolidation

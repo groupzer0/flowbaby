@@ -279,15 +279,27 @@ async def retrieve_context(
             logger.error("Missing API key", extra={'data': error_payload})
             return error_payload
         
-        # Import cognee
+        # Plan 032 M2: Set Cognee environment variables BEFORE SDK import
+        # This ensures the SDK uses workspace-local paths from the start
+        system_root = str(workspace_dir / '.flowbaby/system')
+        data_root = str(workspace_dir / '.flowbaby/data')
+        
+        os.environ['COGNEE_SYSTEM_ROOT_DIRECTORY'] = system_root
+        os.environ['COGNEE_DATA_ROOT_DIRECTORY'] = data_root
+        
+        # Ensure directories exist
+        Path(system_root).mkdir(parents=True, exist_ok=True)
+        Path(data_root).mkdir(parents=True, exist_ok=True)
+        
+        # Import cognee AFTER setting environment variables
         logger.debug("Importing cognee SDK")
         import cognee
         from cognee.modules.search.types import SearchType
         
-        # Configure workspace-local storage directories BEFORE any other cognee operations
+        # Configure workspace-local storage directories (redundant but explicit for clarity)
         logger.debug("Configuring workspace storage directories")
-        cognee.config.system_root_directory(str(workspace_dir / '.flowbaby/system'))
-        cognee.config.data_root_directory(str(workspace_dir / '.flowbaby/data'))
+        cognee.config.system_root_directory(system_root)
+        cognee.config.data_root_directory(data_root)
         
         # Configure Cognee with API key
         logger.debug("Configuring LLM provider (OpenAI)")
