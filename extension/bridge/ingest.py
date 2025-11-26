@@ -55,8 +55,8 @@ def setup_environment(workspace_path: str):
     
     # Return config
     return dataset_name, api_key, {
-        'system_root': str(workspace_dir / '.cognee_system'),
-        'data_root': str(workspace_dir / '.cognee_data'),
+        'system_root': str(workspace_dir / '.flowbaby/system'),
+        'data_root': str(workspace_dir / '.flowbaby/data'),
         'workspace_dir': workspace_dir
     }
 
@@ -65,7 +65,7 @@ def write_status_stub(operation_id: str, workspace_dir: Path, success: bool,
                        error_code: str = None, error_message: str = None, 
                        remediation: str = None, elapsed_ms: int = 0, entity_count: int = None):
     """
-    Write status stub atomically to .cognee/background_ops/<operation_id>.json
+    Write status stub atomically to .flowbaby/background_ops/<operation_id>.json
     
     Uses atomic temp file + rename pattern to prevent corruption.
     """

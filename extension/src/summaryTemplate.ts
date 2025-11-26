@@ -127,7 +127,7 @@ export function validateSummary(summary: Partial<ConversationSummary>): void {
  * 
  * This function produces the enriched text format with embedded metadata that will be:
  * 1. Displayed to users for confirmation
- * 2. Stored via cognee.add() for semantic search
+ * 2. Stored via Flowbaby's memory system for semantic search
  * 3. Parsed by retrieve.py via regex to extract structured fields
  * 4. Retrieved and displayed in future sessions
  * 

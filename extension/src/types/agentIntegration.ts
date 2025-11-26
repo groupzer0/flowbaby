@@ -59,7 +59,7 @@ export interface SummaryMetadata {
  * 
  * @see extension/bridge/INGEST_CONTRACT.md for complete schema documentation
  */
-export interface CogneeIngestRequest {
+export interface FlowbabyIngestRequest {
     /**
      * Summary topic/title (required, non-empty)
      */
@@ -117,7 +117,7 @@ export interface CogneeIngestRequest {
 /**
  * Response from agent ingestion command
  */
-export interface CogneeIngestResponse {
+export interface FlowbabyIngestResponse {
     /**
      * Whether ingestion succeeded
      */
@@ -189,7 +189,7 @@ export interface CogneeIngestResponse {
  * 
  * @see extension/bridge/RETRIEVE_CONTRACT.md for complete schema documentation
  */
-export interface CogneeRetrieveRequest {
+export interface FlowbabyRetrieveRequest {
     /**
      * Search query string
      */
@@ -220,7 +220,7 @@ export interface CogneeRetrieveRequest {
 /**
  * Single retrieval result
  */
-export interface CogneeRetrievalResult {
+export interface FlowbabyRetrievalResult {
     /**
      * Retrieved text content
      */
@@ -255,7 +255,7 @@ export interface CogneeRetrievalResult {
 /**
  * Response from agent retrieval command
  */
-export interface CogneeRetrieveResponse {
+export interface FlowbabyRetrieveResponse {
     /**
      * Whether retrieval succeeded
      */
@@ -264,7 +264,7 @@ export interface CogneeRetrieveResponse {
     /**
      * Array of retrieval results (on success)
      */
-    results?: CogneeRetrievalResult[];
+    results?: FlowbabyRetrievalResult[];
 
     /**
      * Number of results returned (on success)
@@ -310,7 +310,7 @@ export interface ValidationResult {
 /**
  * Request structure for agent retrieval operations (Plan 016)
  */
-export interface CogneeContextRequest {
+export interface FlowbabyContextRequest {
     /** Natural language query for memory search */
     query: string;
     
@@ -337,7 +337,7 @@ export interface CogneeContextRequest {
  * - Enriched summaries have full metadata (topicId, status, timestamps)
  * - Legacy memories have null metadata fields
  */
-export interface CogneeContextEntry {
+export interface FlowbabyContextEntry {
     /** Full formatted summary text (markdown template) */
     summaryText: string;
     
@@ -396,9 +396,9 @@ export interface CogneeContextEntry {
 /**
  * Response structure for agent retrieval operations (Plan 016)
  */
-export interface CogneeContextResponse {
+export interface FlowbabyContextResponse {
     /** Ordered list of memory entries (highest score first) */
-    entries: CogneeContextEntry[];
+    entries: FlowbabyContextEntry[];
     
     /** Total number of results considered */
     totalResults: number;

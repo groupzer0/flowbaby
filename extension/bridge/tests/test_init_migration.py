@@ -35,21 +35,21 @@ class TestWorkspaceHasData:
 
     def test_returns_false_for_empty_directory(self, tmp_path):
         """Empty directory should return False - safe to prune."""
-        system_dir = tmp_path / '.cognee_system'
-        system_dir.mkdir()
+        system_dir = tmp_path / '.flowbaby/system'
+        system_dir.mkdir(parents=True)
         
         assert workspace_has_data(system_dir) is False
 
     def test_returns_false_for_nonexistent_directory(self, tmp_path):
         """Non-existent directory should return False - safe to prune."""
-        system_dir = tmp_path / '.cognee_system'
+        system_dir = tmp_path / '.flowbaby/system'
         # Don't create the directory
         
         assert workspace_has_data(system_dir) is False
 
     def test_returns_true_when_lancedb_has_data(self, tmp_path):
         """LanceDB data present should return True - do NOT prune."""
-        system_dir = tmp_path / '.cognee_system'
+        system_dir = tmp_path / '.flowbaby/system'
         lancedb_dir = system_dir / 'databases' / 'cognee.lancedb'
         lancedb_dir.mkdir(parents=True)
         
@@ -60,7 +60,7 @@ class TestWorkspaceHasData:
 
     def test_returns_true_when_kuzu_has_data(self, tmp_path):
         """Kuzu graph data present should return True - do NOT prune."""
-        system_dir = tmp_path / '.cognee_system'
+        system_dir = tmp_path / '.flowbaby/system'
         kuzu_dir = system_dir / 'databases' / 'cognee_graph'
         kuzu_dir.mkdir(parents=True)
         
@@ -71,7 +71,7 @@ class TestWorkspaceHasData:
 
     def test_returns_false_when_databases_dir_exists_but_empty(self, tmp_path):
         """Empty databases directory should return False - safe to prune."""
-        system_dir = tmp_path / '.cognee_system'
+        system_dir = tmp_path / '.flowbaby/system'
         databases_dir = system_dir / 'databases'
         databases_dir.mkdir(parents=True)
         
@@ -87,8 +87,8 @@ class TestGetDataIntegrityStatus:
 
     def test_returns_healthy_for_empty_workspace(self, tmp_path):
         """Empty workspace should be healthy."""
-        system_dir = tmp_path / '.cognee_system'
-        system_dir.mkdir()
+        system_dir = tmp_path / '.flowbaby/system'
+        system_dir.mkdir(parents=True)
         
         result = get_data_integrity_status(system_dir)
         
@@ -97,7 +97,7 @@ class TestGetDataIntegrityStatus:
 
     def test_returns_healthy_when_no_databases_exist(self, tmp_path):
         """Non-existent databases should be healthy (fresh workspace)."""
-        system_dir = tmp_path / '.cognee_system'
+        system_dir = tmp_path / '.flowbaby/system'
         # Don't create anything
         
         result = get_data_integrity_status(system_dir)
@@ -106,7 +106,7 @@ class TestGetDataIntegrityStatus:
 
     def test_detects_lancedb_tables(self, tmp_path):
         """Should count LanceDB tables/directories."""
-        system_dir = tmp_path / '.cognee_system'
+        system_dir = tmp_path / '.flowbaby/system'
         lancedb_dir = system_dir / 'databases' / 'cognee.lancedb'
         lancedb_dir.mkdir(parents=True)
         
@@ -120,8 +120,8 @@ class TestGetDataIntegrityStatus:
 
     def test_handles_missing_sqlite_gracefully(self, tmp_path):
         """Should handle missing SQLite database gracefully."""
-        system_dir = tmp_path / '.cognee_system'
-        system_dir.mkdir()
+        system_dir = tmp_path / '.flowbaby/system'
+        system_dir.mkdir(parents=True)
         
         result = get_data_integrity_status(system_dir)
         
@@ -136,7 +136,7 @@ class TestMigrationMarkerLocation:
     @pytest.mark.asyncio
     async def test_marker_checked_in_workspace_not_venv(self, tmp_path):
         """
-        CRITICAL TEST: Verify marker is checked in workspace .cognee_system/
+        CRITICAL TEST: Verify marker is checked in workspace .flowbaby/system/
         and NOT in venv/site-packages location.
         
         This is the core fix for Plan 027.
@@ -149,7 +149,7 @@ class TestMigrationMarkerLocation:
         env_file.write_text('LLM_API_KEY=test_key_123')
         
         # Create workspace marker - should prevent prune
-        system_dir = workspace / '.cognee_system'
+        system_dir = workspace / '.flowbaby/system'
         system_dir.mkdir()
         marker = system_dir / '.migration_v1_complete'
         marker.write_text(json.dumps({'version': 'v1', 'migrated_at': '2025-01-01'}))
@@ -189,7 +189,7 @@ class TestMigrationMarkerLocation:
         env_file.write_text('LLM_API_KEY=test_key_123')
         
         # Create data but NO marker
-        system_dir = workspace / '.cognee_system'
+        system_dir = workspace / '.flowbaby/system'
         lancedb_dir = system_dir / 'databases' / 'cognee.lancedb'
         lancedb_dir.mkdir(parents=True)
         (lancedb_dir / 'important_data.lance').touch()
@@ -253,7 +253,7 @@ class TestMigrationMarkerLocation:
         mock_cognee.prune.prune_system.assert_called_once()
         
         # Verify marker was created
-        marker = workspace / '.cognee_system' / '.migration_v1_complete'
+        marker = workspace / '.flowbaby/system' / '.migration_v1_complete'
         assert marker.exists()
         
         marker_data = json.loads(marker.read_text())
@@ -270,7 +270,7 @@ class TestMigrationMarkerLocation:
         env_file.write_text('LLM_API_KEY=test_key_123')
         
         # Create marker to skip prune logic
-        system_dir = workspace / '.cognee_system'
+        system_dir = workspace / '.flowbaby/system'
         system_dir.mkdir()
         marker = system_dir / '.migration_v1_complete'
         marker.write_text(json.dumps({'version': 'v1'}))
@@ -314,7 +314,7 @@ class TestMarkerNotCheckedInVenv:
         env_file.write_text('LLM_API_KEY=test_key_123')
         
         # Create marker
-        system_dir = workspace / '.cognee_system'
+        system_dir = workspace / '.flowbaby/system'
         system_dir.mkdir()
         marker = system_dir / '.migration_v1_complete'
         marker.write_text(json.dumps({'version': 'v1'}))
@@ -333,7 +333,7 @@ class TestMarkerNotCheckedInVenv:
         
         # The marker location should be workspace-local
         assert str(workspace) in result['global_marker_location']
-        assert '.cognee_system' in result['global_marker_location']
+        assert '.flowbaby/system' in result['global_marker_location']
 
 
 class TestMarkerPrecedence:
@@ -349,7 +349,7 @@ class TestMarkerPrecedence:
         env_file.write_text('LLM_API_KEY=test_key_123')
         
         # Create workspace marker
-        system_dir = workspace / '.cognee_system'
+        system_dir = workspace / '.flowbaby/system'
         system_dir.mkdir()
         marker = system_dir / '.migration_v1_complete'
         marker.write_text(json.dumps({

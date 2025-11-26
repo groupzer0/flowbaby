@@ -2,13 +2,13 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
-import { CogneeContextProvider } from '../cogneeContextProvider';
-import { CogneeClient, RetrievalResult } from '../cogneeClient';
+import { FlowbabyContextProvider } from '../flowbabyContextProvider';
+import { FlowbabyClient, RetrievalResult } from '../flowbabyClient';
 
 suite('Retrieval Filtering Test Suite (Plan 021)', () => {
     let sandbox: sinon.SinonSandbox;
     let outputChannel: vscode.OutputChannel;
-    let mockClient: sinon.SinonStubbedInstance<CogneeClient>;
+    let mockClient: sinon.SinonStubbedInstance<FlowbabyClient>;
 
     setup(() => {
         sandbox = sinon.createSandbox();
@@ -26,7 +26,7 @@ suite('Retrieval Filtering Test Suite (Plan 021)', () => {
         } as any;
 
         // Create mock client
-        mockClient = sandbox.createStubInstance(CogneeClient);
+        mockClient = sandbox.createStubInstance(FlowbabyClient);
         
         // Mock configuration
         const mockConfig = {
@@ -39,8 +39,8 @@ suite('Retrieval Filtering Test Suite (Plan 021)', () => {
         sandbox.restore();
     });
 
-    function createProvider(): CogneeContextProvider {
-        return new CogneeContextProvider(mockClient as any, outputChannel);
+    function createProvider(): FlowbabyContextProvider {
+        return new FlowbabyContextProvider(mockClient as any, outputChannel);
     }
 
     test('Allows synthesized answers with score 0.0', async () => {

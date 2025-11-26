@@ -140,7 +140,7 @@ class TestAddOnlyMode:
         assert result.returncode == 0
         
         # Check that dataset directory was created
-        cognee_data_dir = Path(test_workspace) / ".cognee_data"
+        cognee_data_dir = Path(test_workspace) / ".flowbaby/data"
         assert cognee_data_dir.exists(), "Dataset directory should exist after add-only"
     
     def test_add_only_supports_conversation_mode(self, test_workspace):

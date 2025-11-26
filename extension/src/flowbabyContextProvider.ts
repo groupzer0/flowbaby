@@ -1,20 +1,20 @@
 /**
- * CogneeContextProvider - Centralized retrieval service for agent integration (Plan 016)
+ * FlowbabyContextProvider - Centralized retrieval service for agent integration (Plan 016)
  * 
- * This service wraps CogneeClient.retrieve with agent-friendly structured responses,
+ * This service wraps FlowbabyClient.retrieve with agent-friendly structured responses,
  * enforces concurrency/rate limits, and provides the single retrieval entry point
- * for both the @cognee-memory participant and public agent commands.
+ * for both the @flowbaby participant and public agent commands.
  * 
  * Architecture Reference: system-architecture.md §3.1, §4.5
  * Contract Reference: extension/bridge/RETRIEVE_CONTRACT.md
  */
 
 import * as vscode from 'vscode';
-import { CogneeClient } from './cogneeClient';
+import { FlowbabyClient } from './flowbabyClient';
 import {
-    CogneeContextRequest,
-    CogneeContextEntry,
-    CogneeContextResponse,
+    FlowbabyContextRequest,
+    FlowbabyContextEntry,
+    FlowbabyContextResponse,
     AgentErrorCode,
     AgentErrorResponse
 } from './types/agentIntegration';
@@ -27,13 +27,13 @@ interface QueuedRequest {
     id: string;
     
     /** Request parameters */
-    request: CogneeContextRequest;
+    request: FlowbabyContextRequest;
     
     /** Timestamp when request was queued */
     queuedAt: Date;
     
     /** Promise resolve function */
-    resolve: (response: CogneeContextResponse | AgentErrorResponse) => void;
+    resolve: (response: FlowbabyContextResponse | AgentErrorResponse) => void;
     
     /** Promise reject function */
     reject: (error: Error) => void;
@@ -54,19 +54,19 @@ interface ProviderConfig {
 }
 
 /**
- * CogneeContextProvider - Singleton service for agent retrieval
+ * FlowbabyContextProvider - Singleton service for agent retrieval
  * 
  * Key responsibilities:
  * - Centralize retrieval logic for participant and agent commands
  * - Enforce concurrency limits (max 2 in-flight, configurable up to 5)
  * - Enforce rate limits (max 10/minute, configurable up to 30)
- * - Convert bridge responses to structured CogneeContextEntry format
+ * - Convert bridge responses to structured FlowbabyContextEntry format
  * - Provide transparent error handling with standard error codes
  * 
  * @see system-architecture.md §4.5 for agent integration flow
  */
-export class CogneeContextProvider {
-    private readonly client: CogneeClient;
+export class FlowbabyContextProvider {
+    private readonly client: FlowbabyClient;
     private readonly outputChannel: vscode.OutputChannel;
     private readonly config: ProviderConfig;
     
@@ -83,17 +83,17 @@ export class CogneeContextProvider {
     private nextRequestId = 0;
     
     /**
-     * Constructor - Initialize provider with CogneeClient and configuration
+     * Constructor - Initialize provider with FlowbabyClient and configuration
      * 
-     * @param client - CogneeClient instance for bridge operations
+     * @param client - FlowbabyClient instance for bridge operations
      * @param outputChannel - Output channel for logging
      */
-    constructor(client: CogneeClient, outputChannel: vscode.OutputChannel) {
+    constructor(client: FlowbabyClient, outputChannel: vscode.OutputChannel) {
         this.client = client;
         this.outputChannel = outputChannel;
         
         // Load configuration with safe upper bounds
-        const vsConfig = vscode.workspace.getConfiguration('cogneeMemory.agentAccess');
+        const vsConfig = vscode.workspace.getConfiguration('Flowbaby.agentAccess');
         const maxConcurrent = vsConfig.get<number>('maxConcurrentRequests', 2);
         const rateLimit = vsConfig.get<number>('rateLimitPerMinute', 10);
         
@@ -116,28 +116,28 @@ export class CogneeContextProvider {
         }
         
         this.outputChannel.appendLine(
-            `[CogneeContextProvider] Initialized with concurrency=${this.config.maxConcurrentRequests}, ` +
+            `[FlowbabyContextProvider] Initialized with concurrency=${this.config.maxConcurrentRequests}, ` +
             `rate limit=${this.config.rateLimitPerMinute}/min`
         );
     }
     
     /**
-     * Retrieve context from Cognee with concurrency and rate limiting
+     * Retrieve context from Flowbaby with concurrency and rate limiting
      * 
      * This is the primary method for all retrieval operations. It:
      * 1. Validates request parameters
      * 2. Checks rate limits
      * 3. Queues request if concurrency limit reached
-     * 4. Calls CogneeClient.retrieve when slot available
-     * 5. Converts bridge results to CogneeContextResponse
+     * 4. Calls FlowbabyClient.retrieve when slot available
+     * 5. Converts bridge results to FlowbabyContextResponse
      * 6. Returns structured response or error
      * 
      * @param req - Retrieval request with query and optional limits
      * @returns Promise resolving to structured response or error
      */
     async retrieveContext(
-        req: CogneeContextRequest
-    ): Promise<CogneeContextResponse | AgentErrorResponse> {
+        req: FlowbabyContextRequest
+    ): Promise<FlowbabyContextResponse | AgentErrorResponse> {
         // Validate request
         if (!req.query || req.query.trim().length === 0) {
             return {
@@ -250,21 +250,21 @@ export class CogneeContextProvider {
      */
     private async executeRequest(
         queuedRequest: QueuedRequest
-    ): Promise<CogneeContextResponse | AgentErrorResponse> {
+    ): Promise<FlowbabyContextResponse | AgentErrorResponse> {
         const { id, request, queuedAt } = queuedRequest;
         const startTime = Date.now();
         const queueWaitMs = startTime - queuedAt.getTime();
         
         this.outputChannel.appendLine(
-            `[CogneeContextProvider] Executing request ${id} ` +
+            `[FlowbabyContextProvider] Executing request ${id} ` +
             `(queue wait: ${queueWaitMs}ms, query: "${request.query.substring(0, 50)}...")`
         );
         
         try {
-            // Call CogneeClient.retrieve with query
-            // Note: maxResults and maxTokens are handled by CogneeClient configuration
+            // Call FlowbabyClient.retrieve with query
+            // Note: maxResults and maxTokens are handled by FlowbabyClient configuration
             // Per Milestone 1 Task 2, provider enforces concurrency/rate limits but
-            // delegates token budgets to existing CogneeClient settings
+            // delegates token budgets to existing FlowbabyClient settings
             const results = await this.client.retrieve(request.query, {
                 maxResults: request.maxResults,
                 maxTokens: request.maxTokens,
@@ -279,7 +279,7 @@ export class CogneeContextProvider {
 
             if (filteredCount > 0) {
                 this.outputChannel.appendLine(
-                    `[CogneeContextProvider] Filtered ${filteredCount} results with score <= 0.01 (excluding 0.0 sentinel)`
+                    `[FlowbabyContextProvider] Filtered ${filteredCount} results with score <= 0.01 (excluding 0.0 sentinel)`
                 );
             }
 
@@ -287,12 +287,12 @@ export class CogneeContextProvider {
             const synthesizedCount = validResults.filter(r => r.score === 0.0).length;
             if (synthesizedCount > 0) {
                 this.outputChannel.appendLine(
-                    `[CogneeContextProvider] Included ${synthesizedCount} synthesized answers (score 0.0)`
+                    `[FlowbabyContextProvider] Included ${synthesizedCount} synthesized answers (score 0.0)`
                 );
             }
             
-            // Convert RetrievalResult[] to CogneeContextEntry[]
-            const entries: CogneeContextEntry[] = validResults.map(result => ({
+            // Convert RetrievalResult[] to FlowbabyContextEntry[]
+            const entries: FlowbabyContextEntry[] = validResults.map(result => ({
                 summaryText: result.summaryText || result.text || '',
                 decisions: result.decisions,
                 rationale: result.rationale,
@@ -318,7 +318,7 @@ export class CogneeContextProvider {
             
             const duration = Date.now() - startTime;
             this.outputChannel.appendLine(
-                `[CogneeContextProvider] Request ${id} completed ` +
+                `[FlowbabyContextProvider] Request ${id} completed ` +
                 `(duration: ${duration}ms, results: ${entries.length}, tokens: ${tokensUsed})`
             );
             
@@ -333,7 +333,7 @@ export class CogneeContextProvider {
             const errorMessage = error instanceof Error ? error.message : String(error);
             
             this.outputChannel.appendLine(
-                `[CogneeContextProvider] Request ${id} failed ` +
+                `[FlowbabyContextProvider] Request ${id} failed ` +
                 `(duration: ${duration}ms, error: ${errorMessage})`
             );
             

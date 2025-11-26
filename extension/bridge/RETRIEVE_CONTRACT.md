@@ -1,4 +1,4 @@
-# Retrieval Contract for RecallFlow Chat Memory (Plan 014)
+# Retrieval Contract for Flowbaby Chat Memory (Plan 014)
 
 This document describes the **structured JSON contract** returned by `extension/bridge/retrieve.py` for use by the VS Code extension and agents.
 
@@ -46,9 +46,9 @@ This document describes the **structured JSON contract** returned by `extension/
 
 1. `workspace_path` – required, absolute workspace directory
 2. `query` – required, natural-language search string
-3. `max_results` – optional integer (default: VS Code setting `cogneeMemory.maxContextResults`)
-4. `max_tokens` – optional integer (default: VS Code setting `cogneeMemory.maxContextTokens`)
-5. `half_life_days` – optional float (default: VS Code setting `cogneeMemory.ranking.halfLifeDays`, fallback 7)
+3. `max_results` – optional integer (default: VS Code setting `Flowbaby.maxContextResults`)
+4. `max_tokens` – optional integer (default: VS Code setting `Flowbaby.maxContextTokens`)
+5. `half_life_days` – optional float (default: VS Code setting `Flowbaby.ranking.halfLifeDays`, fallback 7)
 6. `include_superseded` – optional boolean (`true`/`false`, default: `false`)
 
 Bridge scripts MUST document defaults and clamp invalid values (e.g., `half_life_days < 0.5` → fallback to 0.5). These parameters propagate from the TypeScript `CogneeContextRequest` interface.
@@ -260,7 +260,7 @@ The `score` (and `final_score`) field represents the final ranking output comput
 
 ### Configuration: Half-Life Parameter
 
-- VS Code setting `cogneeMemory.ranking.halfLifeDays` controls the recency decay half-life (default: 7 days, min: 0.5, max: 90)
+- VS Code setting `Flowbaby.ranking.halfLifeDays` controls the recency decay half-life (default: 7 days, min: 0.5, max: 90)
 - TypeScript passes this value to `retrieve.py`; the bridge computes `decay_alpha = ln(2) / half_life_days`
 - API consumers MAY override per-request by setting `halfLifeDays` in `CogneeContextRequest`
 - Shorter half-life → stronger recency bias; longer half-life → more weight on semantic similarity

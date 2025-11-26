@@ -5,7 +5,7 @@
 
 import { expect } from 'chai';
 import { validateIngestRequest, generateDefaultMetadata } from '../validation/summaryValidator';
-import { CogneeIngestRequest } from '../types/agentIntegration';
+import { FlowbabyIngestRequest } from '../types/agentIntegration';
 
 suite('Agent Ingestion Command Handler Logic', () => {
     
@@ -23,7 +23,7 @@ suite('Agent Ingestion Command Handler Logic', () => {
         });
 
         test('accepts valid minimal payload with metadata', () => {
-            const payload: CogneeIngestRequest = {
+            const payload: FlowbabyIngestRequest = {
                 topic: 'Test Topic',
                 context: 'Test context',
                 metadata: {
@@ -39,7 +39,7 @@ suite('Agent Ingestion Command Handler Logic', () => {
         });
 
         test('accepts valid full payload with all optional fields', () => {
-            const payload: CogneeIngestRequest = {
+            const payload: FlowbabyIngestRequest = {
                 topic: 'Full Topic',
                 context: 'Full context',
                 decisions: ['Decision 1'],

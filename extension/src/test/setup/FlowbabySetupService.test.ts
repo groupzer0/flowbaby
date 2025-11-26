@@ -4,14 +4,14 @@ import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 import * as path from 'path';
 import * as fs from 'fs';
-import { RecallFlowSetupService, BridgeEnvMetadata } from '../../setup/RecallFlowSetupService';
+import { FlowbabySetupService, BridgeEnvMetadata } from '../../setup/FlowbabySetupService';
 import { BackgroundOperationManager } from '../../background/BackgroundOperationManager';
 import { EventEmitter } from 'events';
 
-suite('RecallFlowSetupService Test Suite', () => {
+suite('FlowbabySetupService Test Suite', () => {
     let sandbox: sinon.SinonSandbox;
     let outputChannel: vscode.OutputChannel;
-    let service: RecallFlowSetupService;
+    let service: FlowbabySetupService;
     let mockConfig: any;
     let spawnStub: sinon.SinonStub;
     let mockFs: { existsSync: sinon.SinonStub };
@@ -30,7 +30,7 @@ suite('RecallFlowSetupService Test Suite', () => {
             show: sandbox.stub(),
             hide: sandbox.stub(),
             dispose: sandbox.stub(),
-            name: 'RecallFlow Memory',
+            name: 'Flowbaby',
             replace: sandbox.stub()
         } as any;
 
@@ -71,7 +71,7 @@ suite('RecallFlowSetupService Test Suite', () => {
         });
         sandbox.stub(vscode.commands, 'executeCommand');
 
-        service = new RecallFlowSetupService(
+        service = new FlowbabySetupService(
             { extensionPath: '/ext' } as any, 
             workspacePath, 
             outputChannel,
@@ -121,7 +121,7 @@ suite('RecallFlowSetupService Test Suite', () => {
 
         await service.initializeWorkspace();
 
-        assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'cogneeMemory.environmentVerified', true));
+        assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'Flowbaby.environmentVerified', true));
         assert.ok((outputChannel.appendLine as sinon.SinonStub).calledWith(sinon.match(/Found managed environment/)));
     });
 
@@ -149,7 +149,7 @@ suite('RecallFlowSetupService Test Suite', () => {
 
         assert.ok((vscode.window.showWarningMessage as sinon.SinonStub).calledWith(sinon.match(/outdated/)));
         // Should still verify if it works, but warn
-        assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'cogneeMemory.environmentVerified', true));
+        assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'Flowbaby.environmentVerified', true));
     });
 
     test('initializeWorkspace: No metadata, offers setup', async () => {
@@ -175,7 +175,7 @@ suite('RecallFlowSetupService Test Suite', () => {
 
         await service.initializeWorkspace();
 
-        assert.ok((vscode.window.showInformationMessage as sinon.SinonStub).calledWith(sinon.match(/RecallFlow requires a Python environment/)));
+        assert.ok((vscode.window.showInformationMessage as sinon.SinonStub).calledWith(sinon.match(/Flowbaby requires a Python environment/)));
         assert.ok(spawnStub.callCount >= 4);
         assert.ok((fs.promises.writeFile as sinon.SinonStub).calledWith(sinon.match(/bridge-env.json/)));
     });

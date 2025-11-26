@@ -1,39 +1,85 @@
 # Changelog
 
-All notable changes to the Cognee Chat Memory extension will be documented in this file.
+All notable changes to the Flowbaby extension will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.4.0] - 2025-11-26
+
+### ⚠️ BREAKING CHANGES
+
+This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" with significant breaking changes:
+
+#### Branding Changes
+- Extension renamed: `cognee-chat-memory` → `flowbaby`
+- Publisher changed: `recallflow` → `flowbaby`
+- Display name: `RecallFlow Chat Memory` → `Flowbaby`
+
+#### Command Changes
+- All `cognee.*` commands renamed to `Flowbaby.*`
+- Example: `cognee.captureMessage` → `Flowbaby.captureMessage`
+
+#### Settings Changes
+- All `cogneeMemory.*` settings renamed to `Flowbaby.*`
+- Example: `cogneeMemory.enabled` → `Flowbaby.enabled`
+- **Action Required**: Update your settings.json if you have custom configurations
+
+#### Chat Participant Changes
+- `@recallflow-memory` → `@flowbaby`
+
+#### Tool Changes (for Agent Developers)
+- `recallflow_storeMemory` → `flowbaby_storeMemory`
+- `recallflow_retrieveMemory` → `flowbaby_retrieveMemory`
+- `#recallflowStoreSummary` → `#flowbabyStoreSummary`
+- **Action Required**: Update your `.agent.md` files
+
+#### Workspace Storage Changes
+- All extension data now stored under `.flowbaby/` (was `.cognee/`, `.cognee_data/`, `.cognee_system/`)
+- **Action Required**: Re-set your API key via `Flowbaby: Set API Key` command
+- **Note**: Previous workspace memories are not migrated
+
+#### Logging Consolidation
+- Single log file: `.flowbaby/logs/flowbaby.log`
+- Removed redundant `ingest.log`
+
+### Migration Steps
+
+1. Uninstall the old extension
+2. Install Flowbaby v0.4.0
+3. Run `Flowbaby: Set API Key` to configure your LLM API key
+4. Update any custom keybindings from `cognee.*` to `Flowbaby.*`
+5. Update any agent definitions to use new tool names
+
 ## [0.3.17] - 2025-11-25
 
 ### Fixed - Plan 028: Post-v0.3.16 Bug Fixes and Developer Experience
 
-- **Duplicate Output Channels**: Fixed issue where multiple "RecallFlow Memory" output channels were created. Implemented singleton pattern in `outputChannels.ts`.
+- **Duplicate Output Channels**: Fixed issue where multiple "Flowbaby Memory" output channels were created. Implemented singleton pattern in `outputChannels.ts`.
 - **Status Bar Unclickable**: Fixed status bar command registration timing issue. Commands are now registered early in activation with try/catch error handling.
 
 ### Added
 
-- **Debug Logging Channel**: New opt-in debug output channel for troubleshooting. Enable via `cogneeMemory.debugLogging` setting and use "RecallFlow: Show Debug Logs" command.
-- **Isolated Python Environment**: venv moved from `.venv` to `.cognee/venv` to prevent conflicts with project virtual environments and Python language servers (e.g., Pylance/Jedi).
-- **venv Conflict Detection**: When an existing `.venv` is detected, users are offered a choice between the isolated `.cognee/venv` (recommended) or using the existing `.venv` (advanced).
-- **Global API Key via SecretStorage**: New "RecallFlow: Set API Key" command stores API keys securely via VS Code's SecretStorage API. Keys are shared across all workspaces.
+- **Debug Logging Channel**: New opt-in debug output channel for troubleshooting. Enable via `Flowbaby.debugLogging` setting and use "Flowbaby: Show Debug Logs" command.
+- **Isolated Python Environment**: venv moved from `.venv` to `.flowbaby/venv` to prevent conflicts with project virtual environments and Python language servers (e.g., Pylance/Jedi).
+- **venv Conflict Detection**: When an existing `.venv` is detected, users are offered a choice between the isolated `.flowbaby/venv` (recommended) or using the existing `.venv` (advanced).
+- **Global API Key via SecretStorage**: New "Flowbaby: Set API Key" command stores API keys securely via VS Code's SecretStorage API. Keys are shared across all workspaces.
 - **API Key Priority**: Resolution order is now workspace `.env` > SecretStorage (global) > system environment variable.
-- **Global LLM Configuration**: New settings `cogneeMemory.llm.provider`, `cogneeMemory.llm.model`, and `cogneeMemory.llm.endpoint` for configuring LLM providers without per-workspace `.env` files.
-- **Clear API Key Command**: New "RecallFlow: Clear API Key" command to remove stored SecretStorage key.
+- **Global LLM Configuration**: New settings `Flowbaby.llm.provider`, `Flowbaby.llm.model`, and `Flowbaby.llm.endpoint` for configuring LLM providers without per-workspace `.env` files.
+- **Clear API Key Command**: New "Flowbaby: Clear API Key" command to remove stored SecretStorage key.
 
 ### Changed
 
-- **Python Interpreter Detection**: Priority order updated to: explicit setting > `.cognee/venv` > `.venv` (legacy) > system python3.
+- **Python Interpreter Detection**: Priority order updated to: explicit setting > `.flowbaby/venv` > `.venv` (legacy) > system python3.
 - **Documentation**: Updated README and SETUP docs to reflect new setup flow, removed global pip install requirement, documented new features and troubleshooting steps.
 
 ## [0.3.16] - 2025-11-25
 
 ### Fixed - Plan 027: Migration Marker Data Loss Bug
 
-- **Critical P0 Bug Fix**: Fixed a bug that caused 96% data loss when the cognee Python package was reinstalled. The migration marker was being written to the volatile venv location instead of the workspace-local `.cognee_system/` directory.
+- **Critical P0 Bug Fix**: Fixed a bug that caused 96% data loss when the cognee Python package was reinstalled. The migration marker was being written to the volatile venv location instead of the workspace-local `.flowbaby/system/` directory.
 - **Root Cause**: `get_relational_config()` was called BEFORE `cognee.config.system_root_directory()`, returning the venv path instead of the configured workspace path.
 - **Reordered Initialization**: Workspace directories are now configured FIRST, and the marker path is derived directly from the workspace path (never querying SDK config).
 - **Safety Check**: Added `workspace_has_data()` function that refuses to prune if existing LanceDB or Kuzu data is detected, preventing accidental data loss.
@@ -56,20 +102,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added - Plan 025: Simplified Python Environment Setup
 
-- **Managed Python Environment**: RecallFlow now automatically creates and manages a dedicated `.venv` virtual environment in your workspace, eliminating manual setup steps.
+- **Managed Python Environment**: Flowbaby now automatically creates and manages a dedicated `.venv` virtual environment in your workspace, eliminating manual setup steps.
 - **One-Click Setup**: New "Initialize Workspace" command handles Python version checks (3.8+), virtual environment creation, and dependency installation in a single click.
 - **Status Bar Indicator**: Added a status bar item showing environment health (Ready, Setup Required, Refreshing, Error) with quick access to repair actions.
 - **Dependency Management**: New "Refresh Dependencies" command safely updates the bridge environment, coordinating with background operations to prevent conflicts.
 - **Smart Precedence**: Automatically detects existing `.venv` or configured Python paths, but prioritizes the managed environment for reliability.
 - **Enhanced Walkthrough**: The "Get Started" walkthrough now guides users through the automated setup process with context-aware completion steps.
-- **Robust Metadata**: Tracks environment state and version compatibility in `.cognee/bridge-env.json` to ensure stability across updates.
+- **Robust Metadata**: Tracks environment state and version compatibility in `.flowbaby/bridge-env.json` to ensure stability across updates.
 
 ## [0.3.13] - 2025-11-24
 
 ### Added - Plan 024: Configurable Search Parameters
 
-- **Configurable Search Depth (`searchTopK`)**: Added new `cogneeMemory.searchTopK` setting (default 10, range 1–100) to control how many candidates the RecallFlow search engine returns before ranking.
-- **Higher Context Token Budget**: Increased `cogneeMemory.maxContextTokens` default from 2000 to 32000 and maximum to 100000 to better support large-context models.
+- **Configurable Search Depth (`searchTopK`)**: Added new `Flowbaby.searchTopK` setting (default 10, range 1–100) to control how many candidates the Flowbaby search engine returns before ranking.
+- **Higher Context Token Budget**: Increased `Flowbaby.maxContextTokens` default from 2000 to 32000 and maximum to 100000 to better support large-context models.
 - **Bridge Safeguards**: `retrieve.py` now clamps `max_tokens` into the [100, 100000] window, normalizes `top_k` so it is never lower than `max_results`, and hard-clamps `top_k` to 100 to prevent runaway latency.
 - **Normalization & Logging**: When a user-provided `top_k` is raised to meet `max_results` or clamped to the ceiling, the bridge logs a structured warning with both requested and effective values for easier debugging.
 - **Client Logging & Truncation**: `CogneeClient` logs the configured `searchTopK` value on each retrieval and passes it through to the bridge. Output-channel payloads remain truncated to keep the VS Code UI responsive.
@@ -102,7 +148,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added - Plan 021: Logging Infrastructure Overhaul
 
-**Structured Bridge Logging** - Python bridge scripts now use a shared logging utility that emits structured JSON-lines to both the VS Code Output Channel and a persistent workspace log file (`.cognee/logs/bridge.log`).
+**Structured Bridge Logging** - Python bridge scripts now use a shared logging utility that emits structured JSON-lines to both the VS Code Output Channel and a persistent workspace log file (`.flowbaby/logs/bridge.log`).
 - **Rotating Log File**: `bridge_logger.py` writes untruncated diagnostics with 5MB rotation (3 backups) so retrieval and ingestion history is never lost.
 - **Detailed Retrieval Telemetry**: `retrieve.py` logs candidate lists, semantic scores, recency/status multipliers, filtering reasons, and final selections for each query.
 - **Ingestion Metrics**: `ingest.py` reports character counts and stage durations, making performance bottlenecks obvious.
@@ -120,19 +166,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Strict Score Threshold**: Retrieval results with distance scores > 0.01 are now filtered out by default.
 - **Explicit "No Context" Signal**: Bridge now returns `NO_RELEVANT_CONTEXT` signal when no memories meet the threshold, preventing hallucinated "matches".
 - **Validation Tools**: New commands for inspecting memory state:
-  - `RecallFlow: Validate Memories` - Runs integrity checks on stored memories.
-  - `RecallFlow: List Memories` - Dumps raw memory content for debugging.
+  - `Flowbaby: Validate Memories` - Runs integrity checks on stored memories.
+  - `Flowbaby: List Memories` - Dumps raw memory content for debugging.
 
 **Fixed**:
 - **Integration Test Stability**: Fixed path resolution errors in integration tests by correctly injecting `extensionPath` into the mock context. All 149 tests now pass.
-- **Branding Cleanup**: Removed "formerly Cognee" references from extension description and UI strings for a cleaner "RecallFlow" identity.
+- **Branding Cleanup**: Removed "formerly Cognee" references from extension description and UI strings for a cleaner "Flowbaby" identity.
 
 ## [0.3.7] - 2025-11-22
 
-### Fixed - Plan 019: RecallFlow Rebranding Gaps
+### Fixed - Plan 019: Flowbaby Rebranding Gaps
 
-- **Publisher Identity**: Marketplace publisher ID now set to `recallflow` with author updated to "RecallFlow Team" so the extension no longer appears under the legacy Cognee brand.
-- **Language Model Tools**: Renamed tool identifiers and reference names to `recallflow_storeMemory` / `recallflow_retrieveMemory` so Configure Tools, chat autocomplete, and `.agent.md` definitions all reflect the RecallFlow brand.
+- **Publisher Identity**: Marketplace publisher ID now set to `recallflow` with author updated to "Flowbaby Team" so the extension no longer appears under the legacy Cognee brand.
+- **Language Model Tools**: Renamed tool identifiers and reference names to `recallflow_storeMemory` / `recallflow_retrieveMemory` so Configure Tools, chat autocomplete, and `.agent.md` definitions all reflect the Flowbaby brand.
 - **Documentation Alignment**: `README.md` and `AGENT_INTEGRATION.md` now show the correct tool names and usage examples, preventing confusion for agent developers.
 - **Test Coverage**: Integration tests updated to ensure the new tool identifiers register correctly with GitHub Copilot chat and that UI instructions stay in sync.
 
@@ -140,35 +186,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added - Plan 019: Retrieval Fabrication and Silent Failure Fix
 
-**Rebranding to RecallFlow** - The extension has been renamed to "RecallFlow" to better reflect its purpose as a memory and recall layer for AI agents.
+**Rebranding to Flowbaby** - The extension has been renamed to "Flowbaby" to better reflect its purpose as a memory and recall layer for AI agents.
 - **User-Facing Changes**:
-  - Extension name: "RecallFlow Chat Memory"
-  - Commands: `RecallFlow: Capture to Memory`, `RecallFlow: Toggle Memory`, etc.
-  - Output Channel: "RecallFlow Agent Activity"
+  - Extension name: "Flowbaby Chat Memory"
+  - Commands: `Flowbaby: Capture to Memory`, `Flowbaby: Toggle Memory`, etc.
+  - Output Channel: "Flowbaby Agent Activity"
   - Chat Participant: `@recallflow-memory`
-  - Tools: "Store Memory in RecallFlow", "Retrieve RecallFlow Memory"
+  - Tools: "Store Memory in Flowbaby", "Retrieve Flowbaby Memory"
   - **Tool Renaming**: `cognee_storeMemory` → `recallflow_storeMemory`, `cognee_retrieveMemory` → `recallflow_retrieveMemory`
 - **Backward Compatibility**:
-  - Internal configuration keys (`cogneeMemory.*`) remain unchanged
-  - File paths (`.cognee/`) remain unchanged
+  - Internal configuration keys (`Flowbaby.*`) remain unchanged
+  - File paths (`.flowbaby/`) remain unchanged
   - Python package (`cognee`) remains unchanged
 
 **Fixes & Improvements**:
 
 - **Retrieval Fabrication Fix**: Changed default semantic score for unscored results from 0.7 to 0.0. This prevents empty or irrelevant results from appearing with artificially high confidence scores.
 - **Silent Failure Detection**:
-  - Implemented log rotation for background processes (`.cognee/logs/ingest.log`)
+  - Implemented log rotation for background processes (`.flowbaby/logs/ingest.log`)
   - Redirected `stdout`/`stderr` of background processes to log files to capture crashes
   - Added "zombie" detection for processes that exit without writing a status stub
 - **Proactive Prevention**: Enforced 100k character limit on ingestion payloads to prevent bridge crashes and memory exhaustion.
-- **UX Enhancements**: Added timestamps to `RecallFlow: Show Background Operations` quick pick items for better visibility.
+- **UX Enhancements**: Added timestamps to `Flowbaby: Show Background Operations` quick pick items for better visibility.
 
 ## [0.3.5] - 2025-11-21
 
 ### Added - Plan 018: Metadata Infrastructure and Ranking
 
 **Intelligent Ranking & Filtering** - Retrieval now prioritizes memories based on recency and status:
-- **Recency-Aware Ranking**: New exponential decay algorithm prioritizes fresh memories. Configurable via `cogneeMemory.ranking.halfLifeDays` (default: 7 days).
+- **Recency-Aware Ranking**: New exponential decay algorithm prioritizes fresh memories. Configurable via `Flowbaby.ranking.halfLifeDays` (default: 7 days).
 - **Status Filtering**: Memories can be marked as `Active`, `Superseded`, or `DecisionRecord`.
   - `Superseded` memories are hidden by default to reduce noise.
   - `DecisionRecord` memories receive a relevance boost.
@@ -177,7 +223,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Technical Implementation**:
 - **Enriched Text Fallback**: Implemented "Enriched Text" pattern to store metadata within summary text, bypassing Cognee 0.3.4 DataPoint limitations.
 - **Migration Script**: New `migrate_summaries.py` script automatically upgrades legacy memories to the new schema.
-- **Safe Migration**: Uses file locking (`.cognee/maintenance.lock`) to pause background operations during migration.
+- **Safe Migration**: Uses file locking (`.flowbaby/maintenance.lock`) to pause background operations during migration.
 - **Updated Tool Definitions**: `cognee_storeMemory` and `cognee_retrieveMemory` tools updated with clearer descriptions and privacy guarantees ("Data stays in this workspace").
 
 ### Fixed
@@ -210,7 +256,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 
 - Split `ingest.py` into 3 modes: `--mode sync` (diagnostic), `--mode add-only` (fast staging <10s), `--mode cognify-only` (background graph construction)
 - BackgroundOperationManager service with:
-  - Dual-ledger persistence (`.cognee/background_ops.json` + VS Code globalState)
+  - Dual-ledger persistence (`.flowbaby/background_ops.json` + VS Code globalState)
   - Concurrency limits: max 2 concurrent + FIFO queue of 3 pending operations
   - Detached subprocess spawning with PID tracking
   - Activation reconciliation (reattach live PIDs, mark stale entries `unknown`)
@@ -245,11 +291,11 @@ All features, improvements, and technical details remain as documented in v0.3.3
 
 - **Tool Lifecycle UI Desync**: Fixed issue where Configure Tools dialog showed stale enablement state when toggling tools on/off. Tools now register unconditionally at extension activation; VS Code's Configure Tools UI is the sole authorization mechanism (no redundant workspace setting).
 - **Bridge Timeout Opacity**: Added comprehensive diagnostic logging to Python bridge scripts (ingest.py, retrieve.py) with `[PROGRESS]`, `[WARNING]`, and `[ERROR]` markers. Users now see step-by-step progress in Output channel when bridge operations are slow or fail.
-- **Redundant Authorization**: Removed `cogneeMemory.agentAccess.*` workspace settings entirely. Simplified authorization model: users enable/disable tools via Configure Tools UI only.
+- **Redundant Authorization**: Removed `Flowbaby.agentAccess.*` workspace settings entirely. Simplified authorization model: users enable/disable tools via Configure Tools UI only.
 
 **Breaking Changes**:
 
-- Removed settings: `cogneeMemory.agentAccess.enabled`, `cogneeMemory.agentAccess.maxResultsDefault`, `cogneeMemory.agentAccess.maxTokensDefault`, `cogneeMemory.agentAccess.maxConcurrentRequests`, `cogneeMemory.agentAccess.rateLimitPerMinute`
+- Removed settings: `Flowbaby.agentAccess.enabled`, `Flowbaby.agentAccess.maxResultsDefault`, `Flowbaby.agentAccess.maxTokensDefault`, `Flowbaby.agentAccess.maxConcurrentRequests`, `Flowbaby.agentAccess.rateLimitPerMinute`
 - Status bar "Cognee Agent Access" indicator removed (Configure Tools dialog provides feedback)
 - Error code `ACCESS_DISABLED` no longer returned (tools always registered)
 
@@ -263,7 +309,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 **User Impact**:
 
 - Simpler authorization: single source of truth (Configure Tools)
-- Better debugging: diagnostic logs visible in Output > "Cognee Chat Memory" channel
+- Better debugging: diagnostic logs visible in Output > "Flowbaby" channel
 - Faster resolution of bridge issues: progress markers identify exactly where operations block
 
 ## [0.3.2] - 2025-11-19
@@ -274,11 +320,11 @@ All features, improvements, and technical details remain as documented in v0.3.3
 
 - **Tool Lifecycle UI Desync**: Fixed issue where Configure Tools dialog showed stale enablement state when toggling tools on/off. Tools now register unconditionally at extension activation; VS Code's Configure Tools UI is the sole authorization mechanism (no redundant workspace setting).
 - **Bridge Timeout Opacity**: Added comprehensive diagnostic logging to Python bridge scripts (ingest.py, retrieve.py) with `[PROGRESS]`, `[WARNING]`, and `[ERROR]` markers. Users now see step-by-step progress in Output channel when bridge operations are slow or fail.
-- **Redundant Authorization**: Removed `cogneeMemory.agentAccess.*` workspace settings entirely. Simplified authorization model: users enable/disable tools via Configure Tools UI only.
+- **Redundant Authorization**: Removed `Flowbaby.agentAccess.*` workspace settings entirely. Simplified authorization model: users enable/disable tools via Configure Tools UI only.
 
 **Breaking Changes**:
 
-- Removed settings: `cogneeMemory.agentAccess.enabled`, `cogneeMemory.agentAccess.maxResultsDefault`, `cogneeMemory.agentAccess.maxTokensDefault`, `cogneeMemory.agentAccess.maxConcurrentRequests`, `cogneeMemory.agentAccess.rateLimitPerMinute`
+- Removed settings: `Flowbaby.agentAccess.enabled`, `Flowbaby.agentAccess.maxResultsDefault`, `Flowbaby.agentAccess.maxTokensDefault`, `Flowbaby.agentAccess.maxConcurrentRequests`, `Flowbaby.agentAccess.rateLimitPerMinute`
 - Status bar "Cognee Agent Access" indicator removed (Configure Tools dialog provides feedback)
 - Error code `ACCESS_DISABLED` no longer returned (tools always registered)
 
@@ -292,26 +338,26 @@ All features, improvements, and technical details remain as documented in v0.3.3
 **User Impact**:
 
 - Simpler authorization: single source of truth (Configure Tools)
-- Better debugging: diagnostic logs visible in Output > "Cognee Chat Memory" channel
+- Better debugging: diagnostic logs visible in Output > "Flowbaby" channel
 - Faster resolution of bridge issues: progress markers identify exactly where operations block
 
 ## [0.3.1] - 2025-11-19
 
 ### Added - Plan 015: Agent Ingestion Command
 
-- **Agent Ingestion API**: `cogneeMemory.ingestForAgent` command enables GitHub Copilot agents and third-party extensions to store structured summaries in Cognee
+- **Agent Ingestion API**: `Flowbaby.ingestForAgent` command enables GitHub Copilot agents and third-party extensions to store structured summaries in Cognee
   - TypeScript schema validation with detailed error messages
   - Workspace-global access model with prominent privacy warnings
   - Structured JSON request/response with camelCase field naming
   - Auto-generation of missing IDs (topicId, timestamps)
   - Fast-fail validation before bridge invocation
-- **Agent Access Control**: New `cogneeMemory.agentAccess.enabled` setting (default: false)
+- **Agent Access Control**: New `Flowbaby.agentAccess.enabled` setting (default: false)
   - Workspace-global trust model (all extensions granted access when enabled)
   - Prominent warning in settings UI about privacy implications
   - Access enforcement at command handler level
 - **Audit Logging**: Comprehensive logging for all agent ingestion attempts
   - Real-time logs in `Output` > `Cognee Agent Activity` channel
-  - Structured JSON audit log at `.cognee/agent_audit.log`
+  - Structured JSON audit log at `.flowbaby/agent_audit.log`
   - Privacy-preserving topic digests (8-char SHA-256 hash)
   - Tracks timestamp, agent name, result, error codes, duration
 - **Agent Integration Documentation**: Complete API guide at `extension/AGENT_INTEGRATION.md`
@@ -333,7 +379,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 
 ### Added - Plan 016: Agent Retrieval and UI-Visible Extension Tools
 
-- **Agent Retrieval API**: `cogneeMemory.retrieveForAgent` command enables agents to query Cognee knowledge graph
+- **Agent Retrieval API**: `Flowbaby.retrieveForAgent` command enables agents to query Cognee knowledge graph
   - Structured JSON request/response with `CogneeContextRequest`/`CogneeContextResponse` types
   - Returns metadata-rich entries (topic, topicId, planId, score, decisions, timestamps)
   - Concurrency limiting (max 2 in-flight requests, configurable up to 5)
@@ -354,7 +400,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
   - Tools reference name format: `tools: ['cogneeStoreSummary', 'cogneeRetrieveMemory']`
   - Confirmation messages for transparency (optional, depends on user trust settings)
   - Retrieve tool returns BOTH narrative markdown AND verbatim JSON payload
-- **@cognee-memory Participant Refactor**: Now uses shared `CogneeContextProvider`
+- **@flowbaby Participant Refactor**: Now uses shared `CogneeContextProvider`
   - Consistent retrieval behavior across participant and tools
   - Leverages centralized concurrency/rate limiting
   - Enhanced metadata display (topicId, planId, score when available)
@@ -367,16 +413,16 @@ All features, improvements, and technical details remain as documented in v0.3.3
   - `README.md` includes "Using Cognee Tools with Custom Agents" section with `.agent.md` examples
   - Complete TypeScript interfaces in `types/agentIntegration.ts`
 - **Agent Access Settings**: Additional configuration for retrieval behavior
-  - `cogneeMemory.agentAccess.maxResultsDefault` (default: 5)
-  - `cogneeMemory.agentAccess.maxTokensDefault` (default: 4000)
-  - `cogneeMemory.agentAccess.maxConcurrentRequests` (default: 2, max: 5)
-  - `cogneeMemory.agentAccess.rateLimitPerMinute` (default: 10, max: 30)
+  - `Flowbaby.agentAccess.maxResultsDefault` (default: 5)
+  - `Flowbaby.agentAccess.maxTokensDefault` (default: 4000)
+  - `Flowbaby.agentAccess.maxConcurrentRequests` (default: 2, max: 5)
+  - `Flowbaby.agentAccess.rateLimitPerMinute` (default: 10, max: 30)
 
 ### Changed
 
 - **Minimum VS Code Version**: Requires VS Code 1.106+ for `canBeReferencedInPrompt`/`toolReferenceName` support
 - **Extension Activation**: CogneeContextProvider initialization happens after CogneeClient setup
-- **Participant Behavior**: @cognee-memory now routes through CogneeContextProvider (no breaking changes to user experience)
+- **Participant Behavior**: @flowbaby now routes through CogneeContextProvider (no breaking changes to user experience)
 
 ### Added - Test Coverage Enhancements (from previous release)
 
@@ -406,7 +452,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 
 ### Added - Plan 014: Structured Conversation Summaries
 
-- **Conversation Summary Generation**: Create structured summaries via `@cognee-memory summarize this conversation`
+- **Conversation Summary Generation**: Create structured summaries via `@flowbaby summarize this conversation`
   - Adjustable turn count scope (default: last 15 turns)
   - Interactive scope adjustment before generation
   - LLM-powered summary extraction with Plan 014 schema
@@ -414,7 +460,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - **Enriched Summary Schema**: Structured format with Topic, Context, Decisions, Rationale, Open Questions, Next Steps, References, and Time Scope
 - **Metadata-Rich Retrieval**: Summaries include status badges (📋 Status, 📅 Created, 🏷️ Plan ID), structured content sections, and temporal awareness
 - **Mixed-Mode Support**: Seamless handling of both enriched summaries (Plan 014+) and legacy raw-text memories
-- **In-Chat Help**: Type `@cognee-memory help` or invoke with no query to see usage guide
+- **In-Chat Help**: Type `@flowbaby help` or invoke with no query to see usage guide
 - **Bridge Contract Documentation**: `DATAPOINT_SCHEMA.md` and `RETRIEVE_CONTRACT.md` define stable schemas for downstream consumers
 
 ### Changed
@@ -486,7 +532,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 
 ### Changed
 
-- All Cognee system and data directories now scoped to workspace (`.cognee_system/`, `.cognee_data/`)
+- All Cognee system and data directories now scoped to workspace (`.flowbaby/system/`, `.flowbaby/data/`)
 - Removed fallback parameter retries; signature mismatches now surface as clear errors
 - Enhanced error logging with structured details (exception type, parameters, context)
 
@@ -508,26 +554,26 @@ All features, improvements, and technical details remain as documented in v0.3.3
 #### Added
 
 - **Keyboard Shortcut Capture (Ctrl+Alt+C / Cmd+Alt+C)**: Selective conversation capture via keyboard shortcut + input box workflow
-- **@cognee-memory Chat Participant**: Explicit memory-augmented chat participant for context retrieval and informed responses
+- **@flowbaby Chat Participant**: Explicit memory-augmented chat participant for context retrieval and informed responses
 - **Command Palette Capture**: Alternative capture method via "Cognee: Capture to Memory" command
 - **Toggle Memory Command**: Quick on/off toggle via "Cognee: Toggle Memory" command
 - **Clear Memory Command**: Delete workspace memory via "Cognee: Clear Workspace Memory" command (with confirmation)
 - **OWL/Turtle Ontology**: Chat-specific ontology file (`ontology.ttl`) with 8 classes and 12 object properties for grounded entity extraction
 - **Conversational Ingestion Format**: Simplified natural prose format for better LLM extraction quality
-- **Step 6 Feedback Loop (Experimental)**: Optional automatic capture of @cognee-memory conversations (disabled by default due to Cognee 0.4.0 bug)
+- **Step 6 Feedback Loop (Experimental)**: Optional automatic capture of @flowbaby conversations (disabled by default due to Cognee 0.4.0 bug)
 - **Graceful Degradation**: Retrieval failures show warning but participant continues without context
-- **Configuration Setting**: `cogneeMemory.autoIngestConversations` for experimental feedback loop control
+- **Configuration Setting**: `Flowbaby.autoIngestConversations` for experimental feedback loop control
 
 ### Changed
 
 - **User Workflow**: Shifted from automatic global capture to selective, user-controlled keyboard shortcut capture
-- **Participant Model**: `@cognee-memory` requires explicit invocation; no passive injection into other participants
+- **Participant Model**: `@flowbaby` requires explicit invocation; no passive injection into other participants
 - **Ontology Integration**: Updated `ingest.py` to use `ontology_file_path` parameter with RDFLib validation and graceful fallback
 - **Ingestion Format**: Changed from bracketed metadata format to conversational prose for improved extraction
 
 ### Improved
 
-- **Automatic Python Interpreter Detection**: Extension now auto-detects workspace `.venv` virtual environment, eliminating need for manual `cogneeMemory.pythonPath` configuration in most cases
+- **Automatic Python Interpreter Detection**: Extension now auto-detects workspace `.venv` virtual environment, eliminating need for manual `Flowbaby.pythonPath` configuration in most cases
 - **Enhanced Error Messages**: Python errors (missing packages, API key issues) now visible in Output Channel with actionable troubleshooting hints
 - **Workspace-Relative Execution**: Bridge scripts run from workspace context for reliable path resolution
 - **Context Display**: Retrieved memories formatted with clear markdown previews ("📚 Retrieved N memories")
@@ -546,9 +592,9 @@ All features, improvements, and technical details remain as documented in v0.3.3
 
 ### Known Issues
 
-- **Cognee 0.4.0 File Hashing Bug**: Intermittent ingestion failures for repeated identical content affect Step 6 auto-ingestion; workaround via `cogneeMemory.autoIngestConversations=false` (default)
+- **Cognee 0.4.0 File Hashing Bug**: Intermittent ingestion failures for repeated identical content affect Step 6 auto-ingestion; workaround via `Flowbaby.autoIngestConversations=false` (default)
 - **Manual Capture Workflow**: Keyboard shortcut requires copy-paste; cannot extract message from chat UI directly (VS Code API limitation)
-- **Explicit Participant Invocation**: Must type `@cognee-memory`; cannot inject context into other participants (API limitation)
+- **Explicit Participant Invocation**: Must type `@flowbaby`; cannot inject context into other participants (API limitation)
 
 ### Technical Implementation
 
@@ -562,7 +608,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 
 ### Added
 
-- Initial release of Cognee Chat Memory extension
+- Initial release of Flowbaby extension
 - Automatic capture of GitHub Copilot chat conversations  
 - Automatic context retrieval from Cognee memory before responses
 - Workspace-isolated memory with separate knowledge graphs per workspace
@@ -570,13 +616,13 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - Hybrid graph-vector search combining relationship traversal with semantic similarity
 - Recency and importance weighting for intelligent context relevance scoring
 - Configurable settings:
-  - `cogneeMemory.enabled` - Toggle memory on/off
-  - `cogneeMemory.maxContextResults` - Maximum results to retrieve (1-10)
-  - `cogneeMemory.maxContextTokens` - Token budget for context (100-10000)
-  - `cogneeMemory.recencyWeight` - Prioritize recent conversations (0-1)
-  - `cogneeMemory.importanceWeight` - Prioritize marked conversations (0-1)
-  - `cogneeMemory.pythonPath` - Custom Python interpreter path
-  - `cogneeMemory.logLevel` - Debug verbosity (error/warn/info/debug)
+  - `Flowbaby.enabled` - Toggle memory on/off
+  - `Flowbaby.maxContextResults` - Maximum results to retrieve (1-10)
+  - `Flowbaby.maxContextTokens` - Token budget for context (100-10000)
+  - `Flowbaby.recencyWeight` - Prioritize recent conversations (0-1)
+  - `Flowbaby.importanceWeight` - Prioritize marked conversations (0-1)
+  - `Flowbaby.pythonPath` - Custom Python interpreter path
+  - `Flowbaby.logLevel` - Debug verbosity (error/warn/info/debug)
 - Comprehensive integration test suite with 6 test cases
 - Python bridge scripts for Cognee library communication
 - Output Channel logging for debugging and monitoring

@@ -4,8 +4,8 @@ import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 import * as fs from 'fs';
 import mock = require('mock-fs');
-import { CogneeClient } from '../cogneeClient';
-import { RecallFlowSetupService } from '../setup/RecallFlowSetupService';
+import { FlowbabyClient } from '../flowbabyClient';
+import { FlowbabySetupService } from '../setup/FlowbabySetupService';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 import { EventEmitter } from 'events';
 
@@ -42,7 +42,7 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
 
         // Mock OutputChannel
         sandbox.stub(vscode.window, 'createOutputChannel').returns({
-            name: 'RecallFlow Memory',
+            name: 'Flowbaby',
             appendLine: sandbox.stub(),
             append: sandbox.stub(),
             replace: sandbox.stub(),
@@ -64,7 +64,7 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
         mock.restore();
     });
 
-    suite('CogneeClient API Key Resolution', () => {
+    suite('FlowbabyClient API Key Resolution', () => {
         test('Priority 1: Workspace .env overrides everything', async () => {
             // Setup .env using mock-fs
             mock({
@@ -79,7 +79,7 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
             // Setup Process Env
             process.env.LLM_API_KEY = 'process-key';
 
-            const client = new CogneeClient(testWorkspacePath, mockContext);
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
             const apiKey = await (client as any).resolveApiKey();
 
             assert.strictEqual(apiKey, 'env-key');
@@ -97,7 +97,7 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
             // Setup Process Env
             process.env.LLM_API_KEY = 'process-key';
 
-            const client = new CogneeClient(testWorkspacePath, mockContext);
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
             const apiKey = await (client as any).resolveApiKey();
 
             assert.strictEqual(apiKey, 'secret-key');
@@ -115,14 +115,14 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
             // Setup Process Env
             process.env.LLM_API_KEY = 'process-key';
 
-            const client = new CogneeClient(testWorkspacePath, mockContext);
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
             const apiKey = await (client as any).resolveApiKey();
 
             assert.strictEqual(apiKey, 'process-key');
         });
     });
 
-    suite('CogneeClient LLM Environment Injection', () => {
+    suite('FlowbabyClient LLM Environment Injection', () => {
         test('Injects LLM settings into environment', async () => {
             // Mock Config
             const configMock = {
@@ -135,7 +135,7 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
             };
             (vscode.workspace.getConfiguration as sinon.SinonStub).returns(configMock as any);
 
-            const client = new CogneeClient(testWorkspacePath, mockContext);
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
             const env = await (client as any).getLLMEnvironment();
 
             assert.strictEqual(env['LLM_PROVIDER'], 'anthropic');
@@ -144,8 +144,8 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
         });
     });
 
-    suite('RecallFlowSetupService Isolation', () => {
-        test('createEnvironment uses .cognee/venv', async () => {
+    suite('FlowbabySetupService Isolation', () => {
+        test('createEnvironment uses .flowbaby/venv', async () => {
             const outputChannel = { appendLine: sandbox.stub(), append: sandbox.stub() } as any;
             const mockFs = { existsSync: sandbox.stub().returns(false) };
             const spawnStub = sandbox.stub();
@@ -182,7 +182,7 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
                 return task({ report: () => {} }, new vscode.CancellationTokenSource().token);
             });
 
-            const service = new RecallFlowSetupService(
+            const service = new FlowbabySetupService(
                 mockContext,
                 testWorkspacePath,
                 outputChannel,
@@ -204,9 +204,9 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
             const venvCall = spawnStub.getCalls().find(call => call.args[1] && call.args[1].includes('venv'));
             assert.ok(venvCall, 'Should call venv creation');
             
-            // Check that the path argument contains .cognee/venv
+            // Check that the path argument contains .flowbaby/venv
             const venvPathArg = venvCall.args[1][2]; // ['-m', 'venv', path]
-            assert.ok(venvPathArg.includes('.cognee/venv'), `Expected .cognee/venv in path, got ${venvPathArg}`);
+            assert.ok(venvPathArg.includes('.flowbaby/venv'), `Expected .flowbaby/venv in path, got ${venvPathArg}`);
         });
     });
 });

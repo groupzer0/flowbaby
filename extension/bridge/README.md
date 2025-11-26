@@ -11,7 +11,7 @@ Python Bridge (bridge/)
 Cognee Library (installed via pip)
 
   ↓ stores data in
-.cognee/ Directory (workspace root)
+.flowbaby/ Directory (workspace root)
 ```
 
 The extension spawns Python scripts as child processes, passing arguments via command line and receiving JSON-formatted responses via stdout.
@@ -95,7 +95,7 @@ python init.py <workspace_path>
 1. Loads `.env` from workspace_path/.env
 1. Validates `LLM_API_KEY` exists (note: `OPENAI_API_KEY` is deprecated as of v0.2.2)
 1. Calls `cognee.config.set_llm_api_key(api_key)`
-1. Creates `.cognee/` directory in workspace_path if it doesn't exist
+1. Creates `.flowbaby/` directory in workspace_path if it doesn't exist
 
 **Output** (JSON):
 
@@ -209,7 +209,7 @@ python retrieve.py <workspace_path> <query> [max_results] [max_tokens] [half_lif
 - `max_tokens`: (Optional) Maximum total tokens across results, defaults to 2000 (clamped to 100-100000)
 - `half_life_days`: (Optional) Recency half-life (days) controlling decay rate, defaults to 7 (clamped 0.5-90)
 - `include_superseded`: (Optional) Whether to include Superseded summaries (`true`/`false`), defaults to `false`
-- `top_k`: (Optional) Number of candidates to request from the RecallFlow search engine before ranking. If omitted, defaults to `max_results * 3`. The effective value is always normalized to be at least `max_results` and hard-clamped to 100.
+- `top_k`: (Optional) Number of candidates to request from the Flowbaby search engine before ranking. If omitted, defaults to `max_results * 3`. The effective value is always normalized to be at least `max_results` and hard-clamped to 100.
 
 **Behavior**:
 
@@ -366,7 +366,7 @@ This installs:
   python bridge/init.py /path/to/workspace
   ```
 
-1. Cognee stores data in `workspace/.cognee/` directory (created automatically)
+1. Cognee stores data in `workspace/.flowbaby/` directory (created automatically)
 
 ---
 
@@ -486,7 +486,7 @@ See Milestone 4 in Plan 002 for full implementation details.
 ## Data Flow
 
 ```text
-User asks question in @cognee-memory chat
+User asks question in @flowbaby chat
         ↓
 TypeScript ChatParticipant captures question
         ↓
@@ -585,7 +585,7 @@ After completing Milestone 3 (Python Bridge):
    - Update `extension.ts` to instantiate client on activation
 
 2. **Milestone 5**: Chat Participant Implementation
-   - Create `src/chatParticipant.ts` with @cognee-memory registration
+   - Create `src/chatParticipant.ts` with @flowbaby registration
    - Implement automatic retrieval before response
    - Implement automatic capture after response
 

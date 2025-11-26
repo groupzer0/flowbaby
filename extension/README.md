@@ -1,15 +1,15 @@
-# RecallFlow Chat Memory
+# Flowbaby Chat Memory
 
-> Memory-augmented chat for VS Code using RecallFlow knowledge graphs
+> Memory-augmented chat for VS Code using Flowbaby knowledge graphs
 
-RecallFlow Chat Memory is a VS Code extension that lets you selectively capture important chat conversations and retrieve them as context through the `@recallflow-memory` participant. Each workspace maintains its own isolated memory, creating a personalized knowledge graph that grows with your project.
+Flowbaby Chat Memory is a VS Code extension that lets you selectively capture important chat conversations and retrieve them as context through the `@recallflow-memory` participant. Each workspace maintains its own isolated memory, creating a personalized knowledge graph that grows with your project.
 
 ## Features
 
 - **Selective Capture** - Use keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C) to capture valuable conversations worth remembering
 - **@recallflow-memory Participant** - Retrieves relevant context and generates informed responses when you explicitly invoke it
 - **Keyboard Shortcut Workflow** - Press Ctrl+Alt+C, paste or type content, instant capture with confirmation
-- **Command Palette Alternative** - Run "RecallFlow: Capture to Memory" for the same capture workflow
+- **Command Palette Alternative** - Run "Flowbaby: Capture to Memory" for the same capture workflow
 - **Workspace Isolation** - Each workspace has its own separate memory—no cross-project leakage
 - **Hybrid Graph-Vector Search** - Combines relationship traversal with semantic similarity for superior context relevance
 - **User Control** - You decide what gets captured; explicit memory actions put you in full control
@@ -22,7 +22,7 @@ Before installing the extension, ensure you have:
 - **VS Code** 1.85.0 or higher
 - **Python** 3.8+ installed and available in PATH
 
-**Note**: RecallFlow now manages its own Python environment automatically. You no longer need to manually install `cognee` globally.
+**Note**: Flowbaby now manages its own Python environment automatically. You no longer need to manually install `cognee` globally.
 
 ## Installation
 
@@ -45,13 +45,13 @@ After installation, configure your workspace:
 
 ### 1. Initialize Workspace (Automated)
 
-RecallFlow now manages its own Python environment automatically.
+Flowbaby now manages its own Python environment automatically.
 
 1. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-2. Run **"RecallFlow: Initialize Workspace"**
+2. Run **"Flowbaby: Initialize Workspace"**
 3. The extension will:
    - Check for Python 3.8+
-   - Create a dedicated `.cognee/venv` in your workspace (isolated from project venvs)
+   - Create a dedicated `.flowbaby/venv` in your workspace (isolated from project venvs)
    - Install `cognee` and dependencies
    - Verify the environment is ready
 
@@ -62,7 +62,7 @@ RecallFlow now manages its own Python environment automatically.
 Use the built-in command to set your API key once, securely stored via VS Code's SecretStorage:
 
 1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-2. Run **"RecallFlow: Set API Key"**
+2. Run **"Flowbaby: Set API Key"**
 3. Enter your API key when prompted
 
 This stores the key securely and applies to all workspaces automatically.
@@ -79,18 +79,18 @@ LLM_API_KEY=sk-your-key-here
 
 ### 3. Verify Extension Activation
 
-1. Check the status bar for **"RecallFlow: Ready"** (green checkmark)
-2. If you see **"RecallFlow: Setup Required"** (yellow warning), click it to run setup
-3. Open the Output panel (**View → Output**) and select **"RecallFlow Memory"** to see logs
+1. Check the status bar for **"Flowbaby: Ready"** (green checkmark)
+2. If you see **"Flowbaby: Setup Required"** (yellow warning), click it to run setup
+3. Open the Output panel (**View → Output**) and select **"Flowbaby Memory"** to see logs
 
 ## Usage
 
 ### Environment Management (v0.3.14+)
 
-RecallFlow includes tools to keep your environment healthy:
+Flowbaby includes tools to keep your environment healthy:
 
 - **Status Bar**: Shows real-time health (Ready, Setup Required, Refreshing, Error)
-- **Refresh Dependencies**: If you encounter issues, run **"RecallFlow: Refresh Bridge Dependencies"** to safely reinstall the environment without losing data.
+- **Refresh Dependencies**: If you encounter issues, run **"Flowbaby: Refresh Bridge Dependencies"** to safely reinstall the environment without losing data.
 - **Background Safety**: Refresh operations automatically pause background tasks to prevent conflicts.
 
 ### Async Ingestion Behavior (v0.3.3+)
@@ -133,7 +133,7 @@ Previously, memory capture blocked for 60-90 seconds while the knowledge graph w
 
 To check all in-flight operations:
 1. Press `Cmd+Shift+P` (or `Ctrl+Shift+P` on Linux/Windows)
-2. Type "RecallFlow: View Background Operations"
+2. Type "Flowbaby: View Background Operations"
 3. View pending, running, completed, and failed operations
 
 ### Capturing Conversations
@@ -148,7 +148,7 @@ To check all in-flight operations:
 
 **Command Palette (Alternative)**:
 1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-2. Type "RecallFlow: Capture to Memory"
+2. Type "Flowbaby: Capture to Memory"
 3. Follow the same workflow as keyboard shortcut
 
 **What Gets Captured**:
@@ -268,7 +268,7 @@ Time Scope: Nov 16 10:00-12:30
    - Shows metadata: Status, timestamps, plan IDs if detected
 
 6. **Confirm storage**:
-   - Extension asks: "Should I store this summary in RecallFlow memory?"
+   - Extension asks: "Should I store this summary in Flowbaby memory?"
    - Reply `yes`, `store it`, or `save` to confirm
    - Reply `no` or `cancel` to discard
    - Summary is only stored after explicit confirmation
@@ -322,16 +322,16 @@ For legacy memories (captured before Plan 014):
 ### Memory Management Commands
 
 **Toggle Memory On/Off**:
-- Command Palette → "RecallFlow: Toggle Memory"
-- Flips `cogneeMemory.enabled` setting
+- Command Palette → "Flowbaby: Toggle Memory"
+- Flips `Flowbaby.enabled` setting
 
 **Clear Workspace Memory**:
-- Command Palette → "RecallFlow: Clear Workspace Memory"
+- Command Palette → "Flowbaby: Clear Workspace Memory"
 - Deletes all captured conversations for current workspace (requires confirmation)
 
 ## For Agent Developers
 
-RecallFlow Chat Memory provides an API for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured summaries programmatically.
+Flowbaby Chat Memory provides an API for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured summaries programmatically.
 
 ### Use Cases
 
@@ -341,12 +341,12 @@ RecallFlow Chat Memory provides an API for GitHub Copilot agents and third-party
 
 ### Agent Ingestion API
 
-The `cogneeMemory.ingestForAgent` command allows agents to write structured summaries to RecallFlow:
+The `Flowbaby.ingestForAgent` command allows agents to write structured summaries to Flowbaby:
 
 ```typescript
 ### Agent Ingestion API
 
-The `cogneeMemory.ingestForAgent` command allows agents to write structured summaries to RecallFlow:
+The `Flowbaby.ingestForAgent` command allows agents to write structured summaries to Flowbaby:
 
 ```typescript
 const payload = {
@@ -365,7 +365,7 @@ const payload = {
 };
 
 const responseJson = await vscode.commands.executeCommand<string>(
-  'cogneeMemory.ingestForAgent',
+  'Flowbaby.ingestForAgent',
   JSON.stringify(payload)
 );
 
@@ -380,7 +380,7 @@ if (response.success) {
 
 ### Configuration
 
-RecallFlow tools are controlled exclusively through VS Code's **Configure Tools** UI (see Quick Start below). No additional workspace settings are required for authorization.
+Flowbaby tools are controlled exclusively through VS Code's **Configure Tools** UI (see Quick Start below). No additional workspace settings are required for authorization.
 
 ### Documentation
 
@@ -405,16 +405,16 @@ The extension requires Python 3.8+ with the following packages:
 ### Automatic Detection
 
 The extension automatically detects your Python interpreter in this order:
-1. **Explicit Setting**: `cogneeMemory.pythonPath` if configured (highest priority)
-2. **RecallFlow Environment**: `.cognee/venv/bin/python` (isolated from project venvs)
+1. **Explicit Setting**: `Flowbaby.pythonPath` if configured (highest priority)
+2. **Flowbaby Environment**: `.flowbaby/venv/bin/python` (isolated from project venvs)
 3. **Legacy Location**: `.venv/bin/python` (Linux/macOS) or `.venv/Scripts/python.exe` (Windows)
 4. **System Python**: `python3` as fallback
 
-**Why `.cognee/venv`?** This location prevents conflicts with project virtual environments (e.g., Python Jedi language server overwriting RecallFlow's dependencies). The `.cognee/` directory is also automatically added to `.gitignore`.
+**Why `.flowbaby/venv`?** This location prevents conflicts with project virtual environments (e.g., Python Jedi language server overwriting Flowbaby's dependencies). The `.flowbaby/` directory is also automatically added to `.gitignore`.
 
 ### When to Configure Manually
 
-Set `cogneeMemory.pythonPath` explicitly if:
+Set `Flowbaby.pythonPath` explicitly if:
 - Virtual environment is outside workspace directory
 - Using conda or pyenv environments (not auto-detected)
 - Want to share a Python environment across multiple workspaces
@@ -423,12 +423,12 @@ Example configuration in VS Code settings:
 
 ```json
 {
-  "cogneeMemory.pythonPath": "/path/to/your/.cognee/venv/bin/python"
+  "Flowbaby.pythonPath": "/path/to/your/.flowbaby/venv/bin/python"
 }
 ```
 
 **Platform-specific examples**:
-- Linux/macOS: `/home/user/project/.cognee/venv/bin/python`
+- Linux/macOS: `/home/user/project/.flowbaby/venv/bin/python`
 - Windows: `C:\Users\user\project\.cognee\venv\Scripts\python.exe`
 
 ### Unsupported Contexts (v0.2.0)
@@ -443,29 +443,29 @@ Support for these contexts may be added in future releases.
 
 ### Configuration
 
-Access settings via **File → Preferences → Settings → Extensions → RecallFlow Memory**:
+Access settings via **File → Preferences → Settings → Extensions → Flowbaby Memory**:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `cogneeMemory.enabled` | Toggle memory capture and retrieval on/off | `true` |
-| `cogneeMemory.maxContextResults` | Maximum number of memory results to retrieve | `3` |
-| `cogneeMemory.maxContextTokens` | Token budget for retrieved context | `2000` |
-| `cogneeMemory.recencyWeight` | Weight for prioritizing recent conversations (0-1) | `0.3` |
-| `cogneeMemory.importanceWeight` | Weight for prioritizing marked conversations (0-1) | `0.2` |
-| `cogneeMemory.autoIngestConversations` | **Experimental**: Auto-capture @recallflow-memory conversations (disabled due to Cognee 0.4.0 bug) | `false` |
-| `cogneeMemory.pythonPath` | Path to Python interpreter (must have Cognee installed) | `python3` |
-| `cogneeMemory.logLevel` | Logging verbosity: error, warn, info, debug | `info` |
-| `cogneeMemory.debugLogging` | Show debug output channel (for troubleshooting) | `false` |
+| `Flowbaby.enabled` | Toggle memory capture and retrieval on/off | `true` |
+| `Flowbaby.maxContextResults` | Maximum number of memory results to retrieve | `3` |
+| `Flowbaby.maxContextTokens` | Token budget for retrieved context | `2000` |
+| `Flowbaby.recencyWeight` | Weight for prioritizing recent conversations (0-1) | `0.3` |
+| `Flowbaby.importanceWeight` | Weight for prioritizing marked conversations (0-1) | `0.2` |
+| `Flowbaby.autoIngestConversations` | **Experimental**: Auto-capture @recallflow-memory conversations (disabled due to Cognee 0.4.0 bug) | `false` |
+| `Flowbaby.pythonPath` | Path to Python interpreter (must have Cognee installed) | `python3` |
+| `Flowbaby.logLevel` | Logging verbosity: error, warn, info, debug | `info` |
+| `Flowbaby.debugLogging` | Show debug output channel (for troubleshooting) | `false` |
 
 ### LLM Configuration
 
-Configure your LLM provider via **File → Preferences → Settings → Extensions → RecallFlow Memory**:
+Configure your LLM provider via **File → Preferences → Settings → Extensions → Flowbaby Memory**:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `cogneeMemory.llm.provider` | LLM provider (openai, anthropic, ollama, etc.) | `openai` |
-| `cogneeMemory.llm.model` | Model name (e.g., gpt-4o-mini, claude-3-opus) | `gpt-4o-mini` |
-| `cogneeMemory.llm.endpoint` | Custom API endpoint (for self-hosted models) | *(empty)* |
+| `Flowbaby.llm.provider` | LLM provider (openai, anthropic, ollama, etc.) | `openai` |
+| `Flowbaby.llm.model` | Model name (e.g., gpt-4o-mini, claude-3-opus) | `gpt-4o-mini` |
+| `Flowbaby.llm.endpoint` | Custom API endpoint (for self-hosted models) | *(empty)* |
 
 **Provider Examples**:
 - **OpenAI (default)**: Leave provider as `openai`, model as `gpt-4o-mini`
@@ -473,18 +473,18 @@ Configure your LLM provider via **File → Preferences → Settings → Extensio
 - **Local Ollama**: Set provider to `ollama`, model to your model name, endpoint to `http://localhost:11434`
 
 **Additional Examples**:
-- To disable memory temporarily, set `cogneeMemory.enabled` to `false` in settings
-- To enable experimental auto-capture of @recallflow-memory conversations (feedback loop), set `cogneeMemory.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
+- To disable memory temporarily, set `Flowbaby.enabled` to `false` in settings
+- To enable experimental auto-capture of @recallflow-memory conversations (feedback loop), set `Flowbaby.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
 
-## Using RecallFlow Tools with Custom Agents
+## Using Flowbaby Tools with Custom Agents
 
-RecallFlow Chat Memory provides **Language Model Tools** that allow GitHub Copilot and custom agents to autonomously access workspace memory. These tools appear in VS Code's "Configure Tools" dialog and can be referenced in custom agent configurations.
+Flowbaby Chat Memory provides **Language Model Tools** that allow GitHub Copilot and custom agents to autonomously access workspace memory. These tools appear in VS Code's "Configure Tools" dialog and can be referenced in custom agent configurations.
 
 ### Quick Start
 
 1. **Enable Tools via Configure Tools UI**:
    - Open Copilot chat → Click "Tools" (⚙️ icon) → "Configure Tools"
-   - Find "Store Memory in RecallFlow" and "Retrieve RecallFlow Memory"
+   - Find "Store Memory in Flowbaby" and "Retrieve Flowbaby Memory"
    - Toggle tools on/off individually (disabled by default for privacy)
 
 2. **Use in Chat**:
@@ -493,7 +493,7 @@ RecallFlow Chat Memory provides **Language Model Tools** that allow GitHub Copil
    - Tools appear only when enabled via Configure Tools
 
 3. **Transparency**:
-   - All tool invocations logged in Output channel ("RecallFlow Agent Activity")
+   - All tool invocations logged in Output channel ("Flowbaby Agent Activity")
    - Configure Tools UI provides visual feedback for tool state
 
 ### Custom Agent Example
@@ -523,7 +523,7 @@ When the user completes an important implementation or makes a decision:
 
 #### Store Memory Tool (`#recallflowStoreSummary`)
 
-Stores conversation summaries in RecallFlow knowledge graph.
+Stores conversation summaries in Flowbaby knowledge graph.
 
 **Parameters**:
 - `topic` (required): Summary title
@@ -534,7 +534,7 @@ Stores conversation summaries in RecallFlow knowledge graph.
 
 #### Retrieve Memory Tool (`#recallflowRetrieveMemory`)
 
-Searches RecallFlow knowledge graph for relevant memories.
+Searches Flowbaby knowledge graph for relevant memories.
 
 **Parameters**:
 - `query` (required): Natural language search query
@@ -546,9 +546,9 @@ Searches RecallFlow knowledge graph for relevant memories.
 
 ### Transparency
 
-When agents use RecallFlow, you see:
+When agents use Flowbaby, you see:
 
-- **Output Channel**: All tool invocations logged in "RecallFlow Agent Activity"
+- **Output Channel**: All tool invocations logged in "Flowbaby Agent Activity"
 - **Configure Tools UI**: Visual feedback for which tools are enabled/disabled
 - **Chat Autocomplete**: `#recallflow*` commands only appear when tools are enabled
 
@@ -556,7 +556,7 @@ When agents use RecallFlow, you see:
 
 See [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md) for:
 - Complete API documentation with TypeScript examples
-- Command signatures (`cogneeMemory.ingestForAgent`, `cogneeMemory.retrieveForAgent`)
+- Command signatures (`Flowbaby.ingestForAgent`, `Flowbaby.retrieveForAgent`)
 - Error codes and handling strategies
 - Request/response schemas
 - Testing and troubleshooting guides
@@ -568,16 +568,16 @@ See [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md) for:
 **Check the Output Channel**:
 
 1. Go to **View → Output**
-2. Select **"RecallFlow Memory"** from the dropdown
+2. Select **"Flowbaby Memory"** from the dropdown
 3. Look for initialization errors
 
-**Enable Debug Logging**: If you need more detailed information, enable `cogneeMemory.debugLogging` in settings and use **"RecallFlow: Show Debug Logs"** command.
+**Enable Debug Logging**: If you need more detailed information, enable `Flowbaby.debugLogging` in settings and use **"Flowbaby: Show Debug Logs"** command.
 
 **Common Issues**:
 
 #### 1. "LLM_API_KEY not found"
 
-**Solution**: Use the **"RecallFlow: Set API Key"** command (recommended), or create a `.env` file in your workspace root with:
+**Solution**: Use the **"Flowbaby: Set API Key"** command (recommended), or create a `.env` file in your workspace root with:
 
 ```env
 LLM_API_KEY=sk-your-key-here
@@ -591,8 +591,8 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 
 **Solution**: 
 
-- Run **"RecallFlow: Initialize Workspace"** to set up the environment automatically
-- If using a custom Python environment, set `cogneeMemory.pythonPath` to your Python path
+- Run **"Flowbaby: Initialize Workspace"** to set up the environment automatically
+- If using a custom Python environment, set `Flowbaby.pythonPath` to your Python path
 
 #### 3. "No workspace folder open"
 
@@ -605,20 +605,20 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 
 **Solutions**:
 
-- Check that `cogneeMemory.logLevel` is not set to `"debug"` (this slows down operations)
+- Check that `Flowbaby.logLevel` is not set to `"debug"` (this slows down operations)
 - Reduce `maxContextResults` to 1-2 for faster retrieval
 - Reduce `maxContextTokens` to 1000 for lighter processing
 
 #### 5. Python Jedi Language Server Conflict
 
-**Symptom**: RecallFlow stops working after using Python IntelliSense; the `.venv` or Python environment gets overwritten with different packages.
+**Symptom**: Flowbaby stops working after using Python IntelliSense; the `.venv` or Python environment gets overwritten with different packages.
 
 **Cause**: The Python Jedi language server (Pylance) may modify or replace packages in the active virtual environment.
 
-**Solution**: RecallFlow now uses an isolated environment at `.cognee/venv` (instead of `.venv`) to prevent conflicts:
+**Solution**: Flowbaby now uses an isolated environment at `.flowbaby/venv` (instead of `.venv`) to prevent conflicts:
 
-1. Run **"RecallFlow: Initialize Workspace"** to create the isolated environment
-2. If prompted about an existing `.venv`, choose "Use RecallFlow's .cognee/venv (Recommended)"
+1. Run **"Flowbaby: Initialize Workspace"** to create the isolated environment
+2. If prompted about an existing `.venv`, choose "Use Flowbaby's .flowbaby/venv (Recommended)"
 
 **Advanced**: If you prefer to use your existing `.venv`, choose "Use existing .venv (Advanced)" when prompted.
 
@@ -627,13 +627,13 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 **Capture Issues**:
 
 1. Verify keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C) is not conflicting with other extensions
-2. Check Command Palette for "RecallFlow: Capture to Memory" as alternative
+2. Check Command Palette for "Flowbaby: Capture to Memory" as alternative
 3. Ensure you see confirmation message after capture ("✅ Captured to memory")
 4. Check Output Channel logs for ingestion errors
 
 **Retrieval Issues**:
 
-1. Verify `cogneeMemory.enabled` is `true` in settings
+1. Verify `Flowbaby.enabled` is `true` in settings
 2. Type `@recallflow-memory` in chat to invoke the participant explicitly
 3. Check Output Channel logs for retrieval attempts and timing
 4. Remember: The first conversation in a new workspace has no context (memory starts empty)
@@ -644,20 +644,20 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 
 | Symptom | Likely Cause | Recommended Action |
 |---------|--------------|-------------------|
-| "Python script exited with code 1" (empty stderr) | Interpreter mismatch: `cognee` or `python-dotenv` not installed in detected Python environment | Set `cogneeMemory.pythonPath` in VS Code settings to correct interpreter (Linux/macOS: `.venv/bin/python`, Windows: `.venv\Scripts\python.exe`) |
+| "Python script exited with code 1" (empty stderr) | Interpreter mismatch: `cognee` or `python-dotenv` not installed in detected Python environment | Set `Flowbaby.pythonPath` in VS Code settings to correct interpreter (Linux/macOS: `.venv/bin/python`, Windows: `.venv\Scripts\python.exe`) |
 | "No module named 'cognee'" | Missing `cognee` package in Python environment | Install with: `pip install cognee==0.3.4` (or activate virtual environment first) |
 | "LLM_API_KEY not found" | Missing API key in `.env` file or environment | Create `.env` file in workspace root with valid `LLM_API_KEY`, then reload window |
 | Script timeout (retrieval: 15s, ingestion: 120s) | Network issues, slow LLM provider, or filesystem delay | Ingestion timeout is generous (120s); if timeout occurs but data appears via @recallflow-memory, ingestion succeeded in background. Check Output Channel for timing metrics. |
 | JSON parse error in logs | Script produced non-JSON output | Report as bug. Check for conflicting print statements in bridge scripts. |
 
-**Note**: Auto-detection works for standard `.venv` setups on Linux, macOS, and Windows. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, or pyenv, use explicit `cogneeMemory.pythonPath` configuration.
+**Note**: Auto-detection works for standard `.venv` setups on Linux, macOS, and Windows. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, or pyenv, use explicit `Flowbaby.pythonPath` configuration.
 
 ### Clearing Memory
 
 To reset your workspace memory (e.g., to start fresh or clear sensitive data):
 
 ```bash
-rm -rf .cognee/
+rm -rf .flowbaby/
 ```
 
 The extension will reinitialize on next activation, creating a fresh knowledge graph.
@@ -669,7 +669,7 @@ The extension will reinitialize on next activation, creating a fresh knowledge g
 - **TypeScript Extension** communicates with Python bridge scripts via subprocess calls
 - **Python Bridge Scripts** use the Cognee library for knowledge graph operations
 - **Workspace Isolation** is achieved through unique dataset identifiers (SHA1 hash of workspace path) and workspace-local storage directories
-- **Data Storage** is in workspace-local directories (`.cognee_system/` and `.cognee_data/`) created in each workspace root (v0.2.1+)
+- **Data Storage** is in workspace-local directories (`.flowbaby/system/` and `.flowbaby/data/`) created in each workspace root (v0.2.1+)
 - **Ontology** defines chat-specific entities: User, Question, Answer, Topic, Concept, Problem, Solution, Decision
 
 **Data Flow**:
@@ -697,12 +697,12 @@ The extension will reinitialize on next activation, creating a fresh knowledge g
 - **No Telemetry** - The extension does not collect analytics or usage data
 - **Workspace Isolation** - Each workspace has isolated memory in its own directories; no cross-project data leakage
 - **API Key Security** - Your API key is never logged or transmitted except to your configured LLM provider
-- **Data Location** - Memory is stored in workspace-local directories: `.cognee_system/` (system data) and `.cognee_data/` (knowledge graph data)
+- **Data Location** - Memory is stored in workspace-local directories: `.flowbaby/system/` (system data) and `.flowbaby/data/` (knowledge graph data)
 
 To completely remove all extension data from a workspace:
 
 ```bash
-rm -rf .cognee/ .cognee_system/ .cognee_data/  # In workspace root
+rm -rf .flowbaby/ .flowbaby/system/ .flowbaby/data/  # In workspace root
 ```
 
 ## Known Limitations
@@ -712,7 +712,7 @@ rm -rf .cognee/ .cognee_system/ .cognee_data/  # In workspace root
 - **Manual Capture** - Keyboard shortcut requires copy-paste workflow; cannot extract message from chat UI directly (VS Code API limitation)
 - **Explicit Participant Invocation** - Must type `@recallflow-memory` to trigger retrieval; cannot inject context into other participants (@workspace, GitHub Copilot, etc.)
 - **First Conversation** - The first conversation in a new workspace has no context (memory starts empty)
-- **Step 6 Auto-Ingestion Disabled by Default** - Automatic capture of @recallflow-memory conversations (feedback loop) is experimental due to Cognee 0.4.0 file hashing bug; enable via `cogneeMemory.autoIngestConversations` for testing
+- **Step 6 Auto-Ingestion Disabled by Default** - Automatic capture of @recallflow-memory conversations (feedback loop) is experimental due to Cognee 0.4.0 file hashing bug; enable via `Flowbaby.autoIngestConversations` for testing
 - **Platform Support** - Primarily tested on macOS and Linux; Windows support may require additional configuration
 
 ## Known Issues
@@ -727,9 +727,9 @@ rm -rf .cognee/ .cognee_system/ .cognee_data/  # In workspace root
 - Errors logged in Output Channel: "File not found" or hash-related issues
 
 **Workaround**:
-- **Default**: `cogneeMemory.autoIngestConversations` is set to `false` (auto-ingestion disabled)
+- **Default**: `Flowbaby.autoIngestConversations` is set to `false` (auto-ingestion disabled)
 - **Manual Capture**: Use keyboard shortcut (Ctrl+Alt+C) to capture conversations manually—this does NOT trigger the bug
-- **Experimental Testing**: Set `cogneeMemory.autoIngestConversations` to `true` to test feedback loop (may experience intermittent failures)
+- **Experimental Testing**: Set `Flowbaby.autoIngestConversations` to `true` to test feedback loop (may experience intermittent failures)
 - **Graceful Degradation**: Ingestion failures are logged to Output Channel but do NOT crash the extension or interrupt chat participant functionality
 
 **Status**: Monitoring Cognee updates for bug fix; will enable auto-ingestion by default when resolved.
@@ -789,7 +789,7 @@ For extension developers:
 The extension outputs logs to different locations:
 
 - **Debug Console**: Extension activation and runtime logs (View → Debug Console)
-- **Output Channel**: RecallFlowClient bridge operations—select "RecallFlow Memory" from dropdown (View → Output)
+- **Output Channel**: FlowbabyClient bridge operations—select "Flowbaby Memory" from dropdown (View → Output)
 - **Developer Tools**: Extension Host errors—open with Help → Toggle Developer Tools
 
 #### Test Changes

@@ -154,11 +154,11 @@ Nov 18 10:00-11:30`;
             return { dispose: () => void 0 } as vscode.ChatParticipant;
         });
 
-        const CogneeClientMod = await import('../cogneeClient');
-        sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'initialize').resolves(true);
-        sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'retrieve').resolves([]);
-        sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'ingest').resolves(true);
-        ingestSummaryStub = sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'ingestSummary').resolves(true);
+        const FlowbabyClientMod = await import('../flowbabyClient');
+        sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'initialize').resolves(true);
+        sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'retrieve').resolves([]);
+        sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'ingest').resolves(true);
+        ingestSummaryStub = sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'ingestSummary').resolves(true);
 
         await activate({ subscriptions: [], extensionPath: '/tmp/vscode-cognee-test-ext' } as any);
         assert.ok(handler, 'chat participant handler was not registered');

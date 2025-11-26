@@ -39,7 +39,7 @@ Where:
 
 #### Half-Life Configuration
 
-Users configure the **Half-Life** ($H$) in days via `cogneeMemory.ranking.halfLifeDays`. This is the time it takes for a memory's recency score to drop to 0.5 (50%).
+Users configure the **Half-Life** ($H$) in days via `Flowbaby.ranking.halfLifeDays`. This is the time it takes for a memory's recency score to drop to 0.5 (50%).
 
 The decay constant $\alpha$ is derived as:
 

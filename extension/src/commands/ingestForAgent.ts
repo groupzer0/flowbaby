@@ -1,7 +1,7 @@
 /**
  * Agent Ingestion Command Handler (Plan 015 Milestone 2)
  * 
- * Implements `cogneeMemory.ingestForAgent` command for agent-driven memory writes.
+ * Implements `Flowbaby.ingestForAgent` command for agent-driven memory writes.
  * Validates payloads, enforces access control, and provides audit logging.
  */
 
@@ -10,28 +10,28 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import {
-    CogneeIngestRequest,
-    CogneeIngestResponse
+    FlowbabyIngestRequest,
+    FlowbabyIngestResponse
 } from '../types/agentIntegration';
 import { validateIngestRequest } from '../validation/summaryValidator';
-import { CogneeClient } from '../cogneeClient';
+import { FlowbabyClient } from '../flowbabyClient';
 
 /**
  * Register the agent ingestion command
  * 
  * @param context VS Code extension context
- * @param cogneeClient CogneeClient instance for bridge communication
+ * @param flowbabyClient FlowbabyClient instance for bridge communication
  * @param outputChannel Output channel for agent activity logging
  */
 export function registerIngestForAgentCommand(
     context: vscode.ExtensionContext,
-    cogneeClient: CogneeClient,
+    flowbabyClient: FlowbabyClient,
     outputChannel: vscode.OutputChannel
 ): void {
     const command = vscode.commands.registerCommand(
-        'cogneeMemory.ingestForAgent',
+        'Flowbaby.ingestForAgent',
         async (requestJson: string): Promise<string> => {
-            return await handleIngestForAgent(requestJson, cogneeClient, outputChannel, context);
+            return await handleIngestForAgent(requestJson, flowbabyClient, outputChannel, context);
         }
     );
 
@@ -41,15 +41,15 @@ export function registerIngestForAgentCommand(
 /**
  * Handle agent ingestion command
  * 
- * @param requestJson JSON string containing CogneeIngestRequest
- * @param cogneeClient CogneeClient instance
+ * @param requestJson JSON string containing FlowbabyIngestRequest
+ * @param flowbabyClient FlowbabyClient instance
  * @param outputChannel Output channel for logging
  * @param context Extension context
- * @returns JSON string containing CogneeIngestResponse
+ * @returns JSON string containing FlowbabyIngestResponse
  */
 export async function handleIngestForAgent(
     requestJson: string,
-    cogneeClient: CogneeClient,
+    flowbabyClient: FlowbabyClient,
     outputChannel: vscode.OutputChannel,
     context: vscode.ExtensionContext
 ): Promise<string> {
@@ -57,12 +57,12 @@ export async function handleIngestForAgent(
     
     try {
         // Step 1: Parse JSON request
-        let request: CogneeIngestRequest;
+        let request: FlowbabyIngestRequest;
         try {
             const parsed = JSON.parse(requestJson);
-            request = parsed as CogneeIngestRequest;
+            request = parsed as FlowbabyIngestRequest;
         } catch (error) {
-            const response: CogneeIngestResponse = {
+            const response: FlowbabyIngestResponse = {
                 success: false,
                 error: 'Invalid JSON in request payload',
                 errorCode: 'INVALID_JSON'
@@ -73,7 +73,7 @@ export async function handleIngestForAgent(
         // Step 2: Validate schema
         const validation = validateIngestRequest(request);
         if (!validation.valid) {
-            const response: CogneeIngestResponse = {
+            const response: FlowbabyIngestResponse = {
                 success: false,
                 error: `Payload validation failed: ${validation.errors.join('; ')}`,
                 errorCode: 'INVALID_PAYLOAD'
@@ -112,7 +112,7 @@ export async function handleIngestForAgent(
         const sourceCreatedAt = request.metadata.sourceCreatedAt || createdAt;
         const updatedAt = request.metadata.updatedAt || now;
 
-        // Step 5: Call bridge via CogneeClient (async mode per Plan 017)
+        // Step 5: Call bridge via FlowbabyClient (async mode per Plan 017)
         outputChannel.appendLine(
             `[Agent Ingest] ${new Date().toISOString()} - Agent: ${request.agentName || 'Unknown'} - Topic: ${request.topic} - Status: staging...`
         );
@@ -122,7 +122,7 @@ export async function handleIngestForAgent(
             const { BackgroundOperationManager } = await import('../background/BackgroundOperationManager');
             const manager = BackgroundOperationManager.getInstance();
             
-            const result = await cogneeClient.ingestSummaryAsync({
+            const result = await flowbabyClient.ingestSummaryAsync({
                 topic: request.topic,
                 context: request.context,
                 decisions: request.decisions || [],
@@ -144,7 +144,7 @@ export async function handleIngestForAgent(
 
             if (result.success && result.staged) {
                 // Step 6: Build staged response per Plan 017
-                const response: CogneeIngestResponse = {
+                const response: FlowbabyIngestResponse = {
                     success: true,
                     staged: true,
                     operationId: result.operationId,
@@ -185,7 +185,7 @@ export async function handleIngestForAgent(
                 return JSON.stringify(response);
             } else {
                 // Staging failed
-                const response: CogneeIngestResponse = {
+                const response: FlowbabyIngestResponse = {
                     success: false,
                     error: result.error || 'Staging failed - check Output channel for details',
                     errorCode: 'COGNEE_ERROR'
@@ -214,7 +214,7 @@ export async function handleIngestForAgent(
             const isTimeout = /timeout/i.test(errorMessage);
             const errorCode = isTimeout ? 'BRIDGE_TIMEOUT' : 'COGNEE_ERROR';
 
-            const response: CogneeIngestResponse = {
+            const response: FlowbabyIngestResponse = {
                 success: false,
                 error: errorMessage,
                 errorCode
@@ -239,7 +239,7 @@ export async function handleIngestForAgent(
     } catch (error) {
         // Outer exception (JSON parsing, validation, etc.)
         const errorMessage = error instanceof Error ? error.message : String(error);
-        const response: CogneeIngestResponse = {
+        const response: FlowbabyIngestResponse = {
             success: false,
             error: `Unexpected error: ${errorMessage}`,
             errorCode: 'INTERNAL_ERROR'
@@ -285,7 +285,7 @@ function hashTopicId(topicId: string): string {
 }
 
 /**
- * Log audit entry to .cognee/agent_audit.log
+ * Log audit entry to .flowbaby/agent_audit.log
  * 
  * @param context Extension context
  * @param entry Audit log entry
@@ -308,12 +308,12 @@ export async function logAuditEntry(
             return;
         }
 
-        const cogneeDir = path.join(workspaceFolder.uri.fsPath, '.cognee');
-        const auditLogPath = path.join(cogneeDir, 'agent_audit.log');
+        const flowbabyDir = path.join(workspaceFolder.uri.fsPath, '.flowbaby');
+        const auditLogPath = path.join(flowbabyDir, 'agent_audit.log');
 
-        // Ensure .cognee directory exists
-        if (!fs.existsSync(cogneeDir)) {
-            fs.mkdirSync(cogneeDir, { recursive: true });
+        // Ensure .flowbaby directory exists
+        if (!fs.existsSync(flowbabyDir)) {
+            fs.mkdirSync(flowbabyDir, { recursive: true });
         }
 
         // Append audit entry as JSON line

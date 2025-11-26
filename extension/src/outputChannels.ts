@@ -1,54 +1,55 @@
 /**
- * Output Channel Singletons for RecallFlow Extension
+ * Output Channel Singletons for Flowbaby Extension
  * 
  * This module provides singleton factories for output channels to prevent
  * duplicate channel entries in VS Code's Output dropdown.
  * 
  * Plan 028 Milestone 1: Fix Duplicate Output Channel
  * Plan 028 Milestone 2: Add Debug Logging Channel (lazy creation)
+ * Plan 030: Rebrand to Flowbaby
  * 
  * @module outputChannels
  */
 import * as vscode from 'vscode';
 
 // Module-level singleton instances (lazy initialization)
-let recallFlowOutputChannel: vscode.OutputChannel | undefined;
-let recallFlowDebugChannel: vscode.OutputChannel | undefined;
+let flowbabyOutputChannel: vscode.OutputChannel | undefined;
+let flowbabyDebugChannel: vscode.OutputChannel | undefined;
 
 /**
- * Get the singleton RecallFlow Memory output channel.
+ * Get the singleton Flowbaby output channel.
  * Creates the channel lazily on first call.
  * 
- * @returns The RecallFlow Memory output channel
+ * @returns The Flowbaby output channel
  */
-export function getRecallFlowOutputChannel(): vscode.OutputChannel {
-    if (!recallFlowOutputChannel) {
-        recallFlowOutputChannel = vscode.window.createOutputChannel('RecallFlow Memory');
+export function getFlowbabyOutputChannel(): vscode.OutputChannel {
+    if (!flowbabyOutputChannel) {
+        flowbabyOutputChannel = vscode.window.createOutputChannel('Flowbaby');
     }
-    return recallFlowOutputChannel;
+    return flowbabyOutputChannel;
 }
 
 /**
- * Get the singleton RecallFlow Debug output channel.
+ * Get the singleton Flowbaby Debug output channel.
  * Creates the channel lazily only if debug logging is enabled.
  * 
  * Per Plan 028 Milestone 2: Debug channel is created only when
- * cogneeMemory.debugLogging setting is true.
+ * Flowbaby.debugLogging setting is true.
  * 
- * @returns The RecallFlow Debug output channel, or undefined if debug logging is disabled
+ * @returns The Flowbaby Debug output channel, or undefined if debug logging is disabled
  */
-export function getRecallFlowDebugChannel(): vscode.OutputChannel | undefined {
-    const config = vscode.workspace.getConfiguration('cogneeMemory');
+export function getFlowbabyDebugChannel(): vscode.OutputChannel | undefined {
+    const config = vscode.workspace.getConfiguration('Flowbaby');
     const debugLoggingEnabled = config.get<boolean>('debugLogging', false);
     
     if (!debugLoggingEnabled) {
         return undefined;
     }
     
-    if (!recallFlowDebugChannel) {
-        recallFlowDebugChannel = vscode.window.createOutputChannel('RecallFlow Debug');
+    if (!flowbabyDebugChannel) {
+        flowbabyDebugChannel = vscode.window.createOutputChannel('Flowbaby Debug');
     }
-    return recallFlowDebugChannel;
+    return flowbabyDebugChannel;
 }
 
 /**
@@ -59,7 +60,7 @@ export function getRecallFlowDebugChannel(): vscode.OutputChannel | undefined {
  * @param data Optional structured data to include
  */
 export function debugLog(message: string, data?: Record<string, unknown>): void {
-    const channel = getRecallFlowDebugChannel();
+    const channel = getFlowbabyDebugChannel();
     if (channel) {
         const timestamp = new Date().toISOString();
         let logLine = `[${timestamp}] ${message}`;
@@ -75,12 +76,12 @@ export function debugLog(message: string, data?: Record<string, unknown>): void 
  * Should be called during extension deactivation.
  */
 export function disposeOutputChannels(): void {
-    if (recallFlowOutputChannel) {
-        recallFlowOutputChannel.dispose();
-        recallFlowOutputChannel = undefined;
+    if (flowbabyOutputChannel) {
+        flowbabyOutputChannel.dispose();
+        flowbabyOutputChannel = undefined;
     }
-    if (recallFlowDebugChannel) {
-        recallFlowDebugChannel.dispose();
-        recallFlowDebugChannel = undefined;
+    if (flowbabyDebugChannel) {
+        flowbabyDebugChannel.dispose();
+        flowbabyDebugChannel = undefined;
     }
 }

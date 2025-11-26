@@ -1,8 +1,8 @@
 /**
- * Language Model Tool for RecallFlow Memory Storage (Plan 015)
+ * Language Model Tool for Flowbaby Storage (Plan 015)
  * 
  * Implements VS Code's LanguageModelTool interface to allow Copilot agents
- * to store conversation summaries in RecallFlow knowledge graph.
+ * to store conversation summaries in Flowbaby knowledge graph.
  * 
  * Tool registration and authorization (Plan 016.1):
  * - Registered unconditionally at extension activation
@@ -35,7 +35,7 @@ export class StoreMemoryTool implements vscode.LanguageModelTool<StoreMemoryTool
     }
 
     /**
-     * Invoked when Copilot agent calls recallflow_storeMemory tool
+     * Invoked when Copilot agent calls flowbaby_storeMemory tool
      */
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<StoreMemoryToolInput>,
@@ -44,7 +44,7 @@ export class StoreMemoryTool implements vscode.LanguageModelTool<StoreMemoryTool
         const startTime = Date.now();
         
         this.outputChannel.appendLine(
-            `[Tool Invocation] ${new Date().toISOString()} - recallflow_storeMemory called`
+            `[Tool Invocation] ${new Date().toISOString()} - flowbaby_storeMemory called`
         );
         this.outputChannel.appendLine(`  Topic: ${options.input.topic}`);
         this.outputChannel.appendLine(`  Context length: ${options.input.context.length} chars`);
@@ -53,7 +53,7 @@ export class StoreMemoryTool implements vscode.LanguageModelTool<StoreMemoryTool
             // Plan 016.1: No access check needed - Configure Tools is sole opt-in
             // If this tool is invoked, user has enabled it via Configure Tools UI
             
-            // Prepare payload for cogneeMemory.ingestForAgent command
+            // Prepare payload for Flowbaby.ingestForAgent command
             const payload = {
                 topic: options.input.topic,
                 context: options.input.context,
@@ -68,7 +68,7 @@ export class StoreMemoryTool implements vscode.LanguageModelTool<StoreMemoryTool
 
             // Invoke internal command (now async)
             const responseJson = await vscode.commands.executeCommand<string>(
-                'cogneeMemory.ingestForAgent',
+                'Flowbaby.ingestForAgent',
                 JSON.stringify(payload)
             );
 

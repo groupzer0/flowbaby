@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Batch data recovery script for cognee-chat-memory.
+Batch data recovery script for flowbaby.
 
 This script recovers lost vector embeddings by re-processing the raw text files
-that are still intact in .cognee_data/. It reads each text file and passes it
+that are still intact in .flowbaby/data/. It reads each text file and passes it
 through cognee.add() + cognee.cognify() to regenerate LanceDB embeddings.
 
 Usage:
@@ -24,8 +24,8 @@ def configure_workspace(workspace_path: Path) -> None:
     """Configure cognee to use workspace-local storage directories."""
     import cognee
     
-    system_dir = workspace_path / '.cognee_system'
-    data_dir = workspace_path / '.cognee_data'
+    system_dir = workspace_path / '.flowbaby/system'
+    data_dir = workspace_path / '.flowbaby/data'
     
     print(f"Configuring workspace directories:")
     print(f"  System dir: {system_dir}")
@@ -36,7 +36,7 @@ def configure_workspace(workspace_path: Path) -> None:
 
 
 def find_text_files(data_dir: Path) -> List[Path]:
-    """Find all text files in the .cognee_data directory."""
+    """Find all text files in the .flowbaby/data directory."""
     if not data_dir.exists():
         return []
     
@@ -49,7 +49,7 @@ def get_current_counts(workspace_path: Path) -> Tuple[int, int]:
     import sqlite3
     import lancedb
     
-    db_path = workspace_path / '.cognee_system' / 'databases'
+    db_path = workspace_path / '.flowbaby/system' / 'databases'
     
     # SQLite count
     sqlite_path = db_path / 'cognee_db'
@@ -108,9 +108,9 @@ def main():
         print(f"Error: Workspace path does not exist: {workspace_path}")
         sys.exit(1)
     
-    data_dir = workspace_path / '.cognee_data'
+    data_dir = workspace_path / '.flowbaby/data'
     if not data_dir.exists():
-        print(f"Error: No .cognee_data directory found at: {data_dir}")
+        print(f"Error: No .flowbaby/data directory found at: {data_dir}")
         sys.exit(1)
     
     # Configure workspace FIRST (this is critical!)

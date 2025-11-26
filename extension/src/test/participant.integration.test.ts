@@ -93,10 +93,10 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
         });
 
         // Avoid real Python bridge during activation and handler operations
-        const CogneeClientMod = await import('../cogneeClient');
-        sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'initialize').resolves(true);
-        retrieveStub = sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'retrieve');
-        ingestStub = sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'ingest').resolves(true);
+        const FlowbabyClientMod = await import('../flowbabyClient');
+        sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'initialize').resolves(true);
+        retrieveStub = sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'retrieve');
+        ingestStub = sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'ingest').resolves(true);
 
         await activate({ subscriptions: [], extensionPath: '/tmp/vscode-cognee-test-ext' } as any);
         assert.ok(handler, 'chat participant handler was not registered');
@@ -115,7 +115,7 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
             const { req, stream, token, outputs } = makeInvocation('What did we do?');
             const result = await handler!(req, {} as any, stream, token) as vscode.ChatResult;
 
-            assert.ok(outputs.join('\n').includes('RecallFlow Memory is disabled'));
+            assert.ok(outputs.join('\n').includes('Flowbaby is disabled'));
             assert.deepStrictEqual(result.metadata && (result.metadata as any).disabled, true);
             assert.ok(retrieveStub.notCalled, 'retrieve should not be called when disabled');
         } finally {

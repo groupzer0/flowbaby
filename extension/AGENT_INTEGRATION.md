@@ -1,15 +1,15 @@
-# Agent Integration Guide: RecallFlow Memory
+# Agent Integration Guide: Flowbaby Memory
 <!-- markdownlint-disable MD024 MD031 MD032 MD034 MD040 MD060 -->
 
 **Version**: 1.1  
 **Last Updated**: 2025-11-22  
-**Plan**: 019 - Rebranding to RecallFlow  
+**Plan**: 019 - Rebranding to Flowbaby  
 
 ---
 
 ## Overview
 
-The RecallFlow Memory extension provides commands for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured conversation summaries. This enables:
+The Flowbaby Memory extension provides commands for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured conversation summaries. This enables:
 
 - **Agent continuity**: Agents can maintain context across sessions without manual capture
 - **Multi-agent collaboration**: Different agents can share memory via a common knowledge base
@@ -21,7 +21,7 @@ The RecallFlow Memory extension provides commands for GitHub Copilot agents and 
 
 ### Configure Tools Authorization Model
 
-⚠️ **IMPORTANT**: RecallFlow tools are controlled exclusively through VS Code's **Configure Tools** UI. When you enable tools there, they become available to GitHub Copilot and all extensions in the workspace.
+⚠️ **IMPORTANT**: Flowbaby tools are controlled exclusively through VS Code's **Configure Tools** UI. When you enable tools there, they become available to GitHub Copilot and all extensions in the workspace.
 
 **Why Configure Tools?**
 - VS Code native mechanism for tool authorization
@@ -32,7 +32,7 @@ The RecallFlow Memory extension provides commands for GitHub Copilot agents and 
 **Recommendations**:
 - ✅ Enable tools only in workspaces with trusted extensions
 - ✅ Review installed extensions before enabling
-- ✅ Inspect audit logs regularly (`Output` > `RecallFlow Agent Activity`)
+- ✅ Inspect audit logs regularly (`Output` > `Flowbaby Agent Activity`)
 - ❌ Do NOT enable in untrusted or public workspaces
 - ❌ Do NOT enable if workspace contains sensitive data
 
@@ -40,12 +40,12 @@ The RecallFlow Memory extension provides commands for GitHub Copilot agents and 
 
 All agent ingestion and retrieval attempts are logged:
 
-1. **Output Channel**: `Output` > `RecallFlow Agent Activity`
+1. **Output Channel**: `Output` > `Flowbaby Agent Activity`
    - Real-time log of all agent commands
    - Shows timestamp, agent name (if provided), topic, and result
    - Example: `[Agent Ingest] 2025-11-19T08:12:44Z - Agent: GitHub Copilot - Topic: Plan 015 Implementation - Status: success`
 
-2. **Audit Log File**: `.cognee/agent_audit.log`
+2. **Audit Log File**: `.flowbaby/agent_audit.log`
    - Structured JSON log for programmatic analysis
    - Format: `{"timestamp": "2025-11-19T08:12:44Z", "command": "ingestForAgent", "agentName": "GitHub Copilot", "topicDigest": "a1b2c3d4", "result": "success", "errorCode": null}`
    - Topic digest: First 8 characters of SHA-256 hash (for privacy)
@@ -56,9 +56,9 @@ All agent ingestion and retrieval attempts are logged:
 
 ### Tool Authorization
 
-RecallFlow tools are controlled through VS Code's **Configure Tools** UI:
+Flowbaby tools are controlled through VS Code's **Configure Tools** UI:
 1. Open Copilot chat → Click "Tools" (⚙️) → "Configure Tools"
-2. Find "Store Memory in RecallFlow" and "Retrieve RecallFlow Memory"
+2. Find "Store Memory in Flowbaby" and "Retrieve Flowbaby Memory"
 3. Toggle tools on/off (disabled by default)
 
 No workspace settings required for authorization.
@@ -81,8 +81,8 @@ Without this, ingestion will fail with error code `MISSING_API_KEY`.
 
 **Signature**: `(requestJson: string) => Promise<string>`
 
-- **Input**: JSON string containing `RecallFlowIngestRequest` payload
-- **Output**: JSON string containing `RecallFlowIngestResponse` result
+- **Input**: JSON string containing `FlowbabyIngestRequest` payload
+- **Output**: JSON string containing `FlowbabyIngestResponse` result
 
 ### TypeScript Example (Minimal)
 
@@ -138,7 +138,7 @@ const payload = {
   rationale: [
     "Commands are accessible to Copilot agents",
     "VS Code doesn't expose caller identity",
-    "RecallFlow 0.3.8 doesn't expose DataPoint class"
+    "Flowbaby 0.3.8 doesn't expose DataPoint class"
   ],
   openQuestions: [
     "Should topic_id be hash-based or UUID?",
@@ -201,7 +201,7 @@ if (!response.success) {
       break;
 
     case 'BRIDGE_TIMEOUT':
-      vscode.window.showErrorMessage('RecallFlow ingestion timed out. Try again later.');
+      vscode.window.showErrorMessage('Flowbaby ingestion timed out. Try again later.');
       break;
 
     default:
@@ -218,7 +218,7 @@ if (!response.success) {
 | `MISSING_API_KEY` | `LLM_API_KEY` not in workspace `.env` | Add API key to `.env` file |
 | `INVALID_WORKSPACE_PATH` | Workspace path invalid or inaccessible | Verify workspace exists |
 | `BRIDGE_TIMEOUT` | Python bridge exceeded timeout | Retry; check bridge logs |
-| `RECALLFLOW_ERROR` | RecallFlow library threw exception | Check Output channel for details |
+| `RECALLFLOW_ERROR` | Flowbaby library threw exception | Check Output channel for details |
 | `429_RECALLFLOW_BACKLOG` | Background queue full (5 operations max) | Wait 30-60s for queue to clear, then retry |
 
 ---
@@ -249,10 +249,10 @@ Starting in v0.3.3, the `recallflowMemory.ingestForAgent` command operates **asy
 
 ### Response Fields for Async Mode
 
-The `RecallFlowIngestResponse` includes fields to indicate async processing:
+The `FlowbabyIngestResponse` includes fields to indicate async processing:
 
 ```typescript
-interface RecallFlowIngestResponse {
+interface FlowbabyIngestResponse {
   success: boolean;
   staged?: boolean;           // true if background processing queued
   operationId?: string;        // UUID for tracking background operation
@@ -362,11 +362,11 @@ if (response.errorCode === '429_RECALLFLOW_BACKLOG') {
 
 ---
 
-## Using RecallFlow Tools with GitHub Copilot and Custom Agents (Plan 016)
+## Using Flowbaby Tools with GitHub Copilot and Custom Agents (Plan 016)
 
 ### Overview
 
-RecallFlow Memory provides two **Language Model Tools** that appear in VS Code's "Configure Tools" dialog:
+Flowbaby Memory provides two **Language Model Tools** that appear in VS Code's "Configure Tools" dialog:
 
 1. **recallflow_storeMemory** (`#recallflowStoreSummary`) - Store conversation summaries
 2. **recallflow_retrieveMemory** (`#recallflowRetrieveMemory`) - Retrieve relevant memories
@@ -388,7 +388,7 @@ These expectations mirror the guidance embedded in the tool metadata (e.g., 300�
 1. Open any Copilot chat
 2. Click the "Tools" button (⚙️ icon near input box)
 3. Click "Configure Tools"
-4. Find "RecallFlow Memory" tools in the list
+4. Find "Flowbaby Memory" tools in the list
 5. Toggle tools on/off individually
 
 **In Chat (`#` Autocomplete)**:
@@ -549,7 +549,7 @@ Both tools register at extension activation. VS Code manages tool enablement thr
 
 ### Rate Limits and Throttling
 
-- **Retrieval concurrency**: `RecallFlowContextProvider` executes up to **2** retrievals at once (user setting can lower this; any value above 5 is clamped). Additional requests queue up to 5 deep before being rejected.
+- **Retrieval concurrency**: `FlowbabyContextProvider` executes up to **2** retrievals at once (user setting can lower this; any value above 5 is clamped). Additional requests queue up to 5 deep before being rejected.
 - **Requests per minute**: By default only **10** retrievals may start per 60-second window. Raising the workspace setting above 30 still clamps at **30/min** to stay within architectural guarantees.
 - **Ingestion backlog**: Async ingestion shares the same 2-active / 3-queued limits via `BackgroundOperationManager`. When the queue fills, `ingestForAgent` returns `429_COGNIFY_BACKLOG` without staging the summary.
 
@@ -562,7 +562,7 @@ Both retrieval and ingestion communicate throttling with HTTP-style 429 messages
 | Ingestion | `429_RECALLFLOW_BACKLOG` | 2 background `cognify()` jobs + 3 queued (max 5) | Offer to retry later or skip low-priority summary |
 
 ```typescript
-async function safeRetrieve(request: RecallFlowContextRequest) {
+async function safeRetrieve(request: FlowbabyContextRequest) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const response = await provider.retrieveContext(request);
     if (!('error' in response)) {
@@ -584,9 +584,9 @@ Always surface a user-facing notice when throttling occurs so developers know wh
 
 ### Transparency Indicators
 
-When agents use RecallFlow tools, you see:
+When agents use Flowbaby tools, you see:
 
-1. **Output Channel**: `Output` > `RecallFlow Agent Activity`
+1. **Output Channel**: `Output` > `Flowbaby Agent Activity`
    - Real-time log of all tool invocations
    - Shows timestamp, tool name, query/topic, and result
    - Example: `[Tool Invocation] 2025-11-19T08:12:44Z - recallflow_retrieveMemory called`
@@ -598,7 +598,7 @@ When agents use RecallFlow tools, you see:
 3. **Confirmation Messages** (optional):
    - Tools may show confirmation prompts before execution
    - Depends on user's trust settings for agents
-   - Example: "Store this conversation summary in RecallFlow knowledge graph?"
+   - Example: "Store this conversation summary in Flowbaby knowledge graph?"
 
 ---
 
@@ -608,8 +608,8 @@ When agents use RecallFlow tools, you see:
 
 **Signature**: `(requestJson: string) => Promise<string>`
 
-- **Input**: JSON string containing `RecallFlowContextRequest` payload
-- **Output**: JSON string containing `RecallFlowContextResponse` or `AgentErrorResponse`
+- **Input**: JSON string containing `FlowbabyContextRequest` payload
+- **Output**: JSON string containing `FlowbabyContextResponse` or `AgentErrorResponse`
 
 ### TypeScript Example
 
@@ -673,10 +673,10 @@ try {
 
 ## Schema Reference
 
-### RecallFlowIngestRequest
+### FlowbabyIngestRequest
 
 ```typescript
-interface RecallFlowIngestRequest {
+interface FlowbabyIngestRequest {
   // Required fields
   topic: string;                    // Summary title
   context: string;                  // Summary description
@@ -709,10 +709,10 @@ interface SummaryMetadata {
 }
 ```
 
-### RecallFlowIngestResponse
+### FlowbabyIngestResponse
 
 ```typescript
-interface RecallFlowIngestResponse {
+interface FlowbabyIngestResponse {
   success: boolean;
 
   // On success
@@ -735,10 +735,10 @@ interface RecallFlowIngestResponse {
 }
 ```
 
-### RecallFlowContextRequest
+### FlowbabyContextRequest
 
 ```typescript
-interface RecallFlowContextRequest {
+interface FlowbabyContextRequest {
   // Required fields
   query: string;                    // Natural language search query
 
@@ -751,14 +751,14 @@ interface RecallFlowContextRequest {
 }
 ```
 
-### RecallFlowContextResponse
+### FlowbabyContextResponse
 
 ```typescript
-interface RecallFlowContextResponse {
+interface FlowbabyContextResponse {
   success: boolean;
 
   // On success
-  entries: RecallFlowMemoryEntry[];
+  entries: FlowbabyMemoryEntry[];
   totalResults: number;
   tokensUsed: number;
 
@@ -767,7 +767,7 @@ interface RecallFlowContextResponse {
   errorCode?: string;               // Error code
 }
 
-interface RecallFlowMemoryEntry {
+interface FlowbabyMemoryEntry {
   summaryText: string;              // Summary text
   topic?: string;                   // Topic (optional)
   topicId?: string;                 // Topic ID (optional)
@@ -785,7 +785,7 @@ interface RecallFlowMemoryEntry {
 All tool invocations are logged for transparency. Check the **Output** channel:
 
 1. Open **View → Output**
-2. Select **"RecallFlow Agent Activity"** from dropdown
+2. Select **"Flowbaby Agent Activity"** from dropdown
 3. View real-time logs of all tool calls with timestamps and results
 
 ---
@@ -858,7 +858,7 @@ const topicId = generateTopicId("Plan 015 Implementation", new Date().toISOStrin
 
 1. Open Copilot chat
 2. Click "Tools" (⚙️) → "Configure Tools"
-3. Enable "Store Memory in RecallFlow" and "Retrieve RecallFlow Memory"
+3. Enable "Store Memory in Flowbaby" and "Retrieve Flowbaby Memory"
 
 ### 2. Create Test Script
 
@@ -897,13 +897,13 @@ export async function testIngestion() {
 ### 3. Verify in Output Channel
 
 1. Open `Output` panel (`View` > `Output`)
-2. Select `RecallFlow Agent Activity` from dropdown
+2. Select `Flowbaby Agent Activity` from dropdown
 3. Look for log entry: `[Agent Ingest] <timestamp> - Agent: <your-agent> - Topic: Test Agent Ingestion - Status: success`
 
 ### 4. Check Audit Log
 
 ```bash
-cat .cognee/agent_audit.log | grep test-001
+cat .flowbaby/agent_audit.log | grep test-001
 ```
 
 Expected output:
@@ -919,11 +919,11 @@ Expected output:
 
 **Issue**: `vscode.commands.executeCommand` throws "command not found"
 
-**Solution**: Verify RecallFlow Memory extension is installed and activated
+**Solution**: Verify Flowbaby Memory extension is installed and activated
 ```typescript
-const extension = vscode.extensions.getExtension('cognee.cognee-chat-memory');
+const extension = vscode.extensions.getExtension('cognee.flowbaby');
 if (!extension) {
-  throw new Error('RecallFlow Memory extension not installed');
+  throw new Error('Flowbaby Memory extension not installed');
 }
 await extension.activate();
 ```
@@ -935,7 +935,7 @@ await extension.activate();
 **Solution**: Enable tools via Configure Tools UI
 1. Open Copilot chat
 2. Click "Tools" (⚙️) → "Configure Tools"
-3. Find "Store Memory in RecallFlow" and "Retrieve RecallFlow Memory"
+3. Find "Store Memory in Flowbaby" and "Retrieve Flowbaby Memory"
 4. Toggle checkboxes to enable
 5. Return to chat and type `#recallflow` to verify autocomplete
 
@@ -958,7 +958,7 @@ if (response.errorCode === 'INVALID_PAYLOAD') {
 **Solution**:
 1. Check if LLM API key is valid
 2. Check network connectivity
-3. Verify RecallFlow installation: `pip list | grep cognee`
+3. Verify Flowbaby installation: `pip list | grep cognee`
 4. Check bridge logs in Output channel
 
 ---

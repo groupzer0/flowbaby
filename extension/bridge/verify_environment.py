@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-RecallFlow Environment Verification Script
+Flowbaby Environment Verification Script
 
 Usage: python verify_environment.py <workspace_path>
 

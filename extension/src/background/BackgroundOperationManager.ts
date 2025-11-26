@@ -129,13 +129,13 @@ export class BackgroundOperationManager {
      * Initialize ledger for workspace
      */
     public async initializeForWorkspace(workspacePath: string): Promise<void> {
-        const cogneeDir = path.join(workspacePath, '.cognee');
-        const logsDir = path.join(cogneeDir, 'logs');
-        await fs.promises.mkdir(cogneeDir, { recursive: true });
-        await fs.promises.mkdir(path.join(cogneeDir, 'background_ops'), { recursive: true });
+        const flowbabyDir = path.join(workspacePath, '.flowbaby');
+        const logsDir = path.join(flowbabyDir, 'logs');
+        await fs.promises.mkdir(flowbabyDir, { recursive: true });
+        await fs.promises.mkdir(path.join(flowbabyDir, 'background_ops'), { recursive: true });
         await fs.promises.mkdir(logsDir, { recursive: true });
         
-        this.ledgerPath = path.join(cogneeDir, 'background_ops.json');
+        this.ledgerPath = path.join(flowbabyDir, 'background_ops.json');
         this.logFilePath = path.join(logsDir, 'ingest.log');
 
         // Log rotation: if log file > 5MB, truncate it
@@ -393,7 +393,7 @@ export class BackgroundOperationManager {
         );
         
         if (action === 'View Status') {
-            vscode.commands.executeCommand('cognee.backgroundStatus');
+            vscode.commands.executeCommand('Flowbaby.backgroundStatus');
         }
     }
     
@@ -471,7 +471,7 @@ export class BackgroundOperationManager {
             this.clearStubMonitor(operationId);
             return true;
         }
-        const stubPath = path.join(workspacePath, '.cognee', 'background_ops', `${operationId}.json`);
+        const stubPath = path.join(workspacePath, '.flowbaby', 'background_ops', `${operationId}.json`);
         try {
             const stubContent = await fs.promises.readFile(stubPath, 'utf-8');
             const stub: StatusStub = JSON.parse(stubContent);
@@ -588,7 +588,7 @@ export class BackgroundOperationManager {
     }
 
     private async persistPayload(operationId: string, workspacePath: string, payload: OperationRetryPayload): Promise<string> {
-        const payloadDir = path.join(workspacePath, '.cognee', 'background_ops', 'payloads');
+        const payloadDir = path.join(workspacePath, '.flowbaby', 'background_ops', 'payloads');
         await fs.promises.mkdir(payloadDir, { recursive: true });
         const payloadPath = path.join(payloadDir, `${operationId}.json`);
         const tempPath = `${payloadPath}.tmp`;
@@ -624,7 +624,7 @@ export class BackgroundOperationManager {
     }
 
     private async deleteStatusStub(operationId: string, workspacePath: string): Promise<void> {
-        const stubPath = path.join(workspacePath, '.cognee', 'background_ops', `${operationId}.json`);
+        const stubPath = path.join(workspacePath, '.flowbaby', 'background_ops', `${operationId}.json`);
         try {
             await fs.promises.unlink(stubPath);
         } catch {
@@ -918,7 +918,7 @@ export class BackgroundOperationManager {
             
             // Also try to load from globalState (optional in test environments)
             if (this.context?.globalState) {
-                const stateData = this.context.globalState.get<OperationEntry[]>('cognee.backgroundOps');
+                const stateData = this.context.globalState.get<OperationEntry[]>('flowbaby.backgroundOps');
                 if (stateData) {
                     for (const entry of stateData) {
                         // File takes precedence
@@ -956,7 +956,7 @@ export class BackgroundOperationManager {
         
         // Mirror to globalState (optional in test environments)
         if (this.context?.globalState) {
-            await this.context.globalState.update('cognee.backgroundOps', Array.from(this.operations.values()));
+            await this.context.globalState.update('flowbaby.backgroundOps', Array.from(this.operations.values()));
         }
     }
 }

@@ -1,6 +1,6 @@
 # Distribution Guide
 
-This document explains how to package and distribute the RecallFlow Chat Memory extension.
+This document explains how to package and distribute the Flowbaby Chat Memory extension.
 
 ## Prerequisites
 
@@ -63,7 +63,7 @@ npm run compile
 vsce package
 ```
 
-This creates `cognee-chat-memory-0.3.9.vsix`.
+This creates `flowbaby-0.3.9.vsix`.
 
 ### 3. Test VSIX Locally
 
@@ -79,16 +79,16 @@ code --disable-extensions
 - [ ] All settings appear in Settings UI
 - [ ] Integration tests pass in installed extension
 - [ ] No console errors in Developer Tools
-- [ ] Output Channel "RecallFlow Memory" shows logs correctly
+- [ ] Output Channel "Flowbaby Memory" shows logs correctly
 
 ### 4. Create GitHub Release
 
 1. Navigate to: <https://github.com/lsalsich/cognee/releases>
 2. Click **"Draft a new release"**
 3. **Tag**: `v0.2.0` (must match git tag)
-4. **Title**: "RecallFlow Chat Memory v0.3.9"
+4. **Title**: "Flowbaby Chat Memory v0.3.9"
 5. **Description**: Copy relevant section from CHANGELOG.md
-6. **Attach** `cognee-chat-memory-0.3.9.vsix` file
+6. **Attach** `flowbaby-0.3.9.vsix` file
 7. Click **"Publish release"**
 
 ### 5. Announce Release
@@ -206,7 +206,7 @@ If a release has critical bugs:
 After successful build, you should have:
 
 - `dist/extension.js` - Bundled and minified TypeScript code (~6-10 KB)
-- `cognee-chat-memory-X.Y.Z.vsix` - Installable extension package
+- `flowbaby-X.Y.Z.vsix` - Installable extension package
 
 **VSIX Contents** (verify with `unzip -l <file>.vsix`):
 

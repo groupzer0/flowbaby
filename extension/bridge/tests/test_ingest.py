@@ -76,8 +76,8 @@ async def test_ingest_add_with_correct_parameters(temp_workspace, mock_env, mock
             assert 'dataset_name' in call_kwargs
             
             # Verify workspace-local storage directories configured
-            expected_system_dir = str(temp_workspace / '.cognee_system')
-            expected_data_dir = str(temp_workspace / '.cognee_data')
+            expected_system_dir = str(temp_workspace / '.flowbaby/system')
+            expected_data_dir = str(temp_workspace / '.flowbaby/data')
             mock_cognee_module.config.system_root_directory.assert_called_once_with(expected_system_dir)
             mock_cognee_module.config.data_root_directory.assert_called_once_with(expected_data_dir)
 

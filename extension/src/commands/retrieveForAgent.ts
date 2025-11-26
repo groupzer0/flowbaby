@@ -1,7 +1,7 @@
 /**
  * Agent Retrieval Command (Plan 016 Milestone 2)
  * 
- * Exposes cogneeMemory.retrieveForAgent command for external extensions and agents.
+ * Exposes Flowbaby.retrieveForAgent command for external extensions and agents.
  * This command is headless (not visible in command palette/menus) and returns
  * structured JSON responses for programmatic consumption.
  * 
@@ -11,29 +11,29 @@
 
 import * as vscode from 'vscode';
 import {
-    CogneeContextRequest,
-    CogneeContextResponse,
+    FlowbabyContextRequest,
+    FlowbabyContextResponse,
     AgentErrorCode,
     AgentErrorResponse
 } from '../types/agentIntegration';
 
 /**
- * Register the cogneeMemory.retrieveForAgent command
+ * Register the Flowbaby.retrieveForAgent command
  * 
  * This command provides structured retrieval for arbitrary agents and extensions.
  * Authorization is controlled by VS Code Configure Tools UI.
  * 
  * @param context - Extension context for registrations
- * @param provider - CogneeContextProvider instance (must already be initialized)
+ * @param provider - FlowbabyContextProvider instance (must already be initialized)
  * @param outputChannel - Output channel for audit logging
  */
 export function registerRetrieveForAgentCommand(
     context: vscode.ExtensionContext,
-    provider: any, // CogneeContextProvider type (avoiding circular import)
+    provider: any, // FlowbabyContextProvider type (avoiding circular import)
     outputChannel: vscode.OutputChannel
 ): void {
     const command = vscode.commands.registerCommand(
-        'cogneeMemory.retrieveForAgent',
+        'Flowbaby.retrieveForAgent',
         async (requestJson: string): Promise<string> => {
             const startTime = Date.now();
             
@@ -44,7 +44,7 @@ export function registerRetrieveForAgentCommand(
                 // No additional access check needed
                 
                 // Parse request JSON
-                let request: CogneeContextRequest;
+                let request: FlowbabyContextRequest;
                 try {
                     request = JSON.parse(requestJson);
                 } catch (parseError) {
@@ -93,7 +93,7 @@ export function registerRetrieveForAgentCommand(
                     `maxTokens: ${request.maxTokens || 'default'}`
                 );
                 
-                // Call CogneeContextProvider.retrieveContext
+                // Call FlowbabyContextProvider.retrieveContext
                 const response = await provider.retrieveContext(request);
                 
                 const duration = Date.now() - startTime;
@@ -112,7 +112,7 @@ export function registerRetrieveForAgentCommand(
                     return JSON.stringify(errorResponse);
                 }
                 
-                const successResponse = response as CogneeContextResponse;
+                const successResponse = response as FlowbabyContextResponse;
                 
                 // Log successful result
                 outputChannel.appendLine(

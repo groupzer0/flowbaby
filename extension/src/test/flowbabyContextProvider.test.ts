@@ -1,5 +1,5 @@
 /**
- * CogneeContextProvider Unit Tests (Plan 016)
+ * FlowbabyContextProvider Unit Tests (Plan 016)
  * 
  * Tests for provider concurrency, rate limiting, error handling, and settings clamping
  */
@@ -7,19 +7,19 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
-import { CogneeContextProvider } from '../cogneeContextProvider';
-import { CogneeClient, RetrievalResult } from '../cogneeClient';
+import { FlowbabyContextProvider } from '../flowbabyContextProvider';
+import { FlowbabyClient, RetrievalResult } from '../flowbabyClient';
 import {
-    CogneeContextRequest,
-    CogneeContextResponse,
+    FlowbabyContextRequest,
+    FlowbabyContextResponse,
     AgentErrorCode,
     AgentErrorResponse
 } from '../types/agentIntegration';
 
-suite('CogneeContextProvider Test Suite', () => {
+suite('FlowbabyContextProvider Test Suite', () => {
     let sandbox: sinon.SinonSandbox;
     let outputChannel: vscode.OutputChannel;
-    let mockClient: sinon.SinonStubbedInstance<CogneeClient>;
+    let mockClient: sinon.SinonStubbedInstance<FlowbabyClient>;
 
     setup(() => {
         sandbox = sinon.createSandbox();
@@ -37,7 +37,7 @@ suite('CogneeContextProvider Test Suite', () => {
         } as any;
 
         // Create mock client
-        mockClient = sandbox.createStubInstance(CogneeClient);
+        mockClient = sandbox.createStubInstance(FlowbabyClient);
     });
 
     teardown(() => {
@@ -50,7 +50,7 @@ suite('CogneeContextProvider Test Suite', () => {
     function createProvider(config: {
         maxConcurrentRequests?: number;
         rateLimitPerMinute?: number;
-    } = {}): CogneeContextProvider {
+    } = {}): FlowbabyContextProvider {
         const mockConfig = {
             get: (key: string, defaultValue?: any) => {
                 if (key === 'maxConcurrentRequests') {
@@ -70,7 +70,7 @@ suite('CogneeContextProvider Test Suite', () => {
         sandbox.stub(vscode.workspace, 'getConfiguration')
             .returns(mockConfig as any);
 
-        return new CogneeContextProvider(mockClient as any, outputChannel);
+        return new FlowbabyContextProvider(mockClient as any, outputChannel);
     }
 
     /**
@@ -161,7 +161,7 @@ suite('CogneeContextProvider Test Suite', () => {
     suite('Request Validation', () => {
         test('Rejects empty query string', async () => {
             const provider = createProvider();
-            const request: CogneeContextRequest = { query: '' };
+            const request: FlowbabyContextRequest = { query: '' };
 
             const response = await provider.retrieveContext(request);
 
@@ -174,7 +174,7 @@ suite('CogneeContextProvider Test Suite', () => {
 
         test('Rejects whitespace-only query', async () => {
             const provider = createProvider();
-            const request: CogneeContextRequest = { query: '   \t\n  ' };
+            const request: FlowbabyContextRequest = { query: '   \t\n  ' };
 
             const response = await provider.retrieveContext(request);
 
@@ -188,7 +188,7 @@ suite('CogneeContextProvider Test Suite', () => {
             const provider = createProvider();
             mockClient.retrieve.resolves(createMockResults(1));
 
-            const request: CogneeContextRequest = { query: 'test query' };
+            const request: FlowbabyContextRequest = { query: 'test query' };
             const response = await provider.retrieveContext(request);
 
             assert.strictEqual('error' in response, false, 'Should not return error for valid query');
@@ -249,7 +249,7 @@ suite('CogneeContextProvider Test Suite', () => {
             mockClient.retrieve.returns(neverResolves as any);
 
             // Fill in-flight + queue (1 in-flight + 5 queued = 6 total)
-            const requests: Promise<CogneeContextResponse | AgentErrorResponse>[] = [];
+            const requests: Promise<FlowbabyContextResponse | AgentErrorResponse>[] = [];
             for (let i = 0; i < 6; i++) {
                 requests.push(provider.retrieveContext({ query: `query ${i}` }));
             }
@@ -326,12 +326,12 @@ suite('CogneeContextProvider Test Suite', () => {
     });
 
     suite('Response Formatting', () => {
-        test('Converts bridge results to CogneeContextResponse', async () => {
+        test('Converts bridge results to FlowbabyContextResponse', async () => {
             const provider = createProvider();
             const mockResults = createMockResults(3);
             mockClient.retrieve.resolves(mockResults);
 
-            const request: CogneeContextRequest = { query: 'test query' };
+            const request: FlowbabyContextRequest = { query: 'test query' };
             const response = await provider.retrieveContext(request);
 
             assert.strictEqual('error' in response, false);

@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
-import { RecallFlowStatusBar, RecallFlowStatus } from '../statusBar/RecallFlowStatusBar';
+import { FlowbabyStatusBar, FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
 import { debugLog } from '../outputChannels';
 
 export interface BridgeEnvMetadata {
@@ -18,7 +18,7 @@ export interface BridgeEnvMetadata {
 export interface BridgeVersionMetadata {
     bridgeVersion: string;
     extensionVersion: string;
-    cogneeVersion: string;
+    pythonVersion: string;
     requirementsHash: string;
     lastVerifiedAt: string;
 }
@@ -28,17 +28,16 @@ interface EnvVerificationResult {
     details: Record<string, boolean>;
     missing?: string[];
     python_version?: string;
-    cognee_version?: string;
     bridge_version?: string;
 }
 
-export class RecallFlowSetupService {
+export class FlowbabySetupService {
     private readonly workspacePath: string;
     private readonly outputChannel: vscode.OutputChannel;
     private readonly bridgePath: string;
     private readonly fs: { existsSync: (path: string) => boolean };
     private readonly spawnFn: typeof spawn;
-    private readonly statusBar?: RecallFlowStatusBar;
+    private readonly statusBar?: FlowbabyStatusBar;
 
     private _isVerified: boolean = false;
 
@@ -48,13 +47,13 @@ export class RecallFlowSetupService {
 
     private async setVerified(value: boolean) {
         this._isVerified = value;
-        await vscode.commands.executeCommand('setContext', 'cogneeMemory.environmentVerified', value);
+        await vscode.commands.executeCommand('setContext', 'Flowbaby.environmentVerified', value);
         
         if (this.statusBar) {
             if (value) {
-                this.statusBar.setStatus(RecallFlowStatus.Ready);
+                this.statusBar.setStatus(FlowbabyStatus.Ready);
             } else {
-                this.statusBar.setStatus(RecallFlowStatus.SetupRequired);
+                this.statusBar.setStatus(FlowbabyStatus.SetupRequired);
             }
         }
     }
@@ -65,7 +64,7 @@ export class RecallFlowSetupService {
         outputChannel: vscode.OutputChannel,
         fileSystem?: { existsSync: (path: string) => boolean },
         spawnFunction?: typeof spawn,
-        statusBar?: RecallFlowStatusBar
+        statusBar?: FlowbabyStatusBar
     ) {
         this.workspacePath = workspacePath;
         this.outputChannel = outputChannel;
@@ -91,7 +90,7 @@ export class RecallFlowSetupService {
                     const currentHash = await this.computeRequirementsHash();
                     if (bridgeEnv.requirementsHash !== currentHash) {
                         vscode.window.showWarningMessage(
-                            'RecallFlow dependencies are outdated.',
+                            'Flowbaby dependencies are outdated.',
                             'Refresh Dependencies'
                         ).then(selection => {
                             if (selection === 'Refresh Dependencies') {
@@ -106,7 +105,7 @@ export class RecallFlowSetupService {
                 } else {
                     await this.setVerified(false);
                     vscode.window.showErrorMessage(
-                        'RecallFlow environment is unhealthy.',
+                        'Flowbaby environment is unhealthy.',
                         'Repair Environment'
                     ).then(selection => {
                         if (selection === 'Repair Environment') {
@@ -127,14 +126,14 @@ export class RecallFlowSetupService {
         }
 
         // No bridge-env.json
-        const config = vscode.workspace.getConfiguration('cogneeMemory');
+        const config = vscode.workspace.getConfiguration('Flowbaby');
         const defaultPython = this.getSystemPythonCommand();
         const pythonPath = config.get<string>('pythonPath', defaultPython);
         
         if (pythonPath !== defaultPython && pythonPath !== '') {
             // Explicit path set
             const adopt = await vscode.window.showInformationMessage(
-                'RecallFlow found a configured Python path. Use this environment?',
+                'Flowbaby found a configured Python path. Use this environment?',
                 'Use Configured Python',
                 'Create Managed Environment'
             );
@@ -156,7 +155,7 @@ export class RecallFlowSetupService {
         } else {
             // No config, no metadata -> Prompt setup
             const create = await vscode.window.showInformationMessage(
-                'RecallFlow requires a Python environment.',
+                'Flowbaby requires a Python environment.',
                 'Initialize Workspace'
             );
             
@@ -167,11 +166,11 @@ export class RecallFlowSetupService {
     }
 
     /**
-     * Create .cognee/venv and install dependencies (Plan 028 M3)
-     * Uses isolated .cognee/venv path to avoid conflicts with user's workspace .venv
+     * Create .flowbaby/venv and install dependencies (Plan 028 M3)
+     * Uses isolated .flowbaby/venv path to avoid conflicts with user's workspace .venv
      */
     async createEnvironment(): Promise<boolean> {
-        if (this.statusBar) this.statusBar.setStatus(RecallFlowStatus.Refreshing, 'Creating environment...');
+        if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Creating environment...');
         
         // Plan 028 M2: Debug logging for setup operations
         debugLog('Creating Python environment', { workspacePath: this.workspacePath });
@@ -182,9 +181,9 @@ export class RecallFlowSetupService {
             debugLog('Existing workspace .venv detected', { existingVenvPath });
             
             const choice = await vscode.window.showInformationMessage(
-                'Your workspace has an existing .venv folder. **Recommended**: RecallFlow will create its own isolated environment in .cognee/venv to avoid dependency conflicts.',
+                'Your workspace has an existing .venv folder. **Recommended**: Flowbaby will create its own isolated environment in .flowbaby/venv to avoid dependency conflicts.',
                 { modal: true },
-                'Use .cognee/venv (Recommended)',
+                'Use .flowbaby/venv (Recommended)',
                 'Use existing .venv (Advanced)'
             );
             
@@ -199,7 +198,7 @@ export class RecallFlowSetupService {
                 debugLog('User chose to use existing .venv (advanced option)');
                 
                 const confirmConflict = await vscode.window.showWarningMessage(
-                    'Using your existing .venv may cause version conflicts with your project. RecallFlow will install cognee and its dependencies into this environment.',
+                    'Using your existing .venv may cause version conflicts with your project. Flowbaby will install cognee and its dependencies into this environment.',
                     { modal: true },
                     'Proceed',
                     'Cancel'
@@ -212,7 +211,7 @@ export class RecallFlowSetupService {
                 // Install into existing .venv using legacy path
                 return this.installIntoExistingVenv();
             }
-            // Otherwise, continue with .cognee/venv (recommended)
+            // Otherwise, continue with .flowbaby/venv (recommended)
         }
         
         // Plan 028 M3: Check BackgroundOperationManager queue before proceeding
@@ -225,7 +224,7 @@ export class RecallFlowSetupService {
             
             if (runningOps.length > 0) {
                 const proceed = await vscode.window.showWarningMessage(
-                    `RecallFlow has ${runningOps.length} pending operation(s). Creating a new environment may disrupt them.`,
+                    `"Flowbaby has ${runningOps.length} pending operation(s). Creating a new environment may disrupt them.`,
                     'Wait for Completion',
                     'Create Anyway'
                 );
@@ -244,11 +243,11 @@ export class RecallFlowSetupService {
         
         return vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
-            title: "Setting up RecallFlow Environment...",
+            title: "Setting up Flowbaby Environment...",
             cancellable: false
         }, async (progress) => {
-            // Plan 028 M3: Use isolated .cognee/venv path
-            const cogneeDir = path.join(this.workspacePath, '.cognee');
+            // Plan 028 M3: Use isolated .flowbaby/venv path
+            const cogneeDir = path.join(this.workspacePath, '.flowbaby');
             const venvPath = path.join(cogneeDir, 'venv');
             
             try {
@@ -261,14 +260,14 @@ export class RecallFlowSetupService {
                     throw new Error('PYTHON_VERSION_UNSUPPORTED: Python 3.8+ is required.');
                 }
 
-                // 2. Ensure .cognee directory exists
+                // 2. Ensure .flowbaby directory exists
                 if (!this.fs.existsSync(cogneeDir)) {
                     await fs.promises.mkdir(cogneeDir, { recursive: true });
                 }
 
-                // 3. Create venv in .cognee/venv
+                // 3. Create venv in .flowbaby/venv
                 progress.report({ message: "Creating virtual environment..." });
-                this.log('Creating virtual environment in .cognee/venv...');
+                this.log('Creating virtual environment in .flowbaby/venv...');
                 debugLog('Creating venv', { venvPath });
                 await this.runCommand(pythonCommand, ['-m', 'venv', venvPath], this.workspacePath);
 
@@ -297,7 +296,7 @@ export class RecallFlowSetupService {
 
                 await this.setVerified(true);
 
-                vscode.window.showInformationMessage('RecallFlow environment setup complete!');
+                vscode.window.showInformationMessage('Flowbaby environment setup complete!');
                 debugLog('Environment creation successful', { venvPath });
                 return true;
             } catch (error: any) {
@@ -320,7 +319,7 @@ export class RecallFlowSetupService {
                 }
 
                 vscode.window.showErrorMessage(userMessage);
-                if (this.statusBar) this.statusBar.setStatus(RecallFlowStatus.Error, userMessage);
+                if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Error, userMessage);
                 return false;
             }
         });
@@ -328,14 +327,14 @@ export class RecallFlowSetupService {
 
     /**
      * Install into existing workspace .venv (Plan 028 M7 - Advanced option)
-     * Used when user chooses to use their existing .venv instead of .cognee/venv
+     * Used when user chooses to use their existing .venv instead of .flowbaby/venv
      */
     private async installIntoExistingVenv(): Promise<boolean> {
-        if (this.statusBar) this.statusBar.setStatus(RecallFlowStatus.Refreshing, 'Installing into existing .venv...');
+        if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Installing into existing .venv...');
         
         return vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
-            title: "Installing RecallFlow into existing .venv...",
+            title: "Installing Flowbaby into existing .venv...",
             cancellable: false
         }, async (progress) => {
             const venvPath = path.join(this.workspacePath, '.venv');
@@ -376,7 +375,7 @@ export class RecallFlowSetupService {
 
                 await this.setVerified(true);
 
-                vscode.window.showInformationMessage('RecallFlow installed into existing .venv');
+                vscode.window.showInformationMessage('Flowbaby installed into existing .venv');
                 debugLog('Environment setup completed using existing .venv', { venvPath });
                 return true;
             } catch (error: any) {
@@ -384,7 +383,7 @@ export class RecallFlowSetupService {
                 debugLog('Setup into existing .venv failed', { error: String(error) });
 
                 vscode.window.showErrorMessage('Failed to install into existing .venv. Check output for details.');
-                if (this.statusBar) this.statusBar.setStatus(RecallFlowStatus.Error, 'Setup failed');
+                if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Error, 'Setup failed');
                 return false;
             }
         });
@@ -430,13 +429,13 @@ export class RecallFlowSetupService {
             
             if (result.status === 'ok') {
                 const requirementsHash = await this.computeRequirementsHash();
-                const extension = vscode.extensions.getExtension('recallflow.cognee-chat-memory');
+                const extension = vscode.extensions.getExtension('flowbaby.flowbaby-chat-memory');
                 const extensionVersion = extension ? extension.packageJSON.version : '0.0.0';
 
                 await this.writeBridgeVersion({
                     bridgeVersion: result.bridge_version || '0.0.0',
                     extensionVersion: extensionVersion,
-                    cogneeVersion: result.cognee_version || '0.0.0',
+                    pythonVersion: result.python_version || '0.0.0',
                     requirementsHash: requirementsHash,
                     lastVerifiedAt: new Date().toISOString()
                 });
@@ -477,19 +476,19 @@ export class RecallFlowSetupService {
             }
         }
 
-        if (this.statusBar) this.statusBar.setStatus(RecallFlowStatus.Refreshing, 'Refreshing dependencies...');
+        if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Refreshing dependencies...');
 
         await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
-            title: "Refreshing RecallFlow Dependencies...",
+            title: "Refreshing Flowbaby Dependencies...",
             cancellable: false
         }, async (progress) => {
-            // Plan 028 M3: Use .cognee/venv path, with fallback to legacy .venv
-            const cogneeDir = path.join(this.workspacePath, '.cognee');
+            // Plan 028 M3: Use .flowbaby/venv path, with fallback to legacy .venv
+            const cogneeDir = path.join(this.workspacePath, '.flowbaby');
             const venvPath = path.join(cogneeDir, 'venv');
             const backupPath = path.join(cogneeDir, 'venv.backup');
             
-            // Check if we need to use legacy path (existing .venv with no .cognee/venv)
+            // Check if we need to use legacy path (existing .venv with no .flowbaby/venv)
             const useLegacyPath = !this.fs.existsSync(venvPath) && 
                                   this.fs.existsSync(path.join(this.workspacePath, '.venv'));
             
@@ -504,7 +503,7 @@ export class RecallFlowSetupService {
             try {
                 progress.report({ message: "Quiescing background operations..." });
                 
-                // Ensure .cognee directory exists for new installs
+                // Ensure .flowbaby directory exists for new installs
                 if (!useLegacyPath && !this.fs.existsSync(cogneeDir)) {
                     await fs.promises.mkdir(cogneeDir, { recursive: true });
                 }
@@ -563,7 +562,7 @@ export class RecallFlowSetupService {
                 }
                 
                 vscode.window.showErrorMessage(msg + ' Previous environment restored.');
-                if (this.statusBar) this.statusBar.setStatus(RecallFlowStatus.Error, msg);
+                if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Error, msg);
             } finally {
                 bgManager.resume();
             }
@@ -576,15 +575,15 @@ export class RecallFlowSetupService {
 
     /**
      * Get Python path for managed environment (Plan 028 M3)
-     * Priority: .cognee/venv > .venv (legacy fallback)
+     * Priority: .flowbaby/venv > .venv (legacy fallback)
      */
     private getPythonPath(): string {
         const isWindows = process.platform === 'win32';
         const cogneeVenv = isWindows
-            ? path.join(this.workspacePath, '.cognee', 'venv', 'Scripts', 'python.exe')
-            : path.join(this.workspacePath, '.cognee', 'venv', 'bin', 'python');
+            ? path.join(this.workspacePath, '.flowbaby', 'venv', 'Scripts', 'python.exe')
+            : path.join(this.workspacePath, '.flowbaby', 'venv', 'bin', 'python');
         
-        // Check .cognee/venv first (preferred)
+        // Check .flowbaby/venv first (preferred)
         if (this.fs.existsSync(cogneeVenv)) {
             return cogneeVenv;
         }
@@ -597,15 +596,15 @@ export class RecallFlowSetupService {
 
     /**
      * Get pip path for managed environment (Plan 028 M3)
-     * Priority: .cognee/venv > .venv (legacy fallback)
+     * Priority: .flowbaby/venv > .venv (legacy fallback)
      */
     private getPipPath(): string {
         const isWindows = process.platform === 'win32';
         const cogneePip = isWindows
-            ? path.join(this.workspacePath, '.cognee', 'venv', 'Scripts', 'pip.exe')
-            : path.join(this.workspacePath, '.cognee', 'venv', 'bin', 'pip');
+            ? path.join(this.workspacePath, '.flowbaby', 'venv', 'Scripts', 'pip.exe')
+            : path.join(this.workspacePath, '.flowbaby', 'venv', 'bin', 'pip');
         
-        // Check .cognee/venv first (preferred)
+        // Check .flowbaby/venv first (preferred)
         if (this.fs.existsSync(cogneePip)) {
             return cogneePip;
         }
@@ -647,7 +646,7 @@ export class RecallFlowSetupService {
     }
 
     private getMetadataPath(filename: string): string {
-        return path.join(this.workspacePath, '.cognee', filename);
+        return path.join(this.workspacePath, '.flowbaby', filename);
     }
 
     async computeRequirementsHash(): Promise<string> {
@@ -674,7 +673,7 @@ export class RecallFlowSetupService {
     }
 
     async writeBridgeEnv(metadata: BridgeEnvMetadata): Promise<void> {
-        const dir = path.join(this.workspacePath, '.cognee');
+        const dir = path.join(this.workspacePath, '.flowbaby');
         if (!this.fs.existsSync(dir)) {
             await fs.promises.mkdir(dir, { recursive: true });
         }
@@ -695,7 +694,7 @@ export class RecallFlowSetupService {
     }
 
     async writeBridgeVersion(metadata: BridgeVersionMetadata): Promise<void> {
-        const dir = path.join(this.workspacePath, '.cognee');
+        const dir = path.join(this.workspacePath, '.flowbaby');
         if (!this.fs.existsSync(dir)) {
             await fs.promises.mkdir(dir, { recursive: true });
         }

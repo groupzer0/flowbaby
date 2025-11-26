@@ -1,6 +1,6 @@
 # Release Checklist
 
-Use this checklist when preparing and publishing a new release of the Cognee Chat Memory extension.
+Use this checklist when preparing and publishing a new release of the Flowbaby extension.
 
 ## Pre-Release
 
@@ -74,7 +74,7 @@ npm run package
 
 Verify:
 
-- [ ] VSIX created: `cognee-chat-memory-X.Y.Z.vsix`
+- [ ] VSIX created: `flowbaby-X.Y.Z.vsix`
 - [ ] File size is reasonable (<5 MB)
 - [ ] No warnings during packaging
 
@@ -102,7 +102,7 @@ Verify:
 If you want to manually inspect:
 
 ```bash
-unzip -l cognee-chat-memory-X.Y.Z.vsix
+unzip -l flowbaby-X.Y.Z.vsix
 ```
 
 Confirm these files are included:
@@ -140,13 +140,13 @@ code --disable-extensions
 
 ```bash
 # Remove workspace-local Cognee directories
-rm -rf .cognee/ .cognee_system/ .cognee_data/
+rm -rf .flowbaby/ .flowbaby/system/ .flowbaby/data/
 ```
 
 Install from VSIX:
 
 - [ ] Extensions → ... menu → "Install from VSIX"
-- [ ] Select `cognee-chat-memory-X.Y.Z.vsix`
+- [ ] Select `flowbaby-X.Y.Z.vsix`
 - [ ] Extension appears in Extensions list
 - [ ] No installation errors
 - [ ] **CRITICAL**: Extension initializes successfully (check Output Channel)
@@ -205,9 +205,9 @@ Verify:
 Fill in release form:
 
 - [ ] **Tag**: `v0.X.Y` (select existing tag)
-- [ ] **Title**: "Cognee Chat Memory v0.X.Y"
+- [ ] **Title**: "Flowbaby v0.X.Y"
 - [ ] **Description**: Copy from CHANGELOG.md (format as needed)
-- [ ] **Attach binary**: Upload `cognee-chat-memory-X.Y.Z.vsix`
+- [ ] **Attach binary**: Upload `flowbaby-X.Y.Z.vsix`
 
 Preview release:
 

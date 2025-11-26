@@ -69,8 +69,8 @@ async def test_retrieve_success_with_llm_api_key(temp_workspace, mock_env):
             # Verify API key was set (using key from mock_env fixture)
             mock_cognee.config.set_llm_api_key.assert_called_once_with('sk-test-mock-key-12345')
             # Verify workspace-local storage directories configured
-            expected_system_dir = str(temp_workspace / '.cognee_system')
-            expected_data_dir = str(temp_workspace / '.cognee_data')
+            expected_system_dir = str(temp_workspace / '.flowbaby/system')
+            expected_data_dir = str(temp_workspace / '.flowbaby/data')
             mock_cognee.config.system_root_directory.assert_called_once_with(expected_system_dir)
             mock_cognee.config.data_root_directory.assert_called_once_with(expected_data_dir)
 

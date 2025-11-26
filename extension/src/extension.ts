@@ -1,20 +1,20 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { CogneeClient, RetrievalResult } from './cogneeClient';
+import { FlowbabyClient, RetrievalResult } from './flowbabyClient';
 import { ConversationSummary } from './summaryTemplate';
 import { parseSummaryFromText } from './summaryParser';
 import { registerIngestForAgentCommand } from './commands/ingestForAgent';
 import { registerRetrieveForAgentCommand } from './commands/retrieveForAgent';
 import { StoreMemoryTool } from './tools/storeMemoryTool';
 import { RetrieveMemoryTool } from './tools/retrieveMemoryTool';
-import { CogneeContextProvider } from './cogneeContextProvider';
-import { RecallFlowSetupService } from './setup/RecallFlowSetupService';
-import { RecallFlowStatusBar, RecallFlowStatus } from './statusBar/RecallFlowStatusBar';
-import { getRecallFlowOutputChannel, getRecallFlowDebugChannel, disposeOutputChannels, debugLog } from './outputChannels';
+import { FlowbabyContextProvider } from './flowbabyContextProvider';
+import { FlowbabySetupService } from './setup/FlowbabySetupService';
+import { FlowbabyStatusBar, FlowbabyStatus } from './statusBar/FlowbabyStatusBar';
+import { getFlowbabyOutputChannel, getFlowbabyDebugChannel, disposeOutputChannels, debugLog } from './outputChannels';
 
 // Module-level variable to store client instance
-let cogneeClient: CogneeClient | undefined;
-let cogneeContextProvider: CogneeContextProvider | undefined; // Plan 016 Milestone 1
+let flowbabyClient: FlowbabyClient | undefined;
+let flowbabyContextProvider: FlowbabyContextProvider | undefined; // Plan 016 Milestone 1
 let storeMemoryToolDisposable: vscode.Disposable | undefined;
 let retrieveMemoryToolDisposable: vscode.Disposable | undefined; // Plan 016 Milestone 5
 
@@ -31,7 +31,7 @@ const pendingSummaries = new Map<string, PendingSummary>();
  */
 export async function activate(_context: vscode.ExtensionContext) {
     const activationStart = Date.now();
-    console.log('RecallFlow Chat Memory extension activated');
+    console.log('Flowbaby extension activated');
     
     // Plan 028 M2: Debug logging for activation lifecycle
     debugLog('Extension activation started', { timestamp: new Date().toISOString() });
@@ -40,37 +40,37 @@ export async function activate(_context: vscode.ExtensionContext) {
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
         vscode.window.showWarningMessage(
-            'RecallFlow Chat Memory requires an open workspace folder'
+            'Flowbaby requires an open workspace folder'
         );
         return;
     }
 
     const workspacePath = workspaceFolders[0].uri.fsPath;
 
-    // Initialize Cognee client
+    // Initialize Flowbaby client
     try {
-        cogneeClient = new CogneeClient(workspacePath, _context);
+        flowbabyClient = new FlowbabyClient(workspacePath, _context);
         
         // Plan 015: Create output channel early
-        const agentOutputChannel = vscode.window.createOutputChannel('RecallFlow Agent Activity');
+        const agentOutputChannel = vscode.window.createOutputChannel('Flowbaby Agent Activity');
         
         // Plan 025 Milestone 6: Initialize Status Bar EARLY
-        const statusBar = new RecallFlowStatusBar(_context);
+        const statusBar = new FlowbabyStatusBar(_context);
         
         // Plan 028 M2: Register Show Debug Logs command
         const showDebugLogsCommand = vscode.commands.registerCommand(
-            'cognee.showDebugLogs',
+            'Flowbaby.showDebugLogs',
             () => {
-                const debugChannel = getRecallFlowDebugChannel();
+                const debugChannel = getFlowbabyDebugChannel();
                 if (debugChannel) {
                     debugChannel.show();
                 } else {
                     vscode.window.showInformationMessage(
-                        'Debug logging is disabled. Enable it in settings: cogneeMemory.debugLogging',
+                        'Debug logging is disabled. Enable it in settings: Flowbaby.debugLogging',
                         'Enable Debug Logging'
                     ).then(selection => {
                         if (selection === 'Enable Debug Logging') {
-                            vscode.workspace.getConfiguration('cogneeMemory')
+                            vscode.workspace.getConfiguration('Flowbaby')
                                 .update('debugLogging', true, vscode.ConfigurationTarget.Workspace);
                         }
                     });
@@ -81,7 +81,7 @@ export async function activate(_context: vscode.ExtensionContext) {
         
         // Plan 028 M5: Register Set API Key command
         const setApiKeyCommand = vscode.commands.registerCommand(
-            'cognee.setApiKey',
+            'Flowbaby.setApiKey',
             async () => {
                 const apiKey = await vscode.window.showInputBox({
                     prompt: 'Enter your LLM API Key (e.g., OpenAI, Anthropic)',
@@ -97,7 +97,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                 });
                 
                 if (apiKey) {
-                    await _context.secrets.store('recallflow.llmApiKey', apiKey.trim());
+                    await _context.secrets.store('flowbaby.llmApiKey', apiKey.trim());
                     vscode.window.showInformationMessage(
                         'API key stored securely. It will be used for all workspaces without a .env file.'
                     );
@@ -109,7 +109,7 @@ export async function activate(_context: vscode.ExtensionContext) {
         
         // Plan 028 M5: Register Clear API Key command
         const clearApiKeyCommand = vscode.commands.registerCommand(
-            'cognee.clearApiKey',
+            'Flowbaby.clearApiKey',
             async () => {
                 const confirm = await vscode.window.showWarningMessage(
                     'Clear the stored API key? You will need to create a .env file or set the key again.',
@@ -118,7 +118,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                 );
                 
                 if (confirm === 'Clear Key') {
-                    await _context.secrets.delete('recallflow.llmApiKey');
+                    await _context.secrets.delete('flowbaby.llmApiKey');
                     vscode.window.showInformationMessage('API key cleared.');
                     debugLog('API key cleared from SecretStorage');
                 }
@@ -127,11 +127,11 @@ export async function activate(_context: vscode.ExtensionContext) {
         _context.subscriptions.push(clearApiKeyCommand);
 
         // Plan 021 Milestone 4: Initialize Setup Service EARLY
-        const setupService = new RecallFlowSetupService(_context, workspacePath, agentOutputChannel, undefined, undefined, statusBar);
+        const setupService = new FlowbabySetupService(_context, workspacePath, agentOutputChannel, undefined, undefined, statusBar);
         
         // Register setup environment command (Plan 021 Milestone 4)
         const setupEnvironmentCommand = vscode.commands.registerCommand(
-            'cognee.setupEnvironment',
+            'Flowbaby.setupEnvironment',
             async () => {
                 await setupService.createEnvironment();
             }
@@ -140,26 +140,26 @@ export async function activate(_context: vscode.ExtensionContext) {
 
         // Register refresh dependencies command
         const refreshDependenciesCommand = vscode.commands.registerCommand(
-            'cognee.refreshDependencies',
+            'Flowbaby.refreshDependencies',
             async () => {
                 await setupService.refreshDependencies();
             }
         );
         _context.subscriptions.push(refreshDependenciesCommand);
 
-        const initialized = await cogneeClient.initialize();
+        const initialized = await flowbabyClient.initialize();
 
         if (initialized) {
             const initDuration = Date.now() - activationStart;
-            console.log('RecallFlow client initialized successfully');
+            console.log('Flowbaby client initialized successfully');
             debugLog('Client initialization successful', { duration_ms: initDuration });
-            statusBar.setStatus(RecallFlowStatus.Ready);
+            statusBar.setStatus(FlowbabyStatus.Ready);
             
             // Register commands for Milestone 1: Context Menu Capture
-            registerCaptureCommands(_context, cogneeClient);
+            registerCaptureCommands(_context, flowbabyClient);
             
             // Plan 015: Register agent ingestion command
-            registerIngestForAgentCommand(_context, cogneeClient, agentOutputChannel);
+            registerIngestForAgentCommand(_context, flowbabyClient, agentOutputChannel);
 
             // Plan 017: Initialize BackgroundOperationManager AFTER output channel creation
             try {
@@ -176,44 +176,44 @@ export async function activate(_context: vscode.ExtensionContext) {
             registerBackgroundStatusCommand(_context);
 
             // Plan 021 Milestone 3: Register validation and listing commands
-            registerValidationCommands(_context, cogneeClient);
+            registerValidationCommands(_context, flowbabyClient);
             
-            // Plan 016 Milestone 1: Initialize CogneeContextProvider
-            const { CogneeContextProvider } = await import('./cogneeContextProvider');
-            cogneeContextProvider = new CogneeContextProvider(cogneeClient, agentOutputChannel);
+            // Plan 016 Milestone 1: Initialize FlowbabyContextProvider
+            const { FlowbabyContextProvider } = await import('./flowbabyContextProvider');
+            flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient, agentOutputChannel);
             
-            // Milestone 2: Register @recallflow-memory chat participant (Plan 016 Milestone 6: now uses provider)
-            registerCogneeMemoryParticipant(_context, cogneeClient, cogneeContextProvider);
-            console.log('RecallFlowContextProvider initialized successfully');
+            // Milestone 2: Register @flowbaby chat participant (Plan 016 Milestone 6: now uses provider)
+            registerFlowbabyParticipant(_context, flowbabyClient, flowbabyContextProvider);
+            console.log('FlowbabyContextProvider initialized successfully');
             
             // Plan 016 Milestone 2: Register agent retrieval command
-            registerRetrieveForAgentCommand(_context, cogneeContextProvider, agentOutputChannel);
+            registerRetrieveForAgentCommand(_context, flowbabyContextProvider, agentOutputChannel);
             
             // Plan 016.1: Register languageModelTools unconditionally (Configure Tools is sole opt-in)
             registerLanguageModelTool(_context, agentOutputChannel);
         } else {
             const initDuration = Date.now() - activationStart;
-            console.warn('RecallFlow client initialization failed (see Output Channel)');
+            console.warn('Flowbaby client initialization failed (see Output Channel)');
             debugLog('Client initialization failed', { duration_ms: initDuration });
-            statusBar.setStatus(RecallFlowStatus.SetupRequired);
+            statusBar.setStatus(FlowbabyStatus.SetupRequired);
             
             // Check if it's an API key issue and provide helpful guidance
             // Use singleton output channel (Plan 028 M1)
-            const outputChannel = getRecallFlowOutputChannel();
-            outputChannel.appendLine('Failed to initialize RecallFlow. Common issues:');
+            const outputChannel = getFlowbabyOutputChannel();
+            outputChannel.appendLine('Failed to initialize Flowbaby. Common issues:');
             outputChannel.appendLine('');
             outputChannel.appendLine('1. Missing LLM API Key:');
             outputChannel.appendLine('   - Create a .env file in your workspace root');
             outputChannel.appendLine('   - Add: LLM_API_KEY=your_key_here');
-            outputChannel.appendLine('   - Or use "RecallFlow: Set API Key" command for global setup');
+            outputChannel.appendLine('   - Or use "Flowbaby: Set API Key" command for global setup');
             outputChannel.appendLine('');
             outputChannel.appendLine('2. Missing Python dependencies:');
-            outputChannel.appendLine('   - Ensure cognee and python-dotenv are installed');
-            outputChannel.appendLine('   - Run: pip install cognee python-dotenv');
+            outputChannel.appendLine('   - Ensure flowbaby dependencies are installed');
+            outputChannel.appendLine('   - Run: pip install flowbaby python-dotenv');
             outputChannel.show();
             
             const action = await vscode.window.showWarningMessage(
-                'RecallFlow initialization failed. Check Output > RecallFlow Memory for setup instructions.',
+                'Flowbaby initialization failed. Check Output > Flowbaby for setup instructions.',
                 'Open Output',
                 'Set API Key',
                 'Dismiss'
@@ -222,13 +222,13 @@ export async function activate(_context: vscode.ExtensionContext) {
             if (action === 'Open Output') {
                 outputChannel.show();
             } else if (action === 'Set API Key') {
-                vscode.commands.executeCommand('cognee.setApiKey');
+                vscode.commands.executeCommand('Flowbaby.setApiKey');
             }
         }
     } catch (error) {
-        console.error('Failed to create Cognee client:', error);
+        console.error('Failed to create Flowbaby client:', error);
         vscode.window.showErrorMessage(
-            `RecallFlow Chat Memory initialization error: ${error}`
+            `Flowbaby initialization error: ${error}`
         );
     }
 }
@@ -240,16 +240,16 @@ export async function activate(_context: vscode.ExtensionContext) {
  */
 function registerLanguageModelTool(_context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel) {
     // Register BOTH tools unconditionally (Configure Tools controls enablement)
-    if (cogneeContextProvider) {
+    if (flowbabyContextProvider) {
         const storeTool = new StoreMemoryTool(outputChannel);
-        storeMemoryToolDisposable = vscode.lm.registerTool('recallflow_storeMemory', storeTool);
+        storeMemoryToolDisposable = vscode.lm.registerTool('flowbaby_storeMemory', storeTool);
         
-        const retrieveTool = new RetrieveMemoryTool(cogneeContextProvider, outputChannel);
-        retrieveMemoryToolDisposable = vscode.lm.registerTool('recallflow_retrieveMemory', retrieveTool);
+        const retrieveTool = new RetrieveMemoryTool(flowbabyContextProvider, outputChannel);
+        retrieveMemoryToolDisposable = vscode.lm.registerTool('flowbaby_retrieveMemory', retrieveTool);
         
         outputChannel.appendLine('=== Plan 016.1: Language Model Tools Registered ===');
-        outputChannel.appendLine('✅ recallflow_storeMemory registered - Copilot agents can store memories');
-        outputChannel.appendLine('✅ recallflow_retrieveMemory registered - Copilot agents can retrieve memories');
+        outputChannel.appendLine('✅ flowbaby_storeMemory registered - Copilot agents can store memories');
+        outputChannel.appendLine('✅ flowbaby_retrieveMemory registered - Copilot agents can retrieve memories');
         outputChannel.appendLine('ℹ️  Enable/disable tools via Configure Tools UI in GitHub Copilot Chat');
     }
 }
@@ -259,7 +259,7 @@ function registerLanguageModelTool(_context: vscode.ExtensionContext, outputChan
  */
 function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
     const command = vscode.commands.registerCommand(
-        'cognee.backgroundStatus',
+        'Flowbaby.backgroundStatus',
         async () => {
             try {
                 const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
@@ -335,7 +335,7 @@ function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
     );
     
     context.subscriptions.push(command);
-    console.log('✅ cognee.backgroundStatus command registered');
+    console.log('✅ Flowbaby.backgroundStatus command registered');
 }
 
 /**
@@ -343,7 +343,7 @@ function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
  * Called when VS Code deactivates the extension
  */
 export async function deactivate() {
-    console.log('RecallFlow Chat Memory extension deactivated');
+    console.log('Flowbaby extension deactivated');
     
     // Plan 017: Shutdown BackgroundOperationManager (sends SIGTERM to running processes)
     try {
@@ -367,16 +367,16 @@ export async function deactivate() {
     // Plan 028 M1: Dispose singleton output channels
     disposeOutputChannels();
     
-    cogneeClient = undefined;
-    cogneeContextProvider = undefined;
+    flowbabyClient = undefined;
+    flowbabyContextProvider = undefined;
 }
 
 /**
- * Get the active Cognee client instance
+ * Get the active Flowbaby client instance
  * Used by chat participant (Milestone 2)
  */
-export function getCogneeClient(): CogneeClient | undefined {
-    return cogneeClient;
+export function getFlowbabyClient(): FlowbabyClient | undefined {
+    return flowbabyClient;
 }
 
 /**
@@ -385,12 +385,12 @@ export function getCogneeClient(): CogneeClient | undefined {
  */
 function registerCaptureCommands(
     context: vscode.ExtensionContext,
-    client: CogneeClient
+    client: FlowbabyClient
 ) {
     // VALIDATION 1: Test capture command with keyboard shortcut
     // NOTE: Context menu API (chat/message/context) does not exist - using fallback approach
     const captureCommand = vscode.commands.registerCommand(
-        'cognee.captureMessage',
+        'Flowbaby.captureMessage',
         async () => {
             console.log('=== VALIDATION 1: Capture Command Test (Fallback Approach) ===');
             console.log('Command triggered via keyboard shortcut or command palette');
@@ -398,7 +398,7 @@ function registerCaptureCommands(
             // Fallback: Show input box to capture user text or use clipboard
             try {
                 const options: vscode.InputBoxOptions = {
-                    prompt: 'Enter text to capture to RecallFlow Memory (or leave empty to capture from clipboard)',
+                    prompt: 'Enter text to capture to Flowbaby (or leave empty to capture from clipboard)',
                     placeHolder: 'Example: Discussed Redis caching with 15-minute TTL',
                     ignoreFocusOut: true
                 };
@@ -472,23 +472,23 @@ function registerCaptureCommands(
     
     // Toggle memory command (Milestone 4)
     const toggleCommand = vscode.commands.registerCommand(
-        'cognee.toggleMemory',
+        'Flowbaby.toggleMemory',
         async () => {
-            const config = vscode.workspace.getConfiguration('cogneeMemory');
+            const config = vscode.workspace.getConfiguration('Flowbaby');
             const currentState = config.get<boolean>('enabled', true);
             await config.update('enabled', !currentState, vscode.ConfigurationTarget.Workspace);
             vscode.window.showInformationMessage(
-                `RecallFlow Memory ${!currentState ? 'enabled' : 'disabled'}`
+                `Flowbaby ${!currentState ? 'enabled' : 'disabled'}`
             );
         }
     );
     
     // Clear memory command (Milestone 4)
     const clearCommand = vscode.commands.registerCommand(
-        'cognee.clearMemory',
+        'Flowbaby.clearMemory',
         async () => {
             const confirm = await vscode.window.showWarningMessage(
-                'Delete all RecallFlow memories for this workspace?',
+                'Delete all Flowbaby memories for this workspace?',
                 { modal: true },
                 'Delete'
             );
@@ -512,20 +512,20 @@ function registerCaptureCommands(
 /**
  * Register validation and listing commands for Plan 021 Milestone 3
  */
-function registerValidationCommands(context: vscode.ExtensionContext, client: CogneeClient) {
+function registerValidationCommands(context: vscode.ExtensionContext, client: FlowbabyClient) {
     // Validate Memories
-    const validateCommand = vscode.commands.registerCommand('cognee.validateMemories', async () => {
+    const validateCommand = vscode.commands.registerCommand('Flowbaby.validateMemories', async () => {
         vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
-            title: "Validating RecallFlow Memory System...",
+            title: "Validating Flowbaby System...",
             cancellable: false
         }, async (_progress) => {
             try {
                 const result = await client.validateMemories();
                 
-                const outputChannel = vscode.window.createOutputChannel('RecallFlow Validation');
+                const outputChannel = vscode.window.createOutputChannel('Flowbaby Validation');
                 outputChannel.clear();
-                outputChannel.appendLine('=== RecallFlow Memory Validation ===');
+                outputChannel.appendLine('=== Flowbaby Validation ===');
                 outputChannel.appendLine(`Status: ${result.status.toUpperCase()}`);
                 outputChannel.appendLine('');
                 
@@ -554,7 +554,7 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Co
     });
 
     // List Memories
-    const listCommand = vscode.commands.registerCommand('cognee.listMemories', async () => {
+    const listCommand = vscode.commands.registerCommand('Flowbaby.listMemories', async () => {
         vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: "Fetching memories...",
@@ -589,7 +589,7 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Co
                 
                 if (selected) {
                     const m = selected.memory;
-                    const outputChannel = vscode.window.createOutputChannel('RecallFlow Memory Details');
+                    const outputChannel = vscode.window.createOutputChannel('Flowbaby Details');
                     outputChannel.clear();
                     outputChannel.appendLine(`Topic: ${m.topic}`);
                     outputChannel.appendLine(`Status: ${m.status}`);
@@ -607,10 +607,10 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Co
     });
 
     // Show Diagnostics (Plan 021 Milestone 5)
-    const diagnosticsCommand = vscode.commands.registerCommand('cognee.showDiagnostics', async () => {
+    const diagnosticsCommand = vscode.commands.registerCommand('Flowbaby.showDiagnostics', async () => {
         vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
-            title: "Running RecallFlow Diagnostics...",
+            title: "Running Flowbaby Diagnostics...",
             cancellable: false
         }, async () => {
             try {
@@ -618,7 +618,7 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Co
                 const config = await client.validateConfiguration();
                 
                 const docContent = [
-                    '# RecallFlow Diagnostics Report',
+                    '# Flowbaby Diagnostics Report',
                     `Date: ${new Date().toISOString()}`,
                     '',
                     '## System Status',
@@ -667,7 +667,7 @@ async function handleSummaryGeneration(
     chatContext: vscode.ChatContext,
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken,
-    _client: CogneeClient
+    _client: FlowbabyClient
 ): Promise<vscode.ChatResult> {
     console.log('=== PLAN 014: Handling summary generation request ===');
     
@@ -816,7 +816,7 @@ Create the summary now, following the format exactly. Use markdown formatting.`;
         
         // Ask user for confirmation
         stream.markdown('✅ **Summary generated successfully!**\n\n');
-        stream.markdown('Should I store this summary in RecallFlow memory? Reply with:\n');
+        stream.markdown('Should I store this summary in Flowbaby memory? Reply with:\n');
         stream.markdown('- `yes` or `store it` to save\n');
         stream.markdown('- `no` or `cancel` to discard\n\n');
         stream.markdown('💡 *Stored summaries can be retrieved later when you ask related questions.*');
@@ -865,36 +865,36 @@ function extractPlanIdFromConversation(text: string): string | null {
 }
 
 /**
- * Register @recallflow-memory chat participant for Milestone 2
+ * Register @flowbaby chat participant for Milestone 2
  * Implements 6-step flow: retrieval → format display → augment prompt → generate response → capture conversation
- * Plan 016 Milestone 6: Refactored to use CogneeContextProvider instead of direct client.retrieve
+ * Plan 016 Milestone 6: Refactored to use FlowbabyContextProvider instead of direct client.retrieve
  */
-function registerCogneeMemoryParticipant(
+function registerFlowbabyParticipant(
     context: vscode.ExtensionContext,
-    client: CogneeClient,
-    provider: CogneeContextProvider
+    client: FlowbabyClient,
+    provider: FlowbabyContextProvider
 ) {
-    console.log('=== MILESTONE 2: Registering @recallflow-memory Chat Participant ===');
+    console.log('=== MILESTONE 2: Registering @flowbaby Chat Participant ===');
 
     // Register chat participant with ID matching package.json
     const participant = vscode.chat.createChatParticipant(
-        'recallflow-memory',
+        'flowbaby',
         async (
             request: vscode.ChatRequest,
             _chatContext: vscode.ChatContext,
             stream: vscode.ChatResponseStream,
             token: vscode.CancellationToken
         ): Promise<vscode.ChatResult> => {
-            console.log('=== @recallflow-memory participant invoked ===');
+            console.log('=== @flowbaby participant invoked ===');
             console.log('User query:', request.prompt);
 
             try {
                 // Check if memory is enabled
-                const config = vscode.workspace.getConfiguration('cogneeMemory');
+                const config = vscode.workspace.getConfiguration('Flowbaby');
                 const memoryEnabled = config.get<boolean>('enabled', true);
 
                 if (!memoryEnabled) {
-                    stream.markdown('⚠️ **RecallFlow Memory is disabled**\n\nEnable it in settings: `cogneeMemory.enabled`');
+                    stream.markdown('⚠️ **Flowbaby is disabled**\n\nEnable it in settings: `Flowbaby.enabled`');
                     return { metadata: { disabled: true } };
                 }
 
@@ -907,16 +907,16 @@ function registerCogneeMemoryParticipant(
                                      trimmedPrompt.includes('what can you do');
 
                 if (isHelpRequest) {
-                    stream.markdown('# 📚 RecallFlow Memory Help\n\n');
+                    stream.markdown('# 📚 Flowbaby Help\n\n');
                     stream.markdown('## Query for Context\n\n');
                     stream.markdown('Ask a question to retrieve relevant memories from your workspace:\n\n');
-                    stream.markdown('- `@recallflow-memory How did I implement caching?`\n');
-                    stream.markdown('- `@recallflow-memory What did we decide about Plan 013?`\n');
-                    stream.markdown('- `@recallflow-memory What are the next steps for authentication?`\n\n');
+                    stream.markdown('- `@flowbaby How did I implement caching?`\n');
+                    stream.markdown('- `@flowbaby What did we decide about Plan 013?`\n');
+                    stream.markdown('- `@flowbaby What are the next steps for authentication?`\n\n');
                     stream.markdown('## Create Summaries\n\n');
                     stream.markdown('Capture structured summaries of your conversations:\n\n');
-                    stream.markdown('- `@recallflow-memory summarize this conversation` - Create a summary of recent chat history\n');
-                    stream.markdown('- `@recallflow-memory remember this session` - Same as above\n\n');
+                    stream.markdown('- `@flowbaby summarize this conversation` - Create a summary of recent chat history\n');
+                    stream.markdown('- `@flowbaby remember this session` - Same as above\n\n');
                     stream.markdown('Summaries include: Topic, Context, Decisions, Rationale, Open Questions, Next Steps, References\n\n');
                     stream.markdown('## Tips\n\n');
                     stream.markdown('- **Summaries are optional** - Create them after important discussions or decisions\n');
@@ -960,7 +960,7 @@ function registerCogneeMemoryParticipant(
                                     };
                                 } else {
                                     stream.markdown('⚠️ **Failed to store summary**\n\n');
-                                    stream.markdown('There was an error storing the summary. Check the Output channel (RecallFlow Memory) for details.\n\n');
+                                    stream.markdown('There was an error storing the summary. Check the Output channel (Flowbaby) for details.\n\n');
                                     stream.markdown('You can try again by saying "yes" or "store it".');
                                     
                                     return {
@@ -1019,13 +1019,13 @@ function registerCogneeMemoryParticipant(
                     return { metadata: { cancelled: true } };
                 }
 
-                // STEP 1-2: Retrieve relevant context from Cognee using CogneeContextProvider (Plan 016 Milestone 6)
+                // STEP 1-2: Retrieve relevant context from Flowbaby using FlowbabyContextProvider (Plan 016 Milestone 6)
                 const retrievalStart = Date.now();
                 let retrievedMemories: RetrievalResult[] = [];
                 let retrievalFailed = false;
 
                 try {
-                    // Use shared CogneeContextProvider for concurrency/rate limiting
+                    // Use shared FlowbabyContextProvider for concurrency/rate limiting
                     const contextResponse = await provider.retrieveContext({
                         query: request.prompt,
                         maxResults: config.get<number>('maxContextResults', 3),
@@ -1037,7 +1037,7 @@ function registerCogneeMemoryParticipant(
                         throw new Error(contextResponse.message);
                     }
                     
-                    // Convert CogneeContextEntry[] to RetrievalResult[] format for backward compatibility
+                    // Convert FlowbabyContextEntry[] to RetrievalResult[] format for backward compatibility
                     retrievedMemories = contextResponse.entries.map(entry => ({
                         text: entry.summaryText,
                         summaryText: entry.summaryText,
@@ -1061,7 +1061,7 @@ function registerCogneeMemoryParticipant(
                     } as RetrievalResult));
                     
                     const retrievalDuration = Date.now() - retrievalStart;
-                    console.log(`Retrieved ${retrievedMemories.length} memories in ${retrievalDuration}ms (via RecallFlowContextProvider)`);
+                    console.log(`Retrieved ${retrievedMemories.length} memories in ${retrievalDuration}ms (via FlowbabyContextProvider)`);
                 } catch (error) {
                     retrievalFailed = true;
                     console.error('Retrieval failed:', error);
@@ -1206,7 +1206,7 @@ function registerCogneeMemoryParticipant(
 
                     // Step 6: Conversation Capture (Feedback Loop)
                     // DISABLED BY DEFAULT due to Cognee 0.4.0 file storage bug
-                    // Enable via cogneeMemory.autoIngestConversations setting for experimental testing
+                    // Enable via Flowbaby.autoIngestConversations setting for experimental testing
                     const autoIngest = config.get<boolean>('autoIngestConversations', false);
                     
                     if (autoIngest) {
@@ -1232,7 +1232,7 @@ function registerCogneeMemoryParticipant(
                                 }
                             });
                     } else {
-                        console.log('ℹ️ Step 6 automatic ingestion disabled (enable via cogneeMemory.autoIngestConversations)');
+                        console.log('ℹ️ Step 6 automatic ingestion disabled (enable via Flowbaby.autoIngestConversations)');
                     }
                 }
 
@@ -1260,7 +1260,7 @@ function registerCogneeMemoryParticipant(
     // Set participant description (shows in UI)
     participant.iconPath = vscode.Uri.file(path.join(__dirname, '..', 'media', 'icon.png'));
 
-    console.log('✅ @recallflow-memory participant registered successfully');
+    console.log('✅ @flowbaby participant registered successfully');
 
     // Add to subscriptions for proper cleanup
     context.subscriptions.push(participant);

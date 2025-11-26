@@ -286,8 +286,8 @@ async def retrieve_context(
         
         # Configure workspace-local storage directories BEFORE any other cognee operations
         logger.debug("Configuring workspace storage directories")
-        cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
-        cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
+        cognee.config.system_root_directory(str(workspace_dir / '.flowbaby/system'))
+        cognee.config.data_root_directory(str(workspace_dir / '.flowbaby/data'))
         
         # Configure Cognee with API key
         logger.debug("Configuring LLM provider (OpenAI)")

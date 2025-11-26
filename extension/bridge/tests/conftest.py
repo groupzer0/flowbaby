@@ -129,7 +129,7 @@ def mock_cognee_module(mock_cognee, temp_workspace):
     """
     # Create mock relational config
     mock_relational_config = types.SimpleNamespace(
-        db_path=str(temp_workspace / '.cognee_system' / 'cognee.db')
+        db_path=str(temp_workspace / '.flowbaby/system' / 'cognee.db')
     )
     
     # Create mock get_relational_config function

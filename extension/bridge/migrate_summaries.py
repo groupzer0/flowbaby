@@ -38,8 +38,8 @@ except ImportError:
     from retrieve import parse_enriched_summary
 
 
-MAINTENANCE_LOCK_FILE = '.cognee/maintenance.lock'
-MIGRATION_LOG_FILE = '.cognee/maintenance/migration.log'
+MAINTENANCE_LOCK_FILE = '.flowbaby/maintenance.lock'
+MIGRATION_LOG_FILE = '.flowbaby/maintenance/migration.log'
 
 
 def acquire_lock(workspace_dir: Path) -> bool:

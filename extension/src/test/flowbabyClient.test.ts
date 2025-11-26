@@ -6,11 +6,11 @@ import * as sinon from 'sinon';
 import * as child_process from 'child_process';
 import { EventEmitter } from 'events';
 import mock = require('mock-fs');
-import { CogneeClient } from '../cogneeClient';
+import { FlowbabyClient } from '../flowbabyClient';
 
 /**
  * Creates a mock VS Code ExtensionContext for testing.
- * Only includes the properties actually used by CogneeClient.
+ * Only includes the properties actually used by FlowbabyClient.
  */
 function createMockContext(): vscode.ExtensionContext {
     const secretStorage: vscode.SecretStorage = {
@@ -43,7 +43,7 @@ function createMockContext(): vscode.ExtensionContext {
     } as vscode.ExtensionContext;
 }
 
-suite('CogneeClient Test Suite', () => {
+suite('FlowbabyClient Test Suite', () => {
     const testWorkspacePath = '/tmp/test-workspace';
     let mockContext: vscode.ExtensionContext;
 
@@ -61,7 +61,7 @@ suite('CogneeClient Test Suite', () => {
             originalPlatform = process.platform;
             
             // Mock VS Code configuration
-            originalConfig = vscode.workspace.getConfiguration('cogneeMemory');
+            originalConfig = vscode.workspace.getConfiguration('Flowbaby');
             
             // Ensure mockContext is available
             mockContext = createMockContext();
@@ -87,7 +87,7 @@ suite('CogneeClient Test Suite', () => {
             const getConfigStub = sinon.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
 
             // Execute
-            const client = new CogneeClient(testWorkspacePath, mockContext);
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
             // Assert: Explicit config is used
             assert.strictEqual(client['pythonPath'], '/usr/bin/python3.11');
@@ -121,7 +121,7 @@ suite('CogneeClient Test Suite', () => {
             const getConfigStub = sinon.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
 
             // Execute
-            const client = new CogneeClient(testWorkspacePath, mockContext);
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
             // Assert: .venv is detected
             assert.strictEqual(client['pythonPath'], venvPath);
@@ -156,7 +156,7 @@ suite('CogneeClient Test Suite', () => {
             const getConfigStub = sinon.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
 
             // Execute
-            const client = new CogneeClient(testWorkspacePath, mockContext);
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
             // Assert: .venv is detected with Windows path
             assert.strictEqual(client['pythonPath'], venvPath);
@@ -181,7 +181,7 @@ suite('CogneeClient Test Suite', () => {
             const getConfigStub = sinon.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
 
             // Execute
-            const client = new CogneeClient(testWorkspacePath, mockContext);
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
             // Assert: Falls back to system python3
             assert.strictEqual(client['pythonPath'], 'python3');
@@ -208,7 +208,7 @@ suite('CogneeClient Test Suite', () => {
             const getConfigStub = sinon.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
 
             // Execute
-            const client = new CogneeClient(testWorkspacePath, mockContext);
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
             // Assert: Falls back to system python3 despite error
             // Note: This tests the fallback path, though mock-fs cannot simulate actual permission errors
@@ -238,7 +238,7 @@ suite('CogneeClient Test Suite', () => {
             const startTime = Date.now();
             
             for (let i = 0; i < iterations; i++) {
-                const client = new CogneeClient(testWorkspacePath, mockContext);
+                const client = new FlowbabyClient(testWorkspacePath, mockContext);
             }
             
             const endTime = Date.now();
@@ -255,11 +255,11 @@ suite('CogneeClient Test Suite', () => {
     });
 
     suite('sanitizeOutput', () => {
-        let client: CogneeClient;
+        let client: FlowbabyClient;
 
         setup(() => {
             // Create client for accessing private sanitizeOutput method
-            client = new CogneeClient(testWorkspacePath, mockContext);
+            client = new FlowbabyClient(testWorkspacePath, mockContext);
         });
 
         test('Redacts LLM_API_KEY environment variable format (current)', () => {
@@ -383,7 +383,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('logs truncated query preview with total length when query exceeds 200 chars', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
             sandbox.stub(client as any, 'runPythonScript').resolves({
                 success: true,
@@ -423,7 +423,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('logs full query when length is 200 chars or less', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
             sandbox.stub(client as any, 'runPythonScript').resolves({
                 success: true,
@@ -472,7 +472,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('logs ingestion metrics on success and suppresses warning toast', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
             sandbox.stub(client as any, 'runPythonScript').resolves({
                 success: true,
@@ -500,7 +500,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('handles timeout errors with user-facing guidance', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
             sandbox.stub(client as any, 'runPythonScript').rejects(new Error('Python script timeout after 120 seconds'));
 
@@ -519,7 +519,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('handles non-timeout failures without warning toast', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
             sandbox.stub(client as any, 'runPythonScript').rejects(new Error('LLM_API_KEY not found'));
 
@@ -538,7 +538,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('rejects payloads larger than 100k characters', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
             const runPythonStub = sandbox.stub(client as any, 'runPythonScript').resolves({
                 success: true,
@@ -591,7 +591,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('calls ingest.py with --summary and serialized JSON payload', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             sandbox.stub(client as any, 'log');
             const runPythonStub = sandbox.stub(client as any, 'runPythonScript').resolves({
                 success: true,
@@ -653,7 +653,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('logs summary ingestion metrics on success', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
             sandbox.stub(client as any, 'runPythonScript').resolves({
                 success: true,
@@ -698,7 +698,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('handles timeout with warning notification', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
             sandbox.stub(client as any, 'runPythonScript').rejects(
                 new Error('Python script timeout after 120 seconds')
@@ -742,7 +742,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('handles non-timeout failures without warning toast', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
             sandbox.stub(client as any, 'runPythonScript').rejects(new Error('LLM_API_KEY not configured'));
 
@@ -780,7 +780,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('handles null metadata fields gracefully', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             sandbox.stub(client as any, 'log');
             const runPythonStub = sandbox.stub(client as any, 'runPythonScript').resolves({
                 success: true,
@@ -823,7 +823,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('handles Python script failure response (success: false)', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
             sandbox.stub(client as any, 'runPythonScript').resolves({
                 success: false,
@@ -889,7 +889,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('retrieve logs filtered_count from bridge', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
 
             const mockProcess = new EventEmitter() as any;
@@ -927,7 +927,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('runPythonScript handles large buffer (1MB limit)', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
 
             const mockProcess = new EventEmitter() as any;
@@ -969,7 +969,7 @@ suite('CogneeClient Test Suite', () => {
 
         test('runPythonScript captures stderr on JSON parse failure', async () => {
             stubSharedDependencies();
-            const client = new CogneeClient(workspacePath, mockContext);
+            const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
 
             const mockProcess = new EventEmitter() as any;

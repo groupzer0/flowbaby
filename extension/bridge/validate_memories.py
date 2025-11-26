@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-RecallFlow Memory Validation Script
+Flowbaby Memory Validation Script
 
 Usage: python validate_memories.py <workspace_path>
 
-Performs integrity checks on the RecallFlow memory system:
+Performs integrity checks on the Flowbaby memory system:
 1. Checks environment configuration (.env, API key)
 2. Checks ontology file existence
 3. Verifies graph database connection via smoke-test search
@@ -81,8 +81,8 @@ async def validate_memory(workspace_path: str) -> dict:
         import cognee
         from cognee.modules.search.types import SearchType
         
-        cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
-        cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
+        cognee.config.system_root_directory(str(workspace_dir / '.flowbaby/system'))
+        cognee.config.data_root_directory(str(workspace_dir / '.flowbaby/data'))
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
         

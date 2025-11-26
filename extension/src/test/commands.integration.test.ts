@@ -20,7 +20,7 @@ suite('Commands Integration (no production changes)', () => {
     let infoMsgStub: sinon.SinonStub;
     let warnMsgStub: sinon.SinonStub;
 
-    // CogneeClient method stubs on prototype (affects instance created within activate)
+    // FlowbabyClient method stubs on prototype (affects instance created within activate)
     // initialize is stubbed but not asserted on explicitly
     let ingestAsyncStub: sinon.SinonStub;
     let clearMemoryStub: sinon.SinonStub;
@@ -65,12 +65,12 @@ suite('Commands Integration (no production changes)', () => {
         infoMsgStub = sandbox.stub(vscode.window, 'showInformationMessage');
         warnMsgStub = sandbox.stub(vscode.window, 'showWarningMessage');
 
-        // CogneeClient behavior stubs
+        // FlowbabyClient behavior stubs
         // Avoid real Python calls during activation and ingestion/clear
-        const CogneeClientMod = await import('../cogneeClient');
-    sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'initialize').resolves(true);
-        ingestAsyncStub = sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'ingestAsync').resolves({ success: true, staged: true, operationId: 'test-operation' });
-        clearMemoryStub = sandbox.stub(CogneeClientMod.CogneeClient.prototype, 'clearMemory').resolves(true);
+        const FlowbabyClientMod = await import('../flowbabyClient');
+    sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'initialize').resolves(true);
+        ingestAsyncStub = sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'ingestAsync').resolves({ success: true, staged: true, operationId: 'test-operation' });
+        clearMemoryStub = sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'clearMemory').resolves(true);
 
         // Prevent chat participant registration side-effects in this suite
         sandbox.stub(vscode.chat, 'createChatParticipant').callsFake((_id: string, _handler: any) => {
@@ -89,7 +89,7 @@ suite('Commands Integration (no production changes)', () => {
     });
 
     test('Capture command uses user input when provided and ingests', async () => {
-        const cb = registered['cognee.captureMessage'];
+        const cb = registered['Flowbaby.captureMessage'];
         assert.ok(cb, 'capture command not registered');
 
         inputBoxStub.resolves('Discussed Redis caching with TTL=900s');
@@ -104,7 +104,7 @@ suite('Commands Integration (no production changes)', () => {
     });
 
     test('Capture command falls back to clipboard when input empty', async () => {
-        const cb = registered['cognee.captureMessage'];
+        const cb = registered['Flowbaby.captureMessage'];
         assert.ok(cb, 'capture command not registered');
 
     inputBoxStub.resolves(undefined); // Simulate cancel/empty
@@ -117,7 +117,7 @@ suite('Commands Integration (no production changes)', () => {
     });
 
     test('Capture command warns when no input and empty clipboard', async () => {
-        const cb = registered['cognee.captureMessage'];
+        const cb = registered['Flowbaby.captureMessage'];
         assert.ok(cb, 'capture command not registered');
 
     inputBoxStub.resolves(undefined);
@@ -130,7 +130,7 @@ suite('Commands Integration (no production changes)', () => {
     });
 
     test('Toggle command flips enabled flag in workspace configuration', async () => {
-        const cb = registered['cognee.toggleMemory'];
+        const cb = registered['Flowbaby.toggleMemory'];
         assert.ok(cb, 'toggle command not registered');
 
         await cb();
@@ -138,7 +138,7 @@ suite('Commands Integration (no production changes)', () => {
     });
 
     test('Clear command confirms and clears memory', async () => {
-        const cb = registered['cognee.clearMemory'];
+        const cb = registered['Flowbaby.clearMemory'];
         assert.ok(cb, 'clear command not registered');
 
         // Modal confirmation path

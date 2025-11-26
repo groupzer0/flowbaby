@@ -12,7 +12,7 @@ describe('Test-Agent Scenarios', () => {
         this.timeout(30000); // Extension activation can be slow
 
         // Wait for Cognee Memory extension to activate
-        const cogneeExtension = vscode.extensions.getExtension('cognee.cognee-chat-memory');
+        const cogneeExtension = vscode.extensions.getExtension('flowbaby.flowbaby-chat-memory');
         if (!cogneeExtension) {
             console.warn('Cognee Memory extension not found - skipping test-agent scenarios');
             this.skip();
@@ -24,7 +24,7 @@ describe('Test-Agent Scenarios', () => {
         }
 
         // Wait for test-agent extension to activate
-        const testAgentExtension = vscode.extensions.getExtension('cognee.test-agent');
+        const testAgentExtension = vscode.extensions.getExtension('Flowbaby.test-agent');
         if (!testAgentExtension) {
             console.warn('Test-agent extension not found - skipping scenarios');
             this.skip();
@@ -90,7 +90,7 @@ describe('Test-Agent Scenarios', () => {
 
             try {
                 const responseJson = await vscode.commands.executeCommand<string>(
-                    'cogneeMemory.ingestForAgent',
+                    'Flowbaby.ingestForAgent',
                     malformedJson
                 );
                 const response = JSON.parse(responseJson);
@@ -117,7 +117,7 @@ describe('Test-Agent Scenarios', () => {
 
             try {
                 const responseJson = await vscode.commands.executeCommand<string>(
-                    'cogneeMemory.ingestForAgent',
+                    'Flowbaby.ingestForAgent',
                     JSON.stringify(invalidPayload)
                 );
                 const response = JSON.parse(responseJson);

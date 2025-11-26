@@ -8,6 +8,7 @@
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-26 | Updated Epic 0.3.15.5 Strategy | Changed data storage strategy from hidden `context.storageUri` to visible `.flowbaby/` folder in workspace root. User requested visibility for troubleshooting. |
 | 2025-11-25 | Added Release v0.3.17 (Isolation & Configuration) and Epic 0.3.17.1 | Plan 028 delivers critical isolation fixes (`.cognee/venv`) and global configuration (SecretStorage, LLM settings) that warrant a dedicated release. |
 | 2025-11-24 | Marked Epic 0.3.15.3 as Delivered; Downgraded Epic 0.3.15.1 to P1 | Verified strict filtering implementation in `retrieve.py` (Plan 021/023). User requested P1 for validation to prioritize other P0s. |
 | 2025-11-24 | Added Epic 0.3.15.6 (Flowbaby Rebranding) | User requested a complete rebranding from RecallFlow to Flowbaby across all user-visible surfaces (tools, commands, logs, docs). |
@@ -804,41 +805,41 @@ So that I can start using memory features without troubleshooting dependency con
 
 ---
 
-### Epic 0.3.15.5: Move Cognee Data to Workspace Storage
+### Epic 0.3.15.5: Consolidate Data in Workspace Root
 
 **Priority**: P1 (High - DX improvement)
 **Status**: Planned
 
 **User Story**:
 As a user,
-I want my project root to remain clean of extension-generated data folders,
-So that my file explorer isn't cluttered and I don't accidentally commit internal data.
+I want my extension data to be consolidated in a single `.flowbaby` folder in my workspace root,
+So that I can easily view and troubleshoot it while keeping my project relatively clean.
 
 **Business Value**:
 
-- **User Impact**: Reduces clutter in the file explorer; prevents accidental git commits of large database files.
-- **Strategic Importance**: Aligns with VS Code extension best practices; improves "Zero Cognitive Overhead" by hiding implementation details.
-- **Measurable Success**: Zero `.cognee*` folders in user workspace roots for new installations.
+- **User Impact**: Reduces clutter (3 folders → 1) while maintaining visibility for troubleshooting.
+- **Strategic Importance**: Balances cleanliness with transparency.
+- **Measurable Success**: Only one `.flowbaby` folder in user workspace roots (instead of 3 `.cognee*` folders).
 
 **Dependencies**:
 
-- Epic 0.3.15.4 (Simplified Python Setup) - The managed bridge environment should also live in storage.
+- Epic 0.3.15.4 (Simplified Python Setup) - The managed bridge environment should live in `.flowbaby/venv`.
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] `.cognee`, `.cognee_data`, and `.cognee_system` are created in `context.storageUri` instead of workspace root.
-- [ ] `init.py` accepts a storage path argument and configures Cognee SDK accordingly.
-- [ ] Existing data in workspace root is detected and either migrated or ignored (with a fresh start prompt).
-- [ ] "View Logs" command opens the correct log folder in the storage directory.
-- [ ] `.gitignore` no longer needs to be modified by the user (since data is outside the repo).
+- [ ] `.cognee`, `.cognee_data`, and `.cognee_system` are consolidated into a single `.flowbaby/` directory in the workspace root.
+- [ ] `init.py` configures Cognee SDK to use `.flowbaby/system` and `.flowbaby/data`.
+- [ ] "View Logs" command opens `.flowbaby/logs`.
+- [ ] `.gitignore` is updated to ignore `.flowbaby/`.
+- [ ] **Deferred**: Moving data to `context.storageUri` is deferred to a future release to allow for easier troubleshooting during the alpha phase.
 
 **Constraints**:
 
-- Must handle the case where `context.storageUri` is undefined (e.g., no workspace open).
-- Must provide a migration path or clear messaging for existing users.
+- Must provide a migration path or clear messaging for existing users (fresh start recommended for v0.4.0).
 
 **Status Notes**:
 
+- 2025-11-26: **UPDATED** - User requested keeping data in workspace root for troubleshooting visibility, but consolidated into one folder.
 - 2025-11-24: **ADDED** - User requested moving data folders to workspace storage to improve DX.
 
 ---

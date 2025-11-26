@@ -1,4 +1,4 @@
-# Cognee Chat Memory Extension - Development Setup
+# Flowbaby Extension - Development Setup
 
 ## Prerequisites
 
@@ -11,15 +11,15 @@
 
 ## Quick Start (Automatic Setup)
 
-**RecallFlow v0.3.17+ manages its own Python environment automatically.** You no longer need to manually create virtual environments or install packages.
+**Flowbaby v0.3.17+ manages its own Python environment automatically.** You no longer need to manually create virtual environments or install packages.
 
 ### 1. Initialize Workspace
 
 1. Open your project folder in VS Code
 2. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-3. Run **"RecallFlow: Initialize Workspace"**
+3. Run **"Flowbaby: Initialize Workspace"**
 4. The extension will automatically:
-   - Create an isolated `.cognee/venv` environment
+   - Create an isolated `.flowbaby/venv` environment
    - Install `cognee` and `python-dotenv`
    - Verify the environment is ready
 
@@ -27,7 +27,7 @@
 
 **Option A: Global API Key (Recommended)**
 1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-2. Run **"RecallFlow: Set API Key"**
+2. Run **"Flowbaby: Set API Key"**
 3. Enter your API key when prompted
 
 This stores the key securely via VS Code's SecretStorage and applies to all workspaces.
@@ -43,8 +43,8 @@ LLM_API_KEY=sk-your-key-here
 
 ### 3. Verify Setup
 
-- Check status bar for **"RecallFlow: Ready"** (green checkmark)
-- If you see **"RecallFlow: Setup Required"**, click it to run initialization
+- Check status bar for **"Flowbaby: Ready"** (green checkmark)
+- If you see **"Flowbaby: Setup Required"**, click it to run initialization
 
 ---
 
@@ -189,7 +189,7 @@ Then reload the Extension Development Host window.
 2. OR configure explicit Python path in settings:
    ```json
    {
-     "cogneeMemory.pythonPath": "/path/to/python"
+     "Flowbaby.pythonPath": "/path/to/python"
    }
    ```
 
@@ -237,12 +237,12 @@ This creates a `.vsix` file you can install or distribute.
 
 The extension automatically detects your Python interpreter in this order:
 
-1. **Explicit configuration**: `cogneeMemory.pythonPath` setting
-2. **RecallFlow environment**: `.cognee/venv/bin/python` (isolated from project venvs)
+1. **Explicit configuration**: `Flowbaby.pythonPath` setting
+2. **Flowbaby environment**: `.flowbaby/venv/bin/python` (isolated from project venvs)
 3. **Legacy workspace venv**: `.venv/bin/python` (Linux/Mac) or `.venv\Scripts\python.exe` (Windows)
 4. **System Python**: `python3` command (will fail if cognee not installed globally)
 
-**Recommended**: Use the automatic **"RecallFlow: Initialize Workspace"** command, which creates an isolated environment at `.cognee/venv` to avoid conflicts with project virtual environments or language servers.
+**Recommended**: Use the automatic **"Flowbaby: Initialize Workspace"** command, which creates an isolated environment at `.flowbaby/venv` to avoid conflicts with project virtual environments or language servers.
 
 ---
 
@@ -250,11 +250,11 @@ The extension automatically detects your Python interpreter in this order:
 
 **Per-Workspace Isolation**:
 - Each workspace gets a unique dataset name (hashed from workspace path)
-- RecallFlow environment: `.cognee/venv/` (isolated Python environment)
+- Flowbaby environment: `.flowbaby/venv/` (isolated Python environment)
 - Your conversations are isolated per workspace
 
 **Global Data Storage** (per Python install):
-- Cognee data stored in: `.venv/lib/python3.12/site-packages/cognee/.cognee_system/databases/`
+- Cognee data stored in: `.venv/lib/python3.12/site-packages/cognee/.flowbaby/system/databases/`
 - Multiple workspaces using the same `.venv` share storage but have isolated datasets
 - Typical size: ~50-100MB per workspace after normal usage
 
@@ -278,9 +278,9 @@ Per Workspace:
 workspace/
 ├── .venv/                    # Python virtual environment (required)
 │   └── lib/.../cognee/       # Cognee package installation
-│       └── .cognee_system/   # Global data storage
+│       └── .flowbaby/system/   # Global data storage
 ├── .env                      # OpenAI API key (required)
-└── .cognee/                  # Workspace marker (created automatically)
+└── .flowbaby/                  # Workspace marker (created automatically)
 ```
 
 ## Validation Status
@@ -292,7 +292,7 @@ See `implementation/008-chat-participant-memory-integration-validation.md` for c
 - ⏳ Context menu (not available in VS Code API - using keyboard shortcut)
 - ⏳ Ingestion format testing
 - ⏳ Retrieval testing
-- ⏳ @cognee-memory participant (planned)
+- ⏳ @flowbaby participant (planned)
 
 ---
 
@@ -338,12 +338,12 @@ If you forgot to add `.venv/` to `.gitignore` and committed it:
 # Remove from git (keeps local files)
 git rm -r --cached .venv/
 git rm --cached .env
-git rm -r --cached .cognee/
+git rm -r --cached .flowbaby/
 
 # Add to .gitignore
 echo ".venv/" >> .gitignore
 echo ".env" >> .gitignore
-echo ".cognee/" >> .gitignore
+echo ".flowbaby/" >> .gitignore
 
 # Commit the removal
 git add .gitignore
@@ -375,7 +375,7 @@ echo "LLM_API_KEY=sk-your-key-here" > .env
 # 5. Update .gitignore (IMPORTANT - avoids committing 10k+ files!)
 echo ".venv/" >> .gitignore
 echo ".env" >> .gitignore
-echo ".cognee/" >> .gitignore
+echo ".flowbaby/" >> .gitignore
 
 # 6. Open in VS Code and test
 code .
@@ -394,13 +394,13 @@ The virtual environment (`.venv/`) contains **over 10,000 files** from Python pa
 .env
 
 # Cognee Extension - Workspace Memory
-.cognee/
+.flowbaby/
 ```
 
 **Why ignore each**:
 - `.venv/`: 10k+ files, ~50-100MB, should be recreated per environment
 - `.env`: Contains your OpenAI API key (security risk if committed)
-- `.cognee/`: Workspace-specific memory metadata (not needed in git)
+- `.flowbaby/`: Workspace-specific memory metadata (not needed in git)
 
 **Time required**: 2-3 minutes per workspace
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-RecallFlow Memory Listing Script
+Flowbaby Memory Listing Script
 
 Usage: python list_memories.py <workspace_path> [limit]
 
@@ -60,8 +60,8 @@ async def list_memories(workspace_path: str, limit: int = 10) -> dict:
         import cognee
         from cognee.modules.search.types import SearchType
         
-        cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
-        cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
+        cognee.config.system_root_directory(str(workspace_dir / '.flowbaby/system'))
+        cognee.config.data_root_directory(str(workspace_dir / '.flowbaby/data'))
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
         

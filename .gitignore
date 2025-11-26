@@ -9,7 +9,8 @@ ENV/
 # Environment
 .env
 
-# Cognee data (workspace-local)
+# Flowbaby/Cognee data (workspace-local)
+.flowbaby/
 .cognee/
 .cognee_data/
 .cognee_system/

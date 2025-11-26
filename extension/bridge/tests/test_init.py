@@ -51,8 +51,8 @@ async def test_initialize_workspace_storage_directories(temp_workspace, mock_env
         result = await initialize_cognee(str(temp_workspace))
         
         # Verify config methods were called with workspace paths
-        expected_system_dir = str(temp_workspace / '.cognee_system')
-        expected_data_dir = str(temp_workspace / '.cognee_data')
+        expected_system_dir = str(temp_workspace / '.flowbaby/system')
+        expected_data_dir = str(temp_workspace / '.flowbaby/data')
         
         mock_cognee_module.config.system_root_directory.assert_called_once_with(expected_system_dir)
         mock_cognee_module.config.data_root_directory.assert_called_once_with(expected_data_dir)

@@ -90,7 +90,7 @@ suite('StoreMemoryTool (Language Model Tool Integration)', () => {
 
         expect(executeCommandStub.calledOnce).to.be.true;
         const [commandId, payloadJson] = executeCommandStub.firstCall.args;
-        expect(commandId).to.equal('cogneeMemory.ingestForAgent');
+        expect(commandId).to.equal('Flowbaby.ingestForAgent');
         const payload = JSON.parse(payloadJson as string);
         expect(payload.topic).to.equal('Test Topic');
         expect(payload.context).to.equal('Test Context');

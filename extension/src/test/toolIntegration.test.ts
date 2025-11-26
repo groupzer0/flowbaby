@@ -22,8 +22,8 @@ suite('Tool Integration Test Suite', () => {
             await new Promise(resolve => setTimeout(resolve, 1000));
 
             const tools = await vscode.lm.tools;
-            const storeToolExists = tools.some(t => t.name === 'recallflow_storeMemory');
-            const retrieveToolExists = tools.some(t => t.name === 'recallflow_retrieveMemory');
+            const storeToolExists = tools.some(t => t.name === 'flowbaby_storeMemory');
+            const retrieveToolExists = tools.some(t => t.name === 'flowbaby_retrieveMemory');
 
             assert.strictEqual(storeToolExists, true, 'Store tool should be registered at activation');
             assert.strictEqual(retrieveToolExists, true, 'Retrieve tool should be registered at activation');
@@ -33,8 +33,8 @@ suite('Tool Integration Test Suite', () => {
             await new Promise(resolve => setTimeout(resolve, 500));
 
             const tools = await vscode.lm.tools;
-            const storeTool = tools.find(t => t.name === 'recallflow_storeMemory');
-            const retrieveTool = tools.find(t => t.name === 'recallflow_retrieveMemory');
+            const storeTool = tools.find(t => t.name === 'flowbaby_storeMemory');
+            const retrieveTool = tools.find(t => t.name === 'flowbaby_retrieveMemory');
 
             // Verify store tool metadata
             if (storeTool) {
@@ -61,7 +61,7 @@ suite('Tool Integration Test Suite', () => {
             sandbox = sinon.createSandbox();
             stagedMemories = [];
             commandStub = sandbox.stub(vscode.commands, 'executeCommand').callsFake(async (command: string, payload?: string) => {
-                if (command === 'cogneeMemory.ingestForAgent') {
+                if (command === 'Flowbaby.ingestForAgent') {
                     const request = JSON.parse(payload as string);
                     stagedMemories.push(request);
                     return JSON.stringify({
@@ -72,7 +72,7 @@ suite('Tool Integration Test Suite', () => {
                         metadata: { topic_id: request.metadata?.topicId }
                     });
                 }
-                if (command === 'cogneeMemory.retrieveForAgent') {
+                if (command === 'Flowbaby.retrieveForAgent') {
                     return JSON.stringify({
                         entries: stagedMemories.map(entry => ({
                             summaryText: `${entry.topic}: ${entry.context}`,
@@ -95,7 +95,7 @@ suite('Tool Integration Test Suite', () => {
 
         test('Store summary via tool and retrieve via query returns matching results', async () => {
             const tools = await vscode.lm.tools;
-            const storeTool = tools.find(t => t.name === 'recallflow_storeMemory');
+            const storeTool = tools.find(t => t.name === 'flowbaby_storeMemory');
             assert.ok(storeTool, 'Store tool not registered');
 
             const testTopic = `Test Topic ${Date.now()}`;
@@ -105,7 +105,7 @@ suite('Tool Integration Test Suite', () => {
 
             // Invoke ingest command directly (tool internally uses the same command)
             const ingestResponseJson = await vscode.commands.executeCommand<string>(
-                'cogneeMemory.ingestForAgent',
+                'Flowbaby.ingestForAgent',
                 JSON.stringify({
                     topic: testTopic,
                     context: testContext,
@@ -126,7 +126,7 @@ suite('Tool Integration Test Suite', () => {
 
             // Retrieve staged memory
             const retrieveResponseJson = await vscode.commands.executeCommand<string>(
-                'cogneeMemory.retrieveForAgent',
+                'Flowbaby.retrieveForAgent',
                 JSON.stringify({ query: testTopic, maxResults: 5 })
             );
             const retrieveResponse = JSON.parse(retrieveResponseJson);
@@ -147,7 +147,7 @@ suite('Tool Integration Test Suite', () => {
         test('Retrieve tool returns both narrative and JSON payload', async () => {
             const sandbox = sinon.createSandbox();
             const stub = sandbox.stub(vscode.commands, 'executeCommand').callsFake(async (command: string) => {
-                if (command === 'cogneeMemory.retrieveForAgent') {
+                if (command === 'Flowbaby.retrieveForAgent') {
                     return JSON.stringify({
                         entries: [{
                             summaryText: 'Test memory',
@@ -164,7 +164,7 @@ suite('Tool Integration Test Suite', () => {
             });
 
             const retrieveResponseJson = await vscode.commands.executeCommand<string>(
-                'cogneeMemory.retrieveForAgent',
+                'Flowbaby.retrieveForAgent',
                 JSON.stringify({ query: 'cognee', maxResults: 1 })
             );
             const retrieveResponse = JSON.parse(retrieveResponseJson);

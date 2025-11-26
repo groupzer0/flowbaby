@@ -4,11 +4,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as sinon from 'sinon';
 import mock = require('mock-fs');
-import { CogneeClient } from '../cogneeClient';
+import { FlowbabyClient } from '../flowbabyClient';
 
 /**
  * Creates a mock VS Code ExtensionContext for testing.
- * Only includes the properties actually used by CogneeClient.
+ * Only includes the properties actually used by FlowbabyClient.
  */
 function createMockContext(): vscode.ExtensionContext {
     const secretStorage: vscode.SecretStorage = {
@@ -41,7 +41,7 @@ function createMockContext(): vscode.ExtensionContext {
     } as vscode.ExtensionContext;
 }
 
-suite('CogneeClient Runtime Behaviors', () => {
+suite('FlowbabyClient Runtime Behaviors', () => {
     const testWorkspacePath = '/tmp/test-workspace-runtime';
     let mockContext: vscode.ExtensionContext;
 
@@ -54,11 +54,11 @@ suite('CogneeClient Runtime Behaviors', () => {
         try { mock.restore(); } catch {}
     });
 
-    test('clearMemory deletes .cognee directory and returns true', async () => {
-        // Arrange: mock workspace with .cognee directory and a file
+    test('clearMemory deletes .flowbaby directory and returns true', async () => {
+        // Arrange: mock workspace with .flowbaby directory and a file
         mock({
             [testWorkspacePath]: {
-                '.cognee': {
+                '.flowbaby': {
                     'db.sqlite': 'data'
                 },
                 '.venv': {
@@ -76,14 +76,14 @@ suite('CogneeClient Runtime Behaviors', () => {
         const getConfigStub = (vscode.workspace.getConfiguration as unknown as Function)
             = () => mockConfig;
 
-        const client = new CogneeClient(testWorkspacePath, mockContext);
+        const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
         // Act
         const result = await client.clearMemory();
 
         // Assert
         assert.strictEqual(result, true);
-        assert.strictEqual(fs.existsSync(path.join(testWorkspacePath, '.cognee')), false);
+        assert.strictEqual(fs.existsSync(path.join(testWorkspacePath, '.flowbaby')), false);
 
         // Cleanup
         mock.restore();
@@ -91,13 +91,13 @@ suite('CogneeClient Runtime Behaviors', () => {
         (vscode.workspace.getConfiguration as unknown as any) = getConfigStub;
     });
 
-    test('clearMemory returns true when no .cognee directory exists', async () => {
+    test('clearMemory returns true when no .flowbaby directory exists', async () => {
         // Arrange: empty workspace
         mock({
             [testWorkspacePath]: {}
         });
 
-        const client = new CogneeClient(testWorkspacePath, mockContext);
+        const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
         // Act
         const result = await client.clearMemory();
@@ -114,7 +114,7 @@ suite('CogneeClient Runtime Behaviors', () => {
         mock({
             [testWorkspacePath]: {}
         });
-        const client = new CogneeClient(testWorkspacePath, mockContext);
+        const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
         // Act: missing .env
         const invalid = await client.validateConfiguration();

@@ -1,11 +1,11 @@
 /**
  * Validation helper for agent ingestion requests (Plan 015 Milestone 1)
  * 
- * Validates CogneeIngestRequest payloads before submitting to bridge.
+ * Validates FlowbabyIngestRequest payloads before submitting to bridge.
  * Provides fast-fail feedback with detailed error messages.
  */
 
-import { CogneeIngestRequest, SummaryStatus, ValidationResult } from '../types/agentIntegration';
+import { FlowbabyIngestRequest, SummaryStatus, ValidationResult } from '../types/agentIntegration';
 
 /**
  * Validate an ingest request payload
@@ -33,7 +33,7 @@ export function validateIngestRequest(payload: unknown): ValidationResult {
         };
     }
 
-    const req = payload as Partial<CogneeIngestRequest>;
+    const req = payload as Partial<FlowbabyIngestRequest>;
 
     // Required field: topic (non-empty string)
     if (!req.topic || typeof req.topic !== 'string' || req.topic.trim() === '') {

@@ -2,12 +2,12 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
-import { getRecallFlowOutputChannel, debugLog } from './outputChannels';
+import { getFlowbabyOutputChannel, debugLog } from './outputChannels';
 
 /**
  * Result structure from Python bridge scripts
  */
-interface CogneeResult {
+interface FlowbabyResult {
     success: boolean;
     error?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -51,12 +51,12 @@ enum LogLevel {
 }
 
 /**
- * CogneeClient - TypeScript client for spawning Python bridge scripts
+ * FlowbabyClient - TypeScript client for spawning Python bridge scripts
  * 
- * Provides high-level API for Cognee operations (init, ingest, retrieve)
+ * Provides high-level API for Flowbaby operations (init, ingest, retrieve)
  * via subprocess communication with JSON over stdout.
  */
-export class CogneeClient {
+export class FlowbabyClient {
     private readonly workspacePath: string;
     private readonly pythonPath: string;
     private readonly bridgePath: string;
@@ -80,11 +80,11 @@ export class CogneeClient {
         this.context = context;
 
         // Load configuration from VS Code settings
-        const config = vscode.workspace.getConfiguration('cogneeMemory');
+        const config = vscode.workspace.getConfiguration('Flowbaby');
         this.maxContextResults = config.get<number>('maxContextResults', 3);
         this.maxContextTokens = config.get<number>('maxContextTokens', 32000);
         this.searchTopK = config.get<number>('searchTopK', 10);
-        const rankingConfig = vscode.workspace.getConfiguration('cogneeMemory.ranking');
+        const rankingConfig = vscode.workspace.getConfiguration('Flowbaby.ranking');
         const halfLifeSetting = rankingConfig.get<number>('halfLifeDays', 7);
         this.rankingHalfLifeDays = this.clampHalfLifeDays(halfLifeSetting);
 
@@ -93,7 +93,7 @@ export class CogneeClient {
         this.logLevel = this.parseLogLevel(logLevelStr);
 
         // Use singleton Output Channel for logging (Plan 028 M1)
-        this.outputChannel = getRecallFlowOutputChannel();
+        this.outputChannel = getFlowbabyOutputChannel();
 
         // Resolve bridge path (extension/bridge relative to dist/)
         this.bridgePath = path.join(__dirname, '..', 'bridge');
@@ -107,7 +107,7 @@ export class CogneeClient {
             ? 'explicit_config' 
             : 'auto_detected';
 
-        this.log('INFO', 'RecallFlowClient initialized', {
+        this.log('INFO', 'FlowbabyClient initialized', {
             workspace: workspacePath,
             pythonPath: this.pythonPath,
             pythonSource: detectionSource,
@@ -123,15 +123,15 @@ export class CogneeClient {
      * Detect Python interpreter with auto-detection fallback chain (Plan 028 M3)
      * 
      * Priority order:
-     * 1. Explicit cogneeMemory.pythonPath setting (if not default)
-     * 2. .cognee/venv virtual environment (managed environment - preferred)
+     * 1. Explicit Flowbaby.pythonPath setting (if not default)
+     * 2. .flowbaby/venv virtual environment (managed environment - preferred)
      * 3. Workspace .venv virtual environment (legacy/fallback)
      * 4. System python3 fallback
      * 
      * @returns string - Path to Python interpreter
      */
     private detectPythonInterpreter(): string {
-        const config = vscode.workspace.getConfiguration('cogneeMemory');
+        const config = vscode.workspace.getConfiguration('Flowbaby');
         const configuredPath = config.get<string>('pythonPath', 'python3');
 
         // Priority 1: Explicit config always wins (user override is sacred)
@@ -142,19 +142,19 @@ export class CogneeClient {
 
         const isWindows = process.platform === 'win32';
         
-        // Priority 2: Check .cognee/venv (managed environment - preferred)
-        const cogneePath = isWindows
-            ? path.join(this.workspacePath, '.cognee', 'venv', 'Scripts', 'python.exe')
-            : path.join(this.workspacePath, '.cognee', 'venv', 'bin', 'python');
+        // Priority 2: Check .flowbaby/venv (managed environment - preferred)
+        const flowbabyPath = isWindows
+            ? path.join(this.workspacePath, '.flowbaby', 'venv', 'Scripts', 'python.exe')
+            : path.join(this.workspacePath, '.flowbaby', 'venv', 'bin', 'python');
 
         try {
-            if (fs.existsSync(cogneePath)) {
-                debugLog('Python interpreter: using .cognee/venv', { pythonPath: cogneePath });
-                return cogneePath;
+            if (fs.existsSync(flowbabyPath)) {
+                debugLog('Python interpreter: using .flowbaby/venv', { pythonPath: flowbabyPath });
+                return flowbabyPath;
             }
         } catch (error) {
-            this.log('DEBUG', '.cognee/venv detection failed', {
-                cogneePath,
+            this.log('DEBUG', '.flowbaby/venv detection failed', {
+                flowbabyPath,
                 error: error instanceof Error ? error.message : String(error)
             });
         }
@@ -183,15 +183,15 @@ export class CogneeClient {
     }
 
     /**
-     * Initialize Cognee for workspace
+     * Initialize Flowbaby for workspace
      * 
-     * Calls init.py to configure Cognee with API key from workspace .env
+     * Calls init.py to configure Flowbaby with API key from workspace .env
      * 
      * @returns Promise<boolean> - true if initialized, false on error
      */
     async initialize(): Promise<boolean> {
         const startTime = Date.now();
-        this.log('INFO', 'Initializing RecallFlow', { workspace: this.workspacePath });
+        this.log('INFO', 'Initializing Flowbaby', { workspace: this.workspacePath });
 
         try {
             const result = await this.runPythonScript('init.py', [this.workspacePath]);
@@ -207,7 +207,7 @@ export class CogneeClient {
                     duration,
                     dataset_name: result.dataset_name,
                     workspace_path: result.workspace_path,
-                    cognee_dir: result.cognee_dir
+                    flowbaby_dir: result.flowbaby_dir
                 });
                 
                 this.log('INFO', 'Ontology configuration', {
@@ -231,7 +231,7 @@ export class CogneeClient {
                         data_dir_size_before_mb: sizeMB,
                         data_dir_size_after_mb: (sizeAfter / 1024 / 1024).toFixed(2),
                         data_removed_mb: (sizeDelta / 1024 / 1024).toFixed(2),
-                        note: 'Untagged legacy data pruned from global Cognee directory'
+                        note: 'Untagged legacy data pruned from global Flowbaby directory'
                     });
                 } else if (result.global_marker_location) {
                     this.log('INFO', 'Migration previously completed', {
@@ -248,24 +248,24 @@ export class CogneeClient {
 
                 return true;
             } else {
-                this.log('ERROR', 'RecallFlow initialization failed', {
+                this.log('ERROR', 'Flowbaby initialization failed', {
                     duration,
                     error: result.error
                 });
                 vscode.window.showWarningMessage(
-                    `RecallFlow initialization failed: ${result.error}`
+                    `Flowbaby initialization failed: ${result.error}`
                 );
                 return false;
             }
         } catch (error) {
             const duration = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.log('ERROR', 'RecallFlow initialization exception', {
+            this.log('ERROR', 'Flowbaby initialization exception', {
                 duration,
                 error: errorMessage
             });
             vscode.window.showWarningMessage(
-                `RecallFlow initialization error: ${errorMessage}`
+                `Flowbaby initialization error: ${errorMessage}`
             );
             return false;
         }
@@ -377,13 +377,13 @@ export class CogneeClient {
                     duration_ms: duration,
                     error_type: 'timeout',
                     error: errorMessage,
-                    note: 'Summary ingestion may still complete in background - check @cognee-memory retrieval'
+                    note: 'Summary ingestion may still complete in background - check @flowbaby retrieval'
                 });
                 
                 vscode.window.showWarningMessage(
-                    'RecallFlow is still working on summary ingestion in the background. ' +
+                    'Flowbaby is still working on summary ingestion in the background. ' +
                     'The extension timed out waiting for a response after 120 seconds. ' +
-                    'Your summary may still be ingested; you can check by querying @cognee-memory in a moment.'
+                    'Your summary may still be ingested; you can check by querying @flowbaby in a moment.'
                 );
             } else {
                 this.log('ERROR', 'Summary ingestion exception', {
@@ -620,14 +620,14 @@ export class CogneeClient {
                     duration_ms: duration,
                     error_type: 'timeout',
                     error: errorMessage,
-                    note: 'Ingestion may still complete in background - check @cognee-memory retrieval'
+                    note: 'Ingestion may still complete in background - check @flowbaby retrieval'
                 });
                 
                 // User-facing message clarifying background processing
                 vscode.window.showWarningMessage(
-                    'RecallFlow is still working on ingestion in the background. ' +
+                    'Flowbaby is still working on ingestion in the background. ' +
                     'The extension timed out waiting for a response after 120 seconds. ' +
-                    'Your data may still be ingested; you can check by querying @cognee-memory in a moment.'
+                    'Your data may still be ingested; you can check by querying @flowbaby in a moment.'
                 );
             } else {
                 this.log('ERROR', 'Ingestion exception', {
@@ -670,14 +670,14 @@ export class CogneeClient {
         });
 
         if (!this.pythonPath) {
-            const interpreterError = 'Python interpreter not configured. Set cogneeMemory.pythonPath or create a workspace .venv.';
+            const interpreterError = 'Python interpreter not configured. Set Flowbaby.pythonPath or create a workspace .venv.';
             this.log('ERROR', 'Cannot start async ingestion without Python interpreter', {
                 duration_ms: 0,
                 error: interpreterError
             });
             vscode.window.showErrorMessage(
-                'RecallFlow cannot start background ingestion because no Python interpreter is configured. ' +
-                'Set cogneeMemory.pythonPath or create a workspace .venv and try again.'
+                'Flowbaby cannot start background ingestion because no Python interpreter is configured. ' +
+                'Set Flowbaby.pythonPath or create a workspace .venv and try again.'
             );
             return {
                 success: false,
@@ -940,7 +940,7 @@ export class CogneeClient {
      * @returns boolean - true if enabled in configuration
      */
     isEnabled(): boolean {
-        const config = vscode.workspace.getConfiguration('cogneeMemory');
+        const config = vscode.workspace.getConfiguration('Flowbaby');
         return config.get<boolean>('enabled', true);
     }
 
@@ -1008,7 +1008,7 @@ export class CogneeClient {
      * @param scriptName Script filename (e.g., 'init.py')
      * @param args Command-line arguments
      * @param timeoutMs Timeout in milliseconds (default: 10000ms, use 30000ms for ingestion)
-     * @returns Promise<CogneeResult> - Parsed JSON result
+     * @returns Promise<FlowbabyResult> - Parsed JSON result
      */
     /**
      * Process a single line of stderr output from the bridge
@@ -1080,7 +1080,7 @@ export class CogneeClient {
         scriptName: string,
         args: string[],
         timeoutMs: number = 10000
-    ): Promise<CogneeResult> {
+    ): Promise<FlowbabyResult> {
         const scriptPath = path.join(this.bridgePath, scriptName);
         const sanitizedArgs = args.map((arg, i) => 
             i === 0 ? arg : `<arg${i}>`  // Sanitize args (hide sensitive data)
@@ -1205,7 +1205,7 @@ export class CogneeClient {
 
                     // Try to parse stdout as JSON to extract structured error
                     try {
-                        const result = JSON.parse(stdout) as CogneeResult;
+                        const result = JSON.parse(stdout) as FlowbabyResult;
                         if (result.error) {
                             structuredError = result.error;
                             errorMessage = structuredError;
@@ -1230,7 +1230,7 @@ export class CogneeClient {
                     // User-facing error with troubleshooting hint
                     const troubleshootingHint = structuredError 
                         ? '' 
-                        : ' Check Output Channel for details. If using virtual environment, configure cogneeMemory.pythonPath setting.';
+                        : ' Check Output Channel for details. If using virtual environment, configure Flowbaby.pythonPath setting.';
                     
                     reject(new Error(`${errorMessage}${troubleshootingHint}`));
                     return;
@@ -1238,7 +1238,7 @@ export class CogneeClient {
 
                 // Parse JSON output (success path)
                 try {
-                    const result = JSON.parse(stdout) as CogneeResult;
+                    const result = JSON.parse(stdout) as FlowbabyResult;
                     resolve(result);
                 } catch (error) {
                     // Sanitize before logging parse failure
@@ -1382,7 +1382,7 @@ export class CogneeClient {
      * 
      * Priority:
      * 1. Workspace .env file LLM_API_KEY (explicit workspace override)
-     * 2. SecretStorage global key (recallflow.llmApiKey)
+     * 2. SecretStorage global key (flowbaby.llmApiKey)
      * 3. System environment LLM_API_KEY (fallback)
      * 
      * @returns Promise<string | undefined> - Resolved API key or undefined
@@ -1407,7 +1407,7 @@ export class CogneeClient {
         
         // Priority 2: Check SecretStorage
         try {
-            const secretKey = await this.context.secrets.get('recallflow.llmApiKey');
+            const secretKey = await this.context.secrets.get('flowbaby.llmApiKey');
             if (secretKey) {
                 debugLog('API key resolved from SecretStorage');
                 return secretKey;
@@ -1446,7 +1446,7 @@ export class CogneeClient {
         }
         
         // Plan 028 M6: Get LLM provider settings
-        const config = vscode.workspace.getConfiguration('cogneeMemory');
+        const config = vscode.workspace.getConfiguration('Flowbaby');
         const provider = config.get<string>('llm.provider', 'openai');
         const model = config.get<string>('llm.model', 'gpt-4o-mini');
         const endpoint = config.get<string>('llm.endpoint', '');
@@ -1461,21 +1461,21 @@ export class CogneeClient {
     }
 
     /**
-     * Clear workspace memory (delete .cognee directory)
+     * Clear workspace memory (delete .flowbaby directory)
      * 
      * @returns Promise<boolean> - true if cleared successfully
      */
     async clearMemory(): Promise<boolean> {
         try {
-            const cogneePath = path.join(this.workspacePath, '.cognee');
+            const flowbabyPath = path.join(this.workspacePath, '.flowbaby');
             
-            if (fs.existsSync(cogneePath)) {
-                // Recursively delete .cognee directory
-                fs.rmSync(cogneePath, { recursive: true, force: true });
-                this.log('INFO', 'Workspace memory cleared', { path: cogneePath });
+            if (fs.existsSync(flowbabyPath)) {
+                // Recursively delete .flowbaby directory
+                fs.rmSync(flowbabyPath, { recursive: true, force: true });
+                this.log('INFO', 'Workspace memory cleared', { path: flowbabyPath });
                 return true;
             } else {
-                this.log('WARN', 'No memory to clear', { path: cogneePath });
+                this.log('WARN', 'No memory to clear', { path: flowbabyPath });
                 return true;
             }
         } catch (error) {

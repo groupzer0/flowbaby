@@ -8,18 +8,18 @@ Initializes Cognee for a workspace by:
 1. Loading environment variables from workspace .env file
 2. Configuring Cognee with OpenAI API key
 3. Generating unique dataset name for workspace isolation
-4. Setting up workspace-local .cognee/ directory for marker files
+4. Setting up workspace-local .flowbaby/ directory for marker files
 5. Performing one-time global data prune if needed (with safety checks)
 
 Returns JSON to stdout:
-  Success: {"success": true, "dataset_name": "ws_abc123...", "cognee_dir": "/path/to/.cognee", 
+  Success: {"success": true, "dataset_name": "ws_abc123...", "flowbaby_dir": "/path/to/.cognee", 
             "ontology_loaded": true, "ontology_entities": 8, "ontology_relationships": 12,
             "migration_performed": false, "global_marker_location": "/path/to/marker",
             "data_dir_size_before": 12345, "data_dir_size_after": 6789,
             "data_integrity": {"sqlite_count": 100, "lancedb_count": 100, "healthy": true}}
   Failure: {"success": false, "error": "error message"}
 
-Plan 027 Fix: Migration marker is now checked in workspace-local .cognee_system/ directory
+Plan 027 Fix: Migration marker is now checked in workspace-local .flowbaby/system/ directory
 instead of volatile venv package location. This prevents data loss on package reinstalls.
 """
 
@@ -45,7 +45,7 @@ def workspace_has_data(system_dir: Path) -> bool:
     we should NEVER destroy data that exists.
     
     Args:
-        system_dir: Path to .cognee_system directory
+        system_dir: Path to .flowbaby/system directory
         
     Returns:
         True if existing data is detected, False otherwise
@@ -83,7 +83,7 @@ def get_data_integrity_status(system_dir: Path) -> dict:
     than LanceDB (indicating vector embeddings were lost).
     
     Args:
-        system_dir: Path to .cognee_system directory
+        system_dir: Path to .flowbaby/system directory
         
     Returns:
         Dictionary with sqlite_count, lancedb_count, healthy boolean, and optional warning
@@ -158,7 +158,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
         workspace_path: Absolute path to VS Code workspace root
         
     Returns:
-        Dictionary with success status, dataset_name, cognee_dir, ontology info, and migration status
+        Dictionary with success status, dataset_name, flowbaby_dir, ontology info, and migration status
     """
     # Initialize logger
     logger = bridge_logger.setup_logging(workspace_path, "init")
@@ -221,13 +221,13 @@ async def initialize_cognee(workspace_path: str) -> dict:
             logger.debug(f"Custom LLM endpoint configured: {llm_endpoint}")
         
         # Configure workspace-local storage directories FIRST (before any marker checks)
-        cognee.config.system_root_directory(str(workspace_dir / '.cognee_system'))
-        cognee.config.data_root_directory(str(workspace_dir / '.cognee_data'))
-        logger.debug(f"Configured workspace-local storage: {workspace_dir / '.cognee_system'}")
+        cognee.config.system_root_directory(str(workspace_dir / '.flowbaby/system'))
+        cognee.config.data_root_directory(str(workspace_dir / '.flowbaby/data'))
+        logger.debug(f"Configured workspace-local storage: {workspace_dir / '.flowbaby/system'}")
         
         # PLAN 027: Derive global_data_dir directly from workspace path
         # NEVER query get_relational_config() for marker location - it may return stale/wrong path
-        global_data_dir = workspace_dir / '.cognee_system'
+        global_data_dir = workspace_dir / '.flowbaby/system'
         global_data_dir.mkdir(parents=True, exist_ok=True)
         global_marker_path = global_data_dir / '.migration_v1_complete'
         logger.debug(f"Migration marker location (workspace-local): {global_marker_path}")
@@ -237,10 +237,10 @@ async def initialize_cognee(workspace_path: str) -> dict:
         logger.info(f"Generated dataset name: {dataset_name}")
         
         # 2. Create .cognee directory for local marker files (not database storage)
-        cognee_dir = Path(workspace_path) / '.cognee'
-        cognee_dir.mkdir(parents=True, exist_ok=True)
+        flowbaby_dir = Path(workspace_path) / '.cognee'
+        flowbaby_dir.mkdir(parents=True, exist_ok=True)
         
-        local_marker_path = cognee_dir / '.dataset_migration_complete'
+        local_marker_path = flowbaby_dir / '.dataset_migration_complete'
         
         # 3. Migration marker strategy with safety checks
         migration_performed = False
@@ -407,7 +407,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
             'success': True,
             'dataset_name': dataset_name,
             'workspace_path': workspace_path_str,
-            'cognee_dir': str(cognee_dir.absolute()),
+            'flowbaby_dir': str(flowbaby_dir.absolute()),
             'ontology_loaded': True,
             'ontology_entities': len(ontology.get('entities', [])),
             'ontology_relationships': len(ontology.get('relationships', [])),

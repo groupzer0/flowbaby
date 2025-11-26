@@ -1,8 +1,8 @@
 /**
- * Language Model Tool for RecallFlow Memory Retrieval (Plan 016)
+ * Language Model Tool for Flowbaby Retrieval (Plan 016)
  * 
  * Implements VS Code's LanguageModelTool interface to allow Copilot agents
- * to retrieve structured conversation summaries from RecallFlow knowledge graph.
+ * to retrieve structured conversation summaries from Flowbaby knowledge graph.
  * 
  * Tool registration and authorization (Plan 016.1):
  * - Registered unconditionally at extension activation
@@ -10,14 +10,14 @@
  * - All invocations logged to audit trail
  * 
  * Architecture:
- * - Routes through singleton CogneeContextProvider (NOT via command)
+ * - Routes through singleton FlowbabyContextProvider (NOT via command)
  * - Returns BOTH narrative markdown AND verbatim JSON for agent parsing
  * - Enforces concurrency and rate limits via provider
  */
 
 import * as vscode from 'vscode';
-import { CogneeContextProvider } from '../cogneeContextProvider';
-import { CogneeContextRequest, CogneeContextResponse, AgentErrorResponse, AgentErrorCode } from '../types/agentIntegration';
+import { FlowbabyContextProvider } from '../flowbabyContextProvider';
+import { FlowbabyContextRequest, FlowbabyContextResponse, AgentErrorResponse, AgentErrorCode } from '../types/agentIntegration';
 
 export interface RetrieveMemoryToolInput {
     query: string;
@@ -26,15 +26,15 @@ export interface RetrieveMemoryToolInput {
 
 export class RetrieveMemoryTool implements vscode.LanguageModelTool<RetrieveMemoryToolInput> {
     private outputChannel: vscode.OutputChannel;
-    private provider: CogneeContextProvider;
+    private provider: FlowbabyContextProvider;
 
-    constructor(provider: CogneeContextProvider, outputChannel: vscode.OutputChannel) {
+    constructor(provider: FlowbabyContextProvider, outputChannel: vscode.OutputChannel) {
         this.provider = provider;
         this.outputChannel = outputChannel;
     }
 
     /**
-     * Invoked when Copilot agent calls recallflow_retrieveMemory tool
+     * Invoked when Copilot agent calls flowbaby_retrieveMemory tool
      */
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<RetrieveMemoryToolInput>,
@@ -43,7 +43,7 @@ export class RetrieveMemoryTool implements vscode.LanguageModelTool<RetrieveMemo
         const startTime = Date.now();
         
         this.outputChannel.appendLine(
-            `[Tool Invocation] ${new Date().toISOString()} - recallflow_retrieveMemory called`
+            `[Tool Invocation] ${new Date().toISOString()} - flowbaby_retrieveMemory called`
         );
         this.outputChannel.appendLine(`  Query: "${options.input.query.substring(0, 100)}${options.input.query.length > 100 ? '...' : ''}"`);
         this.outputChannel.appendLine(`  Max Results: ${options.input.maxResults || 3}`);
@@ -53,12 +53,12 @@ export class RetrieveMemoryTool implements vscode.LanguageModelTool<RetrieveMemo
             // If this tool is invoked, user has enabled it via Configure Tools UI
             
             // Prepare retrieval request
-            const request: CogneeContextRequest = {
+            const request: FlowbabyContextRequest = {
                 query: options.input.query,
                 maxResults: options.input.maxResults || 3
             };
 
-            // Call CogneeContextProvider directly (NOT via command)
+            // Call FlowbabyContextProvider directly (NOT via command)
             // This leverages shared concurrency/rate limiting without duplication
             const response = await this.provider.retrieveContext(request);
 
@@ -80,7 +80,7 @@ export class RetrieveMemoryTool implements vscode.LanguageModelTool<RetrieveMemo
             }
 
             // Success - format response with BOTH narrative and structured JSON
-            const successResponse = response as CogneeContextResponse;
+            const successResponse = response as FlowbabyContextResponse;
             
             this.outputChannel.appendLine(
                 `  ✅ Retrieval completed in ${duration}ms ` +
@@ -168,7 +168,7 @@ export class RetrieveMemoryTool implements vscode.LanguageModelTool<RetrieveMemo
 
         // Return prepared invocation with confirmation message
         return {
-            invocationMessage: `Searching RecallFlow memory: "${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}"`
+            invocationMessage: `Searching Flowbaby memory: "${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}"`
         };
     }
 }

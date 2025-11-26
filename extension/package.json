@@ -1,9 +1,9 @@
 {
-  "name": "cognee-chat-memory",
-  "displayName": "RecallFlow Chat Memory",
-  "description": "Automatic memory for GitHub Copilot chat using RecallFlow knowledge graphs",
-  "version": "0.3.17",
-  "publisher": "recallflow",
+  "name": "flowbaby",
+  "displayName": "Flowbaby",
+  "description": "Automatic memory for GitHub Copilot chat using Flowbaby knowledge graphs",
+  "version": "0.4.0",
+  "publisher": "flowbaby",
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.106.0"
@@ -14,8 +14,7 @@
     "Machine Learning"
   ],
   "keywords": [
-    "recallflow",
-    "cognee",
+    "flowbaby",
     "memory",
     "chat",
     "copilot",
@@ -27,93 +26,93 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onLanguageModelTool:recallflow_storeMemory"
+    "onLanguageModelTool:flowbaby_storeMemory"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "cognee.captureMessage",
-        "title": "RecallFlow: Capture to Memory",
-        "category": "RecallFlow"
+        "command": "Flowbaby.captureMessage",
+        "title": "Flowbaby: Capture to Memory",
+        "category": "Flowbaby"
       },
       {
-        "command": "cognee.toggleMemory",
-        "title": "RecallFlow: Toggle Memory",
-        "category": "RecallFlow"
+        "command": "Flowbaby.toggleMemory",
+        "title": "Flowbaby: Toggle Memory",
+        "category": "Flowbaby"
       },
       {
-        "command": "cognee.clearMemory",
-        "title": "RecallFlow: Clear Workspace Memory",
-        "category": "RecallFlow"
+        "command": "Flowbaby.clearMemory",
+        "title": "Flowbaby: Clear Workspace Memory",
+        "category": "Flowbaby"
       },
       {
-        "command": "cogneeMemory.ingestForAgent",
-        "title": "RecallFlow: Ingest Summary for Agent",
-        "category": "RecallFlow",
-        "enablement": "cogneeMemory.enabled"
+        "command": "Flowbaby.ingestForAgent",
+        "title": "Flowbaby: Ingest Summary for Agent",
+        "category": "Flowbaby",
+        "enablement": "Flowbaby.enabled"
       },
       {
-        "command": "cogneeMemory.retrieveForAgent",
-        "title": "RecallFlow: Retrieve Context for Agent",
-        "category": "RecallFlow",
-        "enablement": "cogneeMemory.enabled"
+        "command": "Flowbaby.retrieveForAgent",
+        "title": "Flowbaby: Retrieve Context for Agent",
+        "category": "Flowbaby",
+        "enablement": "Flowbaby.enabled"
       },
       {
-        "command": "cognee.backgroundStatus",
-        "title": "RecallFlow: View Background Operations",
-        "category": "RecallFlow"
+        "command": "Flowbaby.backgroundStatus",
+        "title": "Flowbaby: View Background Operations",
+        "category": "Flowbaby"
       },
       {
-        "command": "cognee.showStatus",
-        "title": "RecallFlow: Show Status",
-        "category": "RecallFlow"
+        "command": "Flowbaby.showStatus",
+        "title": "Flowbaby: Show Status",
+        "category": "Flowbaby"
       },
       {
-        "command": "cognee.validateMemories",
-        "title": "RecallFlow: Validate Memories",
-        "category": "RecallFlow"
+        "command": "Flowbaby.validateMemories",
+        "title": "Flowbaby: Validate Memories",
+        "category": "Flowbaby"
       },
       {
-        "command": "cognee.listMemories",
-        "title": "RecallFlow: List Memories",
-        "category": "RecallFlow"
+        "command": "Flowbaby.listMemories",
+        "title": "Flowbaby: List Memories",
+        "category": "Flowbaby"
       },
       {
-        "command": "cognee.refreshDependencies",
-        "title": "RecallFlow: Refresh Bridge Dependencies",
-        "category": "RecallFlow"
+        "command": "Flowbaby.refreshDependencies",
+        "title": "Flowbaby: Refresh Bridge Dependencies",
+        "category": "Flowbaby"
       },
       {
-        "command": "cognee.initializeWorkspace",
-        "title": "RecallFlow: Initialize Workspace",
-        "category": "RecallFlow"
+        "command": "Flowbaby.initializeWorkspace",
+        "title": "Flowbaby: Initialize Workspace",
+        "category": "Flowbaby"
       },
       {
-        "command": "cognee.configureApiKey",
-        "title": "RecallFlow: Configure API Key",
-        "category": "RecallFlow"
+        "command": "Flowbaby.configureApiKey",
+        "title": "Flowbaby: Configure API Key",
+        "category": "Flowbaby"
       },
       {
-        "command": "cognee.setApiKey",
-        "title": "RecallFlow: Set API Key",
-        "category": "RecallFlow"
+        "command": "Flowbaby.setApiKey",
+        "title": "Flowbaby: Set API Key",
+        "category": "Flowbaby"
       },
       {
-        "command": "cognee.clearApiKey",
-        "title": "RecallFlow: Clear API Key",
-        "category": "RecallFlow"
+        "command": "Flowbaby.clearApiKey",
+        "title": "Flowbaby: Clear API Key",
+        "category": "Flowbaby"
       },
       {
-        "command": "cognee.showDebugLogs",
-        "title": "RecallFlow: Show Debug Logs",
-        "category": "RecallFlow"
+        "command": "Flowbaby.showDebugLogs",
+        "title": "Flowbaby: Show Debug Logs",
+        "category": "Flowbaby"
       }
     ],
 
     "keybindings": [
       {
-        "command": "cognee.captureMessage",
+        "command": "Flowbaby.captureMessage",
         "key": "ctrl+alt+c",
         "mac": "cmd+alt+c",
         "when": "editorTextFocus || chatIsVisible"
@@ -121,21 +120,21 @@
     ],
     "chatParticipants": [
       {
-        "id": "recallflow-memory",
-        "name": "recallflow-memory",
-        "description": "Chat with automatic context from RecallFlow memory",
+        "id": "flowbaby",
+        "name": "flowbaby",
+        "description": "Chat with automatic context from Flowbaby memory",
         "isSticky": true
       }
     ],
     "languageModelTools": [
       {
-        "name": "recallflow_storeMemory",
-        "displayName": "Store Memory in RecallFlow",
-        "toolReferenceName": "recallflowStoreSummary",
+        "name": "flowbaby_storeMemory",
+        "displayName": "Store Memory in Flowbaby",
+        "toolReferenceName": "flowbabyStoreSummary",
         "canBeReferencedInPrompt": true,
         "icon": "$(database)",
-        "modelDescription": "Primary tool for writing episodic long-term memory into RecallFlow's knowledge graph. Agents should call this after meaningful progress, at the end of multi-step reasoning, or when concluding a task, to persist a rich summary of what was done and why. Use this tool proactively as a state checkpoint; do not wait for the user to explicitly ask to save memory. Summaries should be 300–1500 characters and describe goals, actions, important files, decisions, and rationale. Use it to record durable decisions, plans, and implementation notes that will be useful in future turns in this workspace. Do not use this for trivial or ephemeral chit-chat.\n\nExample usage (conceptual): after completing a refactor or design decision, call this tool with topic=\"Auth refactor step 1\" and context summarizing the work, and include any key decisions and rationale. Data stays in this workspace.",
-        "userDescription": "Store a structured conversation or work summary into RecallFlow's knowledge graph for future retrieval. Data stays in this workspace.",
+        "modelDescription": "Primary tool for writing episodic long-term memory into Flowbaby's knowledge graph. Agents should call this after meaningful progress, at the end of multi-step reasoning, or when concluding a task, to persist a rich summary of what was done and why. Use this tool proactively as a state checkpoint; do not wait for the user to explicitly ask to save memory. Summaries should be 300–1500 characters and describe goals, actions, important files, decisions, and rationale. Use it to record durable decisions, plans, and implementation notes that will be useful in future turns in this workspace. Do not use this for trivial or ephemeral chit-chat.\n\nExample usage (conceptual): after completing a refactor or design decision, call this tool with topic=\"Auth refactor step 1\" and context summarizing the work, and include any key decisions and rationale. Data stays in this workspace.",
+        "userDescription": "Store a structured conversation or work summary into Flowbaby's knowledge graph for future retrieval. Data stays in this workspace.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -175,16 +174,16 @@
           },
           "required": ["topic", "context"]
         },
-        "tags": ["memory", "knowledge-graph", "persistence", "recallflow", "long-term-memory", "state-checkpoint"]
+        "tags": ["memory", "knowledge-graph", "persistence", "flowbaby", "long-term-memory", "state-checkpoint"]
       },
       {
-        "name": "recallflow_retrieveMemory",
-        "displayName": "Retrieve RecallFlow Memory",
-        "toolReferenceName": "recallflowRetrieveMemory",
+        "name": "flowbaby_retrieveMemory",
+        "displayName": "Retrieve Flowbaby Memory",
+        "toolReferenceName": "flowbabyRetrieveMemory",
         "canBeReferencedInPrompt": true,
         "icon": "$(search)",
-        "modelDescription": "Primary mechanism for retrieving past context, decisions, and implementation details from RecallFlow's knowledge graph. Agents should call this at the start of a turn, or before planning an answer, whenever the user request might relate to prior work, previous discussions, or existing decisions in this workspace. Use a natural-language query that describes the user goal or task (not just keywords), and retrieve a small number of highly relevant memories to ground reasoning. The tool returns human-readable markdown plus structured JSON with topic, context, decisions, rationale, and metadata, which should be used to guide current planning and responses. If no results are relevant, the agent should proceed but note that no prior memory was found.\n\nExample usage (conceptual): when asked \"How did we implement caching?\" call this tool with query=\"Previous decisions and implementation details for redis caching\" and review the returned summaries before answering. Data stays in this workspace.",
-        "userDescription": "Search RecallFlow knowledge graph for relevant stored summaries, decisions, and context from past work. Data stays in this workspace.",
+        "modelDescription": "Primary mechanism for retrieving past context, decisions, and implementation details from Flowbaby's knowledge graph. Agents should call this at the start of a turn, or before planning an answer, whenever the user request might relate to prior work, previous discussions, or existing decisions in this workspace. Use a natural-language query that describes the user goal or task (not just keywords), and retrieve a small number of highly relevant memories to ground reasoning. The tool returns human-readable markdown plus structured JSON with topic, context, decisions, rationale, and metadata, which should be used to guide current planning and responses. If no results are relevant, the agent should proceed but note that no prior memory was found.\n\nExample usage (conceptual): when asked \"How did we implement caching?\" call this tool with query=\"Previous decisions and implementation details for redis caching\" and review the returned summaries before answering. Data stays in this workspace.",
+        "userDescription": "Search Flowbaby knowledge graph for relevant stored summaries, decisions, and context from past work. Data stays in this workspace.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -202,36 +201,36 @@
           },
           "required": ["query"]
         },
-        "tags": ["memory", "knowledge-graph", "search", "retrieval", "recallflow", "context", "long-term-memory"]
+        "tags": ["memory", "knowledge-graph", "search", "retrieval", "flowbaby", "context", "long-term-memory"]
       }
     ],
     "walkthroughs": [
       {
-        "id": "recallflowSetup",
-        "title": "Get Started with RecallFlow",
-        "description": "Set up your environment and start using RecallFlow Memory",
+        "id": "flowbabySetup",
+        "title": "Get Started with Flowbaby",
+        "description": "Set up your environment and start using Flowbaby",
         "steps": [
           {
             "id": "setupPython",
             "title": "Setup Python Environment",
-            "description": "RecallFlow requires a Python environment with `cognee` installed. We can set this up for you automatically.\n[Initialize Workspace](command:cognee.initializeWorkspace)",
+            "description": "Flowbaby requires a Python environment with `cognee` installed. We can set this up for you automatically.\n[Initialize Workspace](command:Flowbaby.initializeWorkspace)",
             "media": {
               "image": "media/icon.png",
-              "altText": "RecallFlow Logo"
+              "altText": "Flowbaby Logo"
             },
             "completionEvents": [
-              "onContext:cogneeMemory.environmentVerified"
+              "onContext:Flowbaby.environmentVerified"
             ]
           },
           {
             "id": "configureApiKey",
             "title": "Configure API Key",
-            "description": "Create a `.env` file in your workspace root with your LLM API key.\n[Configure API Key](command:cognee.configureApiKey)",
+            "description": "Create a `.env` file in your workspace root with your LLM API key.\n[Configure API Key](command:Flowbaby.configureApiKey)",
             "media": {
               "markdown": "media/icon.png"
             },
             "completionEvents": [
-              "onCommand:cognee.configureApiKey"
+              "onCommand:Flowbaby.configureApiKey"
             ]
           },
           {
@@ -239,67 +238,67 @@
             "title": "Try Capture",
             "description": "Select text in your editor and press `Ctrl+Alt+C` (or `Cmd+Alt+C` on Mac) to capture it to memory.",
             "completionEvents": [
-              "onCommand:cognee.captureMessage"
+              "onCommand:Flowbaby.captureMessage"
             ]
           },
           {
             "id": "tryRetrieval",
             "title": "Try Retrieval",
-            "description": "Open Copilot Chat and ask `@recallflow-memory` a question about your captured context.",
+            "description": "Open Copilot Chat and ask `@flowbaby` a question about your captured context.",
             "completionEvents": [
-              "onView:recallflow-memory"
+              "onView:flowbaby"
             ]
           }
         ]
       }
     ],
     "configuration": {
-      "title": "RecallFlow Memory",
+      "title": "Flowbaby",
       "properties": {
-        "cogneeMemory.enabled": {
+        "Flowbaby.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable/disable automatic memory capture and retrieval"
         },
-        "cogneeMemory.maxContextResults": {
+        "Flowbaby.maxContextResults": {
           "type": "number",
           "default": 3,
           "minimum": 1,
           "maximum": 10,
           "description": "Maximum number of memory results to retrieve"
         },
-        "cogneeMemory.maxContextTokens": {
+        "Flowbaby.maxContextTokens": {
           "type": "number",
           "default": 32000,
           "minimum": 100,
           "maximum": 100000,
           "description": "Maximum token budget for retrieved context (higher values may increase latency and memory usage; hard-clamped to 100k in the bridge)"
         },
-        "cogneeMemory.searchTopK": {
+        "Flowbaby.searchTopK": {
           "type": "number",
           "default": 10,
           "minimum": 1,
           "maximum": 100,
-          "description": "Maximum number of candidates to request from the RecallFlow search engine before ranking. Values are normalized so they are never lower than maxContextResults and are hard-clamped to 100 in the bridge."
+          "description": "Maximum number of candidates to request from the Flowbaby search engine before ranking. Values are normalized so they are never lower than maxContextResults and are hard-clamped to 100 in the bridge."
         },
-        "cogneeMemory.ranking.halfLifeDays": {
+        "Flowbaby.ranking.halfLifeDays": {
           "type": "number",
           "default": 7,
           "minimum": 0.5,
           "maximum": 90,
           "markdownDescription": "Half-life (in days) used for recency-aware ranking. Memories older than this value will have their relevance score halved. Leave between 0.5 and 90 days to balance freshness vs. semantic similarity."
         },
-        "cogneeMemory.autoIngestConversations": {
+        "Flowbaby.autoIngestConversations": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "**Experimental**: Automatically capture @cognee-memory conversations for feedback loop. Currently disabled by default due to Cognee 0.4.0 file storage issues. Enable to test self-improving memory (may fail intermittently)."
+          "markdownDescription": "**Experimental**: Automatically capture @flowbaby conversations for feedback loop. Currently disabled by default due to Cognee 0.4.0 file storage issues. Enable to test self-improving memory (may fail intermittently)."
         },
-        "cogneeMemory.pythonPath": {
+        "Flowbaby.pythonPath": {
           "type": "string",
           "default": "python3",
           "markdownDescription": "Path to Python interpreter. Leave as 'python3' for auto-detection of workspace `.venv`. Explicit path overrides auto-detection. Must have `cognee` and `python-dotenv` installed."
         },
-        "cogneeMemory.logLevel": {
+        "Flowbaby.logLevel": {
           "type": "string",
           "enum": [
             "error",
@@ -310,23 +309,23 @@
           "default": "info",
           "description": "Logging verbosity level"
         },
-        "cogneeMemory.debugLogging": {
+        "Flowbaby.debugLogging": {
           "type": "boolean",
           "default": false,
           "markdownDescription": "Enable debug output channel for extension diagnostics. Shows detailed logs for activation, Python bridge communication, setup operations, and status bar events. Use this when troubleshooting issues."
         },
-        "cogneeMemory.llm.provider": {
+        "Flowbaby.llm.provider": {
           "type": "string",
           "enum": ["openai", "anthropic", "azure", "ollama", "custom"],
           "default": "openai",
           "markdownDescription": "LLM provider for memory processing. Non-OpenAI providers may require additional configuration in the endpoint field."
         },
-        "cogneeMemory.llm.model": {
+        "Flowbaby.llm.model": {
           "type": "string",
           "default": "gpt-4o-mini",
           "markdownDescription": "LLM model name (e.g., gpt-4o-mini, claude-3-haiku-20240307, llama2)"
         },
-        "cogneeMemory.llm.endpoint": {
+        "Flowbaby.llm.endpoint": {
           "type": "string",
           "default": "",
           "markdownDescription": "Custom LLM endpoint URL (for Ollama, Azure, or self-hosted). Leave empty for default provider endpoints."
@@ -369,7 +368,7 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
-  "author": "RecallFlow Team",
+  "author": "Flowbaby Team",
   "license": "MIT",
   "repository": {
     "type": "git",

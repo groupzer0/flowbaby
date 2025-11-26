@@ -1,31 +1,31 @@
 import * as vscode from 'vscode';
 import { debugLog } from '../outputChannels';
 
-export enum RecallFlowStatus {
+export enum FlowbabyStatus {
     Ready = 'Ready',
     SetupRequired = 'SetupRequired',
     Refreshing = 'Refreshing',
     Error = 'Error'
 }
 
-export class RecallFlowStatusBar {
+export class FlowbabyStatusBar {
     private statusBarItem: vscode.StatusBarItem;
-    private status: RecallFlowStatus = RecallFlowStatus.SetupRequired;
+    private status: FlowbabyStatus = FlowbabyStatus.SetupRequired;
     private message: string = '';
 
     constructor(context: vscode.ExtensionContext) {
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-        this.statusBarItem.command = 'cognee.showStatus';
+        this.statusBarItem.command = 'Flowbaby.showStatus';
         context.subscriptions.push(this.statusBarItem);
         
         // Plan 028 M4: Register command with error handling
-        const statusCommand = vscode.commands.registerCommand('cognee.showStatus', async () => {
+        const statusCommand = vscode.commands.registerCommand('Flowbaby.showStatus', async () => {
             try {
                 await this.showStatusMenu();
             } catch (error) {
                 debugLog('Status menu error', { error: String(error) });
                 vscode.window.showErrorMessage(
-                    `RecallFlow status menu error: ${error instanceof Error ? error.message : String(error)}`
+                    `Flowbaby status menu error: ${error instanceof Error ? error.message : String(error)}`
                 );
             }
         });
@@ -43,13 +43,13 @@ export class RecallFlowStatusBar {
         const items: vscode.QuickPickItem[] = [
             {
                 label: '$(sync) Refresh Dependencies',
-                description: 'Reinstall RecallFlow dependencies',
+                description: 'Reinstall Flowbaby dependencies',
                 detail: 'Use this if you encounter environment issues'
             },
             {
                 label: '$(gear) Setup Environment',
                 description: 'Initialize or repair Python environment',
-                detail: 'Create managed environment in .cognee/venv'
+                detail: 'Create managed environment in .flowbaby/venv'
             },
             {
                 label: '$(key) Set API Key',
@@ -59,30 +59,30 @@ export class RecallFlowStatusBar {
             {
                 label: '$(output) Show Debug Logs',
                 description: 'Open debug output channel',
-                detail: 'Enable cogneeMemory.debugLogging for detailed logs'
+                detail: 'Enable Flowbaby.debugLogging for detailed logs'
             }
         ];
 
         const selection = await vscode.window.showQuickPick(items, {
-            placeHolder: `RecallFlow Status: ${this.status}`
+            placeHolder: `Flowbaby Status: ${this.status}`
         });
 
         if (selection) {
             debugLog('Status menu selection', { label: selection.label });
             
             if (selection.label.includes('Refresh Dependencies')) {
-                vscode.commands.executeCommand('cognee.refreshDependencies');
+                vscode.commands.executeCommand('Flowbaby.refreshDependencies');
             } else if (selection.label.includes('Setup Environment')) {
-                vscode.commands.executeCommand('cognee.setupEnvironment');
+                vscode.commands.executeCommand('Flowbaby.setupEnvironment');
             } else if (selection.label.includes('Set API Key')) {
-                vscode.commands.executeCommand('cognee.setApiKey');
+                vscode.commands.executeCommand('Flowbaby.setApiKey');
             } else if (selection.label.includes('Show Debug Logs')) {
-                vscode.commands.executeCommand('cognee.showDebugLogs');
+                vscode.commands.executeCommand('Flowbaby.showDebugLogs');
             }
         }
     }
 
-    public setStatus(status: RecallFlowStatus, message?: string) {
+    public setStatus(status: FlowbabyStatus, message?: string) {
         const previousStatus = this.status;
         this.status = status;
         this.message = message || '';
@@ -99,24 +99,24 @@ export class RecallFlowStatusBar {
 
     private update() {
         switch (this.status) {
-            case RecallFlowStatus.Ready:
-                this.statusBarItem.text = '$(check) RecallFlow';
-                this.statusBarItem.tooltip = 'RecallFlow Memory: Ready';
+            case FlowbabyStatus.Ready:
+                this.statusBarItem.text = '$(check) Flowbaby';
+                this.statusBarItem.tooltip = 'Flowbaby: Ready';
                 this.statusBarItem.backgroundColor = undefined; // Default color
                 break;
-            case RecallFlowStatus.SetupRequired:
-                this.statusBarItem.text = '$(alert) RecallFlow';
-                this.statusBarItem.tooltip = 'RecallFlow Memory: Setup Required';
+            case FlowbabyStatus.SetupRequired:
+                this.statusBarItem.text = '$(alert) Flowbaby';
+                this.statusBarItem.tooltip = 'Flowbaby: Setup Required';
                 this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
                 break;
-            case RecallFlowStatus.Refreshing:
-                this.statusBarItem.text = '$(sync~spin) RecallFlow';
-                this.statusBarItem.tooltip = 'RecallFlow Memory: Refreshing Dependencies...';
+            case FlowbabyStatus.Refreshing:
+                this.statusBarItem.text = '$(sync~spin) Flowbaby';
+                this.statusBarItem.tooltip = 'Flowbaby: Refreshing Dependencies...';
                 this.statusBarItem.backgroundColor = undefined;
                 break;
-            case RecallFlowStatus.Error:
-                this.statusBarItem.text = '$(error) RecallFlow';
-                this.statusBarItem.tooltip = `RecallFlow Memory: Error - ${this.message}`;
+            case FlowbabyStatus.Error:
+                this.statusBarItem.text = '$(error) Flowbaby';
+                this.statusBarItem.tooltip = `Flowbaby: Error - ${this.message}`;
                 this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
                 break;
         }
