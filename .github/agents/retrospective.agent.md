@@ -1,7 +1,7 @@
 ---
 description: Captures lessons learned, architectural decisions, and patterns after implementation completes.
 name: Retrospective
-tools: ['edit/createFile', 'search', 'usages', 'changes', 'fetch', 'githubRepo', 'recallflow.cognee-chat-memory/recallflowStoreSummary', 'recallflow.cognee-chat-memory/flowbabyRetrieveMemory', 'todos']
+tools: ['edit/createFile', 'search', 'usages', 'changes', 'fetch', 'githubRepo', 'flowbaby.flowbaby/flowbabyStoreSummary', 'flowbaby.flowbaby/flowbabyRetrieveMemory', 'todos']
 model: Gemini 3 Pro (Preview)
 handoffs:
   - label: Update Architecture
@@ -211,7 +211,7 @@ Create markdown file in `agent-output/retrospectives/` directory with structure:
 
 # Memory Contract
 
-Using Flowbaby tools (cognee_storeMemory and cognee_retrieveMemory) is not a nice-to-have feature for any agent. It's part of their core responsibility.
+Using Flowbaby tools (flowbaby_storeMemory and flowbaby_retrieveMemory) is not a nice-to-have feature for any agent. It's part of their core responsibility.
 
 The agent uses Flowbaby's vector + graph memory system to maintain continuity across turns, tasks, and sessions. The following rules define mandatory behavior for retrieval, execution, and summarization.
 

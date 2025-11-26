@@ -16,6 +16,21 @@ from retrieve import retrieve_context
 from ingest import run_sync
 from init import initialize_cognee
 
+
+def has_real_api_key():
+    """Check if a real (non-dummy) API key is available."""
+    key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+    if not key:
+        return False
+    # Skip dummy keys
+    return not key.startswith("sk-dummy") and not key.startswith("test_key")
+
+
+requires_llm = pytest.mark.skipif(
+    not has_real_api_key(),
+    reason="Requires real LLM API key (OPENAI_API_KEY or LLM_API_KEY)"
+)
+
 @pytest.fixture
 def test_workspace():
     """Create a temporary workspace for testing."""
@@ -37,8 +52,8 @@ def test_logging_setup(test_workspace):
     logger = bridge_logger.setup_logging(test_workspace, "test_script")
     logger.info("Test message", extra={'data': {'key': 'value'}})
     
-    log_dir = Path(test_workspace) / ".cognee" / "logs"
-    log_file = log_dir / "bridge.log"
+    log_dir = Path(test_workspace) / ".flowbaby" / "logs"
+    log_file = log_dir / "flowbaby.log"
     
     assert log_file.exists()
     
@@ -50,9 +65,11 @@ def test_logging_setup(test_workspace):
         
         assert log_entry["message"] == "Test message"
         assert log_entry["level"] == "INFO"
-        assert log_entry["logger"] == "cognee.test_script"
+        assert log_entry["logger"] == "flowbaby.test_script"
         assert log_entry["data"]["key"] == "value"
 
+
+@requires_llm
 @pytest.mark.asyncio
 async def test_ingestion_logging(test_workspace):
     """Verify ingestion logs metrics."""
@@ -66,7 +83,7 @@ async def test_ingestion_logging(test_workspace):
     
     assert result["success"] is True
     
-    log_file = Path(test_workspace) / ".cognee" / "logs" / "bridge.log"
+    log_file = Path(test_workspace) / ".flowbaby" / "logs" / "flowbaby.log"
     assert log_file.exists()
     
     found_metrics = False
@@ -82,6 +99,8 @@ async def test_ingestion_logging(test_workspace):
                 
     assert found_metrics, "Ingestion metrics log not found"
 
+
+@requires_llm
 @pytest.mark.asyncio
 async def test_retrieval_logging(test_workspace):
     """Verify retrieval logs contain scoring details."""
@@ -102,7 +121,7 @@ async def test_retrieval_logging(test_workspace):
     
     assert result["success"] is True
     
-    log_file = Path(test_workspace) / ".cognee" / "logs" / "bridge.log"
+    log_file = Path(test_workspace) / ".flowbaby" / "logs" / "flowbaby.log"
     assert log_file.exists()
     
     found_scoring = False

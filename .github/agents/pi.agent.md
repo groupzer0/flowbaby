@@ -2,7 +2,7 @@
 description: Analyze retrospective findings and systematically improves agent workflows.
 name: ProcessImprovement
 
-tools: ['edit/createFile', 'edit/editFiles', 'runNotebooks', 'search', 'runCommands', 'usages', 'vscodeAPI', 'problems', 'fetch', 'githubRepo', 'recallflow.cognee-chat-memory/recallflowStoreSummary', 'recallflow.cognee-chat-memory/flowbabyRetrieveMemory', 'todos']
+tools: ['edit/createFile', 'edit/editFiles', 'runNotebooks', 'search', 'runCommands', 'usages', 'vscodeAPI', 'problems', 'fetch', 'githubRepo', 'flowbaby.flowbaby/flowbabyStoreSummary', 'flowbaby.flowbaby/flowbabyRetrieveMemory', 'todos']
 model: GPT-5.1-Codex (Preview)
 handoffs:
   - label: Start New Plan
@@ -439,7 +439,7 @@ Updated [count] agent instruction files based on [count] process improvement rec
 
 # Memory Contract
 
-Using Flowbaby tools (cognee_storeMemory and cognee_retrieveMemory) is not a nice-to-have feature for any agent. It's part of their core responsibility.
+Using Flowbaby tools (flowbaby_storeMemory and flowbaby_retrieveMemory) is not a nice-to-have feature for any agent. It's part of their core responsibility.
 
 The agent uses Flowbaby's vector + graph memory system to maintain continuity across turns, tasks, and sessions. The following rules define mandatory behavior for retrieval, execution, and summarization.
 

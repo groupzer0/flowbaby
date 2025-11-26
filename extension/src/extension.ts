@@ -208,8 +208,8 @@ export async function activate(_context: vscode.ExtensionContext) {
             outputChannel.appendLine('   - Or use "Flowbaby: Set API Key" command for global setup');
             outputChannel.appendLine('');
             outputChannel.appendLine('2. Missing Python dependencies:');
-            outputChannel.appendLine('   - Ensure flowbaby dependencies are installed');
-            outputChannel.appendLine('   - Run: pip install flowbaby python-dotenv');
+            outputChannel.appendLine('   - Ensure cognee dependencies are installed');
+            outputChannel.appendLine('   - Run: pip install cognee python-dotenv');
             outputChannel.show();
             
             const action = await vscode.window.showWarningMessage(

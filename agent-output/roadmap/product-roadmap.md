@@ -8,6 +8,7 @@
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-26 | Added Release v0.4.1 (Hotfix) | Critical regression found in v0.4.0: Background operations do not inherit global API key. |
 | 2025-11-26 | Updated Epic 0.3.15.5 Strategy | Changed data storage strategy from hidden `context.storageUri` to visible `.flowbaby/` folder in workspace root. User requested visibility for troubleshooting. |
 | 2025-11-25 | Added Release v0.3.17 (Isolation & Configuration) and Epic 0.3.17.1 | Plan 028 delivers critical isolation fixes (`.cognee/venv`) and global configuration (SecretStorage, LLM settings) that warrant a dedicated release. |
 | 2025-11-24 | Marked Epic 0.3.15.3 as Delivered; Downgraded Epic 0.3.15.1 to P1 | Verified strict filtering implementation in `retrieve.py` (Plan 021/023). User requested P1 for validation to prioritize other P0s. |
@@ -847,7 +848,7 @@ So that I can easily view and troubleshoot it while keeping my project relativel
 ### Epic 0.3.15.6: Flowbaby Rebranding
 
 **Priority**: P0 (Critical - Brand Identity)
-**Status**: Planned
+**Status**: ✅ Delivered (Plan 030)
 
 **User Story**:
 As a user,
@@ -866,13 +867,13 @@ So that the product identity is unified and I am not confused by legacy "RecallF
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] **Tool Names**: `cognee_storeMemory` renamed to `flowbaby_storeMemory`, `cognee_retrieveMemory` renamed to `flowbaby_retrieveMemory`. (Breaking change for agents).
-- [ ] **Command Titles**: All Command Palette entries updated to start with "Flowbaby: ...".
-- [ ] **Documentation**: `README.md`, `CHANGELOG.md`, and `package.json` metadata updated to "Flowbaby".
-- [ ] **Logs & Output**: Output channel renamed to "Flowbaby Memory"; log messages updated to "Flowbaby initialized...", etc.
-- [ ] **Participant**: Chat participant renamed/aliased to `@flowbaby` (if possible) or help text updated to reflect Flowbaby identity.
-- [ ] **Status Bar**: Status bar text updated to "Flowbaby".
-- [ ] **Notifications**: All toast notifications updated to use "Flowbaby".
+- [x] **Tool Names**: `cognee_storeMemory` renamed to `flowbaby_storeMemory`, `cognee_retrieveMemory` renamed to `flowbaby_retrieveMemory`. (Breaking change for agents).
+- [x] **Command Titles**: All Command Palette entries updated to start with "Flowbaby: ...".
+- [x] **Documentation**: `README.md`, `CHANGELOG.md`, and `package.json` metadata updated to "Flowbaby".
+- [x] **Logs & Output**: Output channel renamed to "Flowbaby Memory"; log messages updated to "Flowbaby initialized...", etc.
+- [x] **Participant**: Chat participant renamed/aliased to `@flowbaby` (if possible) or help text updated to reflect Flowbaby identity.
+- [x] **Status Bar**: Status bar text updated to "Flowbaby".
+- [x] **Notifications**: All toast notifications updated to use "Flowbaby".
 
 **Constraints**:
 
@@ -881,6 +882,7 @@ So that the product identity is unified and I am not confused by legacy "RecallF
 
 **Status Notes**:
 
+- 2025-11-26: **DELIVERED** - Plan 030 implemented and deployed.
 - 2025-11-24: **ADDED** - User requested a complete rebranding to Flowbaby.
 
 ---
@@ -1132,7 +1134,7 @@ So that changes don't break initialization or ingestion workflows.
 ### Epic 0.3.17.1: Global Configuration & Security
 
 **Priority**: P0 (Critical - UX/Security)
-**Status**: Planned (Plan 028)
+**Status**: ✅ Delivered (Plan 028)
 
 **User Story**:
 As a user working across multiple projects,
@@ -1151,10 +1153,10 @@ So that I don't have to create `.env` files for every new workspace.
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] **Global API Key**: Users can set API key once via `RecallFlow: Set API Key` command; stored securely in VS Code SecretStorage.
-- [ ] **Global LLM Settings**: Users can configure Provider, Model, and Endpoint in VS Code User Settings; applies to all workspaces.
-- [ ] **Workspace Overrides**: Workspace-specific `.env` files take precedence over global settings (for power users).
-- [ ] **Security**: API keys are never written to `settings.json` or synced to the cloud.
+- [x] **Global API Key**: Users can set API key once via `RecallFlow: Set API Key` command; stored securely in VS Code SecretStorage.
+- [x] **Global LLM Settings**: Users can configure Provider, Model, and Endpoint in VS Code User Settings; applies to all workspaces.
+- [x] **Workspace Overrides**: Workspace-specific `.env` files take precedence over global settings (for power users).
+- [x] **Security**: API keys are never written to `settings.json` or synced to the cloud.
 
 **Constraints**:
 
@@ -1163,6 +1165,45 @@ So that I don't have to create `.env` files for every new workspace.
 
 **Status Notes**:
 
+- 2025-11-26: **DELIVERED** - Plan 028 implemented and deployed.
 - 2025-11-25: **ADDED** - Plan 028 defines the implementation for global config and security.
 
 ---
+
+## Release v0.4.1 - Hotfix: Background Reliability
+
+**Target Date**: 2025-11-26
+**Strategic Goal**: Fix critical regression in background ingestion to ensure global API keys work for all operations.
+
+### Epic 0.4.1.1: Background API Key Injection
+
+**Priority**: P0 (Critical - Bug Fix)
+**Status**: Planned
+
+**User Story**:
+As a user with a globally configured API key,
+I want background ingestion to work correctly,
+So that I don't get "Missing API Key" errors despite having configured it.
+
+**Business Value**:
+
+- **User Impact**: Restores functionality for the primary configuration method (Global API Key).
+- **Strategic Importance**: Reliability of core features.
+
+**Dependencies**:
+
+- None.
+
+**Acceptance Criteria** (outcome-focused):
+
+- [ ] `BackgroundOperationManager` correctly resolves the API key from SecretStorage or `.env`.
+- [ ] Background `cognify` processes are spawned with the `LLM_API_KEY` environment variable injected.
+- [ ] `ingest.log` no longer shows `MISSING_API_KEY` errors for valid configurations.
+
+**Constraints**:
+
+- Must reuse the same resolution logic/priority as the main client (Workspace > Global > System).
+
+**Status Notes**:
+
+- 2025-11-26: **ADDED** - Regression identified in v0.4.0.

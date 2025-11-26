@@ -31,14 +31,14 @@ def setup_logging(workspace_path, script_name):
     Configure logging for bridge scripts.
     
     Args:
-        workspace_path (str): Path to the workspace root (where .cognee is located)
+        workspace_path (str): Path to the workspace root (where .flowbaby is located)
         script_name (str): Name of the script (e.g., 'retrieve', 'ingest')
     
     Returns:
         logging.Logger: Configured logger instance
     """
     # Create logger
-    logger = logging.getLogger(f"cognee.{script_name}")
+    logger = logging.getLogger(f"flowbaby.{script_name}")
     logger.setLevel(logging.DEBUG)
     
     # Prevent propagation to root logger to avoid double logging if root is configured
@@ -50,10 +50,10 @@ def setup_logging(workspace_path, script_name):
     
     # 1. File Handler - Full detailed logs (rotating)
     try:
-        log_dir = os.path.join(workspace_path, ".cognee", "logs")
+        log_dir = os.path.join(workspace_path, ".flowbaby", "logs")
         os.makedirs(log_dir, exist_ok=True)
         
-        log_file = os.path.join(log_dir, "bridge.log")
+        log_file = os.path.join(log_dir, "flowbaby.log")
         
         # Rotate at 5MB, keep 3 backups
         file_handler = logging.handlers.RotatingFileHandler(

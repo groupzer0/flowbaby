@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
+import * as dotenv from 'dotenv';
 
 export interface OperationRetryPayload {
     type: 'summary' | 'conversation';
@@ -136,9 +137,10 @@ export class BackgroundOperationManager {
         await fs.promises.mkdir(logsDir, { recursive: true });
         
         this.ledgerPath = path.join(flowbabyDir, 'background_ops.json');
-        this.logFilePath = path.join(logsDir, 'ingest.log');
+        this.logFilePath = path.join(logsDir, 'flowbaby.log');
 
         // Log rotation: if log file > 5MB, truncate it
+        // Note: Python bridge_logger.py also writes to this file with its own rotation
         try {
             const stats = await fs.promises.stat(this.logFilePath);
             if (stats.size > 5 * 1024 * 1024) {
@@ -157,6 +159,79 @@ export class BackgroundOperationManager {
 
         // Resume any pending operations after reconciliation
         await this.resumePendingOperations();
+    }
+
+    /**
+     * Resolve API key from workspace .env, SecretStorage, or system environment
+     * Priority: .env file > SecretStorage > process.env
+     */
+    private async resolveApiKey(workspacePath: string): Promise<string | undefined> {
+        // Priority 1: Check workspace .env file
+        const envPath = path.join(workspacePath, '.env');
+        try {
+            if (fs.existsSync(envPath)) {
+                const envContent = fs.readFileSync(envPath, 'utf8');
+                const parsed = dotenv.parse(envContent);
+                if (parsed.LLM_API_KEY) {
+                    this.outputChannel.appendLine('[BACKGROUND] Using LLM_API_KEY from workspace .env file');
+                    return parsed.LLM_API_KEY;
+                }
+            }
+        } catch (err) {
+            this.outputChannel.appendLine(`[BACKGROUND] Failed to read .env file: ${err}`);
+        }
+
+        // Priority 2: Check SecretStorage
+        try {
+            const secretKey = await this.context.secrets.get('flowbaby.llmApiKey');
+            if (secretKey) {
+                this.outputChannel.appendLine('[BACKGROUND] Using LLM_API_KEY from SecretStorage');
+                return secretKey;
+            }
+        } catch (err) {
+            this.outputChannel.appendLine(`[BACKGROUND] Failed to read SecretStorage: ${err}`);
+        }
+
+        // Priority 3: System environment
+        if (process.env.LLM_API_KEY) {
+            this.outputChannel.appendLine('[BACKGROUND] Using LLM_API_KEY from system environment');
+            return process.env.LLM_API_KEY;
+        }
+
+        return undefined;
+    }
+
+    /**
+     * Build LLM environment variables from config and resolved API key
+     */
+    private async getLLMEnvironment(workspacePath: string): Promise<Record<string, string>> {
+        const env: Record<string, string> = {};
+        
+        // Resolve API key with priority chain
+        const apiKey = await this.resolveApiKey(workspacePath);
+        if (apiKey) {
+            env['LLM_API_KEY'] = apiKey;
+        }
+
+        // Get LLM configuration from VS Code settings
+        const config = vscode.workspace.getConfiguration('Flowbaby.llm');
+        
+        const provider = config.get<string>('provider');
+        if (provider) {
+            env['LLM_PROVIDER'] = provider;
+        }
+
+        const model = config.get<string>('model');
+        if (model) {
+            env['LLM_MODEL'] = model;
+        }
+
+        const endpoint = config.get<string>('endpoint');
+        if (endpoint) {
+            env['LLM_ENDPOINT'] = endpoint;
+        }
+
+        return env;
     }
     
     /**
@@ -190,7 +265,7 @@ export class BackgroundOperationManager {
         const queuedCount = this.getQueuedCount();
         
         if (runningCount + queuedCount >= this.maxConcurrent + this.maxQueued) {
-            throw new Error('429_COGNIFY_BACKLOG: Background queue full. Wait 30-60s and try again.');
+            throw new Error('429_FLOWBABY_BACKLOG: Background queue full. Wait 30-60s and try again.');
         }
         
         // Persist payload for retry support
@@ -269,10 +344,20 @@ export class BackgroundOperationManager {
             }
         }
 
+        // Get LLM environment variables for the subprocess
+        const llmEnv = await this.getLLMEnvironment(workspacePath);
+        
+        // Merge with process.env but prioritize our resolved values
+        const spawnEnv = {
+            ...process.env,
+            ...llmEnv
+        };
+
         const child = spawn(pythonExecutable, args, {
             detached: true,
             stdio: stdio,
-            cwd: path.dirname(bridgeScriptPath)
+            cwd: path.dirname(bridgeScriptPath),
+            env: spawnEnv
         });
         
         entry.pid = child.pid || null;
@@ -658,7 +743,7 @@ export class BackgroundOperationManager {
             throw new Error('Retry payload is incomplete');
         }
 
-        const result = await this.runPythonJson(pythonExecutable, args, path.dirname(bridgeScriptPath));
+        const result = await this.runPythonJson(pythonExecutable, args, path.dirname(bridgeScriptPath), entry.datasetPath);
         if (!result.success) {
             const errorMessage = typeof result.error === 'string' ? result.error : 'Add-only retry failed';
             throw new Error(errorMessage);
@@ -668,12 +753,20 @@ export class BackgroundOperationManager {
     private async runPythonJson(
         pythonExecutable: string,
         args: string[],
-        cwd: string
+        cwd: string,
+        workspacePath?: string
     ): Promise<{ success?: boolean; error?: unknown; [key: string]: unknown }> {
+        // Build environment with LLM variables if workspace provided
+        let spawnEnv: NodeJS.ProcessEnv = { ...process.env, PYTHONUNBUFFERED: '1' };
+        if (workspacePath) {
+            const llmEnv = await this.getLLMEnvironment(workspacePath);
+            spawnEnv = { ...spawnEnv, ...llmEnv };
+        }
+        
         return await new Promise((resolve, reject) => {
             const child = spawn(pythonExecutable, args, {
                 cwd,
-                env: { ...process.env, PYTHONUNBUFFERED: '1' }
+                env: spawnEnv
             });
             let stdout = '';
             let stderr = '';

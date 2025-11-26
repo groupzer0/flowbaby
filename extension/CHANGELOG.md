@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.4.1] - 2025-11-26
+
+### Fixed - Plan 031: Background API Key and Logging Consolidation
+
+**Critical Hotfix** - Resolves v0.4.0 regressions affecting background ingestion and logging.
+
+#### Background Ingestion API Key Fix
+- **Root Cause**: `BackgroundOperationManager.spawnCognifyProcess()` was not injecting `LLM_API_KEY` from SecretStorage into the spawned process environment, causing `MISSING_API_KEY` errors for users who relied on the "Flowbaby: Set API Key" command.
+- **Fix**: Added `resolveApiKey()` and `getLLMEnvironment()` methods to `BackgroundOperationManager`, mirroring the working implementation in `FlowbabyClient`. These methods now properly inject API keys from:
+  1. Workspace `.env` file (highest priority)
+  2. VS Code SecretStorage (`flowbaby.llmApiKey`)
+  3. System environment variable (`LLM_API_KEY`)
+- **Scope**: Applies to `spawnCognifyProcess()` (background cognify) and `runPythonJson()` (add-only retry).
+
+#### Logging Consolidation
+- **Unified Log File**: All Python bridge logs now write to `.flowbaby/logs/flowbaby.log` (was split between `bridge.log` and `ingest.log`).
+- **Updated Logger**: `bridge_logger.py` updated to use `.flowbaby/logs/flowbaby.log` path and `flowbaby.*` logger names.
+- **View Logs Action**: "View Logs" notification action now opens the consolidated log file.
+
+#### Test Infrastructure
+- **rdflib Dependency**: Added early detection for missing `rdflib` library in test environment with actionable error message in `conftest.py`.
+- **Updated Tests**: `test_logging_overhaul.py` updated to use new log paths.
+
+#### Documentation
+- **README.md**: Fixed Windows path example to use `.flowbaby` instead of `.cognee`.
+- **extension.ts**: Fixed incorrect pip install instruction - changed "pip install flowbaby" to "pip install cognee" (flowbaby is the VS Code extension name, not a Python package).
+
 ## [0.4.0] - 2025-11-26
 
 ### ⚠️ BREAKING CHANGES
@@ -15,7 +42,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 
 #### Branding Changes
 - Extension renamed: `cognee-chat-memory` → `flowbaby`
-- Publisher changed: `recallflow` → `flowbaby`
+- Publisher changed: `flowbaby` → `flowbaby`
 - Display name: `RecallFlow Chat Memory` → `Flowbaby`
 
 #### Command Changes
@@ -28,12 +55,12 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Action Required**: Update your settings.json if you have custom configurations
 
 #### Chat Participant Changes
-- `@recallflow-memory` → `@flowbaby`
+- `@flowbaby-memory` → `@flowbaby`
 
 #### Tool Changes (for Agent Developers)
-- `recallflow_storeMemory` → `flowbaby_storeMemory`
-- `recallflow_retrieveMemory` → `flowbaby_retrieveMemory`
-- `#recallflowStoreSummary` → `#flowbabyStoreSummary`
+- `flowbaby_storeMemory` → `flowbaby_storeMemory`
+- `flowbaby_retrieveMemory` → `flowbaby_retrieveMemory`
+- `#flowbabyStoreSummary` → `#flowbabyStoreSummary`
 - **Action Required**: Update your `.agent.md` files
 
 #### Workspace Storage Changes
@@ -177,8 +204,8 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 
 ### Fixed - Plan 019: Flowbaby Rebranding Gaps
 
-- **Publisher Identity**: Marketplace publisher ID now set to `recallflow` with author updated to "Flowbaby Team" so the extension no longer appears under the legacy Cognee brand.
-- **Language Model Tools**: Renamed tool identifiers and reference names to `recallflow_storeMemory` / `recallflow_retrieveMemory` so Configure Tools, chat autocomplete, and `.agent.md` definitions all reflect the Flowbaby brand.
+- **Publisher Identity**: Marketplace publisher ID now set to `flowbaby` with author updated to "Flowbaby Team" so the extension no longer appears under the legacy Cognee brand.
+- **Language Model Tools**: Renamed tool identifiers and reference names to `flowbaby_storeMemory` / `flowbaby_retrieveMemory` so Configure Tools, chat autocomplete, and `.agent.md` definitions all reflect the Flowbaby brand.
 - **Documentation Alignment**: `README.md` and `AGENT_INTEGRATION.md` now show the correct tool names and usage examples, preventing confusion for agent developers.
 - **Test Coverage**: Integration tests updated to ensure the new tool identifiers register correctly with GitHub Copilot chat and that UI instructions stay in sync.
 
@@ -191,9 +218,9 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
   - Extension name: "Flowbaby Chat Memory"
   - Commands: `Flowbaby: Capture to Memory`, `Flowbaby: Toggle Memory`, etc.
   - Output Channel: "Flowbaby Agent Activity"
-  - Chat Participant: `@recallflow-memory`
+  - Chat Participant: `@flowbaby-memory`
   - Tools: "Store Memory in Flowbaby", "Retrieve Flowbaby Memory"
-  - **Tool Renaming**: `cognee_storeMemory` → `recallflow_storeMemory`, `cognee_retrieveMemory` → `recallflow_retrieveMemory`
+  - **Tool Renaming**: `flowbaby_storeMemory` → `flowbaby_storeMemory`, `flowbaby_retrieveMemory` → `flowbaby_retrieveMemory`
 - **Backward Compatibility**:
   - Internal configuration keys (`Flowbaby.*`) remain unchanged
   - File paths (`.flowbaby/`) remain unchanged
@@ -224,7 +251,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Enriched Text Fallback**: Implemented "Enriched Text" pattern to store metadata within summary text, bypassing Cognee 0.3.4 DataPoint limitations.
 - **Migration Script**: New `migrate_summaries.py` script automatically upgrades legacy memories to the new schema.
 - **Safe Migration**: Uses file locking (`.flowbaby/maintenance.lock`) to pause background operations during migration.
-- **Updated Tool Definitions**: `cognee_storeMemory` and `cognee_retrieveMemory` tools updated with clearer descriptions and privacy guarantees ("Data stays in this workspace").
+- **Updated Tool Definitions**: `flowbaby_storeMemory` and `flowbaby_retrieveMemory` tools updated with clearer descriptions and privacy guarantees ("Data stays in this workspace").
 
 ### Fixed
 - **Ranking Quality**: Addressed issue where old, less relevant memories cluttered retrieval results.
@@ -391,8 +418,8 @@ All features, improvements, and technical details remain as documented in v0.3.3
   - Structured error responses (ACCESS_DISABLED, RATE_LIMIT_EXCEEDED, QUEUE_FULL, BRIDGE_TIMEOUT, INVALID_REQUEST)
   - Settings clamping with safe upper bounds (prevents misconfiguration)
 - **UI-Visible Language Model Tools**: Both tools appear in VS Code's "Configure Tools" dialog
-  - `cognee_storeMemory` (`#cogneeStoreSummary`) - Store conversation summaries
-  - `cognee_retrieveMemory` (`#cogneeRetrieveMemory`) - Retrieve relevant memories
+  - `flowbaby_storeMemory` (`#cogneeStoreSummary`) - Store conversation summaries
+  - `flowbaby_retrieveMemory` (`#cogneeRetrieveMemory`) - Retrieve relevant memories
   - Tools support `#` autocomplete in chat and `.agent.md` front-matter references
   - Atomic lifecycle: both tools register/unregister together when `agentAccess.enabled` toggles
   - Icon support for visual identity (`$(database)` and `$(search)`)

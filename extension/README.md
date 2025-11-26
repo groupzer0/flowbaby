@@ -2,12 +2,12 @@
 
 > Memory-augmented chat for VS Code using Flowbaby knowledge graphs
 
-Flowbaby Chat Memory is a VS Code extension that lets you selectively capture important chat conversations and retrieve them as context through the `@recallflow-memory` participant. Each workspace maintains its own isolated memory, creating a personalized knowledge graph that grows with your project.
+Flowbaby Chat Memory is a VS Code extension that lets you selectively capture important chat conversations and retrieve them as context through the `@flowbaby-memory` participant. Each workspace maintains its own isolated memory, creating a personalized knowledge graph that grows with your project.
 
 ## Features
 
 - **Selective Capture** - Use keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C) to capture valuable conversations worth remembering
-- **@recallflow-memory Participant** - Retrieves relevant context and generates informed responses when you explicitly invoke it
+- **@flowbaby-memory Participant** - Retrieves relevant context and generates informed responses when you explicitly invoke it
 - **Keyboard Shortcut Workflow** - Press Ctrl+Alt+C, paste or type content, instant capture with confirmation
 - **Command Palette Alternative** - Run "Flowbaby: Capture to Memory" for the same capture workflow
 - **Workspace Isolation** - Each workspace has its own separate memory—no cross-project leakage
@@ -157,11 +157,11 @@ To check all in-flight operations:
 - Code explanations and discussions
 - Only content YOU choose to capture (selective, user-controlled)
 
-### Retrieving Context with @recallflow-memory
+### Retrieving Context with @flowbaby-memory
 
 **How to Use**:
 1. Open GitHub Copilot Chat (`Ctrl+Alt+I` or click chat icon)
-2. Type: `@recallflow-memory How did I implement caching?`
+2. Type: `@flowbaby-memory How did I implement caching?`
 3. The participant:
    - Retrieves relevant memories from your workspace knowledge graph
    - Shows previews: "📚 Retrieved 3 memories"
@@ -170,9 +170,9 @@ To check all in-flight operations:
    - Optionally captures the conversation for future retrieval (if enabled via config)
 
 **Example Queries**:
-- `@recallflow-memory What problems did we discuss about the authentication system?`
-- `@recallflow-memory What solutions did we consider for rate limiting?`
-- `@recallflow-memory Summarize our decisions about database architecture`
+- `@flowbaby-memory What problems did we discuss about the authentication system?`
+- `@flowbaby-memory What solutions did we consider for rate limiting?`
+- `@flowbaby-memory Summarize our decisions about database architecture`
 
 ### Creating Conversation Summaries (Plan 014)
 
@@ -248,10 +248,10 @@ Time Scope: Nov 16 10:00-12:30
 **How to Create a Summary**:
 
 1. **Open GitHub Copilot Chat** (`Ctrl+Alt+I` / `Cmd+Alt+I`)
-2. **Start a conversation with @recallflow-memory** and type:
-   - `@recallflow-memory summarize this conversation`
-   - Or: `@recallflow-memory remember this session`
-   - Or: `@recallflow-memory create summary`
+2. **Start a conversation with @flowbaby-memory** and type:
+   - `@flowbaby-memory summarize this conversation`
+   - Or: `@flowbaby-memory remember this session`
+   - Or: `@flowbaby-memory create summary`
 
 3. **Review the scope preview**:
    - Extension shows: "I'll summarize the last 15 turns (from 5 mins ago)."
@@ -290,7 +290,7 @@ Time Scope: Nov 16 10:00-12:30
 
 ### Retrieving Summaries
 
-When you query `@recallflow-memory`, the extension searches both raw captured conversations and structured summaries. Summaries display with rich metadata when available.
+When you query `@flowbaby-memory`, the extension searches both raw captured conversations and structured summaries. Summaries display with rich metadata when available.
 
 **What You'll See in Retrieval Results**:
 
@@ -307,10 +307,10 @@ For legacy memories (captured before Plan 014):
 
 **Example Retrieval Queries**:
 
-- `@recallflow-memory What did we decide about Plan 013?` → Retrieves relevant summaries with decisions highlighted
-- `@recallflow-memory What questions are still open about memory transparency?` → Finds Open Questions sections from summaries
-- `@recallflow-memory What are the next steps for the authentication system?` → Retrieves Next Steps from related summaries
-- `@recallflow-memory Show me the rationale for using enriched text format` → Finds Rationale sections explaining design choices
+- `@flowbaby-memory What did we decide about Plan 013?` → Retrieves relevant summaries with decisions highlighted
+- `@flowbaby-memory What questions are still open about memory transparency?` → Finds Open Questions sections from summaries
+- `@flowbaby-memory What are the next steps for the authentication system?` → Retrieves Next Steps from related summaries
+- `@flowbaby-memory Show me the rationale for using enriched text format` → Finds Rationale sections explaining design choices
 
 **Retrieval Benefits**:
 
@@ -429,7 +429,7 @@ Example configuration in VS Code settings:
 
 **Platform-specific examples**:
 - Linux/macOS: `/home/user/project/.flowbaby/venv/bin/python`
-- Windows: `C:\Users\user\project\.cognee\venv\Scripts\python.exe`
+- Windows: `C:\Users\user\project\.flowbaby\venv\Scripts\python.exe`
 
 ### Unsupported Contexts (v0.2.0)
 
@@ -452,7 +452,7 @@ Access settings via **File → Preferences → Settings → Extensions → Flowb
 | `Flowbaby.maxContextTokens` | Token budget for retrieved context | `2000` |
 | `Flowbaby.recencyWeight` | Weight for prioritizing recent conversations (0-1) | `0.3` |
 | `Flowbaby.importanceWeight` | Weight for prioritizing marked conversations (0-1) | `0.2` |
-| `Flowbaby.autoIngestConversations` | **Experimental**: Auto-capture @recallflow-memory conversations (disabled due to Cognee 0.4.0 bug) | `false` |
+| `Flowbaby.autoIngestConversations` | **Experimental**: Auto-capture @flowbaby-memory conversations (disabled due to Cognee 0.4.0 bug) | `false` |
 | `Flowbaby.pythonPath` | Path to Python interpreter (must have Cognee installed) | `python3` |
 | `Flowbaby.logLevel` | Logging verbosity: error, warn, info, debug | `info` |
 | `Flowbaby.debugLogging` | Show debug output channel (for troubleshooting) | `false` |
@@ -474,7 +474,7 @@ Configure your LLM provider via **File → Preferences → Settings → Extensio
 
 **Additional Examples**:
 - To disable memory temporarily, set `Flowbaby.enabled` to `false` in settings
-- To enable experimental auto-capture of @recallflow-memory conversations (feedback loop), set `Flowbaby.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
+- To enable experimental auto-capture of @flowbaby-memory conversations (feedback loop), set `Flowbaby.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
 
 ## Using Flowbaby Tools with Custom Agents
 
@@ -488,8 +488,8 @@ Flowbaby Chat Memory provides **Language Model Tools** that allow GitHub Copilot
    - Toggle tools on/off individually (disabled by default for privacy)
 
 2. **Use in Chat**:
-   - Type `#recallflow` to see autocomplete suggestions
-   - Select `#recallflowStoreSummary` or `#recallflowRetrieveMemory`
+   - Type `#flowbaby` to see autocomplete suggestions
+   - Select `#flowbabyStoreSummary` or `#flowbabyRetrieveMemory`
    - Tools appear only when enabled via Configure Tools
 
 3. **Transparency**:
@@ -504,24 +504,24 @@ Create a `.agent.md` file in your workspace to define a memory-aware agent:
 ---
 name: Memory-Aware Code Assistant
 description: Copilot assistant with access to workspace memory
-tools: ['search', 'recallflowStoreSummary', 'recallflowRetrieveMemory']
+tools: ['search', 'flowbabyStoreSummary', 'flowbabyRetrieveMemory']
 ---
 
 You are a code assistant with access to workspace-specific memory.
 
 When the user asks about past decisions or implementations:
-1. Use #recallflowRetrieveMemory to search for relevant context
+1. Use #flowbabyRetrieveMemory to search for relevant context
 2. Ground your answer in the retrieved memories
 3. If no memories exist, use your training data but clarify it's not workspace-specific
 
 When the user completes an important implementation or makes a decision:
-1. Offer to store a summary using #recallflowStoreSummary
+1. Offer to store a summary using #flowbabyStoreSummary
 2. Include topic, context, and key decisions in the summary
 ```
 
 ### Available Tools
 
-#### Store Memory Tool (`#recallflowStoreSummary`)
+#### Store Memory Tool (`#flowbabyStoreSummary`)
 
 Stores conversation summaries in Flowbaby knowledge graph.
 
@@ -532,7 +532,7 @@ Stores conversation summaries in Flowbaby knowledge graph.
 - `rationale` (optional): Reasoning behind decisions
 - `metadata` (optional): Plan ID, status, etc.
 
-#### Retrieve Memory Tool (`#recallflowRetrieveMemory`)
+#### Retrieve Memory Tool (`#flowbabyRetrieveMemory`)
 
 Searches Flowbaby knowledge graph for relevant memories.
 
@@ -550,7 +550,7 @@ When agents use Flowbaby, you see:
 
 - **Output Channel**: All tool invocations logged in "Flowbaby Agent Activity"
 - **Configure Tools UI**: Visual feedback for which tools are enabled/disabled
-- **Chat Autocomplete**: `#recallflow*` commands only appear when tools are enabled
+- **Chat Autocomplete**: `#flowbaby*` commands only appear when tools are enabled
 
 ### For Extension Developers
 
@@ -634,7 +634,7 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 **Retrieval Issues**:
 
 1. Verify `Flowbaby.enabled` is `true` in settings
-2. Type `@recallflow-memory` in chat to invoke the participant explicitly
+2. Type `@flowbaby-memory` in chat to invoke the participant explicitly
 3. Check Output Channel logs for retrieval attempts and timing
 4. Remember: The first conversation in a new workspace has no context (memory starts empty)
 5. Each workspace has separate memory—switching workspaces means different context
@@ -647,7 +647,7 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 | "Python script exited with code 1" (empty stderr) | Interpreter mismatch: `cognee` or `python-dotenv` not installed in detected Python environment | Set `Flowbaby.pythonPath` in VS Code settings to correct interpreter (Linux/macOS: `.venv/bin/python`, Windows: `.venv\Scripts\python.exe`) |
 | "No module named 'cognee'" | Missing `cognee` package in Python environment | Install with: `pip install cognee==0.3.4` (or activate virtual environment first) |
 | "LLM_API_KEY not found" | Missing API key in `.env` file or environment | Create `.env` file in workspace root with valid `LLM_API_KEY`, then reload window |
-| Script timeout (retrieval: 15s, ingestion: 120s) | Network issues, slow LLM provider, or filesystem delay | Ingestion timeout is generous (120s); if timeout occurs but data appears via @recallflow-memory, ingestion succeeded in background. Check Output Channel for timing metrics. |
+| Script timeout (retrieval: 15s, ingestion: 120s) | Network issues, slow LLM provider, or filesystem delay | Ingestion timeout is generous (120s); if timeout occurs but data appears via @flowbaby-memory, ingestion succeeded in background. Check Output Channel for timing metrics. |
 | JSON parse error in logs | Script produced non-JSON output | Report as bug. Check for conflicting print statements in bridge scripts. |
 
 **Note**: Auto-detection works for standard `.venv` setups on Linux, macOS, and Windows. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, or pyenv, use explicit `Flowbaby.pythonPath` configuration.
@@ -682,7 +682,7 @@ The extension will reinitialize on next activation, creating a fresh knowledge g
 5. Cognee stores conversation in workspace-specific knowledge graph
 
 **Retrieval Flow**:
-1. User types `@recallflow-memory [question]` in chat
+1. User types `@flowbaby-memory [question]` in chat
 2. Extension calls Python bridge (`retrieve.py`) via subprocess
 3. Cognee searches knowledge graph using hybrid graph-vector search
 4. Extension formats retrieved context with previews
@@ -710,16 +710,16 @@ rm -rf .flowbaby/ .flowbaby/system/ .flowbaby/data/  # In workspace root
 - **Workspace Required** - Extension doesn't work in single-file mode
 - **Python Dependency** - Python and Cognee must be installed separately (not bundled)
 - **Manual Capture** - Keyboard shortcut requires copy-paste workflow; cannot extract message from chat UI directly (VS Code API limitation)
-- **Explicit Participant Invocation** - Must type `@recallflow-memory` to trigger retrieval; cannot inject context into other participants (@workspace, GitHub Copilot, etc.)
+- **Explicit Participant Invocation** - Must type `@flowbaby-memory` to trigger retrieval; cannot inject context into other participants (@workspace, GitHub Copilot, etc.)
 - **First Conversation** - The first conversation in a new workspace has no context (memory starts empty)
-- **Step 6 Auto-Ingestion Disabled by Default** - Automatic capture of @recallflow-memory conversations (feedback loop) is experimental due to Cognee 0.4.0 file hashing bug; enable via `Flowbaby.autoIngestConversations` for testing
+- **Step 6 Auto-Ingestion Disabled by Default** - Automatic capture of @flowbaby-memory conversations (feedback loop) is experimental due to Cognee 0.4.0 file hashing bug; enable via `Flowbaby.autoIngestConversations` for testing
 - **Platform Support** - Primarily tested on macOS and Linux; Windows support may require additional configuration
 
 ## Known Issues
 
 ### Cognee 0.4.0 File Hashing Bug (Auto-Ingestion)
 
-**Issue**: Cognee v0.4.0 has an intermittent file hashing bug that causes ingestion to fail unpredictably when the same conversation is ingested multiple times. This affects automatic capture of @recallflow-memory conversations (Step 6 feedback loop).
+**Issue**: Cognee v0.4.0 has an intermittent file hashing bug that causes ingestion to fail unpredictably when the same conversation is ingested multiple times. This affects automatic capture of @flowbaby-memory conversations (Step 6 feedback loop).
 
 **Symptoms**:
 - Conversations fail to ingest with hash mismatch errors

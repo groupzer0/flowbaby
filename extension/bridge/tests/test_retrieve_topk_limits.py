@@ -14,6 +14,21 @@ from retrieve import retrieve_context  # noqa: E402
 from ingest import run_sync  # noqa: E402
 
 
+def has_real_api_key():
+    """Check if a real (non-dummy) API key is available."""
+    key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+    if not key:
+        return False
+    # Skip dummy keys
+    return not key.startswith("sk-dummy") and not key.startswith("test_key")
+
+
+requires_llm = pytest.mark.skipif(
+    not has_real_api_key(),
+    reason="Requires real LLM API key (OPENAI_API_KEY or LLM_API_KEY)"
+)
+
+
 @pytest.fixture
 async def populated_workspace():
     """Create a temporary workspace with one ingested memory for retrieval tests."""
@@ -38,6 +53,7 @@ async def populated_workspace():
         shutil.rmtree(workspace_dir)
 
 
+@requires_llm
 @pytest.mark.asyncio
 async def test_topk_normalized_up_to_max_results(populated_workspace):
     """When top_k < max_results, effective selection should still honor max_results.
@@ -65,6 +81,7 @@ async def test_topk_normalized_up_to_max_results(populated_workspace):
     assert result["result_count"] <= max_results
 
 
+@requires_llm
 @pytest.mark.asyncio
 async def test_topk_clamped_to_upper_bound(populated_workspace):
     """When top_k is huge, the bridge should clamp it to the architectural ceiling.
@@ -92,6 +109,7 @@ async def test_topk_clamped_to_upper_bound(populated_workspace):
     assert result["result_count"] <= max_results
 
 
+@requires_llm
 @pytest.mark.asyncio
 async def test_max_tokens_hard_clamp(populated_workspace):
     """max_tokens values above 100k should be hard-clamped by the bridge.

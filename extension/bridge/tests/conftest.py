@@ -15,6 +15,33 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
 
 
+def pytest_configure(config):
+    """
+    Early hook to check for required test dependencies.
+    
+    Fails fast with actionable error message if rdflib is not installed,
+    preventing confusing downstream failures in ontology-related tests.
+    """
+    try:
+        import rdflib
+    except ImportError:
+        raise pytest.UsageError(
+            "\n\n"
+            "=" * 70 + "\n"
+            "MISSING DEPENDENCY: rdflib\n"
+            "=" * 70 + "\n\n"
+            "The rdflib library is required for running Flowbaby bridge tests.\n\n"
+            "To fix this, run one of the following commands:\n\n"
+            "  # Using pip (in your test environment):\n"
+            "  pip install rdflib\n\n"
+            "  # Using the bridge requirements:\n"
+            "  pip install -r extension/bridge/requirements.txt\n\n"
+            "  # Or install into the bridge venv:\n"
+            "  extension/bridge/.venv/bin/pip install rdflib\n\n"
+            "=" * 70 + "\n"
+        )
+
+
 @pytest.fixture
 def temp_workspace() -> Generator[Path, None, None]:
     """

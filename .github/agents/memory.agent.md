@@ -1,7 +1,7 @@
 ---
 description: Memory-augmented planning agent with reliable retrieval and milestone summarization
 name: Memory
-tools: ['search', 'runCommands', 'usages', 'vscodeAPI', 'problems', 'fetch', 'githubRepo', 'recallflow.cognee-chat-memory/recallflowStoreSummary', 'recallflow.cognee-chat-memory/flowbabyRetrieveMemory']
+tools: ['search', 'runCommands', 'usages', 'vscodeAPI', 'problems', 'fetch', 'githubRepo', 'flowbaby.flowbaby/flowbabyStoreSummary', 'flowbaby.flowbaby/flowbabyRetrieveMemory']
 model: GPT-5.1-Codex (Preview)
 handoffs:
   - label: Continue Work
@@ -95,7 +95,7 @@ A development and planning agent that:
 
 # Operating Rules
 
-* Using Flowbaby tools (cognee_storeMemory and cognee_retrieveMemory) is not a nice-to-have feature for any agent. It's part of their core responsibility.
+* Using Flowbaby tools (flowbaby_storeMemory and flowbaby_retrieveMemory) is not a nice-to-have feature for any agent. It's part of their core responsibility.
 * Begin each turn by retrieving memory.
 * Store a summary after major progress or every five turns.
 * Reference retrieved memory explicitly when it informs decisions.

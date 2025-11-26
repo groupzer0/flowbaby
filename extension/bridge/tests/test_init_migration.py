@@ -150,7 +150,7 @@ class TestMigrationMarkerLocation:
         
         # Create workspace marker - should prevent prune
         system_dir = workspace / '.flowbaby/system'
-        system_dir.mkdir()
+        system_dir.mkdir(parents=True)
         marker = system_dir / '.migration_v1_complete'
         marker.write_text(json.dumps({'version': 'v1', 'migrated_at': '2025-01-01'}))
         
@@ -271,7 +271,7 @@ class TestMigrationMarkerLocation:
         
         # Create marker to skip prune logic
         system_dir = workspace / '.flowbaby/system'
-        system_dir.mkdir()
+        system_dir.mkdir(parents=True)
         marker = system_dir / '.migration_v1_complete'
         marker.write_text(json.dumps({'version': 'v1'}))
         
@@ -315,7 +315,7 @@ class TestMarkerNotCheckedInVenv:
         
         # Create marker
         system_dir = workspace / '.flowbaby/system'
-        system_dir.mkdir()
+        system_dir.mkdir(parents=True)
         marker = system_dir / '.migration_v1_complete'
         marker.write_text(json.dumps({'version': 'v1'}))
         
@@ -350,7 +350,7 @@ class TestMarkerPrecedence:
         
         # Create workspace marker
         system_dir = workspace / '.flowbaby/system'
-        system_dir.mkdir()
+        system_dir.mkdir(parents=True)
         marker = system_dir / '.migration_v1_complete'
         marker.write_text(json.dumps({
             'version': 'v1',

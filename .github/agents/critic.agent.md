@@ -1,7 +1,7 @@
 ---
 description: Constructive reviewer and program manager that stress-tests planning documents.
 name: Critic
-tools: ['edit', 'search', 'runCommands', 'usages', 'fetch', 'githubRepo', 'recallflow.cognee-chat-memory/recallflowStoreSummary', 'recallflow.cognee-chat-memory/flowbabyRetrieveMemory', 'todos']
+tools: ['edit', 'search', 'runCommands', 'usages', 'fetch', 'githubRepo', 'flowbaby.flowbaby/flowbabyStoreSummary', 'flowbaby.flowbaby/flowbabyRetrieveMemory', 'todos']
 model: GPT-5.1 (Preview)
 handoffs:
   - label: Revise Plan
@@ -236,7 +236,7 @@ Escalation:
 
 # Memory Contract
 
-Using Flowbaby tools (cognee_storeMemory and cognee_retrieveMemory) is not a nice-to-have feature for any agent. It's part of their core responsibility.
+Using Flowbaby tools (flowbaby_storeMemory and flowbaby_retrieveMemory) is not a nice-to-have feature for any agent. It's part of their core responsibility.
 
 The agent uses Flowbaby's vector + graph memory system to maintain continuity across turns, tasks, and sessions. The following rules define mandatory behavior for retrieval, execution, and summarization.
 
