@@ -2,7 +2,7 @@
 description: Dedicated QA specialist verifying test coverage and execution before implementation approval.
 name: QA
 tools: ['edit/createFile', 'edit/editNotebook', 'edit/newJupyterNotebook', 'edit/editFiles', 'search', 'runCommands', 'problems', 'changes', 'testFailure', 'flowbaby.flowbaby/flowbabyStoreSummary', 'flowbaby.flowbaby/flowbabyRetrieveMemory', 'todos', 'runTests']
-model: Gemini 3 Pro (Preview)
+model: GPT-5.1 (Preview)
 handoffs:
   - label: Request Testing Infrastructure
     agent: Planner
