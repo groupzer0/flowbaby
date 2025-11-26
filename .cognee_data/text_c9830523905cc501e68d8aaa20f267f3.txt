@@ -1,5 +1,0 @@
-User asked: Manual note: The "Conversation ingested" log confirms Cognee wrote to the workspace dataset. The subsequent failure came from our bridge code calling cognee.setup(), which does not exist in Cognee 0.3.4. That call threw before any search could run, so it never even touched the database that ingestion had already created. The database path printed in the log still points to site‑packages because Cognee logs its defaults at import time, before our workspace-specific configuration executes; actual read/writes still go to .cognee_system once configured.
-
-Assistant answered: Captured via Ctrl+Alt+C (Cmd+Alt+C on Mac) shortcut
-
-Metadata: timestamp=2025-11-15T19:13:05.248630, importance=0.0

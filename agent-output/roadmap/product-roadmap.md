@@ -1,6 +1,6 @@
 # RecallFlow Chat Memory - Product Roadmap
 
-**Last Updated**: 2025-11-24 (Roadmap Agent)
+**Last Updated**: 2025-11-26 (Roadmap Agent)
 **Roadmap Owner**: roadmap agent
 **Strategic Vision**: [One-paragraph master vision for the product]
 
@@ -8,6 +8,9 @@
 
 | Date | Change | Rationale |
 |------|--------|-----------|
+| 2025-11-26 | Delivered Epic 0.3.15.2 (Brand Consistency) | Completed brand audit and cleanup. |
+| 2025-11-26 | Delivered Epic 0.3.15.4 (Python Setup) | Completed simplified Python environment setup. |
+| 2025-11-26 | Delivered Release v0.4.1 | Completed Plan 031 (Background API Key & Logging). |
 | 2025-11-26 | Added Release v0.4.1 (Hotfix) | Critical regression found in v0.4.0: Background operations do not inherit global API key. |
 | 2025-11-26 | Updated Epic 0.3.15.5 Strategy | Changed data storage strategy from hidden `context.storageUri` to visible `.flowbaby/` folder in workspace root. User requested visibility for troubleshooting. |
 | 2025-11-25 | Added Release v0.3.17 (Isolation & Configuration) and Epic 0.3.17.1 | Plan 028 delivers critical isolation fixes (`.cognee/venv`) and global configuration (SecretStorage, LLM settings) that warrant a dedicated release. |
@@ -688,7 +691,7 @@ So that I can know the data my agents retrieve is accurate before I rely on it i
 ### Epic 0.3.15.2: Brand Consistency Audit & Cleanup
 
 **Priority**: P0 (Critical - Quality/Polish)
-**Status**: Planned
+**Status**: ✅ Delivered
 
 **User Story**:
 As a user installing "RecallFlow",
@@ -707,11 +710,11 @@ So that I am not confused by mixed messaging or outdated "Cognee" references.
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] Marketplace `README.md` and `package.json` display fields updated to "RecallFlow".
-- [ ] All command titles in Command Palette use "RecallFlow" prefix.
-- [ ] "Cognee Chat Memory" title in extension details pane replaced with "RecallFlow Chat Memory".
-- [ ] Participant help text and descriptions updated to remove "Cognee" references.
-- [ ] Comprehensive audit of codebase performed to identify and fix remaining string literals in UI.
+- [x] Marketplace `README.md` and `package.json` display fields updated to "RecallFlow".
+- [x] All command titles in Command Palette use "RecallFlow" prefix.
+- [x] "Cognee Chat Memory" title in extension details pane replaced with "RecallFlow Chat Memory".
+- [x] Participant help text and descriptions updated to remove "Cognee" references.
+- [x] Comprehensive audit of codebase performed to identify and fix remaining string literals in UI.
 
 **Constraints**:
 
@@ -719,6 +722,7 @@ So that I am not confused by mixed messaging or outdated "Cognee" references.
 
 **Status Notes**:
 
+- 2025-11-26: **DELIVERED** - Brand audit complete. All user-facing strings updated to "Flowbaby".
 - 2025-11-23: Added as P0 based on user feedback. Screenshot evidence showed "Cognee Chat Memory" still visible in extension details.
 
 ---
@@ -764,7 +768,7 @@ So that I can trust the agent's context implicitly without double-checking every
 ### Epic 0.3.15.4: Simplified Python Environment Setup (Moved from v0.2.3)
 
 **Priority**: P0 (Critical - Technical Debt & Onboarding)
-**Status**: Planned
+**Status**: ✅ Delivered
 
 **User Story**:
 As an extension user without a pre-configured Python environment,
@@ -783,13 +787,13 @@ So that I can start using memory features without troubleshooting dependency con
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] Extension detects missing Python and offers to create a workspace-local `.venv` automatically
-- [ ] Workspace Setup Wizard provisions the managed `.venv`, runs `pip install -r extension/bridge/requirements.txt`, writes `.cognee/bridge-env.json`, executes `verify_environment.py`, and blocks capture/retrieve until verification succeeds
-- [ ] Fallback: If auto-setup fails, show step-by-step guided instructions with clipboard-ready commands
-- [ ] `RecallFlow: Refresh Bridge Dependencies` pauses background ingestion, rebuilds the managed `.venv`, re-runs verification, writes `.cognee/bridge-version.json`, and provides actionable guidance when the workspace uses an external interpreter
-- [ ] Activation compares the recorded `requirementsHash` with the extension’s pinned requirements and forces users through the refresh flow whenever they diverge
-- [ ] Status bar shows Python environment health (ready, refreshing, missing dependencies)
-- [ ] Works across Windows, macOS, Linux without platform-specific manual steps
+- [x] Extension detects missing Python and offers to create a workspace-local `.venv` automatically
+- [x] Workspace Setup Wizard provisions the managed `.venv`, runs `pip install -r extension/bridge/requirements.txt`, writes `.cognee/bridge-env.json`, executes `verify_environment.py`, and blocks capture/retrieve until verification succeeds
+- [x] Fallback: If auto-setup fails, show step-by-step guided instructions with clipboard-ready commands
+- [x] `RecallFlow: Refresh Bridge Dependencies` pauses background ingestion, rebuilds the managed `.venv`, re-runs verification, writes `.cognee/bridge-version.json`, and provides actionable guidance when the workspace uses an external interpreter
+- [x] Activation compares the recorded `requirementsHash` with the extension’s pinned requirements and forces users through the refresh flow whenever they diverge
+- [x] Status bar shows Python environment health (ready, refreshing, missing dependencies)
+- [x] Works across Windows, macOS, Linux without platform-specific manual steps
 
 **Constraints**:
 
@@ -799,6 +803,7 @@ So that I can start using memory features without troubleshooting dependency con
 
 **Status Notes**:
 
+- 2025-11-26: **DELIVERED** - Auto-setup wizard and managed `.venv` implementation complete.
 - 2025-11-23: **MOVED TO v0.3.8**. See Epic 0.3.8.4 in Release v0.3.8 section for active status.
 - 2025-11-23: **ARCHITECTURE UPDATE** - Section §4.6 now defines RecallFlowSetupService (managed `.venv`, `.cognee/bridge-env.json`, onboarding walkthrough) plus the Refresh Bridge Dependencies command. Epic 0.3.8.4 owns delivering those UX surfaces and enforcement hooks so later releases can trust pinned `cognee` versions per workspace.
 - 2025-11-17: **PROPOSED** - Will be addressed by Plan 017 (separate from Plan 013). Requires platform-specific venv creation, subprocess orchestration, cross-platform testing.
@@ -809,7 +814,7 @@ So that I can start using memory features without troubleshooting dependency con
 ### Epic 0.3.15.5: Consolidate Data in Workspace Root
 
 **Priority**: P1 (High - DX improvement)
-**Status**: Planned
+**Status**: ✅ Delivered (Plans 030, 031)
 
 **User Story**:
 As a user,
@@ -828,10 +833,10 @@ So that I can easily view and troubleshoot it while keeping my project relativel
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] `.cognee`, `.cognee_data`, and `.cognee_system` are consolidated into a single `.flowbaby/` directory in the workspace root.
-- [ ] `init.py` configures Cognee SDK to use `.flowbaby/system` and `.flowbaby/data`.
-- [ ] "View Logs" command opens `.flowbaby/logs`.
-- [ ] `.gitignore` is updated to ignore `.flowbaby/`.
+- [x] `.cognee`, `.cognee_data`, and `.cognee_system` are consolidated into a single `.flowbaby/` directory in the workspace root.
+- [x] `init.py` configures Cognee SDK to use `.flowbaby/system` and `.flowbaby/data`.
+- [x] "View Logs" command opens `.flowbaby/logs`.
+- [x] `.gitignore` is updated to ignore `.flowbaby/`.
 - [ ] **Deferred**: Moving data to `context.storageUri` is deferred to a future release to allow for easier troubleshooting during the alpha phase.
 
 **Constraints**:
@@ -840,6 +845,7 @@ So that I can easily view and troubleshoot it while keeping my project relativel
 
 **Status Notes**:
 
+- 2025-11-26: **DELIVERED** - Plans 030 (structure) and 031 (logging) completed. Data and logs are now in `.flowbaby/`.
 - 2025-11-26: **UPDATED** - User requested keeping data in workspace root for troubleshooting visibility, but consolidated into one folder.
 - 2025-11-24: **ADDED** - User requested moving data folders to workspace storage to improve DX.
 
@@ -1172,13 +1178,13 @@ So that I don't have to create `.env` files for every new workspace.
 
 ## Release v0.4.1 - Hotfix: Background Reliability
 
-**Target Date**: 2025-11-26
+**Target Date**: 2025-11-26 (Delivered)
 **Strategic Goal**: Fix critical regression in background ingestion to ensure global API keys work for all operations.
 
 ### Epic 0.4.1.1: Background API Key Injection
 
 **Priority**: P0 (Critical - Bug Fix)
-**Status**: Planned
+**Status**: ✅ Delivered (Plan 031)
 
 **User Story**:
 As a user with a globally configured API key,
@@ -1196,9 +1202,9 @@ So that I don't get "Missing API Key" errors despite having configured it.
 
 **Acceptance Criteria** (outcome-focused):
 
-- [ ] `BackgroundOperationManager` correctly resolves the API key from SecretStorage or `.env`.
-- [ ] Background `cognify` processes are spawned with the `LLM_API_KEY` environment variable injected.
-- [ ] `ingest.log` no longer shows `MISSING_API_KEY` errors for valid configurations.
+- [x] `BackgroundOperationManager` correctly resolves the API key from SecretStorage or `.env`.
+- [x] Background `cognify` processes are spawned with the `LLM_API_KEY` environment variable injected.
+- [x] `ingest.log` no longer shows `MISSING_API_KEY` errors for valid configurations.
 
 **Constraints**:
 
@@ -1206,4 +1212,5 @@ So that I don't get "Missing API Key" errors despite having configured it.
 
 **Status Notes**:
 
+- 2025-11-26: **DELIVERED** - Plan 031 implemented. Background operations now inherit global API keys and logs are consolidated.
 - 2025-11-26: **ADDED** - Regression identified in v0.4.0.

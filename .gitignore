@@ -11,6 +11,7 @@ ENV/
 
 # Flowbaby/Cognee data (workspace-local)
 .flowbaby/
+.cognee_data/
 .cognee-old/
 .cognee_data-old/
 .cognee_system-old/

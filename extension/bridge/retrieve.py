@@ -279,13 +279,14 @@ async def retrieve_context(
             logger.error("Missing API key", extra={'data': error_payload})
             return error_payload
         
-        # Plan 032 M2: Set Cognee environment variables BEFORE SDK import
-        # This ensures the SDK uses workspace-local paths from the start
+        # Plan 032 M2 (hotfix): Set Cognee environment variables BEFORE SDK import
+        # CRITICAL: Use DATA_ROOT_DIRECTORY and SYSTEM_ROOT_DIRECTORY (no COGNEE_ prefix!)
+        # The Cognee SDK's BaseConfig uses pydantic-settings which reads these env vars
         system_root = str(workspace_dir / '.flowbaby/system')
         data_root = str(workspace_dir / '.flowbaby/data')
         
-        os.environ['COGNEE_SYSTEM_ROOT_DIRECTORY'] = system_root
-        os.environ['COGNEE_DATA_ROOT_DIRECTORY'] = data_root
+        os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
+        os.environ['DATA_ROOT_DIRECTORY'] = data_root
         
         # Ensure directories exist
         Path(system_root).mkdir(parents=True, exist_ok=True)

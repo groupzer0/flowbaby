@@ -1,5 +1,0 @@
-User asked: What is the direct command line i could use to ingest or retrieve information from cognee-memory?
-
-Assistant answered: Ingest: python extension/bridge/ingest.py <workspace_path> <user_message> <assistant_message> [importance]. Example: python extension/bridge/ingest.py /home/luke/Documents/Github-projects/cognee 'How do I use Cognee?' 'You can use Cognee by calling cognify()...' 5. Retrieve: python extension/bridge/retrieve.py <workspace_path> <query> [max_results] [max_tokens] [recency_weight] [importance_weight]. Example: python extension/bridge/retrieve.py /home/luke/Documents/Github-projects/cognee 'Cognee usage' 5 2000 0.3 0.2. Both require .env with COGNEE_API_KEY.
-
-Metadata: timestamp=2025-11-15T20:11:02.318942, importance=1.0

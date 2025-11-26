@@ -34,9 +34,13 @@ def setup_environment(workspace_path: str):
     """
     Shared environment setup for all ingestion modes.
     
-    Plan 032 M2: Sets COGNEE_SYSTEM_ROOT_DIRECTORY and COGNEE_DATA_ROOT_DIRECTORY
+    Plan 032 M2 (hotfix): Sets SYSTEM_ROOT_DIRECTORY and DATA_ROOT_DIRECTORY
     environment variables BEFORE any import of cognee SDK, to ensure the SDK
     uses workspace-local paths instead of defaulting to ~/.cognee_data.
+    
+    CRITICAL: The Cognee SDK uses pydantic-settings which reads environment
+    variables matching the field names (DATA_ROOT_DIRECTORY, SYSTEM_ROOT_DIRECTORY)
+    NOT prefixed with COGNEE_. The original Plan 032 incorrectly used COGNEE_ prefix.
     
     Returns:
         tuple: (dataset_name, api_key, cognee_config_dict) or raises exception
@@ -54,13 +58,14 @@ def setup_environment(workspace_path: str):
     if not api_key:
         raise ValueError('LLM_API_KEY not found in environment or .env file')
     
-    # Plan 032 M2: Set Cognee environment variables BEFORE SDK import
-    # This ensures the SDK uses workspace-local paths from the start
+    # Plan 032 M2 (hotfix): Set Cognee environment variables BEFORE SDK import
+    # CRITICAL: Use DATA_ROOT_DIRECTORY and SYSTEM_ROOT_DIRECTORY (no COGNEE_ prefix!)
+    # The Cognee SDK's BaseConfig uses pydantic-settings which reads these env vars
     system_root = str(workspace_dir / '.flowbaby/system')
     data_root = str(workspace_dir / '.flowbaby/data')
     
-    os.environ['COGNEE_SYSTEM_ROOT_DIRECTORY'] = system_root
-    os.environ['COGNEE_DATA_ROOT_DIRECTORY'] = data_root
+    os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
+    os.environ['DATA_ROOT_DIRECTORY'] = data_root
     
     # Also ensure the directories exist
     Path(system_root).mkdir(parents=True, exist_ok=True)

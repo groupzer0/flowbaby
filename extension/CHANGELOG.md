@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.4.3] - 2025-11-27
+
+### Fixed - Hotfix: Cognee SDK Environment Variable Names
+
+**Critical Hotfix** - Fixes storage directory misconfiguration causing `FileNotFoundError: Storage directory does not exist: '.cognee_data'`.
+
+#### Root Cause
+v0.4.2 used incorrect environment variable names (`COGNEE_SYSTEM_ROOT_DIRECTORY`, `COGNEE_DATA_ROOT_DIRECTORY`). The Cognee SDK's `BaseConfig` uses pydantic-settings which reads environment variables matching the exact field names—no `COGNEE_` prefix.
+
+#### Fix Applied
+- Changed `COGNEE_SYSTEM_ROOT_DIRECTORY` → `SYSTEM_ROOT_DIRECTORY` in `ingest.py` and `retrieve.py`
+- Changed `COGNEE_DATA_ROOT_DIRECTORY` → `DATA_ROOT_DIRECTORY` in `ingest.py` and `retrieve.py`
+
+#### Impact
+- Background cognify operations now correctly use workspace-local `.flowbaby/` paths
+- New data files appear in `.flowbaby/data/` instead of `~/.cognee_data`
+
 ## [0.4.2] - 2025-11-27
 
 ### Fixed - Plan 032: Activation and Background Processing Bugs

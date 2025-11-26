@@ -1,8 +1,12 @@
 """
 Tests for setup_environment() function in ingest.py
 
-Plan 032 M2: Verifies that environment variables are set BEFORE cognee import
+Plan 032 M2 (hotfix): Verifies that environment variables are set BEFORE cognee import
 and that workspace-local directories are created.
+
+CRITICAL: The Cognee SDK uses pydantic-settings which reads environment variables
+matching the field names (DATA_ROOT_DIRECTORY, SYSTEM_ROOT_DIRECTORY) NOT prefixed
+with COGNEE_. The original Plan 032 incorrectly used COGNEE_ prefix.
 """
 
 import os
@@ -33,36 +37,36 @@ class TestSetupEnvironment:
         workspace.mkdir()
         return workspace
 
-    def test_sets_cognee_system_root_directory_env_var(self, temp_workspace):
-        """Verify COGNEE_SYSTEM_ROOT_DIRECTORY is set to workspace-local path"""
+    def test_sets_system_root_directory_env_var(self, temp_workspace):
+        """Verify SYSTEM_ROOT_DIRECTORY is set to workspace-local path"""
         # Import here to avoid module-level side effects
         from ingest import setup_environment
         
         # Clear any existing env vars
-        os.environ.pop('COGNEE_SYSTEM_ROOT_DIRECTORY', None)
-        os.environ.pop('COGNEE_DATA_ROOT_DIRECTORY', None)
+        os.environ.pop('SYSTEM_ROOT_DIRECTORY', None)
+        os.environ.pop('DATA_ROOT_DIRECTORY', None)
         
         dataset_name, api_key, config = setup_environment(str(temp_workspace))
         
         # Verify env var is set
-        assert 'COGNEE_SYSTEM_ROOT_DIRECTORY' in os.environ
+        assert 'SYSTEM_ROOT_DIRECTORY' in os.environ
         expected_path = str(temp_workspace / '.flowbaby/system')
-        assert os.environ['COGNEE_SYSTEM_ROOT_DIRECTORY'] == expected_path
+        assert os.environ['SYSTEM_ROOT_DIRECTORY'] == expected_path
 
-    def test_sets_cognee_data_root_directory_env_var(self, temp_workspace):
-        """Verify COGNEE_DATA_ROOT_DIRECTORY is set to workspace-local path"""
+    def test_sets_data_root_directory_env_var(self, temp_workspace):
+        """Verify DATA_ROOT_DIRECTORY is set to workspace-local path"""
         from ingest import setup_environment
         
         # Clear any existing env vars
-        os.environ.pop('COGNEE_SYSTEM_ROOT_DIRECTORY', None)
-        os.environ.pop('COGNEE_DATA_ROOT_DIRECTORY', None)
+        os.environ.pop('SYSTEM_ROOT_DIRECTORY', None)
+        os.environ.pop('DATA_ROOT_DIRECTORY', None)
         
         dataset_name, api_key, config = setup_environment(str(temp_workspace))
         
         # Verify env var is set
-        assert 'COGNEE_DATA_ROOT_DIRECTORY' in os.environ
+        assert 'DATA_ROOT_DIRECTORY' in os.environ
         expected_path = str(temp_workspace / '.flowbaby/data')
-        assert os.environ['COGNEE_DATA_ROOT_DIRECTORY'] == expected_path
+        assert os.environ['DATA_ROOT_DIRECTORY'] == expected_path
 
     def test_creates_system_directory(self, temp_workspace):
         """Verify .flowbaby/system directory is created"""
@@ -140,21 +144,21 @@ class TestSetupEnvironment:
         from ingest import setup_environment
         
         # Clear env vars
-        os.environ.pop('COGNEE_SYSTEM_ROOT_DIRECTORY', None)
-        os.environ.pop('COGNEE_DATA_ROOT_DIRECTORY', None)
+        os.environ.pop('SYSTEM_ROOT_DIRECTORY', None)
+        os.environ.pop('DATA_ROOT_DIRECTORY', None)
         
         # First call
         setup_environment(str(temp_workspace))
         
-        first_system = os.environ.get('COGNEE_SYSTEM_ROOT_DIRECTORY')
-        first_data = os.environ.get('COGNEE_DATA_ROOT_DIRECTORY')
+        first_system = os.environ.get('SYSTEM_ROOT_DIRECTORY')
+        first_data = os.environ.get('DATA_ROOT_DIRECTORY')
         
         # Second call (directories already exist)
         setup_environment(str(temp_workspace))
         
         # Should be the same
-        assert os.environ.get('COGNEE_SYSTEM_ROOT_DIRECTORY') == first_system
-        assert os.environ.get('COGNEE_DATA_ROOT_DIRECTORY') == first_data
+        assert os.environ.get('SYSTEM_ROOT_DIRECTORY') == first_system
+        assert os.environ.get('DATA_ROOT_DIRECTORY') == first_data
 
 
 class TestRetrieveEnvironmentSetup:
@@ -174,7 +178,7 @@ class TestRetrieveEnvironmentSetup:
 
     def test_retrieve_sets_env_vars_before_import(self, temp_workspace):
         """
-        Verify retrieve.py sets COGNEE_* env vars.
+        Verify retrieve.py sets SYSTEM_ROOT_DIRECTORY and DATA_ROOT_DIRECTORY env vars.
         
         Note: We can't easily test the "before import" aspect without
         mocking the entire cognee import, but we verify the env vars
@@ -186,8 +190,8 @@ class TestRetrieveEnvironmentSetup:
         # the retrieve module is imported and used
         
         # Clear env vars
-        os.environ.pop('COGNEE_SYSTEM_ROOT_DIRECTORY', None)
-        os.environ.pop('COGNEE_DATA_ROOT_DIRECTORY', None)
+        os.environ.pop('SYSTEM_ROOT_DIRECTORY', None)
+        os.environ.pop('DATA_ROOT_DIRECTORY', None)
         
         # The retrieve module sets env vars in retrieve_context()
         # We can verify the pattern is correct by checking the code structure
