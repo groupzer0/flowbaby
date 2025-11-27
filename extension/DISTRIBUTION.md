@@ -83,7 +83,7 @@ code --disable-extensions
 
 ### 4. Create GitHub Release
 
-1. Navigate to: <https://github.com/lsalsich/cognee/releases>
+1. Navigate to: <https://github.com/lsalsich/flowbaby/releases>
 2. Click **"Draft a new release"**
 3. **Tag**: `v0.2.0` (must match git tag)
 4. **Title**: "Flowbaby Chat Memory v0.3.9"

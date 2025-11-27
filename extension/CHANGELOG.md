@@ -757,4 +757,4 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - First conversation in new workspace has no context (memory starts empty)
 - macOS and Linux tested; Windows support may require additional configuration
 
-[0.1.0]: https://github.com/lsalsich/cognee/releases/tag/v0.1.0
+[0.1.0]: https://github.com/lsalsich/flowbaby/releases/tag/v0.1.0

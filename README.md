@@ -15,7 +15,7 @@ A VS Code extension that automatically captures GitHub Copilot chat conversation
 
 **Location**: [`extension/`](extension/)  
 **See**: [Extension README](extension/README.md) for installation and configuration  
-**Status**: v0.3.9 Released - [Download VSIX](https://github.com/lsalsich/cognee/releases)  
+**Status**: v0.3.9 Released - [Download VSIX](https://github.com/lsalsich/flowbaby/releases)  
 **Features**: Automatic memory capture, context retrieval, workspace isolation, hybrid search, custom ontology
 
 ## Prerequisites
@@ -40,7 +40,7 @@ python examples/cognee_walkthrough.py
 
 ### Option 2: Install Extension
 
-1. Download latest `.vsix` from [GitHub Releases](https://github.com/lsalsich/cognee/releases)
+1. Download latest `.vsix` from [GitHub Releases](https://github.com/lsalsich/flowbaby/releases)
 2. Install: `code --install-extension cognee-chat-memory-X.Y.Z.vsix`
 3. Configure API key in VS Code Settings
 4. See [Extension README](extension/README.md) for full setup guide

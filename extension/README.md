@@ -28,7 +28,7 @@ Before installing the extension, ensure you have:
 
 ### Method 1: Install from VSIX (Recommended)
 
-1. Download the latest `.vsix` file from [GitHub Releases](https://github.com/lsalsich/cognee/releases)
+1. Download the latest `.vsix` file from [GitHub Releases](https://github.com/lsalsich/flowbaby/releases)
 2. Open VS Code
 3. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS)
 4. Type **"Install from VSIX"** and select the command
@@ -808,8 +808,8 @@ This extension is licensed under the MIT License. See [LICENSE](LICENSE) for det
 
 ## Support
 
-- **Report Bugs**: [GitHub Issues](https://github.com/lsalsich/cognee/issues)
-- **Feature Requests**: [GitHub Discussions](https://github.com/lsalsich/cognee/discussions)
+- **Report Bugs**: [GitHub Issues](https://github.com/lsalsich/flowbaby/issues)
+- **Feature Requests**: [GitHub Discussions](https://github.com/lsalsich/flowbaby/discussions)
 - **Documentation**: [Cognee Docs](https://docs.cognee.ai)
 
 ## Changelog

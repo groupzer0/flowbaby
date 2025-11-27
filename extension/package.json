@@ -405,12 +405,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lsalsich/cognee.git"
+    "url": "https://github.com/lsalsich/flowbaby.git"
   },
   "bugs": {
-    "url": "https://github.com/lsalsich/cognee/issues"
+    "url": "https://github.com/lsalsich/flowbaby/issues"
   },
-  "homepage": "https://github.com/lsalsich/cognee/tree/main/extension",
+  "homepage": "https://github.com/lsalsich/flowbaby/tree/main/extension",
   "dependencies": {
     "dotenv": "^17.2.3"
   }

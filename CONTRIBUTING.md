@@ -1,4 +1,4 @@
-# Contributing to Cognee Chat Memory Extension
+# Contributing to Flowbaby
 
 Thank you for contributing to the Cognee Chat Memory extension! This guide covers development setup, coding standards, and the pull request process.
 
@@ -29,8 +29,8 @@ Thank you for contributing to the Cognee Chat Memory extension! This guide cover
 1. **Clone the repository**:
 
    ```bash
-   git clone https://github.com/lsalsich/cognee.git
-   cd cognee/extension
+   git clone https://github.com/lsalsich/flowbaby.git
+   cd flowbaby/extension
    ```
 
 2. **Install Node.js dependencies**:
@@ -283,7 +283,7 @@ See [Commit Message Format](#commit-message-format) for guidelines.
 git push origin feat/descriptive-feature-name
 ```
 
-Open pull request on GitHub: <https://github.com/lsalsich/cognee/pulls>
+Open pull request on GitHub: <https://github.com/lsalsich/flowbaby/pulls>
 
 **PR Template**:
 
