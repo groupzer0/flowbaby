@@ -19,6 +19,7 @@ let storeMemoryToolDisposable: vscode.Disposable | undefined;
 let retrieveMemoryToolDisposable: vscode.Disposable | undefined; // Plan 016 Milestone 5
 // Plan 032: Flag to track initialization state for graceful degradation
 let clientInitialized: boolean = false;
+let clientInitializationFailed: boolean = false;
 
 // Module-level storage for pending summary confirmations (Plan 014 Milestone 2)
 interface PendingSummary {
@@ -155,7 +156,16 @@ export async function activate(_context: vscode.ExtensionContext) {
         registerFlowbabyParticipant(_context);
         console.log('@flowbaby chat participant registered (pending initialization)');
 
-        const initialized = await flowbabyClient.initialize();
+        // Add timeout to initialization to prevent extension activation hang (Issue 1)
+        const initPromise = flowbabyClient.initialize();
+        const timeoutPromise = new Promise<boolean>((resolve) => {
+            setTimeout(() => {
+                console.warn('Flowbaby initialization timed out after 15s');
+                resolve(false);
+            }, 15000);
+        });
+
+        const initialized = await Promise.race([initPromise, timeoutPromise]);
 
         if (initialized) {
             const initDuration = Date.now() - activationStart;
@@ -165,6 +175,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             
             // Plan 032 M1: Mark client as initialized for graceful degradation
             clientInitialized = true;
+            clientInitializationFailed = false;
             
             // Register commands for Milestone 1: Context Menu Capture
             registerCaptureCommands(_context, flowbabyClient);
@@ -204,6 +215,9 @@ export async function activate(_context: vscode.ExtensionContext) {
             console.warn('Flowbaby client initialization failed (see Output Channel)');
             debugLog('Client initialization failed', { duration_ms: initDuration });
             statusBar.setStatus(FlowbabyStatus.SetupRequired);
+            
+            clientInitialized = false;
+            clientInitializationFailed = true;
             
             // Check if it's an API key issue and provide helpful guidance
             // Use singleton output channel (Plan 028 M1)
@@ -514,7 +528,15 @@ function registerCaptureCommands(
         }
     );
     
-    context.subscriptions.push(captureCommand, toggleCommand, clearCommand);
+    // Open Documentation command
+    const openDocsCommand = vscode.commands.registerCommand(
+        'Flowbaby.openDocs',
+        async () => {
+            vscode.env.openExternal(vscode.Uri.parse('https://docs.flowbaby.ai'));
+        }
+    );
+    
+    context.subscriptions.push(captureCommand, toggleCommand, clearCommand, openDocsCommand);
 }
 
 /**
@@ -898,6 +920,12 @@ function registerFlowbabyParticipant(
             try {
                 // Plan 032 M1: Graceful degradation if client not yet initialized
                 if (!clientInitialized || !flowbabyClient || !flowbabyContextProvider) {
+                    if (clientInitializationFailed) {
+                        stream.markdown('❌ **Flowbaby initialization failed**\n\n');
+                        stream.markdown('Please check the Output channel for details and try reloading the window.\n\n');
+                        return { metadata: { error: 'initialization_failed' } };
+                    }
+
                     stream.markdown('⏳ **Flowbaby is still initializing...**\n\n');
                     stream.markdown('The memory system is starting up. Please wait a moment and try again.\n\n');
                     stream.markdown('💡 *This usually takes just a few seconds on first use.*');

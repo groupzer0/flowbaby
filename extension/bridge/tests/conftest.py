@@ -162,9 +162,13 @@ def mock_cognee_module(mock_cognee, temp_workspace):
     # Create mock get_relational_config function
     mock_get_relational_config = MagicMock(return_value=mock_relational_config)
     
+    # Create mock create_db_and_tables function (async)
+    mock_create_db_and_tables = AsyncMock(return_value=None)
+    
     # Create mock infrastructure.databases.relational module
     mock_relational_module = types.SimpleNamespace(
-        get_relational_config=mock_get_relational_config
+        get_relational_config=mock_get_relational_config,
+        create_db_and_tables=mock_create_db_and_tables
     )
     
     # Create mock infrastructure.databases module

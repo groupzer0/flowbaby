@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import tempfile
+import types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -28,6 +29,56 @@ from init import (
     workspace_has_data,
     get_data_integrity_status,
 )
+
+
+def create_cognee_module_mocks():
+    """
+    Create a dictionary of mock modules for cognee and its submodules.
+    
+    This ensures that `import cognee` and 
+    `from cognee.infrastructure.databases.relational import create_db_and_tables`
+    both work correctly in tests.
+    
+    Returns:
+        Tuple of (modules_dict, mock_cognee) for use with patch.dict
+    """
+    # Create mock cognee
+    mock_cognee = MagicMock()
+    mock_cognee.config = MagicMock()
+    mock_cognee.prune = MagicMock()
+    mock_cognee.prune.prune_system = AsyncMock()
+    
+    # Create mock create_db_and_tables
+    mock_create_db_and_tables = AsyncMock()
+    
+    # Create mock relational module
+    mock_relational = types.SimpleNamespace(
+        create_db_and_tables=mock_create_db_and_tables,
+        get_relational_config=MagicMock()
+    )
+    
+    # Create mock databases module
+    mock_databases = types.SimpleNamespace(
+        relational=mock_relational
+    )
+    
+    # Create mock infrastructure module
+    mock_infrastructure = types.SimpleNamespace(
+        databases=mock_databases
+    )
+    
+    # Assign infrastructure to cognee
+    mock_cognee.infrastructure = mock_infrastructure
+    
+    # Build the modules dict
+    modules = {
+        'cognee': mock_cognee,
+        'cognee.infrastructure': mock_infrastructure,
+        'cognee.infrastructure.databases': mock_databases,
+        'cognee.infrastructure.databases.relational': mock_relational,
+    }
+    
+    return modules, mock_cognee
 
 
 class TestWorkspaceHasData:
@@ -154,13 +205,10 @@ class TestMigrationMarkerLocation:
         marker = system_dir / '.migration_v1_complete'
         marker.write_text(json.dumps({'version': 'v1', 'migrated_at': '2025-01-01'}))
         
-        # Mock cognee module before it's imported inside initialize_cognee
-        mock_cognee = MagicMock()
-        mock_cognee.config = MagicMock()
-        mock_cognee.prune = MagicMock()
-        mock_cognee.prune.prune_system = AsyncMock()
+        # Create full cognee module mock hierarchy
+        modules, mock_cognee = create_cognee_module_mocks()
         
-        with patch.dict('sys.modules', {'cognee': mock_cognee}):
+        with patch.dict('sys.modules', modules):
             with patch('init.load_ontology') as mock_ontology:
                 mock_ontology.return_value = {'entities': [], 'relationships': []}
                 
@@ -194,13 +242,10 @@ class TestMigrationMarkerLocation:
         lancedb_dir.mkdir(parents=True)
         (lancedb_dir / 'important_data.lance').touch()
         
-        # Mock cognee module
-        mock_cognee = MagicMock()
-        mock_cognee.config = MagicMock()
-        mock_cognee.prune = MagicMock()
-        mock_cognee.prune.prune_system = AsyncMock()
+        # Create full cognee module mock hierarchy
+        modules, mock_cognee = create_cognee_module_mocks()
         
-        with patch.dict('sys.modules', {'cognee': mock_cognee}):
+        with patch.dict('sys.modules', modules):
             with patch('init.load_ontology') as mock_ontology:
                 mock_ontology.return_value = {'entities': [], 'relationships': []}
                 
@@ -222,8 +267,10 @@ class TestMigrationMarkerLocation:
     @pytest.mark.asyncio
     async def test_prune_executed_when_no_data_no_marker(self, tmp_path):
         """
-        Test that prune IS executed when there's no data and no marker.
-        This is the legitimate fresh workspace scenario.
+        Test that prune is SKIPPED for fresh workspaces (no data, no marker).
+        
+        Per Plan 034: Fresh workspaces only need create_db_and_tables(), not prune.
+        Prune is only needed for legacy data migration.
         """
         workspace = tmp_path / 'test_workspace'
         workspace.mkdir()
@@ -234,13 +281,10 @@ class TestMigrationMarkerLocation:
         
         # Don't create any data or marker - fresh workspace
         
-        # Mock cognee module
-        mock_cognee = MagicMock()
-        mock_cognee.config = MagicMock()
-        mock_cognee.prune = MagicMock()
-        mock_cognee.prune.prune_system = AsyncMock()
+        # Create full cognee module mock hierarchy
+        modules, mock_cognee = create_cognee_module_mocks()
         
-        with patch.dict('sys.modules', {'cognee': mock_cognee}):
+        with patch.dict('sys.modules', modules):
             with patch('init.load_ontology') as mock_ontology:
                 mock_ontology.return_value = {'entities': [], 'relationships': []}
                 
@@ -249,15 +293,18 @@ class TestMigrationMarkerLocation:
         # Verify success
         assert result['success'] is True
         
-        # Verify prune WAS called (fresh workspace)
-        mock_cognee.prune.prune_system.assert_called_once()
+        # Per Plan 034: Prune should NOT be called for fresh workspaces
+        # Fresh workspaces only need create_db_and_tables()
+        mock_cognee.prune.prune_system.assert_not_called()
         
         # Verify marker was created
         marker = workspace / '.flowbaby/system' / '.migration_v1_complete'
         assert marker.exists()
         
+        # Verify marker indicates it was a fresh workspace (prune skipped)
         marker_data = json.loads(marker.read_text())
-        assert marker_data.get('prune_skipped', True) is False
+        assert marker_data.get('prune_skipped') is True
+        assert marker_data.get('reason') == 'fresh_workspace'
 
     @pytest.mark.asyncio
     async def test_data_integrity_included_in_response(self, tmp_path):
@@ -275,11 +322,10 @@ class TestMigrationMarkerLocation:
         marker = system_dir / '.migration_v1_complete'
         marker.write_text(json.dumps({'version': 'v1'}))
         
-        # Mock cognee module
-        mock_cognee = MagicMock()
-        mock_cognee.config = MagicMock()
+        # Create full cognee module mock hierarchy
+        modules, mock_cognee = create_cognee_module_mocks()
         
-        with patch.dict('sys.modules', {'cognee': mock_cognee}):
+        with patch.dict('sys.modules', modules):
             with patch('init.load_ontology') as mock_ontology:
                 mock_ontology.return_value = {'entities': [], 'relationships': []}
                 
@@ -319,11 +365,10 @@ class TestMarkerNotCheckedInVenv:
         marker = system_dir / '.migration_v1_complete'
         marker.write_text(json.dumps({'version': 'v1'}))
         
-        # Mock cognee module
-        mock_cognee = MagicMock()
-        mock_cognee.config = MagicMock()
+        # Create full cognee module mock hierarchy
+        modules, mock_cognee = create_cognee_module_mocks()
         
-        with patch.dict('sys.modules', {'cognee': mock_cognee}):
+        with patch.dict('sys.modules', modules):
             with patch('init.load_ontology') as mock_ontology:
                 mock_ontology.return_value = {'entities': [], 'relationships': []}
                 
@@ -358,13 +403,10 @@ class TestMarkerPrecedence:
             'note': 'Existing workspace marker'
         }))
         
-        # Mock cognee module
-        mock_cognee = MagicMock()
-        mock_cognee.config = MagicMock()
-        mock_cognee.prune = MagicMock()
-        mock_cognee.prune.prune_system = AsyncMock()
+        # Create full cognee module mock hierarchy
+        modules, mock_cognee = create_cognee_module_mocks()
         
-        with patch.dict('sys.modules', {'cognee': mock_cognee}):
+        with patch.dict('sys.modules', modules):
             with patch('init.load_ontology') as mock_ontology:
                 mock_ontology.return_value = {'entities': [], 'relationships': []}
                 

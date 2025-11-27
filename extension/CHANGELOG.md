@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.4.5] - 2025-11-27
+
+### Fixed - Plan 034: Initialization Bugs and Background Notification Issues
+
+**Maintenance Release** - Resolves 3 critical bugs affecting new workspace initialization and background processing notifications.
+
+#### Database Initialization for Fresh Workspaces
+- **Bug**: Fresh workspaces threw `sqlite3.OperationalError: no such table: principals` during user registration
+- **Root Cause**: Database table creation was implicitly part of `prune_system()`. Fresh workspaces (where pruning is skipped) never called table creation
+- **Fix**: Explicitly call `create_db_and_tables()` from `cognee.infrastructure.databases.relational` in the fresh workspace initialization path
+
+#### Lance Namespace Import Error
+- **Bug**: `ModuleNotFoundError: No module named 'lance_namespace'` prevented vector engine loading
+- **Root Cause**: The `lance-namespace==0.2.0` package on PyPI is broken/incomplete - missing the `lance_namespace` top-level module
+- **Fix**: Pinned `lance-namespace==0.0.21` in `requirements.txt` (verified working version)
+
+#### Background Notification False Positives
+- **Bug**: "Flowbaby processing failed" notifications appeared despite successful ingestion in logs
+- **Root Cause**: `ingest.py` wrote status stubs to `.cognee/background_ops/` (legacy path) while `BackgroundOperationManager.ts` looked for stubs in `.flowbaby/background_ops/`
+- **Fix**: Updated `ingest.py` to write status stubs to `.flowbaby/background_ops/`
+
+### Technical Notes
+- All fixes maintain backward compatibility with existing workspaces
+- Legacy `.cognee/background_ops` stubs will be ignored (no functional impact)
+- No migration required from v0.4.4
+
 ## [0.4.4] - 2025-11-26
 
 ### Fixed - Plan 033: Complete Environment Variable Hotfix

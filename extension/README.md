@@ -808,9 +808,9 @@ This extension is licensed under the MIT License. See [LICENSE](LICENSE) for det
 
 ## Support
 
+- 📚 **Documentation**: [docs.flowbaby.ai](https://docs.flowbaby.ai)
 - **Report Bugs**: [GitHub Issues](https://github.com/lsalsich/flowbaby/issues)
 - **Feature Requests**: [GitHub Discussions](https://github.com/lsalsich/flowbaby/discussions)
-- **Documentation**: [Cognee Docs](https://docs.cognee.ai)
 
 ## Changelog
 

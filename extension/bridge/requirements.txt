@@ -10,6 +10,10 @@ python-dotenv>=1.0.0
 # Ontology parsing (TTL/RDF)
 rdflib>=7.0.0
 
+# Explicitly pin lancedb dependencies to prevent import errors
+lancedb>=0.24.0
+lance-namespace==0.0.21
+
 # Testing dependencies
 pytest>=7.4.0
 pytest-asyncio>=0.21.0

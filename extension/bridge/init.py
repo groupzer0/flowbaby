@@ -215,6 +215,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
         # NOW import cognee - it will read the env vars we just set
         logger.debug("Importing cognee SDK")
         import cognee
+        from cognee.infrastructure.databases.relational import create_db_and_tables
         
         # ============================================================================
         # Belt-and-suspenders: Also call cognee.config methods after import
@@ -309,9 +310,39 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 global_marker_path.write_text(json.dumps(marker_metadata, indent=2))
                 logger.info("Migration marker created (prune skipped due to existing data)")
                 migration_performed = False
+            
+            # Check for fresh workspace (empty databases directory)
+            # If the workspace is fresh, we don't need to prune anything
+            elif not (global_data_dir / 'databases').exists() or not any((global_data_dir / 'databases').iterdir()):
+                logger.info("Fresh workspace detected - skipping prune")
+                
+                # Ensure databases directory exists
+                (global_data_dir / 'databases').mkdir(parents=True, exist_ok=True)
+                
+                # Initialize relational database tables (SQLite)
+                # This is required for user registration and basic system function
+                logger.info("Initializing relational database tables...")
+                await create_db_and_tables()
+                logger.info("Relational database tables created")
+                
+                marker_metadata = {
+                    'migrated_at': datetime.now().isoformat(),
+                    'workspace_id': dataset_name,
+                    'workspace_path': workspace_path_str,
+                    'data_dir_size_before': 0,
+                    'data_dir_size_after': 0,
+                    'version': 'v1',
+                    'note': 'Marker created without prune - fresh workspace',
+                    'prune_skipped': True,
+                    'reason': 'fresh_workspace'
+                }
+                global_marker_path.write_text(json.dumps(marker_metadata, indent=2))
+                logger.info("Migration marker created (fresh workspace)")
+                migration_performed = False
+
             else:
-                # No existing data - safe to perform migration prune
-                logger.info("No existing data detected - proceeding with migration")
+                # No existing data detected but directory is not empty - proceed with migration prune
+                logger.info("Legacy data structure detected - proceeding with migration")
                 
                 # Attempt to atomically create marker (OS-level exclusivity)
                 try:

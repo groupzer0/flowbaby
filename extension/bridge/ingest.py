@@ -90,7 +90,7 @@ def write_status_stub(operation_id: str, workspace_dir: Path, success: bool,
     
     Uses atomic temp file + rename pattern to prevent corruption.
     """
-    stub_dir = workspace_dir / '.cognee' / 'background_ops'
+    stub_dir = workspace_dir / '.flowbaby' / 'background_ops'
     stub_dir.mkdir(parents=True, exist_ok=True)
     
     stub_data = {
