@@ -16,25 +16,34 @@ from unittest.mock import patch, MagicMock
 
 
 class TestSetupEnvironment:
-    """Tests for the setup_environment() function in ingest.py"""
+    """Tests for the setup_environment() function in ingest.py
+    
+    Plan 039 M5: .env file support has been removed for security (F2).
+    All tests must set LLM_API_KEY via environment variable, not .env file.
+    """
 
     @pytest.fixture
-    def temp_workspace(self, tmp_path):
-        """Create a temporary workspace with .env file"""
+    def temp_workspace(self, tmp_path, monkeypatch):
+        """Create a temporary workspace with LLM_API_KEY set via environment.
+        
+        Plan 039: API key is now provided via environment variable from TypeScript,
+        not read from .env files.
+        """
         workspace = tmp_path / "test_workspace"
         workspace.mkdir()
         
-        # Create .env file with API key
-        env_file = workspace / ".env"
-        env_file.write_text("LLM_API_KEY=test-api-key-12345\n")
+        # Plan 039 M5: Set API key via environment variable (not .env file)
+        monkeypatch.setenv('LLM_API_KEY', 'test-api-key-12345')
         
         return workspace
 
     @pytest.fixture
-    def temp_workspace_no_env(self, tmp_path):
-        """Create a temporary workspace without .env file"""
+    def temp_workspace_no_env(self, tmp_path, monkeypatch):
+        """Create a temporary workspace without API key in environment."""
         workspace = tmp_path / "test_workspace_no_env"
         workspace.mkdir()
+        # Ensure LLM_API_KEY is not set
+        monkeypatch.delenv('LLM_API_KEY', raising=False)
         return workspace
 
     def test_sets_system_root_directory_env_var(self, temp_workspace):
@@ -106,13 +115,15 @@ class TestSetupEnvironment:
         assert config['data_root'] == str(temp_workspace / '.flowbaby/data')
         assert config['workspace_dir'] == temp_workspace
 
-    def test_returns_api_key_from_env_file(self, temp_workspace):
-        """Verify API key is extracted from .env file"""
+    def test_returns_api_key_from_environment(self, temp_workspace):
+        """Verify API key is extracted from environment variable.
+        
+        Plan 039 M5: API key now comes from LLM_API_KEY environment variable,
+        injected by TypeScript client. .env file support removed for security.
+        """
         from ingest import setup_environment
         
-        # Clear any existing LLM_API_KEY env var to ensure we read from .env file
-        os.environ.pop('LLM_API_KEY', None)
-        
+        # temp_workspace fixture already sets LLM_API_KEY='test-api-key-12345'
         dataset_name, api_key, config = setup_environment(str(temp_workspace))
         
         assert api_key == 'test-api-key-12345'
@@ -128,16 +139,22 @@ class TestSetupEnvironment:
         assert dataset_name.startswith('ws_')
 
     def test_raises_when_no_api_key(self, temp_workspace_no_env):
-        """Verify ValueError is raised when no API key is available"""
+        """Verify ValueError is raised when no API key is available.
+        
+        Plan 039 M5: Error message now directs user to 'Flowbaby: Set API Key'
+        command rather than .env file.
+        """
         from ingest import setup_environment
         
-        # Clear any env var that might exist
-        os.environ.pop('LLM_API_KEY', None)
+        # temp_workspace_no_env fixture ensures LLM_API_KEY is not set
         
         with pytest.raises(ValueError) as exc_info:
             setup_environment(str(temp_workspace_no_env))
         
-        assert 'LLM_API_KEY' in str(exc_info.value)
+        error_message = str(exc_info.value)
+        assert 'LLM_API_KEY' in error_message
+        # Plan 039: Remediation now points to secure storage command
+        assert 'Flowbaby: Set API Key' in error_message
 
     def test_env_vars_set_before_directories_exist(self, temp_workspace):
         """Verify env vars are set even if directories don't exist yet (idempotent)"""
@@ -162,17 +179,24 @@ class TestSetupEnvironment:
 
 
 class TestRetrieveEnvironmentSetup:
-    """Tests for environment setup in retrieve.py"""
+    """Tests for environment setup in retrieve.py
+    
+    Plan 039 M5: .env file support has been removed for security (F2).
+    All tests must set LLM_API_KEY via environment variable.
+    """
 
     @pytest.fixture
-    def temp_workspace(self, tmp_path):
-        """Create a temporary workspace with .env file"""
+    def temp_workspace(self, tmp_path, monkeypatch):
+        """Create a temporary workspace with LLM_API_KEY set via environment.
+        
+        Plan 039: API key is now provided via environment variable from TypeScript,
+        not read from .env files.
+        """
         workspace = tmp_path / "test_workspace"
         workspace.mkdir()
         
-        # Create .env file with API key
-        env_file = workspace / ".env"
-        env_file.write_text("LLM_API_KEY=test-api-key-retrieve\n")
+        # Plan 039 M5: Set API key via environment variable (not .env file)
+        monkeypatch.setenv('LLM_API_KEY', 'test-api-key-retrieve')
         
         return workspace
 

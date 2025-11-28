@@ -160,6 +160,10 @@ Nov 18 10:00-11:30`;
         sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'ingest').resolves(true);
         ingestSummaryStub = sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'ingestSummary').resolves(true);
 
+        // Plan 039 M3: Stub health check to return VALID so tests can proceed with initialization
+        const FlowbabySetupMod = await import('../setup/FlowbabySetupService');
+        sandbox.stub(FlowbabySetupMod.FlowbabySetupService.prototype, 'checkWorkspaceHealth').resolves('VALID');
+
         await activate({ subscriptions: [], extensionPath: '/tmp/vscode-cognee-test-ext' } as any);
         assert.ok(handler, 'chat participant handler was not registered');
     });

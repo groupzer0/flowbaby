@@ -255,25 +255,20 @@ async def retrieve_context(
             'final_top_k': final_top_k
         }})
         
-        # Load workspace .env file
-        logger.debug("Loading .env file")
+        # Plan 039 M5: Workspace .env loading removed per Plan 037 F2 security finding
+        # API key is now resolved by TypeScript and passed via LLM_API_KEY environment variable
         workspace_dir = Path(workspace_path)
-        env_file = workspace_dir / '.env'
         
-        if env_file.exists():
-            from dotenv import load_dotenv
-            load_dotenv(env_file)
-        
-        # Check for API key
+        # Check for API key (provided by TypeScript via LLM_API_KEY environment variable)
         api_key = os.getenv('LLM_API_KEY')
         if not api_key:
             error_payload = {
                 'success': False,
                 'error_code': 'LLM_API_ERROR',
                 'error_type': 'MISSING_API_KEY',
-                'message': 'LLM_API_KEY not found in .env file',
-                'user_message': 'LLM_API_KEY not found. Please add it to your workspace .env file.',
-                'remediation': 'Create .env in workspace root with: LLM_API_KEY=your_key_here',
+                'message': 'LLM_API_KEY not found in environment',
+                'user_message': 'LLM_API_KEY not found. Use "Flowbaby: Set API Key" for secure storage.',
+                'remediation': 'Run "Flowbaby: Set API Key" from Command Palette to configure your API key securely.',
                 'error': 'LLM_API_KEY environment variable is required but not set'
             }
             logger.error("Missing API key", extra={'data': error_payload})

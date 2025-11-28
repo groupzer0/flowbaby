@@ -42,21 +42,18 @@ def setup_environment(workspace_path: str):
     variables matching the field names (DATA_ROOT_DIRECTORY, SYSTEM_ROOT_DIRECTORY)
     NOT prefixed with COGNEE_. The original Plan 032 incorrectly used COGNEE_ prefix.
     
+    Plan 039 M5: Workspace .env loading removed per Plan 037 F2 security finding.
+    API key is now resolved by TypeScript and passed via LLM_API_KEY environment variable.
+    
     Returns:
         tuple: (dataset_name, api_key, cognee_config_dict) or raises exception
     """
-    from dotenv import load_dotenv
-    
     workspace_dir = Path(workspace_path)
-    env_file = workspace_dir / '.env'
     
-    if env_file.exists():
-        load_dotenv(env_file)
-    
-    # Check for API key
+    # Check for API key (provided by TypeScript via LLM_API_KEY environment variable)
     api_key = os.getenv('LLM_API_KEY')
     if not api_key:
-        raise ValueError('LLM_API_KEY not found in environment or .env file')
+        raise ValueError('LLM_API_KEY not found in environment. Use "Flowbaby: Set API Key" for secure storage.')
     
     # Plan 032 M2 (hotfix): Set Cognee environment variables BEFORE SDK import
     # CRITICAL: Use DATA_ROOT_DIRECTORY and SYSTEM_ROOT_DIRECTORY (no COGNEE_ prefix!)

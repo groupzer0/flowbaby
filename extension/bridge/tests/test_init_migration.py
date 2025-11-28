@@ -37,7 +37,10 @@ def create_cognee_module_mocks():
     
     This ensures that `import cognee` and 
     `from cognee.infrastructure.databases.relational import create_db_and_tables`
-    both work correctly in tests.
+    and `from cognee.infrastructure.databases.graph import get_graph_engine`
+    all work correctly in tests.
+    
+    Plan 038/039: Added graph module mock for Kuzu initialization.
     
     Returns:
         Tuple of (modules_dict, mock_cognee) for use with patch.dict
@@ -47,9 +50,13 @@ def create_cognee_module_mocks():
     mock_cognee.config = MagicMock()
     mock_cognee.prune = MagicMock()
     mock_cognee.prune.prune_system = AsyncMock()
+    mock_cognee.add = AsyncMock(return_value=None)  # For LanceDB init
     
     # Create mock create_db_and_tables
     mock_create_db_and_tables = AsyncMock()
+    
+    # Create mock get_graph_engine (for Kuzu init)
+    mock_get_graph_engine = AsyncMock(return_value=MagicMock())
     
     # Create mock relational module
     mock_relational = types.SimpleNamespace(
@@ -57,9 +64,15 @@ def create_cognee_module_mocks():
         get_relational_config=MagicMock()
     )
     
+    # Create mock graph module
+    mock_graph = types.SimpleNamespace(
+        get_graph_engine=mock_get_graph_engine
+    )
+    
     # Create mock databases module
     mock_databases = types.SimpleNamespace(
-        relational=mock_relational
+        relational=mock_relational,
+        graph=mock_graph
     )
     
     # Create mock infrastructure module
@@ -76,6 +89,7 @@ def create_cognee_module_mocks():
         'cognee.infrastructure': mock_infrastructure,
         'cognee.infrastructure.databases': mock_databases,
         'cognee.infrastructure.databases.relational': mock_relational,
+        'cognee.infrastructure.databases.graph': mock_graph,
     }
     
     return modules, mock_cognee
@@ -185,19 +199,20 @@ class TestMigrationMarkerLocation:
     """Tests verifying that migration marker is checked in workspace location."""
 
     @pytest.mark.asyncio
-    async def test_marker_checked_in_workspace_not_venv(self, tmp_path):
+    async def test_marker_checked_in_workspace_not_venv(self, tmp_path, monkeypatch):
         """
         CRITICAL TEST: Verify marker is checked in workspace .flowbaby/system/
         and NOT in venv/site-packages location.
         
         This is the core fix for Plan 027.
+        
+        Plan 039 M5: API key now set via environment variable, not .env file.
         """
         workspace = tmp_path / 'test_workspace'
         workspace.mkdir()
         
-        # Create .env with API key
-        env_file = workspace / '.env'
-        env_file.write_text('LLM_API_KEY=test_key_123')
+        # Plan 039 M5: Set API key via environment variable (not .env file)
+        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
         
         # Create workspace marker - should prevent prune
         system_dir = workspace / '.flowbaby/system'
@@ -224,17 +239,18 @@ class TestMigrationMarkerLocation:
         assert result['global_marker_location'] == str(marker.absolute())
 
     @pytest.mark.asyncio
-    async def test_prune_skipped_when_data_exists_no_marker(self, tmp_path):
+    async def test_prune_skipped_when_data_exists_no_marker(self, tmp_path, monkeypatch):
         """
         Test that prune is skipped when data exists but marker doesn't.
         This is the defense-in-depth safety check.
+        
+        Plan 039 M5: API key now set via environment variable, not .env file.
         """
         workspace = tmp_path / 'test_workspace'
         workspace.mkdir()
         
-        # Create .env with API key
-        env_file = workspace / '.env'
-        env_file.write_text('LLM_API_KEY=test_key_123')
+        # Plan 039 M5: Set API key via environment variable (not .env file)
+        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
         
         # Create data but NO marker
         system_dir = workspace / '.flowbaby/system'
@@ -265,19 +281,20 @@ class TestMigrationMarkerLocation:
         assert marker_data.get('prune_skipped') is True
 
     @pytest.mark.asyncio
-    async def test_prune_executed_when_no_data_no_marker(self, tmp_path):
+    async def test_prune_executed_when_no_data_no_marker(self, tmp_path, monkeypatch):
         """
         Test that prune is SKIPPED for fresh workspaces (no data, no marker).
         
         Per Plan 034: Fresh workspaces only need create_db_and_tables(), not prune.
         Prune is only needed for legacy data migration.
+        
+        Plan 039 M5: API key now set via environment variable, not .env file.
         """
         workspace = tmp_path / 'test_workspace'
         workspace.mkdir()
         
-        # Create .env with API key
-        env_file = workspace / '.env'
-        env_file.write_text('LLM_API_KEY=test_key_123')
+        # Plan 039 M5: Set API key via environment variable (not .env file)
+        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
         
         # Don't create any data or marker - fresh workspace
         
@@ -307,14 +324,16 @@ class TestMigrationMarkerLocation:
         assert marker_data.get('reason') == 'fresh_workspace'
 
     @pytest.mark.asyncio
-    async def test_data_integrity_included_in_response(self, tmp_path):
-        """Test that init response includes data_integrity field."""
+    async def test_data_integrity_included_in_response(self, tmp_path, monkeypatch):
+        """Test that init response includes data_integrity field.
+        
+        Plan 039 M5: API key now set via environment variable, not .env file.
+        """
         workspace = tmp_path / 'test_workspace'
         workspace.mkdir()
         
-        # Create .env with API key
-        env_file = workspace / '.env'
-        env_file.write_text('LLM_API_KEY=test_key_123')
+        # Plan 039 M5: Set API key via environment variable (not .env file)
+        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
         
         # Create marker to skip prune logic
         system_dir = workspace / '.flowbaby/system'
@@ -345,19 +364,21 @@ class TestMarkerNotCheckedInVenv:
     """
 
     @pytest.mark.asyncio
-    async def test_no_get_relational_config_import_for_marker(self, tmp_path):
+    async def test_no_get_relational_config_import_for_marker(self, tmp_path, monkeypatch):
         """
         Verify that get_relational_config is not imported or called
         for determining marker location.
         
         This is critical because get_relational_config() returns the venv
         location before workspace config is set.
+        
+        Plan 039 M5: API key now set via environment variable, not .env file.
         """
         workspace = tmp_path / 'test_workspace'
         workspace.mkdir()
         
-        env_file = workspace / '.env'
-        env_file.write_text('LLM_API_KEY=test_key_123')
+        # Plan 039 M5: Set API key via environment variable (not .env file)
+        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
         
         # Create marker
         system_dir = workspace / '.flowbaby/system'
@@ -385,13 +406,16 @@ class TestMarkerPrecedence:
     """Tests for marker precedence logic."""
 
     @pytest.mark.asyncio
-    async def test_workspace_marker_takes_precedence(self, tmp_path):
-        """Workspace marker should take precedence over any other checks."""
+    async def test_workspace_marker_takes_precedence(self, tmp_path, monkeypatch):
+        """Workspace marker should take precedence over any other checks.
+        
+        Plan 039 M5: API key now set via environment variable, not .env file.
+        """
         workspace = tmp_path / 'test_workspace'
         workspace.mkdir()
         
-        env_file = workspace / '.env'
-        env_file.write_text('LLM_API_KEY=test_key_123')
+        # Plan 039 M5: Set API key via environment variable (not .env file)
+        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
         
         # Create workspace marker
         system_dir = workspace / '.flowbaby/system'

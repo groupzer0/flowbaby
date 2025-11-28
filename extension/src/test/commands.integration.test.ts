@@ -72,6 +72,10 @@ suite('Commands Integration (no production changes)', () => {
         ingestAsyncStub = sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'ingestAsync').resolves({ success: true, staged: true, operationId: 'test-operation' });
         clearMemoryStub = sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'clearMemory').resolves(true);
 
+        // Plan 039 M3: Stub health check to return VALID so tests can proceed with initialization
+        const FlowbabySetupMod = await import('../setup/FlowbabySetupService');
+        sandbox.stub(FlowbabySetupMod.FlowbabySetupService.prototype, 'checkWorkspaceHealth').resolves('VALID');
+
         // Prevent chat participant registration side-effects in this suite
         sandbox.stub(vscode.chat, 'createChatParticipant').callsFake((_id: string, _handler: any) => {
             return { dispose: () => void 0 } as vscode.ChatParticipant;

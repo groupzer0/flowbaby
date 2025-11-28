@@ -11,6 +11,7 @@ import { FlowbabyContextProvider } from './flowbabyContextProvider';
 import { FlowbabySetupService } from './setup/FlowbabySetupService';
 import { FlowbabyStatusBar, FlowbabyStatus } from './statusBar/FlowbabyStatusBar';
 import { getFlowbabyOutputChannel, getFlowbabyDebugChannel, disposeOutputChannels, debugLog } from './outputChannels';
+import { getAuditLogger } from './audit/AuditLogger';
 
 // Module-level variable to store client instance
 let flowbabyClient: FlowbabyClient | undefined;
@@ -49,6 +50,9 @@ export async function activate(_context: vscode.ExtensionContext) {
     }
 
     const workspacePath = workspaceFolders[0].uri.fsPath;
+
+    // Plan 039 M6: Initialize AuditLogger early for security event tracking
+    getAuditLogger().initialize(workspacePath);
 
     // Initialize Flowbaby client
     try {
@@ -100,11 +104,19 @@ export async function activate(_context: vscode.ExtensionContext) {
                 });
                 
                 if (apiKey) {
-                    await _context.secrets.store('flowbaby.llmApiKey', apiKey.trim());
-                    vscode.window.showInformationMessage(
-                        'API key stored securely. It will be used for all workspaces without a .env file.'
-                    );
-                    debugLog('API key stored via SecretStorage');
+                    try {
+                        await _context.secrets.store('flowbaby.llmApiKey', apiKey.trim());
+                        vscode.window.showInformationMessage(
+                            'API key stored securely. It will be used for all workspaces.'
+                        );
+                        debugLog('API key stored via SecretStorage');
+                        // Plan 039 M6: Audit log API key set
+                        getAuditLogger().logApiKeySet(true, 'command');
+                    } catch (error) {
+                        // Plan 039 M6: Audit log failure
+                        getAuditLogger().logApiKeySet(false, 'command');
+                        throw error;
+                    }
                 }
             }
         );
@@ -115,15 +127,23 @@ export async function activate(_context: vscode.ExtensionContext) {
             'Flowbaby.clearApiKey',
             async () => {
                 const confirm = await vscode.window.showWarningMessage(
-                    'Clear the stored API key? You will need to create a .env file or set the key again.',
+                    'Clear the stored API key? You will need to set the key again.',
                     { modal: true },
                     'Clear Key'
                 );
                 
                 if (confirm === 'Clear Key') {
-                    await _context.secrets.delete('flowbaby.llmApiKey');
-                    vscode.window.showInformationMessage('API key cleared.');
-                    debugLog('API key cleared from SecretStorage');
+                    try {
+                        await _context.secrets.delete('flowbaby.llmApiKey');
+                        vscode.window.showInformationMessage('API key cleared.');
+                        debugLog('API key cleared from SecretStorage');
+                        // Plan 039 M6: Audit log API key clear
+                        getAuditLogger().logApiKeyClear(true);
+                    } catch (error) {
+                        // Plan 039 M6: Audit log failure
+                        getAuditLogger().logApiKeyClear(false);
+                        throw error;
+                    }
                 }
             }
         );
@@ -141,6 +161,18 @@ export async function activate(_context: vscode.ExtensionContext) {
         );
         _context.subscriptions.push(setupEnvironmentCommand);
 
+        // Plan 039 M2: Register initializeWorkspace command with consistent Flowbaby namespace
+        // This is the canonical command for workspace initialization
+        // setupEnvironment is retained as an alias for backward compatibility
+        const initializeWorkspaceCommand = vscode.commands.registerCommand(
+            'Flowbaby.initializeWorkspace',
+            async () => {
+                // Delegate to setupService.createEnvironment() for unified behavior
+                await setupService.createEnvironment();
+            }
+        );
+        _context.subscriptions.push(initializeWorkspaceCommand);
+
         // Register refresh dependencies command
         const refreshDependenciesCommand = vscode.commands.registerCommand(
             'Flowbaby.refreshDependencies',
@@ -155,6 +187,61 @@ export async function activate(_context: vscode.ExtensionContext) {
         // degradation when the backend is still initializing
         registerFlowbabyParticipant(_context);
         console.log('@flowbaby chat participant registered (pending initialization)');
+
+        // Plan 039 M3: Proactive Health Check before client initialization
+        // This provides targeted UX guidance based on actual workspace state
+        const healthStatus = await setupService.checkWorkspaceHealth();
+        debugLog('Workspace health check result', { healthStatus });
+        
+        if (healthStatus === 'FRESH') {
+            // No .flowbaby directory - user needs to initialize
+            console.log('Flowbaby workspace not initialized');
+            statusBar.setStatus(FlowbabyStatus.SetupRequired);
+            clientInitialized = false;
+            clientInitializationFailed = true;
+            
+            // Non-blocking prompt for initialization
+            vscode.window.showInformationMessage(
+                'Flowbaby needs to set up a Python environment for this workspace.',
+                'Initialize Workspace',
+                'Later'
+            ).then(action => {
+                if (action === 'Initialize Workspace') {
+                    vscode.commands.executeCommand('Flowbaby.initializeWorkspace');
+                }
+            });
+            
+            // Skip client initialization attempt - environment not ready
+            return;
+        }
+        
+        if (healthStatus === 'BROKEN') {
+            // .flowbaby exists but is corrupt/incomplete - user needs to repair
+            console.warn('Flowbaby workspace environment is broken');
+            statusBar.setStatus(FlowbabyStatus.SetupRequired);
+            clientInitialized = false;
+            clientInitializationFailed = true;
+            
+            const outputChannel = getFlowbabyOutputChannel();
+            outputChannel.appendLine('Flowbaby workspace environment is corrupted or incomplete.');
+            outputChannel.appendLine('Use "Flowbaby: Initialize Workspace" to repair.');
+            
+            // Non-blocking prompt for repair
+            vscode.window.showWarningMessage(
+                'Flowbaby workspace environment needs repair.',
+                'Repair Environment',
+                'Later'
+            ).then(action => {
+                if (action === 'Repair Environment') {
+                    vscode.commands.executeCommand('Flowbaby.initializeWorkspace');
+                }
+            });
+            
+            // Skip client initialization attempt - environment broken
+            return;
+        }
+        
+        // healthStatus === 'VALID' - proceed with client initialization
 
         // Add timeout to initialization to prevent extension activation hang (Issue 1)
         const initPromise = flowbabyClient.initialize();
@@ -225,27 +312,28 @@ export async function activate(_context: vscode.ExtensionContext) {
             outputChannel.appendLine('Failed to initialize Flowbaby. Common issues:');
             outputChannel.appendLine('');
             outputChannel.appendLine('1. Missing LLM API Key:');
-            outputChannel.appendLine('   - Create a .env file in your workspace root');
-            outputChannel.appendLine('   - Add: LLM_API_KEY=your_key_here');
-            outputChannel.appendLine('   - Or use "Flowbaby: Set API Key" command for global setup');
+            outputChannel.appendLine('   - Use "Flowbaby: Set API Key" command for secure storage');
+            outputChannel.appendLine('   - Or set LLM_API_KEY environment variable for CI/automated environments');
             outputChannel.appendLine('');
             outputChannel.appendLine('2. Missing Python dependencies:');
-            outputChannel.appendLine('   - Ensure cognee dependencies are installed');
-            outputChannel.appendLine('   - Run: pip install cognee python-dotenv');
+            outputChannel.appendLine('   - Use "Flowbaby: Initialize Workspace" to set up the environment');
+            outputChannel.appendLine('   - Or use "Flowbaby: Refresh Bridge Dependencies" to repair');
             outputChannel.show();
             
-            const action = await vscode.window.showWarningMessage(
+            // Plan 039 M1: Non-blocking warning message to prevent activation hang
+            // Use .then() instead of await to allow activate() to return immediately
+            vscode.window.showWarningMessage(
                 'Flowbaby initialization failed. Check Output > Flowbaby for setup instructions.',
                 'Open Output',
                 'Set API Key',
                 'Dismiss'
-            );
-            
-            if (action === 'Open Output') {
-                outputChannel.show();
-            } else if (action === 'Set API Key') {
-                vscode.commands.executeCommand('Flowbaby.setApiKey');
-            }
+            ).then(action => {
+                if (action === 'Open Output') {
+                    outputChannel.show();
+                } else if (action === 'Set API Key') {
+                    vscode.commands.executeCommand('Flowbaby.setApiKey');
+                }
+            });
         }
     } catch (error) {
         console.error('Failed to create Flowbaby client:', error);

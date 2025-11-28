@@ -192,8 +192,9 @@ suite('BackgroundOperationManager - API Key Resolution (Plan 031)', () => {
         delete process.env.LLM_API_KEY;
     });
 
-    test('resolveApiKey prefers .env file over SecretStorage and process.env', async () => {
-        // Create .env file with API key
+    // Plan 039 M5: Removed .env support - SecretStorage is now Priority 1
+    test('resolveApiKey uses SecretStorage as primary source (Plan 039 M5)', async () => {
+        // Create .env file with API key (should be IGNORED per Plan 039 M5)
         const envContent = 'LLM_API_KEY=env-file-key-123\nOTHER_VAR=value';
         fs.writeFileSync(path.join(workspacePath, '.env'), envContent);
         
@@ -206,7 +207,8 @@ suite('BackgroundOperationManager - API Key Resolution (Plan 031)', () => {
         // Call resolveApiKey (private method, access via prototype)
         const apiKey = await (manager as any).resolveApiKey(workspacePath);
         
-        assert.strictEqual(apiKey, 'env-file-key-123', '.env file key should have highest priority');
+        // SecretStorage should be used (not .env) per Plan 039 M5
+        assert.strictEqual(apiKey, 'secret-storage-key-456', 'SecretStorage should have highest priority (Plan 039 M5 removed .env support)');
     });
 
     test('resolveApiKey uses SecretStorage when no .env file exists', async () => {
@@ -328,8 +330,8 @@ suite('BackgroundOperationManager - getLLMEnvironment (Plan 031)', () => {
     });
 
     test('getLLMEnvironment returns complete LLM config', async () => {
-        // Create .env with API key
-        fs.writeFileSync(path.join(workspacePath, '.env'), 'LLM_API_KEY=test-key-xyz');
+        // Plan 039 M5: Use SecretStorage instead of .env file
+        secretsStub.get.resolves('test-key-xyz');
         
         // Mock VS Code configuration
         const mockConfig = {
@@ -440,8 +442,8 @@ suite('BackgroundOperationManager - runPythonJson Env Injection (Plan 031)', () 
     });
 
     test('runPythonJson injects LLM environment when workspacePath provided', async () => {
-        // Create .env with API key
-        fs.writeFileSync(path.join(workspacePath, '.env'), 'LLM_API_KEY=injected-key-abc');
+        // Plan 039 M5: Use SecretStorage instead of .env file
+        secretsStub.get.resolves('injected-key-abc');
         
         // Mock config
         const mockConfig = { get: (key: string) => key === 'provider' ? 'openai' : undefined };

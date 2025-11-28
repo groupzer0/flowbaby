@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
 import { getFlowbabyOutputChannel, debugLog } from './outputChannels';
+import { getAuditLogger } from './audit/AuditLogger';
 
 /**
  * Result structure from Python bridge scripts
@@ -947,21 +948,18 @@ export class FlowbabyClient {
     /**
      * Validate configuration
      * 
-     * Checks if Python path exists and workspace has .env with API key
+     * Checks if API key is available via SecretStorage or environment
+     * Plan 039 M5: Updated to remove .env requirement
      * 
      * @returns Promise<{valid: boolean, errors: string[]}>
      */
     async validateConfiguration(): Promise<{ valid: boolean; errors: string[] }> {
         const errors: string[] = [];
 
-        // Check if workspace .env exists
-        const envPath = path.join(this.workspacePath, '.env');
-        try {
-            if (!fs.existsSync(envPath)) {
-                errors.push('.env file not found in workspace');
-            }
-        } catch (error) {
-            errors.push(`Error checking .env file: ${error}`);
+        // Plan 039 M5: Check for API key via resolveApiKey (SecretStorage or env var)
+        const apiKey = await this.resolveApiKey();
+        if (!apiKey) {
+            errors.push('API key not configured. Use "Flowbaby: Set API Key" command or set LLM_API_KEY environment variable.');
         }
 
         return {
@@ -1378,34 +1376,20 @@ export class FlowbabyClient {
     }
 
     /**
-     * Resolve LLM API key with priority order (Plan 028 M5)
+     * Resolve LLM API key with priority order (Plan 039 M5 - Security Hardening)
      * 
      * Priority:
-     * 1. Workspace .env file LLM_API_KEY (explicit workspace override)
-     * 2. SecretStorage global key (flowbaby.llmApiKey)
-     * 3. System environment LLM_API_KEY (fallback)
+     * 1. SecretStorage global key (flowbaby.llmApiKey) - secure, encrypted storage
+     * 2. System environment LLM_API_KEY (fallback for CI/automated environments)
+     * 
+     * NOTE: Workspace .env support removed per Plan 037 F2 security finding.
+     * Plaintext API keys in .env files are a credential exposure risk.
+     * Users should use "Flowbaby: Set API Key" command for secure storage.
      * 
      * @returns Promise<string | undefined> - Resolved API key or undefined
      */
     private async resolveApiKey(): Promise<string | undefined> {
-        // Priority 1: Check workspace .env file
-        const envPath = path.join(this.workspacePath, '.env');
-        try {
-            if (fs.existsSync(envPath)) {
-                const envContent = fs.readFileSync(envPath, 'utf8');
-                const match = envContent.match(/^LLM_API_KEY\s*=\s*(.+)$/m);
-                if (match && match[1].trim()) {
-                    debugLog('API key resolved from workspace .env');
-                    return match[1].trim();
-                }
-            }
-        } catch (error) {
-            this.log('DEBUG', 'Failed to read workspace .env', {
-                error: error instanceof Error ? error.message : String(error)
-            });
-        }
-        
-        // Priority 2: Check SecretStorage
+        // Priority 1: Check SecretStorage (secure, encrypted)
         try {
             const secretKey = await this.context.secrets.get('flowbaby.llmApiKey');
             if (secretKey) {
@@ -1418,7 +1402,7 @@ export class FlowbabyClient {
             });
         }
         
-        // Priority 3: System environment variable
+        // Priority 2: System environment variable (for CI/automated environments)
         if (process.env.LLM_API_KEY) {
             debugLog('API key resolved from system environment');
             return process.env.LLM_API_KEY;
@@ -1461,25 +1445,108 @@ export class FlowbabyClient {
     }
 
     /**
-     * Clear workspace memory (delete .flowbaby directory)
+     * Clear workspace memory with soft-delete (Plan 039 M7 - F8)
+     * 
+     * Instead of permanent deletion, moves data to .flowbaby/.trash/{timestamp}/
+     * This allows recovery of accidentally cleared memories.
+     * 
+     * Retention policy: Trash contents older than 7 days can be purged by user
      * 
      * @returns Promise<boolean> - true if cleared successfully
      */
     async clearMemory(): Promise<boolean> {
+        const auditLogger = getAuditLogger();
+        
         try {
             const flowbabyPath = path.join(this.workspacePath, '.flowbaby');
             
-            if (fs.existsSync(flowbabyPath)) {
-                // Recursively delete .flowbaby directory
-                fs.rmSync(flowbabyPath, { recursive: true, force: true });
-                this.log('INFO', 'Workspace memory cleared', { path: flowbabyPath });
+            if (!fs.existsSync(flowbabyPath)) {
+                this.log('WARN', 'No memory to clear', { path: flowbabyPath });
+                auditLogger.logMemoryClear(true, 'soft');
+                return true;
+            }
+            
+            // Plan 039 M7: Soft-delete - move to .trash instead of permanent delete
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const trashDir = path.join(flowbabyPath, '.trash');
+            const trashPath = path.join(trashDir, timestamp);
+            
+            // Ensure trash directory exists
+            if (!fs.existsSync(trashDir)) {
+                fs.mkdirSync(trashDir, { recursive: true });
+            }
+            
+            // Move data directories to trash (preserve logs and trash itself)
+            const dataDirectories = ['system', 'data'];
+            let movedAny = false;
+            
+            for (const dirName of dataDirectories) {
+                const srcPath = path.join(flowbabyPath, dirName);
+                if (fs.existsSync(srcPath)) {
+                    const destDir = path.join(trashPath, dirName);
+                    fs.mkdirSync(path.dirname(destDir), { recursive: true });
+                    fs.renameSync(srcPath, destDir);
+                    movedAny = true;
+                    this.log('INFO', `Moved ${dirName} to trash`, { 
+                        src: srcPath, 
+                        dest: destDir 
+                    });
+                }
+            }
+            
+            // Also move bridge metadata files (but preserve logs and trash)
+            const metadataFiles = ['bridge-env.json', 'bridge-version.json', '.migration_v1_complete', '.dataset_migration_complete'];
+            for (const fileName of metadataFiles) {
+                const srcPath = path.join(flowbabyPath, fileName);
+                if (fs.existsSync(srcPath)) {
+                    const destPath = path.join(trashPath, fileName);
+                    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+                    fs.renameSync(srcPath, destPath);
+                    movedAny = true;
+                }
+            }
+            
+            if (movedAny) {
+                this.log('INFO', 'Workspace memory soft-deleted', { 
+                    path: flowbabyPath,
+                    trashPath: trashPath,
+                    note: 'Data moved to .trash - can be recovered if needed'
+                });
+                auditLogger.logMemoryClear(true, 'soft');
+            } else {
+                this.log('INFO', 'No data directories to clear', { path: flowbabyPath });
+                auditLogger.logMemoryClear(true, 'soft');
+            }
+            
+            return true;
+        } catch (error) {
+            this.log('ERROR', 'Failed to clear memory', {
+                error: error instanceof Error ? error.message : String(error)
+            });
+            auditLogger.logMemoryClear(false, 'soft');
+            return false;
+        }
+    }
+
+    /**
+     * Permanently purge trash (for users who want to free disk space)
+     * 
+     * @returns Promise<boolean> - true if purged successfully
+     */
+    async purgeTrash(): Promise<boolean> {
+        try {
+            const trashPath = path.join(this.workspacePath, '.flowbaby', '.trash');
+            
+            if (fs.existsSync(trashPath)) {
+                fs.rmSync(trashPath, { recursive: true, force: true });
+                this.log('INFO', 'Trash purged', { path: trashPath });
                 return true;
             } else {
-                this.log('WARN', 'No memory to clear', { path: flowbabyPath });
+                this.log('INFO', 'No trash to purge', { path: trashPath });
                 return true;
             }
         } catch (error) {
-            this.log('ERROR', 'Failed to clear memory', {
+            this.log('ERROR', 'Failed to purge trash', {
                 error: error instanceof Error ? error.message : String(error)
             });
             return false;

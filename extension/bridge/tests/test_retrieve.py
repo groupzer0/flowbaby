@@ -39,7 +39,8 @@ async def test_retrieve_missing_llm_api_key(temp_workspace, monkeypatch):
         assert 'user_message' in result
         assert 'LLM_API_KEY' in result['user_message']
         assert 'remediation' in result
-        assert 'LLM_API_KEY=your_key_here' in result['remediation']
+        # Plan 039 M5: Remediation now points to secure storage command, not .env file
+        assert 'Flowbaby: Set API Key' in result['remediation']
         assert 'error' in result
         assert 'LLM_API_KEY' in result['error']
 

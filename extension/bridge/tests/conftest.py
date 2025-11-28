@@ -171,9 +171,18 @@ def mock_cognee_module(mock_cognee, temp_workspace):
         create_db_and_tables=mock_create_db_and_tables
     )
     
+    # Create mock get_graph_engine function (async) - Plan 038/039
+    mock_get_graph_engine = AsyncMock(return_value=MagicMock())
+    
+    # Create mock infrastructure.databases.graph module
+    mock_graph_module = types.SimpleNamespace(
+        get_graph_engine=mock_get_graph_engine
+    )
+    
     # Create mock infrastructure.databases module
     mock_databases_module = types.SimpleNamespace(
-        relational=mock_relational_module
+        relational=mock_relational_module,
+        graph=mock_graph_module
     )
     
     # Create mock infrastructure module
@@ -195,11 +204,13 @@ def mock_cognee_module(mock_cognee, temp_workspace):
     sys.modules['cognee.infrastructure'] = mock_infrastructure_module
     sys.modules['cognee.infrastructure.databases'] = mock_databases_module
     sys.modules['cognee.infrastructure.databases.relational'] = mock_relational_module
+    sys.modules['cognee.infrastructure.databases.graph'] = mock_graph_module
     
     yield mock_cognee  # Return original fixture for assertions
     
     # Cleanup
     for module_name in [
+        'cognee.infrastructure.databases.graph',
         'cognee.infrastructure.databases.relational',
         'cognee.infrastructure.databases',
         'cognee.infrastructure',

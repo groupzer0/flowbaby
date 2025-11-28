@@ -7,6 +7,8 @@ import { BackgroundOperationManager } from '../background/BackgroundOperationMan
 import { FlowbabyStatusBar, FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
 import { debugLog } from '../outputChannels';
 
+export type WorkspaceHealthStatus = 'FRESH' | 'BROKEN' | 'VALID';
+
 export interface BridgeEnvMetadata {
     pythonPath: string;
     ownership: 'managed' | 'external';
@@ -446,6 +448,63 @@ export class FlowbabySetupService {
             this.log('Verification failed: ' + error);
             return false;
         }
+    }
+
+    /**
+     * Plan 039 M3: Proactive Workspace Health Check
+     * 
+     * Determines the health state of the Flowbaby workspace environment:
+     * - FRESH: No .flowbaby directory exists → user needs to initialize
+     * - BROKEN: .flowbaby exists but is corrupt or incomplete → user needs to repair
+     * - VALID: All components present and healthy → proceed with client initialization
+     * 
+     * This enables the activation flow to provide targeted guidance based on
+     * the actual workspace state rather than generic error messages.
+     * 
+     * @returns Promise<WorkspaceHealthStatus> - 'FRESH' | 'BROKEN' | 'VALID'
+     */
+    async checkWorkspaceHealth(): Promise<WorkspaceHealthStatus> {
+        const flowbabyDir = path.join(this.workspacePath, '.flowbaby');
+        
+        // Scenario 1: No .flowbaby directory → FRESH workspace
+        if (!this.fs.existsSync(flowbabyDir)) {
+            debugLog('Workspace health check: FRESH (no .flowbaby directory)');
+            return 'FRESH';
+        }
+        
+        // Scenario 2: .flowbaby exists but bridge-env.json is missing or corrupt → BROKEN
+        const bridgeEnv = await this.readBridgeEnv();
+        if (!bridgeEnv) {
+            debugLog('Workspace health check: BROKEN (bridge-env.json missing or corrupt)');
+            return 'BROKEN';
+        }
+        
+        // Scenario 2b (R3): Check for migration marker indicating unresolved migration
+        const migrationMarkerPath = path.join(flowbabyDir, '.migration-in-progress');
+        if (this.fs.existsSync(migrationMarkerPath)) {
+            debugLog('Workspace health check: BROKEN (migration marker exists)');
+            return 'BROKEN';
+        }
+        
+        // Scenario 3: bridge-env.json exists, check Python environment health
+        const pythonPath = bridgeEnv.pythonPath;
+        const venvDir = path.dirname(path.dirname(pythonPath)); // Go up from bin/python to venv
+        
+        // Check if venv directory exists
+        if (!this.fs.existsSync(venvDir)) {
+            debugLog('Workspace health check: BROKEN (venv directory missing)', { venvDir });
+            return 'BROKEN';
+        }
+        
+        // Check if Python executable exists
+        if (!this.fs.existsSync(pythonPath)) {
+            debugLog('Workspace health check: BROKEN (Python executable missing)', { pythonPath });
+            return 'BROKEN';
+        }
+        
+        // All checks passed → VALID
+        debugLog('Workspace health check: VALID');
+        return 'VALID';
     }
 
     /**

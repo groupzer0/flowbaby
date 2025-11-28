@@ -165,25 +165,22 @@ async def initialize_cognee(workspace_path: str) -> dict:
     logger.info(f"Initializing cognee for workspace: {workspace_path}")
 
     try:
-        # Load workspace .env file if it exists
         workspace_dir = Path(workspace_path)
-        env_file = workspace_dir / '.env'
         
-        if env_file.exists():
-            from dotenv import load_dotenv
-            load_dotenv(env_file)
-            logger.debug(f"Loaded .env file from {env_file}")
+        # Plan 039 M5: API key is now resolved by TypeScript and passed via environment
+        # Workspace .env loading removed per Plan 037 F2 security finding
+        # (plaintext API keys in .env files are a credential exposure risk)
         
-        # Check for API key
+        # Check for API key (provided by TypeScript via LLM_API_KEY environment variable)
         api_key = os.getenv('LLM_API_KEY')
         if not api_key:
-            error_msg = 'LLM_API_KEY not found in environment or .env file'
+            error_msg = 'LLM_API_KEY not found in environment'
             logger.error(error_msg)
             return {
                 'success': False,
                 'error_code': 'MISSING_API_KEY',
-                'user_message': 'LLM_API_KEY not found. Please add it to your workspace .env file.',
-                'remediation': 'Create .env in workspace root with: LLM_API_KEY=your_key_here',
+                'user_message': 'LLM_API_KEY not found. Use "Flowbaby: Set API Key" command for secure storage.',
+                'remediation': 'Run "Flowbaby: Set API Key" from Command Palette to configure your API key securely.',
                 'error': error_msg
             }
         
@@ -324,6 +321,19 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 logger.info("Initializing relational database tables...")
                 await create_db_and_tables()
                 logger.info("Relational database tables created")
+                
+                # Initialize Graph DB (Kuzu)
+                logger.info("Initializing graph database (Kuzu)...")
+                from cognee.infrastructure.databases.graph import get_graph_engine
+                await get_graph_engine()
+                
+                # Initialize Vector DB (LanceDB) via dummy ingestion
+                logger.info("Initializing vector database (LanceDB) via setup marker...")
+                await cognee.add(
+                    data=["Flowbaby environment setup completed"],
+                    dataset_name=dataset_name
+                )
+                logger.info("Vector database initialized")
                 
                 marker_metadata = {
                     'migrated_at': datetime.now().isoformat(),

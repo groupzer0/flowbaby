@@ -54,12 +54,18 @@ suite('FlowbabyClient Runtime Behaviors', () => {
         try { mock.restore(); } catch {}
     });
 
-    test('clearMemory deletes .flowbaby directory and returns true', async () => {
-        // Arrange: mock workspace with .flowbaby directory and a file
+    test('clearMemory soft-deletes data directories to .trash and returns true', async () => {
+        // Arrange: mock workspace with .flowbaby directory containing data
+        // Plan 039 M7: clearMemory now uses soft-delete (moves to .trash)
         mock({
             [testWorkspacePath]: {
                 '.flowbaby': {
-                    'db.sqlite': 'data'
+                    'system': {
+                        'db.sqlite': 'data'
+                    },
+                    'data': {
+                        'files.txt': 'content'
+                    }
                 },
                 '.venv': {
                     'bin': {
@@ -81,9 +87,15 @@ suite('FlowbabyClient Runtime Behaviors', () => {
         // Act
         const result = await client.clearMemory();
 
-        // Assert
+        // Assert: returns true and data moved to .trash
         assert.strictEqual(result, true);
-        assert.strictEqual(fs.existsSync(path.join(testWorkspacePath, '.flowbaby')), false);
+        // .flowbaby directory still exists (contains .trash)
+        assert.strictEqual(fs.existsSync(path.join(testWorkspacePath, '.flowbaby')), true);
+        // .trash directory should exist
+        assert.strictEqual(fs.existsSync(path.join(testWorkspacePath, '.flowbaby', '.trash')), true);
+        // Original data directories should be gone
+        assert.strictEqual(fs.existsSync(path.join(testWorkspacePath, '.flowbaby', 'system')), false);
+        assert.strictEqual(fs.existsSync(path.join(testWorkspacePath, '.flowbaby', 'data')), false);
 
         // Cleanup
         mock.restore();
@@ -109,33 +121,57 @@ suite('FlowbabyClient Runtime Behaviors', () => {
         mock.restore();
     });
 
-    test('validateConfiguration reports missing .env, then passes when present', async () => {
-        // Arrange: workspace without .env
+    test('validateConfiguration reports missing API key', async () => {
+        // Arrange: workspace without API key in SecretStorage (default mock returns undefined)
+        // Also need to ensure no API key in process.env (it's Priority 2 fallback)
+        const originalEnvKey = process.env.LLM_API_KEY;
+        delete process.env.LLM_API_KEY;
+        
         mock({
             [testWorkspacePath]: {}
         });
         const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
-        // Act: missing .env
-        const invalid = await client.validateConfiguration();
+        // Act: missing API key (SecretStorage returns undefined, process.env cleared)
+        const result = await client.validateConfiguration();
         
-        // Assert
-        assert.strictEqual(invalid.valid, false);
-        assert.ok(invalid.errors.find(e => e.includes('.env')));
+        // Assert: should fail with API key error
+        assert.strictEqual(result.valid, false);
+        assert.ok(result.errors.find(e => e.includes('API key')));
 
-        // Arrange: add .env
+        // Cleanup
+        mock.restore();
+        if (originalEnvKey) {
+            process.env.LLM_API_KEY = originalEnvKey;
+        }
+    });
+
+    test('validateConfiguration passes when SecretStorage has key', async () => {
+        // Arrange: workspace with API key in SecretStorage
         mock({
-            [testWorkspacePath]: {
-                '.env': 'OPENAI_API_KEY=sk-test'
-            }
+            [testWorkspacePath]: {}
         });
+        
+        // Create a new mock context with API key available
+        const contextWithKey: vscode.ExtensionContext = {
+            ...mockContext,
+            secrets: {
+                get: sinon.stub().resolves('sk-test-key'),
+                store: sinon.stub().resolves(),
+                delete: sinon.stub().resolves(),
+                keys: sinon.stub().resolves([]),
+                onDidChange: new vscode.EventEmitter<vscode.SecretStorageChangeEvent>().event
+            }
+        } as any;
+        
+        const client = new FlowbabyClient(testWorkspacePath, contextWithKey);
 
-        // Act: now valid
-        const valid = await client.validateConfiguration();
+        // Act: API key available via SecretStorage
+        const result = await client.validateConfiguration();
 
         // Assert
-        assert.strictEqual(valid.valid, true);
-        assert.strictEqual(valid.errors.length, 0);
+        assert.strictEqual(result.valid, true);
+        assert.strictEqual(result.errors.length, 0);
 
         // Cleanup
         mock.restore();

@@ -13,7 +13,15 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 @pytest.fixture
-def mock_cognee_module():
+def mock_cognee_module(monkeypatch):
+    """Mock cognee module with LLM_API_KEY set for filtering tests.
+    
+    Plan 039 M5: LLM_API_KEY must be set in environment for retrieve to proceed
+    past the API key validation guard and reach filtering logic.
+    """
+    # Plan 039: Set API key so retrieve_context reaches filtering logic
+    monkeypatch.setenv('LLM_API_KEY', 'sk-test-filtering-key')
+    
     with patch.dict('sys.modules', {'cognee': MagicMock()}):
         import cognee
         cognee.search = AsyncMock()

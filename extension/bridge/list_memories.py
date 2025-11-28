@@ -43,16 +43,12 @@ async def list_memories(workspace_path: str, limit: int = 10) -> dict:
 
     try:
         workspace_dir = Path(workspace_path)
-        env_file = workspace_dir / '.env'
         
-        if env_file.exists():
-            from dotenv import load_dotenv
-            load_dotenv(env_file)
-            logger.debug(f"Loaded .env file from {env_file}")
-        
+        # Plan 039 M5: Workspace .env loading removed per Plan 037 F2 security finding
+        # API key is now resolved by TypeScript and passed via LLM_API_KEY environment variable
         api_key = os.getenv('LLM_API_KEY')
         if not api_key:
-            error_msg = "LLM_API_KEY missing"
+            error_msg = "LLM_API_KEY missing. Use 'Flowbaby: Set API Key' for secure storage."
             logger.error(error_msg)
             return {"success": False, "error": error_msg}
 

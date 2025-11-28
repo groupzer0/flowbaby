@@ -41,21 +41,16 @@ async def validate_memory(workspace_path: str) -> dict:
     }
     
     try:
-        # 1. Check .env and API Key
+        # 1. Check API Key (Plan 039 M5: .env support removed per security hardening)
         workspace_dir = Path(workspace_path)
-        env_file = workspace_dir / '.env'
         
-        if env_file.exists():
-            checks["env_file"] = True
-            from dotenv import load_dotenv
-            load_dotenv(env_file)
-            logger.debug(f"Loaded .env file from {env_file}")
-        
+        # API key is provided by TypeScript via LLM_API_KEY environment variable
         api_key = os.getenv('LLM_API_KEY')
         if api_key:
             checks["api_key"] = True
+            checks["env_file"] = True  # Mark as passed since env var is set
         else:
-            error_msg = "LLM_API_KEY missing in .env"
+            error_msg = "LLM_API_KEY missing. Use 'Flowbaby: Set API Key' for secure storage."
             logger.error(error_msg)
             return {
                 "success": False,

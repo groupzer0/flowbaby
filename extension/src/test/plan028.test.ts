@@ -65,15 +65,16 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
     });
 
     suite('FlowbabyClient API Key Resolution', () => {
-        test('Priority 1: Workspace .env overrides everything', async () => {
-            // Setup .env using mock-fs
+        // Plan 039 M5: Removed .env support - SecretStorage is now Priority 1
+        test('Priority 1: SecretStorage is the primary API key source', async () => {
+            // Note: .env files are no longer supported per Plan 039 M5
             mock({
                 [testWorkspacePath]: {
-                    '.env': 'LLM_API_KEY=env-key'
+                    '.env': 'LLM_API_KEY=env-key'  // This is now ignored
                 }
             });
             
-            // Setup SecretStorage
+            // Setup SecretStorage with key
             (mockContext.secrets.get as sinon.SinonStub).resolves('secret-key');
             
             // Setup Process Env
@@ -82,7 +83,8 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
             const client = new FlowbabyClient(testWorkspacePath, mockContext);
             const apiKey = await (client as any).resolveApiKey();
 
-            assert.strictEqual(apiKey, 'env-key');
+            // SecretStorage takes priority (Plan 039 M5 removed .env support)
+            assert.strictEqual(apiKey, 'secret-key');
         });
 
         test('Priority 2: SecretStorage used if no .env', async () => {

@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
-import * as dotenv from 'dotenv';
+// Plan 039 M5: Removed dotenv import - .env API key support removed for security
 
 export interface OperationRetryPayload {
     type: 'summary' | 'conversation';
@@ -162,26 +162,12 @@ export class BackgroundOperationManager {
     }
 
     /**
-     * Resolve API key from workspace .env, SecretStorage, or system environment
-     * Priority: .env file > SecretStorage > process.env
+     * Resolve API key from SecretStorage or system environment
+     * Priority: SecretStorage > process.env
+     * Note: Plan 039 M5 removed .env file support for security
      */
-    private async resolveApiKey(workspacePath: string): Promise<string | undefined> {
-        // Priority 1: Check workspace .env file
-        const envPath = path.join(workspacePath, '.env');
-        try {
-            if (fs.existsSync(envPath)) {
-                const envContent = fs.readFileSync(envPath, 'utf8');
-                const parsed = dotenv.parse(envContent);
-                if (parsed.LLM_API_KEY) {
-                    this.outputChannel.appendLine('[BACKGROUND] Using LLM_API_KEY from workspace .env file');
-                    return parsed.LLM_API_KEY;
-                }
-            }
-        } catch (err) {
-            this.outputChannel.appendLine(`[BACKGROUND] Failed to read .env file: ${err}`);
-        }
-
-        // Priority 2: Check SecretStorage
+    private async resolveApiKey(_workspacePath: string): Promise<string | undefined> {
+        // Priority 1: Check SecretStorage (secure, encrypted)
         try {
             const secretKey = await this.context.secrets.get('flowbaby.llmApiKey');
             if (secretKey) {
@@ -192,7 +178,7 @@ export class BackgroundOperationManager {
             this.outputChannel.appendLine(`[BACKGROUND] Failed to read SecretStorage: ${err}`);
         }
 
-        // Priority 3: System environment
+        // Priority 2: System environment (for CI/automated environments)
         if (process.env.LLM_API_KEY) {
             this.outputChannel.appendLine('[BACKGROUND] Using LLM_API_KEY from system environment');
             return process.env.LLM_API_KEY;

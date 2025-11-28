@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.4.6] - 2025-06-14
+
+### Fixed - Plan 039: Initialization UX and Security Hardening
+
+**User Experience and Security Release** - Resolves activation deadlock, improves initialization guidance, and implements security hardening from Plan 037 audit.
+
+#### M1: Fix Activation Deadlock
+- **Bug**: Extension activation could hang indefinitely when initialization failed, requiring VS Code restart
+- **Root Cause**: Blocking `await vscode.window.showWarningMessage()` in failure path prevented `activate()` from returning
+- **Fix**: Replaced blocking `await` with non-blocking `.then()` callback pattern, ensuring activation completes within 2 seconds
+
+#### M2: Register `Flowbaby.initializeWorkspace` Command
+- **New**: Added `Flowbaby.initializeWorkspace` command for workspace initialization
+- **Change**: `Flowbaby.setupEnvironment` retained as backward-compatible alias
+- **Benefit**: Consistent command naming within `Flowbaby.*` namespace
+
+#### M3: Proactive Health Check
+- **New**: `checkWorkspaceHealth()` method returns `FRESH | BROKEN | VALID` status
+- **Change**: Activation flow now checks workspace health before attempting client initialization
+- **Benefit**: Targeted UX guidance based on actual workspace state (fresh vs corrupted vs ready)
+- **Added**: Migration marker validation (`.migration-in-progress` check) per architecture review R3
+
+#### M4: Full Database Initialization
+- **Verified**: `init.py` already performs complete database priming (SQLite, Kuzu, LanceDB) for fresh workspaces
+- **No changes required**: Existing implementation meets acceptance criteria
+
+#### M5: Remove `.env` API Key Support (Security - F2)
+- **Breaking Change**: Removed workspace `.env` file API key loading
+- **Migration**: Users must use `Flowbaby: Set API Key` command for secure SecretStorage
+- **Rationale**: Plaintext API keys in `.env` files are credential exposure risk
+- **Files Updated**: `flowbabyClient.ts`, `init.py`, `ingest.py`, `retrieve.py`, `list_memories.py`, `validate_memories.py`
+
+#### M6: Audit Logging (Security - F7)
+- **New**: `AuditLogger` class for security event tracking
+- **Format**: JSON-lines structured logging to `.flowbaby/logs/audit.jsonl`
+- **Events Logged**: API key changes, memory clear operations, environment initialization
+- **Benefit**: Security audit trail for credential and data operations
+
+#### M7: Safe Memory Clear with Soft-Delete (Security - F8)
+- **Change**: `clearMemory()` now moves data to `.flowbaby/.trash/{timestamp}/` instead of permanent deletion
+- **Benefit**: Recovery possible for accidentally cleared memories
+- **New**: `purgeTrash()` method for permanent trash cleanup
+- **Audit**: All clear operations logged via AuditLogger
+
+#### M8: Version and Release Artifacts
+- **Version**: 0.4.5 → 0.4.6
+- **Changelog**: Updated with Plan 039 changes
+
+### Breaking Changes
+- **API Key Source**: Workspace `.env` files no longer used for API key resolution. Use `Flowbaby: Set API Key` command or set `LLM_API_KEY` environment variable.
+
+### Security Improvements
+- Credentials now stored in VS Code SecretStorage (encrypted)
+- Security-relevant operations logged to audit trail
+- Data deletion uses soft-delete with recovery option
+
 ## [0.4.5] - 2025-11-27
 
 ### Fixed - Plan 034: Initialization Bugs and Background Notification Issues
