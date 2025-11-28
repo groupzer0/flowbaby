@@ -45,7 +45,7 @@ suite('Commands Integration (no production changes)', () => {
         // Stub configuration API used by toggle/commands
         const fakeConfig: vscode.WorkspaceConfiguration = {
             get: ((key: string, defaultValue?: any) => {
-                if (key === 'enabled') return true; // default enabled
+                if (key === 'enabled') {return true;} // default enabled
                 return defaultValue;
             }) as any,
             has: (() => true) as any,
@@ -88,7 +88,7 @@ suite('Commands Integration (no production changes)', () => {
     teardown(() => {
         sandbox.restore();
         // Cleanup captured commands
-        for (const key of Object.keys(registered)) delete registered[key];
+        for (const key of Object.keys(registered)) {delete registered[key];}
         lastEnabledValue = undefined;
     });
 

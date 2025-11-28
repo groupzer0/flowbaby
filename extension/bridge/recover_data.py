@@ -23,31 +23,30 @@ from typing import List, Tuple
 def configure_workspace(workspace_path: Path) -> None:
     """
     Configure cognee to use workspace-local storage directories.
-    
+
     Plan 033: Sets environment variables BEFORE importing cognee SDK.
     The Cognee SDK uses pydantic-settings with @lru_cache, which reads
     environment variables at import time and caches them permanently.
     """
-    import os
-    
+
     system_dir = workspace_path / '.flowbaby/system'
     data_dir = workspace_path / '.flowbaby/data'
-    
-    print(f"Configuring workspace directories:")
+
+    print("Configuring workspace directories:")
     print(f"  System dir: {system_dir}")
     print(f"  Data dir: {data_dir}")
-    
+
     # Create directories BEFORE setting env vars
     system_dir.mkdir(parents=True, exist_ok=True)
     data_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Set environment variables BEFORE importing cognee
     os.environ['SYSTEM_ROOT_DIRECTORY'] = str(system_dir)
     os.environ['DATA_ROOT_DIRECTORY'] = str(data_dir)
-    
+
     # NOW import cognee
     import cognee
-    
+
     # Belt-and-suspenders: Also call config methods (redundant but safe)
     cognee.config.system_root_directory(str(system_dir))
     cognee.config.data_root_directory(str(data_dir))
@@ -57,7 +56,7 @@ def find_text_files(data_dir: Path) -> List[Path]:
     """Find all text files in the .flowbaby/data directory."""
     if not data_dir.exists():
         return []
-    
+
     txt_files = sorted(data_dir.glob('*.txt'))
     return txt_files
 
@@ -65,10 +64,11 @@ def find_text_files(data_dir: Path) -> List[Path]:
 def get_current_counts(workspace_path: Path) -> Tuple[int, int]:
     """Get current SQLite and LanceDB entry counts."""
     import sqlite3
+
     import lancedb
-    
+
     db_path = workspace_path / '.flowbaby/system' / 'databases'
-    
+
     # SQLite count
     sqlite_path = db_path / 'cognee_db'
     sqlite_count = 0
@@ -80,7 +80,7 @@ def get_current_counts(workspace_path: Path) -> Tuple[int, int]:
             conn.close()
         except Exception as e:
             print(f"  Warning: Could not read SQLite: {e}")
-    
+
     # LanceDB count
     lance_path = db_path / 'lancedb'
     lance_count = 0
@@ -94,7 +94,7 @@ def get_current_counts(workspace_path: Path) -> Tuple[int, int]:
                 lance_count += len(table.to_pandas())
         except Exception as e:
             print(f"  Warning: Could not read LanceDB: {e}")
-    
+
     return sqlite_count, lance_count
 
 
@@ -118,36 +118,36 @@ def main():
                         help='Show what would be done without making changes')
     parser.add_argument('--batch-size', type=int, default=10,
                         help='Number of files to add before running cognify (default: 10)')
-    
+
     args = parser.parse_args()
     workspace_path = Path(args.workspace).resolve()
-    
+
     if not workspace_path.exists():
         print(f"Error: Workspace path does not exist: {workspace_path}")
         sys.exit(1)
-    
+
     data_dir = workspace_path / '.flowbaby/data'
     if not data_dir.exists():
         print(f"Error: No .flowbaby/data directory found at: {data_dir}")
         sys.exit(1)
-    
+
     # Configure workspace FIRST (this is critical!)
     configure_workspace(workspace_path)
-    
+
     # Find text files
     txt_files = find_text_files(data_dir)
     print(f"\nFound {len(txt_files)} text files in {data_dir}")
-    
+
     if not txt_files:
         print("No files to recover.")
         sys.exit(0)
-    
+
     # Get current counts
     print("\nCurrent database status:")
     sqlite_count, lance_count = get_current_counts(workspace_path)
     print(f"  SQLite entries: {sqlite_count}")
     print(f"  LanceDB embeddings: {lance_count}")
-    
+
     if args.dry_run:
         print(f"\n[DRY RUN] Would process {len(txt_files)} text files")
         print("\nFirst 10 files:")
@@ -156,41 +156,41 @@ def main():
         if len(txt_files) > 10:
             print(f"  ... and {len(txt_files) - 10} more")
         sys.exit(0)
-    
+
     # Confirm before proceeding
     print(f"\nThis will re-process {len(txt_files)} text files to regenerate vector embeddings.")
     response = input("Continue? [y/N]: ")
     if response.lower() != 'y':
         print("Aborted.")
         sys.exit(0)
-    
+
     # Process files in batches
     async def process_all():
         total = len(txt_files)
         processed = 0
         errors = []
-        
+
         for i, txt_file in enumerate(txt_files, 1):
             try:
                 content = txt_file.read_text(encoding='utf-8')
                 print(f"[{i}/{total}] Adding {txt_file.name}...")
                 await add_file_content(content, txt_file.name)
                 processed += 1
-                
+
                 # Run cognify after each batch
                 if i % args.batch_size == 0 or i == total:
-                    print(f"  Running cognify on batch...")
+                    print("  Running cognify on batch...")
                     await batch_cognify()
-                    
+
             except Exception as e:
                 errors.append((txt_file.name, str(e)))
                 print(f"  ERROR: {e}")
-        
+
         return processed, errors
-    
+
     print("\nStarting recovery...")
     processed, errors = asyncio.run(process_all())
-    
+
     # Final status
     print(f"\n{'='*60}")
     print("Recovery complete!")
@@ -199,13 +199,13 @@ def main():
         print(f"  Errors: {len(errors)}")
         for name, err in errors[:5]:
             print(f"    - {name}: {err}")
-    
+
     # Get updated counts
     print("\nUpdated database status:")
     sqlite_count_new, lance_count_new = get_current_counts(workspace_path)
     print(f"  SQLite entries: {sqlite_count_new} (was {sqlite_count})")
     print(f"  LanceDB embeddings: {lance_count_new} (was {lance_count})")
-    
+
     if lance_count_new > lance_count:
         print(f"\n✅ Successfully recovered {lance_count_new - lance_count} vector embeddings!")
     else:

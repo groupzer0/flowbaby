@@ -17,7 +17,7 @@
 
 import * as vscode from 'vscode';
 import { FlowbabyContextProvider } from '../flowbabyContextProvider';
-import { FlowbabyContextRequest, FlowbabyContextResponse, AgentErrorResponse, AgentErrorCode } from '../types/agentIntegration';
+import { FlowbabyContextRequest, FlowbabyContextResponse, AgentErrorResponse } from '../types/agentIntegration';
 
 export interface RetrieveMemoryToolInput {
     query: string;

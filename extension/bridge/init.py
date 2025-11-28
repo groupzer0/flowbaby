@@ -12,7 +12,7 @@ Initializes Cognee for a workspace by:
 5. Performing one-time global data prune if needed (with safety checks)
 
 Returns JSON to stdout:
-  Success: {"success": true, "dataset_name": "ws_abc123...", "flowbaby_dir": "/path/to/.flowbaby", 
+  Success: {"success": true, "dataset_name": "ws_abc123...", "flowbaby_dir": "/path/to/.flowbaby",
             "ontology_loaded": true, "ontology_entities": 8, "ontology_relationships": 12,
             "migration_performed": false, "global_marker_location": "/path/to/marker",
             "data_dir_size_before": 12345, "data_dir_size_after": 6789,
@@ -35,25 +35,25 @@ from pathlib import Path
 # Add bridge directory to path to import bridge_logger
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import bridge_logger
-from workspace_utils import generate_dataset_name, canonicalize_workspace_path
-from ontology_provider import load_ontology, OntologyLoadError
+from ontology_provider import OntologyLoadError, load_ontology
+from workspace_utils import canonicalize_workspace_path, generate_dataset_name
 
 
 @contextmanager
 def suppress_stdout(logger=None):
     """
     Context manager to suppress stdout/stderr during operations that may print unwanted output.
-    
+
     Plan 040 Milestone 1: The cognee SDK prints "User X has registered" and other messages
     to stdout during database initialization, which corrupts our JSON output. This context
     manager captures all stdout/stderr and redirects it to the logger.
-    
+
     STDOUT CONTRACT: init.py must emit exactly one JSON line to stdout and nothing else.
     All human-readable diagnostics must go through the file logger or stderr.
-    
+
     Args:
         logger: Optional logger instance to log captured output
-        
+
     Yields:
         Captured output object with .stdout and .stderr properties
     """
@@ -61,15 +61,15 @@ def suppress_stdout(logger=None):
         def __init__(self):
             self.stdout = ""
             self.stderr = ""
-    
+
     captured = CapturedOutput()
     old_stdout = sys.stdout
     old_stderr = sys.stderr
-    
+
     # Create StringIO buffers to capture output
     stdout_buffer = io.StringIO()
     stderr_buffer = io.StringIO()
-    
+
     try:
         sys.stdout = stdout_buffer
         sys.stderr = stderr_buffer
@@ -78,18 +78,18 @@ def suppress_stdout(logger=None):
         # Restore original stdout/stderr BEFORE accessing buffers
         sys.stdout = old_stdout
         sys.stderr = old_stderr
-        
+
         # Get captured content
         captured.stdout = stdout_buffer.getvalue()
         captured.stderr = stderr_buffer.getvalue()
-        
+
         # Log captured output if logger is provided and there's content
         if logger:
             if captured.stdout.strip():
                 logger.debug(f"Suppressed stdout: {captured.stdout.strip()}")
             if captured.stderr.strip():
                 logger.debug(f"Suppressed stderr: {captured.stderr.strip()}")
-        
+
         # Clean up buffers
         stdout_buffer.close()
         stderr_buffer.close()
@@ -98,13 +98,13 @@ def suppress_stdout(logger=None):
 def workspace_has_data(system_dir: Path) -> bool:
     """
     Check if workspace has existing vector data that would be lost by prune.
-    
+
     This is a defense-in-depth safety check. Even if marker logic has bugs,
     we should NEVER destroy data that exists.
-    
+
     Args:
         system_dir: Path to .flowbaby/system directory
-        
+
     Returns:
         True if existing data is detected, False otherwise
     """
@@ -117,7 +117,7 @@ def workspace_has_data(system_dir: Path) -> bool:
                     return True
             except (PermissionError, OSError):
                 pass  # Can't read dir, assume no data
-        
+
         # Check for Kuzu graph data
         kuzu_path = system_dir / 'databases' / 'cognee_graph'
         if kuzu_path.exists() and kuzu_path.is_dir():
@@ -126,7 +126,7 @@ def workspace_has_data(system_dir: Path) -> bool:
                     return True
             except (PermissionError, OSError):
                 pass  # Can't read dir, assume no data
-        
+
         return False
     except Exception:
         # On any error, assume no data (fail-open for fresh workspaces)
@@ -136,20 +136,20 @@ def workspace_has_data(system_dir: Path) -> bool:
 def get_data_integrity_status(system_dir: Path) -> dict:
     """
     Check data integrity by comparing SQLite vs LanceDB counts.
-    
+
     This helps detect data loss situations where SQLite has more entries
     than LanceDB (indicating vector embeddings were lost).
-    
+
     Args:
         system_dir: Path to .flowbaby/system directory
-        
+
     Returns:
         Dictionary with sqlite_count, lancedb_count, healthy boolean, and optional warning
     """
     try:
         sqlite_count = 0
         lancedb_count = 0
-        
+
         # Count SQLite entries
         sqlite_db_path = system_dir / 'databases' / 'cognee_db'
         if sqlite_db_path.exists():
@@ -168,7 +168,7 @@ def get_data_integrity_status(system_dir: Path) -> dict:
                 conn.close()
             except Exception:
                 sqlite_count = -1  # Could not query
-        
+
         # Count LanceDB entries
         lancedb_path = system_dir / 'databases' / 'cognee.lancedb'
         if lancedb_path.exists() and lancedb_path.is_dir():
@@ -178,7 +178,7 @@ def get_data_integrity_status(system_dir: Path) -> dict:
                 lancedb_count = len([f for f in lance_items if f.is_dir() or f.suffix == '.lance'])
             except Exception:
                 lancedb_count = -1  # Could not query
-        
+
         # Determine health - healthy if counts match or LanceDB >= 90% of SQLite
         if sqlite_count <= 0 and lancedb_count <= 0:
             healthy = True  # No data, no problem
@@ -192,7 +192,7 @@ def get_data_integrity_status(system_dir: Path) -> dict:
         else:
             healthy = False
             warning = f'Data mismatch: {sqlite_count} SQLite entries but only {lancedb_count} vector tables'
-        
+
         return {
             'sqlite_count': sqlite_count,
             'lancedb_count': lancedb_count,
@@ -211,10 +211,10 @@ def get_data_integrity_status(system_dir: Path) -> dict:
 async def initialize_cognee(workspace_path: str) -> dict:
     """
     Initialize Cognee for the given workspace with dataset-based isolation.
-    
+
     Args:
         workspace_path: Absolute path to VS Code workspace root
-        
+
     Returns:
         Dictionary with success status, dataset_name, flowbaby_dir, ontology info, and migration status
     """
@@ -224,11 +224,11 @@ async def initialize_cognee(workspace_path: str) -> dict:
 
     try:
         workspace_dir = Path(workspace_path)
-        
+
         # Plan 039 M5: API key is now resolved by TypeScript and passed via environment
         # Workspace .env loading removed per Plan 037 F2 security finding
         # (plaintext API keys in .env files are a credential exposure risk)
-        
+
         # Check for API key (provided by TypeScript via LLM_API_KEY environment variable)
         api_key = os.getenv('LLM_API_KEY')
         if not api_key:
@@ -241,7 +241,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 'remediation': 'Run "Flowbaby: Set API Key" from Command Palette to configure your API key securely.',
                 'error': error_msg
             }
-        
+
         # ============================================================================
         # PLAN 033 FIX: Set environment variables BEFORE importing cognee SDK
         # ============================================================================
@@ -251,43 +251,43 @@ async def initialize_cognee(workspace_path: str) -> dict:
         #
         # This is the same pattern used in ingest.py and retrieve.py (Plan 032).
         # ============================================================================
-        
+
         # Calculate workspace-local storage paths
         system_root = str(workspace_dir / '.flowbaby/system')
         data_root = str(workspace_dir / '.flowbaby/data')
-        
+
         # Create directories BEFORE setting env vars (ensures paths exist)
         Path(system_root).mkdir(parents=True, exist_ok=True)
         Path(data_root).mkdir(parents=True, exist_ok=True)
         logger.debug(f"Created storage directories: {system_root}, {data_root}")
-        
+
         # Set environment variables BEFORE importing cognee
         # CRITICAL: Use DATA_ROOT_DIRECTORY and SYSTEM_ROOT_DIRECTORY (no COGNEE_ prefix!)
         os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
         os.environ['DATA_ROOT_DIRECTORY'] = data_root
         logger.debug(f"Set environment variables: SYSTEM_ROOT_DIRECTORY={system_root}, DATA_ROOT_DIRECTORY={data_root}")
-        
+
         # NOW import cognee - it will read the env vars we just set
         # Plan 040 M1: Wrap import in stdout suppression as SDK may print during module init
         logger.debug("Importing cognee SDK")
         with suppress_stdout(logger):
             import cognee
             from cognee.infrastructure.databases.relational import create_db_and_tables
-        
+
         # ============================================================================
         # Belt-and-suspenders: Also call cognee.config methods after import
         # These are redundant since env vars are set before import, but kept for safety
         # ============================================================================
-        
+
         # Plan 028 M6: Read LLM configuration from environment with workspace .env fallback
         # Priority: Environment variable (from TypeScript) > workspace .env > default
         llm_api_key = os.environ.get('LLM_API_KEY') or api_key  # api_key loaded from .env earlier
         llm_provider = os.environ.get('LLM_PROVIDER') or os.getenv('LLM_PROVIDER') or 'openai'
         llm_model = os.environ.get('LLM_MODEL') or os.getenv('LLM_MODEL') or 'gpt-4o-mini'
         llm_endpoint = os.environ.get('LLM_ENDPOINT') or os.getenv('LLM_ENDPOINT') or ''
-        
+
         logger.debug(f"LLM configuration: provider={llm_provider}, model={llm_model}, endpoint={'<set>' if llm_endpoint else '<default>'}")
-        
+
         # Configure Cognee with LLM settings in the correct order (per architecture review §2.6)
         # 1. Set API key first
         cognee.config.set_llm_api_key(llm_api_key)
@@ -299,37 +299,37 @@ async def initialize_cognee(workspace_path: str) -> dict:
         if llm_endpoint:
             cognee.config.set_llm_endpoint(llm_endpoint)
             logger.debug(f"Custom LLM endpoint configured: {llm_endpoint}")
-        
+
         # Belt-and-suspenders: Also call config methods (redundant but safe)
         # Plan 033: Env vars are set before import, so these are now confirmatory
         cognee.config.system_root_directory(system_root)
         cognee.config.data_root_directory(data_root)
         logger.debug(f"Confirmed workspace-local storage via config API: {system_root}")
-        
+
         # PLAN 027: Derive global_data_dir directly from workspace path
         # NEVER query get_relational_config() for marker location - it may return stale/wrong path
         global_data_dir = workspace_dir / '.flowbaby/system'
         global_data_dir.mkdir(parents=True, exist_ok=True)
         global_marker_path = global_data_dir / '.migration_v1_complete'
         logger.debug(f"Migration marker location (workspace-local): {global_marker_path}")
-        
+
         # 1. Generate unique dataset name for this workspace using canonical path
         dataset_name, workspace_path_str = generate_dataset_name(workspace_path)
         logger.info(f"Generated dataset name: {dataset_name}")
-        
+
         # 2. Create .flowbaby directory for local marker files (not database storage)
         # Note: The data/system storage directories are already created earlier
         flowbaby_dir = Path(workspace_path) / '.flowbaby'
         flowbaby_dir.mkdir(parents=True, exist_ok=True)
-        
+
         local_marker_path = flowbaby_dir / '.dataset_migration_complete'
-        
+
         # 3. Migration marker strategy with safety checks
         migration_performed = False
         global_marker_location = str(global_marker_path.absolute())
         data_dir_size_before = 0
         data_dir_size_after = 0
-        
+
         # Check if workspace migration marker already exists (authoritative)
         if global_marker_path.exists():
             logger.debug("Workspace migration marker found - migration already complete")
@@ -343,7 +343,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 logger.warning(f"Failed to read marker metadata: {e}")
         else:
             logger.info("Workspace migration marker not found, checking safety conditions")
-            
+
             # PLAN 027 SAFETY CHECK: Never prune if existing data is detected
             if workspace_has_data(global_data_dir):
                 logger.warning("=" * 60)
@@ -351,7 +351,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 logger.warning("   Skipping prune to prevent data loss")
                 logger.warning("   Creating marker without pruning")
                 logger.warning("=" * 60)
-                
+
                 # Create marker WITHOUT pruning
                 marker_metadata = {
                     'migrated_at': datetime.now().isoformat(),
@@ -367,15 +367,15 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 global_marker_path.write_text(json.dumps(marker_metadata, indent=2))
                 logger.info("Migration marker created (prune skipped due to existing data)")
                 migration_performed = False
-            
+
             # Check for fresh workspace (empty databases directory)
             # If the workspace is fresh, we don't need to prune anything
             elif not (global_data_dir / 'databases').exists() or not any((global_data_dir / 'databases').iterdir()):
                 logger.info("Fresh workspace detected - skipping prune")
-                
+
                 # Ensure databases directory exists
                 (global_data_dir / 'databases').mkdir(parents=True, exist_ok=True)
-                
+
                 # Initialize relational database tables (SQLite)
                 # This is required for user registration and basic system function
                 # Plan 040 M1: Wrap in stdout suppression - create_db_and_tables() prints
@@ -384,14 +384,14 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 with suppress_stdout(logger):
                     await create_db_and_tables()
                 logger.info("Relational database tables created")
-                
+
                 # Initialize Graph DB (Kuzu)
                 # Plan 040 M1: Wrap in stdout suppression as Kuzu may print diagnostics
                 logger.info("Initializing graph database (Kuzu)...")
                 with suppress_stdout(logger):
                     from cognee.infrastructure.databases.graph import get_graph_engine
                     await get_graph_engine()
-                
+
                 # Initialize Vector DB (LanceDB) via dummy ingestion
                 # Plan 040 M1: Wrap in stdout suppression as LanceDB may print during setup
                 logger.info("Initializing vector database (LanceDB) via setup marker...")
@@ -401,7 +401,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
                         dataset_name=dataset_name
                     )
                 logger.info("Vector database initialized")
-                
+
                 marker_metadata = {
                     'migrated_at': datetime.now().isoformat(),
                     'workspace_id': dataset_name,
@@ -420,39 +420,39 @@ async def initialize_cognee(workspace_path: str) -> dict:
             else:
                 # No existing data detected but directory is not empty - proceed with migration prune
                 logger.info("Legacy data structure detected - proceeding with migration")
-                
+
                 # Attempt to atomically create marker (OS-level exclusivity)
                 try:
                     # O_CREAT | O_EXCL ensures only one process can create the file
                     fd = os.open(str(global_marker_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-                    
+
                     # This process won the race - perform global prune
                     try:
                         # Calculate data directory size before pruning
                         data_dir_size_before = sum(
                             f.stat().st_size for f in global_data_dir.rglob('*') if f.is_file()
                         )
-                        
+
                         # PLAN 027: Prominent warning before prune
                         logger.warning("=" * 60)
                         logger.warning("⚠️ PERFORMING DATA PRUNE - This will clear vector embeddings")
                         logger.warning("   This is a one-time migration for legacy untagged data.")
                         logger.warning(f"   Marker will be created at: {global_marker_path}")
                         logger.warning("=" * 60)
-                        
+
                         # Perform global prune (removes only untagged legacy data)
                         # Plan 040 M1: Wrap in stdout suppression
                         with suppress_stdout(logger):
                             await cognee.prune.prune_system()
                         migration_performed = True
-                        
+
                         # Calculate data directory size after pruning
                         data_dir_size_after = sum(
                             f.stat().st_size for f in global_data_dir.rglob('*') if f.is_file()
                         )
-                        
+
                         logger.info(f"Data prune complete. Size before: {data_dir_size_before} bytes, after: {data_dir_size_after} bytes")
-                        
+
                         # Write structured metadata to global marker
                         marker_metadata = {
                             'migrated_at': datetime.now().isoformat(),
@@ -464,19 +464,19 @@ async def initialize_cognee(workspace_path: str) -> dict:
                             'note': 'Global prune of untagged data performed by this process',
                             'prune_skipped': False
                         }
-                        
+
                         # Write to the already-opened file descriptor
                         os.write(fd, json.dumps(marker_metadata, indent=2).encode())
                         logger.info("Global migration completed and marker created")
-                        
+
                     finally:
                         os.close(fd)
-                        
+
                 except FileExistsError:
                     # Another process created the marker - migration already performed
                     logger.info("Migration marker created by another process")
                     migration_performed = False
-                    
+
                     # Read existing marker metadata if available
                     try:
                         if global_marker_path.exists():
@@ -486,7 +486,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
                             data_dir_size_after = marker_data.get('data_dir_size_after', 0)
                     except Exception as e:
                         logger.warning(f"Failed to read marker metadata: {e}")
-                        
+
                 except (OSError, PermissionError) as e:
                     error_msg = f'Failed to create migration marker (permission denied or filesystem error): {e}'
                     logger.error(error_msg)
@@ -494,7 +494,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
                         'success': False,
                         'error': error_msg
                     }
-        
+
         # 4. Create/update local acknowledgement marker (all processes do this)
         local_marker_path.write_text(json.dumps({
             'acknowledged_at': datetime.now().isoformat(),
@@ -503,7 +503,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
             'migration_performed_by_this_process': migration_performed,
             'global_marker_location': global_marker_location
         }, indent=2))
-        
+
         # 5. Load ontology configuration using OntologyProvider
         try:
             logger.debug("Loading ontology")
@@ -528,14 +528,14 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 'remediation': 'Check extension logs for details. File an issue if problem persists.',
                 'error': error_msg
             }
-        
+
         # 6. PLAN 027: Get data integrity status for health reporting
         data_integrity = get_data_integrity_status(global_data_dir)
         if data_integrity.get('warning'):
             logger.warning(f"Data integrity warning: {data_integrity['warning']}")
-        
+
         logger.info("Initialization completed successfully")
-        
+
         # 7. Return extended success JSON with migration metadata and data integrity
         return {
             'success': True,
@@ -551,7 +551,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
             'data_dir_size_after': data_dir_size_after,
             'data_integrity': data_integrity
         }
-        
+
     except ImportError as e:
         error_msg = f'Failed to import required module: {str(e)}'
         if logger: logger.error(error_msg)
@@ -578,7 +578,7 @@ def main():
         }
         print(json.dumps(result))
         sys.exit(1)
-    
+
     workspace_path = sys.argv[1]
     try:
         workspace_path = canonicalize_workspace_path(workspace_path)
@@ -589,7 +589,7 @@ def main():
         }
         print(json.dumps(result))
         sys.exit(1)
-    
+
     # Validate workspace path exists
     if not Path(workspace_path).is_dir():
         result = {
@@ -598,13 +598,13 @@ def main():
         }
         print(json.dumps(result))
         sys.exit(1)
-    
+
     # Run initialization
     result = asyncio.run(initialize_cognee(workspace_path))
-    
+
     # Output JSON result
     print(json.dumps(result))
-    
+
     # Exit with appropriate code
     sys.exit(0 if result['success'] else 1)
 

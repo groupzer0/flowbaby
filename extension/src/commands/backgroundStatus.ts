@@ -5,12 +5,12 @@
  */
 
 import * as vscode from 'vscode';
-import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
+import { BackgroundOperationManager, OperationEntry } from '../background/BackgroundOperationManager';
 
 export async function backgroundStatus(): Promise<void> {
     try {
         const manager = BackgroundOperationManager.getInstance();
-        const operations = manager.getStatus() as any[];
+        const operations = manager.getStatus() as OperationEntry[];
         
         if (operations.length === 0) {
             vscode.window.showInformationMessage('No background operations');

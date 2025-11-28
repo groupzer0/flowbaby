@@ -1,9 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import * as sinon from 'sinon';
-import * as child_process from 'child_process';
 import { EventEmitter } from 'events';
 import mock = require('mock-fs');
 import { FlowbabyClient } from '../flowbabyClient';
@@ -54,14 +52,14 @@ suite('FlowbabyClient Test Suite', () => {
 
     suite('detectPythonInterpreter', () => {
         let originalPlatform: string;
-        let originalConfig: vscode.WorkspaceConfiguration;
+        let _originalConfig: vscode.WorkspaceConfiguration;
 
         setup(() => {
             // Save original platform
             originalPlatform = process.platform;
             
-            // Mock VS Code configuration
-            originalConfig = vscode.workspace.getConfiguration('Flowbaby');
+            // Mock VS Code configuration (saved for potential future cleanup)
+            _originalConfig = vscode.workspace.getConfiguration('Flowbaby');
             
             // Ensure mockContext is available
             mockContext = createMockContext();
@@ -80,7 +78,7 @@ suite('FlowbabyClient Test Suite', () => {
             // Setup: Mock explicit config
             const mockConfig = {
                 get: (key: string, defaultValue?: string) => {
-                    if (key === 'pythonPath') return '/usr/bin/python3.11';
+                    if (key === 'pythonPath') {return '/usr/bin/python3.11';}
                     return defaultValue;
                 }
             };
@@ -114,7 +112,7 @@ suite('FlowbabyClient Test Suite', () => {
             
             const mockConfig = {
                 get: (key: string, defaultValue?: string) => {
-                    if (key === 'pythonPath') return 'python3'; // Default value
+                    if (key === 'pythonPath') {return 'python3';} // Default value
                     return defaultValue;
                 }
             };
@@ -149,7 +147,7 @@ suite('FlowbabyClient Test Suite', () => {
             
             const mockConfig = {
                 get: (key: string, defaultValue?: string) => {
-                    if (key === 'pythonPath') return 'python3'; // Default value
+                    if (key === 'pythonPath') {return 'python3';} // Default value
                     return defaultValue;
                 }
             };
@@ -174,7 +172,7 @@ suite('FlowbabyClient Test Suite', () => {
             
             const mockConfig = {
                 get: (key: string, defaultValue?: string) => {
-                    if (key === 'pythonPath') return 'python3'; // Default value
+                    if (key === 'pythonPath') {return 'python3';} // Default value
                     return defaultValue;
                 }
             };
@@ -201,7 +199,7 @@ suite('FlowbabyClient Test Suite', () => {
             
             const mockConfig = {
                 get: (key: string, defaultValue?: string) => {
-                    if (key === 'pythonPath') return 'python3'; // Default value
+                    if (key === 'pythonPath') {return 'python3';} // Default value
                     return defaultValue;
                 }
             };
@@ -227,7 +225,7 @@ suite('FlowbabyClient Test Suite', () => {
             
             const mockConfig = {
                 get: (key: string, defaultValue?: string) => {
-                    if (key === 'pythonPath') return 'python3';
+                    if (key === 'pythonPath') {return 'python3';}
                     return defaultValue;
                 }
             };
@@ -238,7 +236,7 @@ suite('FlowbabyClient Test Suite', () => {
             const startTime = Date.now();
             
             for (let i = 0; i < iterations; i++) {
-                const client = new FlowbabyClient(testWorkspacePath, mockContext);
+                const _client = new FlowbabyClient(testWorkspacePath, mockContext);
             }
             
             const endTime = Date.now();
@@ -547,7 +545,7 @@ suite('FlowbabyClient Test Suite', () => {
                 ingestion_duration_sec: 1.5
             });
 
-            const warningStub = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+            const _warningStub = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
 
             const largeContext = 'A'.repeat(100005);
             const result = await client.ingest('Question', largeContext);

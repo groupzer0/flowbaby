@@ -9,6 +9,7 @@
  * API Documentation: extension/AGENT_INTEGRATION.md
  */
 
+import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import {
     FlowbabyContextRequest,
@@ -16,6 +17,14 @@ import {
     AgentErrorCode,
     AgentErrorResponse
 } from '../types/agentIntegration';
+
+/**
+ * Interface for FlowbabyContextProvider to avoid circular imports.
+ * Defines the minimal contract needed for agent retrieval command.
+ */
+interface IFlowbabyContextProvider {
+    retrieveContext(req: FlowbabyContextRequest): Promise<FlowbabyContextResponse | AgentErrorResponse>;
+}
 
 /**
  * Register the Flowbaby.retrieveForAgent command
@@ -29,7 +38,7 @@ import {
  */
 export function registerRetrieveForAgentCommand(
     context: vscode.ExtensionContext,
-    provider: any, // FlowbabyContextProvider type (avoiding circular import)
+    provider: IFlowbabyContextProvider,
     outputChannel: vscode.OutputChannel
 ): void {
     const command = vscode.commands.registerCommand(
@@ -80,7 +89,7 @@ export function registerRetrieveForAgentCommand(
                 }
                 
                 // Generate query hash for logging (first 8 chars of SHA-256)
-                const queryHash = require('crypto')
+                const queryHash = crypto
                     .createHash('sha256')
                     .update(request.query)
                     .digest('hex')

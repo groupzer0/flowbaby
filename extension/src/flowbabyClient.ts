@@ -1,9 +1,31 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, SpawnOptions } from 'child_process';
 import { getFlowbabyOutputChannel, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
+
+/**
+ * Interface for BackgroundOperationManager to avoid circular imports.
+ * Defines the minimal contract needed by FlowbabyClient for async operations.
+ */
+interface IBackgroundOperationManager {
+    startOperation(
+        summaryText: string,
+        datasetPath: string,
+        pythonPath: string,
+        bridgeScriptPath: string,
+        payload: {
+            type: 'summary' | 'conversation';
+            summary?: Record<string, unknown>;
+            conversation?: {
+                userMessage: string;
+                assistantMessage: string;
+                importance: number;
+            };
+        }
+    ): Promise<string>;
+}
 
 /**
  * Result structure from Python bridge scripts
@@ -429,7 +451,7 @@ export class FlowbabyClient {
             createdAt: Date | null;
             updatedAt: Date | null;
         },
-        manager: any // BackgroundOperationManager
+        manager: IBackgroundOperationManager
     ): Promise<{success: boolean, operationId?: string, staged: boolean, error?: string}> {
         const startTime = Date.now();
         
@@ -661,7 +683,7 @@ export class FlowbabyClient {
     async ingestAsync(
         userMessage: string,
         assistantMessage: string,
-        manager: any, // BackgroundOperationManager
+        manager: IBackgroundOperationManager,
         importance: number = 0.0
     ): Promise<{success: boolean, operationId?: string, staged: boolean, error?: string}> {
         const startTime = Date.now();
@@ -834,7 +856,7 @@ export class FlowbabyClient {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const results: RetrievalResult[] = (result.results || []).map((r: any) => {
                     // Mixed-mode handling per §4.4.1: branch on topic_id presence
-                    const isEnriched = !!r.topic_id;
+                    const _isEnriched = !!r.topic_id; // Reserved for future enriched-text handling
                     
                     return {
                         summaryText: r.summary_text || r.text || '',
@@ -1015,7 +1037,7 @@ export class FlowbabyClient {
      * Handles both structured JSON logs and legacy text markers
      */
     private processBridgeLogLine(line: string, scriptName: string): void {
-        if (!line.trim()) return;
+        if (!line.trim()) {return;}
 
         try {
             // Try parsing as structured JSON log
@@ -1027,8 +1049,8 @@ export class FlowbabyClient {
                 // Python: DEBUG, INFO, WARNING, ERROR, CRITICAL
                 // VS Code: Debug, Info, Warn, Error
                 let level = logEntry.level.toUpperCase();
-                if (level === 'WARNING') level = 'WARN';
-                if (level === 'CRITICAL') level = 'ERROR';
+                if (level === 'WARNING') {level = 'WARN';}
+                if (level === 'CRITICAL') {level = 'ERROR';}
                 
                 // Log with data if present
                 this.log(level, logEntry.message, logEntry.data);
@@ -1072,7 +1094,7 @@ export class FlowbabyClient {
     /**
      * Spawn a child process (wrapper for testing)
      */
-    protected spawnProcess(command: string, args: string[], options: any): ChildProcess {
+    protected spawnProcess(command: string, args: string[], options: SpawnOptions): ChildProcess {
         return spawn(command, args, options);
     }
 
@@ -1335,13 +1357,13 @@ export class FlowbabyClient {
 
         // Redact LLM API keys (environment variable format - current)
         sanitized = sanitized.replace(
-            /LLM_API_KEY[\s=]+[\w\-]{32,}/gi,
+            /LLM_API_KEY[\s=]+[\w-]{32,}/gi,
             'LLM_API_KEY=***'
         );
 
         // Redact OpenAI API keys (environment variable format - legacy, for backwards compatibility)
         sanitized = sanitized.replace(
-            /OPENAI_API_KEY[\s=]+[\w\-]{32,}/gi,
+            /OPENAI_API_KEY[\s=]+[\w-]{32,}/gi,
             'OPENAI_API_KEY=***'
         );
 
@@ -1353,13 +1375,13 @@ export class FlowbabyClient {
 
         // Redact Bearer tokens
         sanitized = sanitized.replace(
-            /Bearer\s+[A-Za-z0-9\-_]{32,}/g,
+            /Bearer\s+[A-Za-z0-9_-]{32,}/g,
             'Bearer ***'
         );
 
         // Redact AWS secret access keys
         sanitized = sanitized.replace(
-            /AWS_SECRET_ACCESS_KEY[\s=]+[\w\/\+]{32,}/gi,
+            /AWS_SECRET_ACCESS_KEY[\s=]+[\w/+]{32,}/gi,
             'AWS_SECRET_ACCESS_KEY=***'
         );
 

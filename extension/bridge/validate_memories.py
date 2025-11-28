@@ -24,7 +24,8 @@ from pathlib import Path
 # Add bridge directory to path to import bridge_logger
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import bridge_logger
-from workspace_utils import generate_dataset_name, canonicalize_workspace_path
+from workspace_utils import canonicalize_workspace_path, generate_dataset_name
+
 
 async def validate_memory(workspace_path: str) -> dict:
     # Initialize logger
@@ -39,11 +40,11 @@ async def validate_memory(workspace_path: str) -> dict:
         "retrieval_smoke_test": False,
         "memory_structure": "N/A"
     }
-    
+
     try:
         # 1. Check API Key (Plan 039 M5: .env support removed per security hardening)
         workspace_dir = Path(workspace_path)
-        
+
         # API key is provided by TypeScript via LLM_API_KEY environment variable
         api_key = os.getenv('LLM_API_KEY')
         if api_key:
@@ -70,40 +71,40 @@ async def validate_memory(workspace_path: str) -> dict:
             logger.debug(f"Ontology file found at {ontology_file}")
         else:
             logger.warning(f"Ontology file not found at {ontology_file}")
-        
+
         # ============================================================================
         # PLAN 033 FIX: Set environment variables BEFORE importing cognee SDK
         # ============================================================================
         # CRITICAL: The Cognee SDK uses pydantic-settings with @lru_cache, which reads
         # environment variables at import time and caches them permanently.
         # ============================================================================
-        
+
         # Calculate workspace-local storage paths
         system_root = str(workspace_dir / '.flowbaby/system')
         data_root = str(workspace_dir / '.flowbaby/data')
-        
+
         # Create directories BEFORE setting env vars
         Path(system_root).mkdir(parents=True, exist_ok=True)
         Path(data_root).mkdir(parents=True, exist_ok=True)
-        
+
         # Set environment variables BEFORE importing cognee
         os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
         os.environ['DATA_ROOT_DIRECTORY'] = data_root
-        
+
         # 3. Configure Cognee
         logger.debug("Importing cognee SDK")
         import cognee
         from cognee.modules.search.types import SearchType
-        
+
         # Belt-and-suspenders: Also call config methods (redundant but safe)
         cognee.config.system_root_directory(system_root)
         cognee.config.data_root_directory(data_root)
         cognee.config.set_llm_api_key(api_key)
         cognee.config.set_llm_provider('openai')
-        
+
         dataset_name, _ = generate_dataset_name(workspace_path)
         logger.info(f"Using dataset: {dataset_name}")
-        
+
         # 4. Smoke Test (Graph Connection & Retrieval)
         try:
             # Search for something generic
@@ -116,10 +117,10 @@ async def validate_memory(workspace_path: str) -> dict:
             )
             checks["graph_connection"] = True
             checks["retrieval_smoke_test"] = True
-            
+
             # 5. Validate Structure (if any results)
             if results:
-                first_result = results[0]
+                results[0]
                 # Check if it has expected attributes (text/summary_text)
                 # We can't strictly validate metadata if the result is just a generic chunk
                 # But we can check if we got a result object
@@ -128,7 +129,7 @@ async def validate_memory(workspace_path: str) -> dict:
             else:
                 checks["memory_structure"] = "empty_graph" # Not an error, just empty
                 logger.debug("Smoke test returned no results (empty graph)")
-                
+
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Smoke test failed: {error_msg}")
@@ -160,18 +161,18 @@ def main():
     if len(sys.argv) < 2:
         print(json.dumps({"success": False, "error": "Missing workspace_path"}))
         sys.exit(1)
-        
+
     workspace_path = sys.argv[1]
     try:
         workspace_path = canonicalize_workspace_path(workspace_path)
     except FileNotFoundError:
         print(json.dumps({"success": False, "error": f"Workspace path does not exist: {sys.argv[1]}"}))
         sys.exit(1)
-    
+
     if not Path(workspace_path).is_dir():
         print(json.dumps({"success": False, "error": f"Invalid workspace path: {workspace_path}"}))
         sys.exit(1)
-        
+
     result = asyncio.run(validate_memory(workspace_path))
     print(json.dumps(result))
     sys.exit(0 if result["success"] else 1)

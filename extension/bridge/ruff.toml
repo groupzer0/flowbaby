@@ -1,0 +1,30 @@
+# Ruff linting configuration for Flowbaby Python bridge
+# Documentation: https://docs.astral.sh/ruff/
+
+line-length = 100
+target-version = "py38"
+
+# Exclude backup files and cache directories
+exclude = ["ingest_old.py", ".venv", "__pycache__", ".pytest_cache"]
+
+[lint]
+# Selected rule categories:
+# E: pycodestyle errors
+# F: pyflakes (undefined names, unused imports, etc.)
+# W: pycodestyle warnings
+# I: isort (import sorting)
+# B: bugbear (common bug patterns)
+# C4: flake8-comprehensions (better list/dict/set comprehensions)
+select = ["E", "F", "W", "I", "B", "C4"]
+
+# Ignored rules:
+# E501: Line too long (handled by line-length setting above with flexibility)
+# E701: Multiple statements on one line - common in logging guards (if logger: logger.x)
+ignore = ["E501", "E701"]
+
+[lint.per-file-ignores]
+# Allow assert statements and module-level import after path manipulation in test files
+"tests/*" = ["S101", "E402"]
+"test_*.py" = ["S101", "E402"]
+# Allow importing rdflib just to check it's installed in conftest
+"tests/conftest.py" = ["F401"]

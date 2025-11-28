@@ -1,7 +1,6 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as sinon from 'sinon';
 import mock = require('mock-fs');
 import { AuditLogger, getAuditLogger, AuditEvent } from '../audit/AuditLogger';
 

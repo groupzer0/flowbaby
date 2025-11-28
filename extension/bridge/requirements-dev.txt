@@ -1,0 +1,9 @@
+# Development dependencies for bridge Python code
+# Install alongside requirements.txt: pip install -r requirements.txt -r requirements-dev.txt
+# These are NOT validated by verify_environment.py (runtime only)
+
+# Linting
+ruff>=0.1.0
+
+# Testing (if not already in requirements.txt)
+pytest>=7.0.0

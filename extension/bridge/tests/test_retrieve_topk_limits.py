@@ -1,6 +1,6 @@
 import os
-import sys
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -10,8 +10,8 @@ import pytest
 BRIDGE_DIR = Path(__file__).parent.parent
 sys.path.append(str(BRIDGE_DIR))
 
-from retrieve import retrieve_context  # noqa: E402
 from ingest import run_sync  # noqa: E402
+from retrieve import retrieve_context  # noqa: E402
 
 
 def has_real_api_key():

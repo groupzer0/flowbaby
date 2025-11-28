@@ -129,9 +129,9 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
             // Mock Config
             const configMock = {
                 get: (key: string, defaultValue?: any) => {
-                    if (key === 'llm.provider') return 'anthropic';
-                    if (key === 'llm.model') return 'claude-3-opus';
-                    if (key === 'llm.endpoint') return 'https://api.anthropic.com';
+                    if (key === 'llm.provider') {return 'anthropic';}
+                    if (key === 'llm.model') {return 'claude-3-opus';}
+                    if (key === 'llm.endpoint') {return 'https://api.anthropic.com';}
                     return defaultValue;
                 }
             };
@@ -167,7 +167,7 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
                 proc.stdout = new EventEmitter();
                 proc.stderr = new EventEmitter();
                 setTimeout(() => {
-                    if (stdout) proc.stdout.emit('data', stdout);
+                    if (stdout) {proc.stdout.emit('data', stdout);}
                     proc.emit('close', 0);
                 }, 10);
                 return proc;

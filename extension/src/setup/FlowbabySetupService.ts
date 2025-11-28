@@ -172,7 +172,7 @@ export class FlowbabySetupService {
      * Uses isolated .flowbaby/venv path to avoid conflicts with user's workspace .venv
      */
     async createEnvironment(): Promise<boolean> {
-        if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Creating environment...');
+        if (this.statusBar) {this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Creating environment...');}
         
         // Plan 028 M2: Debug logging for setup operations
         debugLog('Creating Python environment', { workspacePath: this.workspacePath });
@@ -304,8 +304,9 @@ export class FlowbabySetupService {
                 vscode.window.showInformationMessage('Flowbaby environment setup complete!');
                 debugLog('Environment creation successful', { venvPath });
                 return true;
-            } catch (error: any) {
-                this.log('Setup failed: ' + error);
+            } catch (error: unknown) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.log('Setup failed: ' + errorMessage);
                 debugLog('Environment creation failed', { error: String(error), venvPath });
                 
                 // Rollback
@@ -315,16 +316,16 @@ export class FlowbabySetupService {
                 }
 
                 let userMessage = 'Setup failed.';
-                if (error.message && error.message.includes('PYTHON_VERSION_UNSUPPORTED')) {
+                if (errorMessage.includes('PYTHON_VERSION_UNSUPPORTED')) {
                     userMessage = 'Python 3.8+ is required. Please install it and try again.';
-                } else if (error.message && error.message.includes('VERIFICATION_FAILED')) {
+                } else if (errorMessage.includes('VERIFICATION_FAILED')) {
                     userMessage = 'Environment verification failed. Check logs.';
                 } else {
                     userMessage = 'Setup failed. Check output for details.';
                 }
 
                 vscode.window.showErrorMessage(userMessage);
-                if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Error, userMessage);
+                if (this.statusBar) {this.statusBar.setStatus(FlowbabyStatus.Error, userMessage);}
                 return false;
             }
         });
@@ -335,7 +336,7 @@ export class FlowbabySetupService {
      * Used when user chooses to use their existing .venv instead of .flowbaby/venv
      */
     private async installIntoExistingVenv(): Promise<boolean> {
-        if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Installing into existing .venv...');
+        if (this.statusBar) {this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Installing into existing .venv...');}
         
         return vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
@@ -383,12 +384,12 @@ export class FlowbabySetupService {
                 vscode.window.showInformationMessage('Flowbaby installed into existing .venv');
                 debugLog('Environment setup completed using existing .venv', { venvPath });
                 return true;
-            } catch (error: any) {
-                this.log('Setup into existing .venv failed: ' + error);
+            } catch (error: unknown) {
+                this.log('Setup into existing .venv failed: ' + (error instanceof Error ? error.message : String(error)));
                 debugLog('Setup into existing .venv failed', { error: String(error) });
 
                 vscode.window.showErrorMessage('Failed to install into existing .venv. Check output for details.');
-                if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Error, 'Setup failed');
+                if (this.statusBar) {this.statusBar.setStatus(FlowbabyStatus.Error, 'Setup failed');}
                 return false;
             }
         });
@@ -548,7 +549,7 @@ export class FlowbabySetupService {
             }
         }
 
-        if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Refreshing dependencies...');
+        if (this.statusBar) {this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Refreshing dependencies...');}
 
         await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
@@ -613,8 +614,9 @@ export class FlowbabySetupService {
                     throw new Error('VERIFICATION_FAILED');
                 }
 
-            } catch (error: any) {
-                this.log(`Refresh failed: ${error}`);
+            } catch (error: unknown) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.log(`Refresh failed: ${errorMessage}`);
                 debugLog('Dependencies refresh failed', { error: String(error) });
                 
                 // Restore backup
@@ -627,14 +629,14 @@ export class FlowbabySetupService {
                 }
                 
                 let msg = 'Refresh failed.';
-                if (error.message && error.message.includes('PIP_INSTALL_FAILED')) {
+                if (errorMessage.includes('PIP_INSTALL_FAILED')) {
                     msg = 'Failed to install dependencies.';
-                } else if (error.message && error.message.includes('VERIFICATION_FAILED')) {
+                } else if (errorMessage.includes('VERIFICATION_FAILED')) {
                     msg = 'Verification failed after refresh.';
                 }
                 
                 vscode.window.showErrorMessage(msg + ' Previous environment restored.');
-                if (this.statusBar) this.statusBar.setStatus(FlowbabyStatus.Error, msg);
+                if (this.statusBar) {this.statusBar.setStatus(FlowbabyStatus.Error, msg);}
             } finally {
                 bgManager.resume();
             }
@@ -695,12 +697,12 @@ export class FlowbabySetupService {
 
             proc.stdout.on('data', (data) => {
                 stdout += data.toString();
-                if (!captureOutput) this.outputChannel.append(data.toString());
+                if (!captureOutput) {this.outputChannel.append(data.toString());}
             });
 
             proc.stderr.on('data', (data) => {
                 stderr += data.toString();
-                if (!captureOutput) this.outputChannel.append(data.toString());
+                if (!captureOutput) {this.outputChannel.append(data.toString());}
             });
 
             proc.on('close', (code) => {
@@ -734,7 +736,7 @@ export class FlowbabySetupService {
 
     async readBridgeEnv(): Promise<BridgeEnvMetadata | null> {
         const filePath = this.getMetadataPath('bridge-env.json');
-        if (!this.fs.existsSync(filePath)) return null;
+        if (!this.fs.existsSync(filePath)) {return null;}
         try {
             const content = await fs.promises.readFile(filePath, 'utf8');
             return JSON.parse(content) as BridgeEnvMetadata;
@@ -755,7 +757,7 @@ export class FlowbabySetupService {
 
     async readBridgeVersion(): Promise<BridgeVersionMetadata | null> {
         const filePath = this.getMetadataPath('bridge-version.json');
-        if (!this.fs.existsSync(filePath)) return null;
+        if (!this.fs.existsSync(filePath)) {return null;}
         try {
             const content = await fs.promises.readFile(filePath, 'utf8');
             return JSON.parse(content) as BridgeVersionMetadata;

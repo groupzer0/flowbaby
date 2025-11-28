@@ -2,7 +2,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
-import * as path from 'path';
 import * as fs from 'fs';
 import { FlowbabySetupService, BridgeEnvMetadata } from '../../setup/FlowbabySetupService';
 import { BackgroundOperationManager } from '../../background/BackgroundOperationManager';
@@ -94,8 +93,8 @@ suite('FlowbabySetupService Test Suite', () => {
         
         // Emit events after a short delay to allow listeners to be attached
         setTimeout(() => {
-            if (stdout) processMock.stdout.emit('data', stdout);
-            if (stderr) processMock.stderr.emit('data', stderr);
+            if (stdout) {processMock.stdout.emit('data', stdout);}
+            if (stderr) {processMock.stderr.emit('data', stderr);}
             processMock.emit('close', exitCode);
         }, 10);
 

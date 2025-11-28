@@ -85,9 +85,9 @@ function parseEnrichedSummary(text: string): ConversationSummary | null {
     const topic = topicMatch[1].trim();
     
     // Parse metadata block using regex patterns from DATAPOINT_SCHEMA.md
-    const topicIdMatch = text.match(/- Topic ID:\s*(N\/A|[a-zA-Z0-9\-]+)/i);
-    const sessionIdMatch = text.match(/- Session ID:\s*(N\/A|[a-zA-Z0-9\-]+)/);
-    const planIdMatch = text.match(/- Plan ID:\s*(N\/A|[\w\-]+)/);
+    const topicIdMatch = text.match(/- Topic ID:\s*(N\/A|[a-zA-Z0-9-]+)/i);
+    const sessionIdMatch = text.match(/- Session ID:\s*(N\/A|[a-zA-Z0-9-]+)/);
+    const planIdMatch = text.match(/- Plan ID:\s*(N\/A|[\w-]+)/);
     const statusMatch = text.match(/- Status:\s*(N\/A|Active|Superseded|DecisionRecord)/i);
     const sourceCreatedMatch = text.match(/- Source Created:\s*(N\/A|[\d\-T:Z.]+)/i);
     const createdAtMatch = text.match(/- Created:\s*(N\/A|[\d\-T:Z.]+)/i);
@@ -200,7 +200,7 @@ function extractSection(text: string, sectionName: string): string[] {
     
     for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed) continue;
+        if (!trimmed) {continue;}
         
         const bulletMatch = trimmed.match(/^[-*]\s*(.+)$/);
         if (bulletMatch) {

@@ -8,11 +8,11 @@ Provides TTL parsing with RDFLib and basic validation.
 
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 try:
-    from rdflib import Graph, URIRef, Namespace
-    from rdflib.namespace import RDF, RDFS, OWL
+    from rdflib import Graph, Namespace, URIRef
+    from rdflib.namespace import OWL, RDF, RDFS
 except ImportError:
     # Graceful degradation if rdflib not available
     Graph = None
@@ -31,13 +31,13 @@ class OntologyLoadError(Exception):
 def load_ontology() -> Dict[str, Any]:
     """
     Load and parse the ontology.ttl file from the bridge directory.
-    
+
     Returns:
         Dictionary containing:
         - entities: List of entity class names
         - relationships: List of relationship property names
         - raw_graph: RDFLib Graph object (if rdflib available)
-    
+
     Raises:
         OntologyLoadError: If file not found, parsing fails, or validation fails
     """
@@ -45,27 +45,27 @@ def load_ontology() -> Dict[str, Any]:
         raise OntologyLoadError(
             "rdflib library not available. Install with: pip install rdflib"
         )
-    
+
     # Locate ontology.ttl relative to this script
     bridge_dir = Path(__file__).parent
     ontology_path = bridge_dir / 'ontology.ttl'
-    
+
     if not ontology_path.exists():
         raise OntologyLoadError(
             f"Ontology file not found at {ontology_path}. "
             f"Expected location: extension/bridge/ontology.ttl"
         )
-    
+
     if not ontology_path.is_file():
         raise OntologyLoadError(
             f"Ontology path exists but is not a file: {ontology_path}"
         )
-    
+
     if ontology_path.stat().st_size == 0:
         raise OntologyLoadError(
             f"Ontology file is empty: {ontology_path}"
         )
-    
+
     # Parse TTL file with RDFLib
     try:
         graph = Graph()
@@ -73,14 +73,14 @@ def load_ontology() -> Dict[str, Any]:
     except Exception as e:
         raise OntologyLoadError(
             f"Failed to parse ontology.ttl as Turtle RDF: {e}"
-        )
-    
+        ) from e
+
     # Validate non-empty graph
     if len(graph) == 0:
         raise OntologyLoadError(
             "Ontology graph is empty after parsing (no triples found)"
         )
-    
+
     # Extract entity classes (owl:Class instances)
     entities = []
     for subj in graph.subjects(RDF.type, OWL.Class):
@@ -88,23 +88,23 @@ def load_ontology() -> Dict[str, Any]:
         entity_name = str(subj).split('#')[-1].split('/')[-1]
         if entity_name and entity_name != 'ChatEntity':  # Skip base class
             entities.append(entity_name)
-    
+
     # Extract relationship properties (owl:ObjectProperty or rdfs:subPropertyOf)
     relationships = []
     for subj in graph.subjects(RDF.type, OWL.ObjectProperty):
         rel_name = str(subj).split('#')[-1].split('/')[-1]
         if rel_name:
             relationships.append(rel_name)
-    
+
     # Validate expected namespaces are present
     namespaces = list(graph.namespaces())
     ns_prefixes = [prefix for prefix, _ in namespaces]
-    
+
     if not any(prefix in ['', 'rdf', 'rdfs', 'owl'] for prefix in ns_prefixes):
         raise OntologyLoadError(
             f"Ontology missing expected namespaces (rdf, rdfs, owl). Found: {ns_prefixes}"
         )
-    
+
     # Return structured ontology data
     return {
         'entities': sorted(entities),
@@ -118,9 +118,9 @@ def load_ontology() -> Dict[str, Any]:
 def ontology_to_json_legacy_format() -> Dict[str, Any]:
     """
     Load ontology and convert to legacy JSON format for backwards compatibility.
-    
+
     This format matches the old ontology.json structure that cognify expects.
-    
+
     Returns:
         Dictionary with 'entities' and 'relationships' lists
     """
@@ -158,7 +158,7 @@ def main():
             'error': f'Unexpected error: {e}'
         }, indent=2))
         return 1
-    
+
     return 0
 
 

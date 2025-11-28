@@ -18,7 +18,7 @@ class TestLanceNamespaceImport:
 
     def test_lancedb_import_succeeds(self):
         """Verify that lancedb can be imported without ModuleNotFoundError.
-        
+
         Plan 034 pins lance-namespace to 0.0.21 because version 0.2.0 is broken
         and missing the top-level lance_namespace module. This test ensures
         lancedb (which depends on lance-namespace) imports correctly.
@@ -32,7 +32,7 @@ class TestLanceNamespaceImport:
 
     def test_lance_namespace_module_exists(self):
         """Verify that the lance_namespace module is accessible.
-        
+
         The root cause of the Plan 034 bug was that lance-namespace==0.2.0
         only shipped lance_namespace_urllib3_client but not lance_namespace.
         Version 0.0.21 correctly includes the lance_namespace top-level module.
@@ -48,7 +48,7 @@ class TestLanceNamespaceImport:
 
     def test_cognee_vector_engine_accessible(self):
         """Verify that Cognee's vector engine can be loaded.
-        
+
         This is the actual codepath that failed in production: Cognee's
         get_vector_engine() internally imports lancedb, which depends on
         lance_namespace. If this test passes, the full vector retrieval

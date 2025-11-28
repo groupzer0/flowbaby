@@ -919,7 +919,7 @@ export class BackgroundOperationManager {
         
         for (const [operationId, _child] of this.runningProcesses) {
             const entry = this.operations.get(operationId);
-            if (!entry) continue;
+            if (!entry) {continue;}
             
             try {
                 // Send SIGTERM

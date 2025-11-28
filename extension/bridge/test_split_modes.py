@@ -14,11 +14,10 @@ import os
 import subprocess
 import sys
 import uuid
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
 import pytest
-import tempfile
-import shutil
 
 
 @pytest.fixture
@@ -32,11 +31,11 @@ def test_workspace(tmp_path):
     """Create temporary test workspace with .env file."""
     workspace = tmp_path / "test_workspace"
     workspace.mkdir()
-    
+
     # Create .env with dummy API key (tests will be mocked)
     env_file = workspace / ".env"
     env_file.write_text("LLM_API_KEY=sk-test-key-for-testing\n")
-    
+
     return str(workspace)
 
 
@@ -82,12 +81,12 @@ def _parse_json_stdout(stdout: str) -> dict:
 
 class TestAddOnlyMode:
     """Tests for --mode add-only"""
-    
+
     def test_add_only_returns_quickly(self, test_workspace):
         """Verify add-only mode returns success with staged=true after add()."""
         summary = create_test_summary(test_workspace)
         summary_json_str = json.dumps(summary)
-        
+
         cmd = [
             sys.executable,
             "ingest.py",
@@ -95,7 +94,7 @@ class TestAddOnlyMode:
             "--summary",
             "--summary-json", summary_json_str
         ]
-        
+
         result = subprocess.run(
             cmd,
             cwd=Path(__file__).parent,
@@ -103,24 +102,24 @@ class TestAddOnlyMode:
             text=True,
             timeout=30  # Should complete in <10s
         )
-        
+
         assert result.returncode == 0, f"add-only failed: {result.stderr}"
-        
+
         output = _parse_json_stdout(result.stdout)
         assert output['success'] is True
         assert output['staged'] is True
         assert 'ingested_chars' in output
         assert output['ingested_chars'] > 0
-        
+
         # Verify no cognify() execution in stderr
         assert '[PROGRESS] Cognify started' not in result.stderr
         assert '[PROGRESS] Add completed' in result.stderr
-    
+
     def test_add_only_creates_dataset(self, test_workspace):
         """Verify add-only mode creates dataset directory."""
         summary = create_test_summary(test_workspace)
         summary_json_str = json.dumps(summary)
-        
+
         cmd = [
             sys.executable,
             "ingest.py",
@@ -128,7 +127,7 @@ class TestAddOnlyMode:
             "--summary",
             "--summary-json", summary_json_str
         ]
-        
+
         result = subprocess.run(
             cmd,
             cwd=Path(__file__).parent,
@@ -136,13 +135,13 @@ class TestAddOnlyMode:
             text=True,
             timeout=30
         )
-        
+
         assert result.returncode == 0
-        
+
         # Check that dataset directory was created
         cognee_data_dir = Path(test_workspace) / ".flowbaby/data"
         assert cognee_data_dir.exists(), "Dataset directory should exist after add-only"
-    
+
     def test_add_only_supports_conversation_mode(self, test_workspace):
         """Verify add-only mode supports conversation arguments for async flows."""
         cmd = [
@@ -153,7 +152,7 @@ class TestAddOnlyMode:
             "user message",
             "assistant message"
         ]
-        
+
         result = subprocess.run(
             cmd,
             cwd=Path(__file__).parent,
@@ -161,7 +160,7 @@ class TestAddOnlyMode:
             text=True,
             timeout=10
         )
-        
+
         assert result.returncode == 0, f"add-only conversation failed: {result.stderr}"
         output = _parse_json_stdout(result.stdout)
         assert output['success'] is True
@@ -171,7 +170,7 @@ class TestAddOnlyMode:
 
 class TestCognifyOnlyMode:
     """Tests for --mode cognify-only"""
-    
+
     def test_cognify_only_requires_operation_id(self, test_workspace):
         """Verify cognify-only mode requires --operation-id flag."""
         cmd = [
@@ -180,7 +179,7 @@ class TestCognifyOnlyMode:
             "--mode", "cognify-only",
             test_workspace
         ]
-        
+
         result = subprocess.run(
             cmd,
             cwd=Path(__file__).parent,
@@ -188,12 +187,12 @@ class TestCognifyOnlyMode:
             text=True,
             timeout=10
         )
-        
+
         assert result.returncode == 1
         output = _parse_json_stdout(result.stdout)
         assert output['success'] is False
         assert 'operation-id' in output['error'].lower()
-    
+
     def test_cognify_only_validates_uuid_format(self, test_workspace):
         """Verify cognify-only mode validates UUID format."""
         cmd = [
@@ -203,7 +202,7 @@ class TestCognifyOnlyMode:
             "--operation-id", "not-a-uuid",
             test_workspace
         ]
-        
+
         result = subprocess.run(
             cmd,
             cwd=Path(__file__).parent,
@@ -211,18 +210,18 @@ class TestCognifyOnlyMode:
             text=True,
             timeout=10
         )
-        
+
         assert result.returncode == 1
         output = _parse_json_stdout(result.stdout)
         assert output['success'] is False
         assert 'uuid' in output['error'].lower()
-    
+
     def test_cognify_only_writes_status_stub(self, test_workspace):
         """Verify cognify-only mode writes status stub on completion."""
         # First, stage data with add-only
         summary = create_test_summary(test_workspace)
         summary_json_str = json.dumps(summary)
-        
+
         add_cmd = [
             sys.executable,
             "ingest.py",
@@ -230,7 +229,7 @@ class TestCognifyOnlyMode:
             "--summary",
             "--summary-json", summary_json_str
         ]
-        
+
         add_result = subprocess.run(
             add_cmd,
             cwd=Path(__file__).parent,
@@ -238,12 +237,12 @@ class TestCognifyOnlyMode:
             text=True,
             timeout=30
         )
-        
+
         assert add_result.returncode == 0, f"add-only setup failed: {add_result.stderr}"
-        
+
         # Now run cognify-only
         operation_id = str(uuid.uuid4())
-        
+
         cognify_cmd = [
             sys.executable,
             "ingest.py",
@@ -251,19 +250,19 @@ class TestCognifyOnlyMode:
             "--operation-id", operation_id,
             test_workspace
         ]
-        
-        cognify_result = subprocess.run(
+
+        subprocess.run(
             cognify_cmd,
             cwd=Path(__file__).parent,
             capture_output=True,
             text=True,
             timeout=120  # Cognify can take 60-90s
         )
-        
+
         # Check for status stub
         stub_path = Path(test_workspace) / ".cognee" / "background_ops" / f"{operation_id}.json"
         assert stub_path.exists(), f"Status stub should exist at {stub_path}"
-        
+
         stub_data = json.loads(stub_path.read_text())
         assert stub_data['operation_id'] == operation_id
         assert 'success' in stub_data
@@ -273,12 +272,12 @@ class TestCognifyOnlyMode:
 
 class TestSyncMode:
     """Tests for --mode sync (diagnostic/test mode)"""
-    
+
     def test_sync_mode_executes_both_add_and_cognify(self, test_workspace):
         """Verify sync mode executes both add() and cognify()."""
         summary = create_test_summary(test_workspace)
         summary_json_str = json.dumps(summary)
-        
+
         cmd = [
             sys.executable,
             "ingest.py",
@@ -286,7 +285,7 @@ class TestSyncMode:
             "--summary",
             "--summary-json", summary_json_str
         ]
-        
+
         result = subprocess.run(
             cmd,
             cwd=Path(__file__).parent,
@@ -294,17 +293,17 @@ class TestSyncMode:
             text=True,
             timeout=120  # Sync waits for cognify
         )
-        
+
         assert result.returncode == 0, f"sync mode failed: {result.stderr}"
-        
+
         output = _parse_json_stdout(result.stdout)
         assert output['success'] is True
         assert output['staged'] is False  # sync completes cognify immediately
-        
+
         # Verify both operations in stderr
         assert '[PROGRESS] Adding to dataset' in result.stderr
         assert '[PROGRESS] Running cognify' in result.stderr or '[PROGRESS] Cognify' in result.stderr
-    
+
     def test_sync_mode_supports_conversation(self, test_workspace):
         """Verify sync mode preserves conversation argument handling."""
         cmd = [
@@ -316,7 +315,7 @@ class TestSyncMode:
             "42",
             "0.8"
         ]
-        
+
         result = subprocess.run(
             cmd,
             cwd=Path(__file__).parent,
@@ -324,9 +323,9 @@ class TestSyncMode:
             text=True,
             timeout=120
         )
-        
+
         assert result.returncode == 0, f"sync conversation failed: {result.stderr}"
-        
+
         output = _parse_json_stdout(result.stdout)
         assert output['success'] is True
         assert 'ingested_chars' in output
@@ -334,19 +333,19 @@ class TestSyncMode:
 
 class TestBackwardCompatibility:
     """Tests for backward compatibility (default mode)"""
-    
+
     def test_default_mode_is_sync(self, test_workspace):
         """Verify omitting --mode flag defaults to sync mode."""
         summary = create_test_summary(test_workspace)
         summary_json_str = json.dumps(summary)
-        
+
         cmd = [
             sys.executable,
             "ingest.py",
             "--summary",
             "--summary-json", summary_json_str
         ]
-        
+
         result = subprocess.run(
             cmd,
             cwd=Path(__file__).parent,
@@ -354,7 +353,7 @@ class TestBackwardCompatibility:
             text=True,
             timeout=120
         )
-        
+
         assert result.returncode == 0
         output = _parse_json_stdout(result.stdout)
         assert output['success'] is True
@@ -364,18 +363,18 @@ class TestBackwardCompatibility:
 
 class TestErrorHandling:
     """Tests for error handling across modes"""
-    
+
     def test_missing_api_key_error(self, tmp_path):
         """Verify missing API key produces correct error code."""
         workspace = tmp_path / "no_env_workspace"
         workspace.mkdir()
-        
+
         summary = create_test_summary(str(workspace))
         summary_json_str = json.dumps(summary)
 
         env = os.environ.copy()
         env.pop("LLM_API_KEY", None)
-        
+
         cmd = [
             sys.executable,
             "ingest.py",
@@ -383,7 +382,7 @@ class TestErrorHandling:
             "--summary",
             "--summary-json", summary_json_str
         ]
-        
+
         result = subprocess.run(
             cmd,
             cwd=Path(__file__).parent,
@@ -392,12 +391,12 @@ class TestErrorHandling:
             timeout=10,
             env=env
         )
-        
+
         assert result.returncode == 1
         output = _parse_json_stdout(result.stdout)
         assert output['success'] is False
         assert output['error_code'] == 'MISSING_API_KEY'
-    
+
     def test_invalid_mode_rejected(self, test_workspace):
         """Verify invalid mode value is rejected."""
         cmd = [
@@ -406,7 +405,7 @@ class TestErrorHandling:
             "--mode", "invalid-mode",
             test_workspace
         ]
-        
+
         result = subprocess.run(
             cmd,
             cwd=Path(__file__).parent,
@@ -414,7 +413,7 @@ class TestErrorHandling:
             text=True,
             timeout=10
         )
-        
+
         assert result.returncode == 1
         output = _parse_json_stdout(result.stdout)
         assert output['success'] is False
@@ -423,13 +422,13 @@ class TestErrorHandling:
 
 class TestAtomicWrites:
     """Tests for atomic status stub writes"""
-    
+
     def test_status_stub_is_complete_json(self, test_workspace):
         """Verify status stub is never partially written (atomic)."""
         # Stage data
         summary = create_test_summary(test_workspace)
         summary_json_str = json.dumps(summary)
-        
+
         add_cmd = [
             sys.executable,
             "ingest.py",
@@ -437,12 +436,12 @@ class TestAtomicWrites:
             "--summary",
             "--summary-json", summary_json_str
         ]
-        
+
         subprocess.run(add_cmd, cwd=Path(__file__).parent, capture_output=True, timeout=30)
-        
+
         # Run cognify-only
         operation_id = str(uuid.uuid4())
-        
+
         cognify_cmd = [
             sys.executable,
             "ingest.py",
@@ -450,23 +449,23 @@ class TestAtomicWrites:
             "--operation-id", operation_id,
             test_workspace
         ]
-        
-        result = subprocess.run(
+
+        subprocess.run(
             cognify_cmd,
             cwd=Path(__file__).parent,
             capture_output=True,
             text=True,
             timeout=120
         )
-        
+
         # Read and parse stub
         stub_path = Path(test_workspace) / ".cognee" / "background_ops" / f"{operation_id}.json"
-        
+
         if stub_path.exists():
             stub_content = stub_path.read_text()
             # Should be valid JSON (no truncation)
             stub_data = json.loads(stub_content)
-            
+
             # Verify required fields
             assert 'operation_id' in stub_data
             assert 'success' in stub_data

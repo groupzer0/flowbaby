@@ -2,7 +2,7 @@
   "name": "flowbaby",
   "displayName": "Flowbaby",
   "description": "Automatic memory for GitHub Copilot chat using Flowbaby knowledge graphs",
-  "version": "0.4.9",
+  "version": "0.5.0",
   "publisher": "flowbaby",
   "icon": "media/icon.png",
   "engines": {
@@ -383,6 +383,9 @@
     "pretest": "npm run compile:tests",
     "watch": "node esbuild.js --watch",
     "lint": "eslint src --ext ts",
+    "lint:python": "cd bridge && python -m ruff check .",
+    "lint:markdown": "markdownlint -c ../.markdownlint.json README.md CHANGELOG.md AGENT_INTEGRATION.md SETUP.md DISTRIBUTION.md",
+    "lint:all": "npm run lint && npm run lint:python && npm run lint:markdown",
     "test": "node ./out/test/runTest.js",
     "test:bridge": "cd bridge && pytest tests/ -v",
     "test:agent": "npm run compile:tests && node ./out/test/run-test-agent.js",

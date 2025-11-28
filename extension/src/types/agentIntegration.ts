@@ -227,9 +227,9 @@ export interface FlowbabyRetrievalResult {
     text: string;
 
     /**
-     * Metadata (if available)
+     * Metadata (if available) - contains dynamic JSON from Python bridge
      */
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
 
     /**
      * Final weighted score

@@ -132,15 +132,15 @@ Nov 18 10:00-11:30`;
 
         const fakeConfig: vscode.WorkspaceConfiguration = {
             get: ((key: string, defaultValue?: any) => {
-                if (key === 'enabled') return configState.enabled;
-                if (key === 'autoIngestConversations') return configState.autoIngest;
+                if (key === 'enabled') {return configState.enabled;}
+                if (key === 'autoIngestConversations') {return configState.autoIngest;}
                 return defaultValue;
             }) as any,
             has: (() => true) as any,
             inspect: (() => undefined) as any,
             update: (async (section: string, value: any) => {
-                if (section === 'enabled') configState.enabled = Boolean(value);
-                if (section === 'autoIngestConversations') configState.autoIngest = Boolean(value);
+                if (section === 'enabled') {configState.enabled = Boolean(value);}
+                if (section === 'autoIngestConversations') {configState.autoIngest = Boolean(value);}
             }) as any
         };
         sandbox.stub(vscode.workspace, 'getConfiguration').callsFake(() => fakeConfig);

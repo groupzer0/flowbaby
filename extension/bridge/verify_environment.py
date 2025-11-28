@@ -12,10 +12,11 @@ Returns JSON to stdout:
     Failure: {"status": "error", "details": {...}, "missing": [...]}
 """
 
+import importlib.util
 import json
 import sys
-import importlib.util
 from pathlib import Path
+
 
 def check_import(module_name):
     try:
@@ -30,29 +31,29 @@ def verify_environment(workspace_path):
         "rdflib": "rdflib",
         "dotenv": "python-dotenv" # import name is dotenv
     }
-    
+
     details = {}
     missing = []
-    
+
     # 1. Check Python Modules
     for import_name, package_name in required_modules.items():
         is_installed = check_import(import_name)
         details[import_name] = is_installed
         if not is_installed:
             missing.append(package_name)
-            
+
     # 2. Check Ontology File
     # In the extension structure, ontology.ttl is in the same directory as this script
     script_dir = Path(__file__).parent
     ontology_file = script_dir / 'ontology.ttl'
     ontology_exists = ontology_file.exists()
     details["ontology_file"] = ontology_exists
-    
+
     if not ontology_exists:
         missing.append("ontology.ttl")
-        
+
     status = "ok" if not missing else "error"
-    
+
     return {
         "status": status,
         "details": details,
@@ -66,14 +67,14 @@ def main():
         workspace_path = "."
     else:
         workspace_path = sys.argv[1]
-        
+
     try:
         result = verify_environment(workspace_path)
         print(json.dumps(result))
         sys.exit(0)
     except Exception as e:
         print(json.dumps({
-            "status": "error", 
+            "status": "error",
             "error": str(e),
             "details": {}
         }))

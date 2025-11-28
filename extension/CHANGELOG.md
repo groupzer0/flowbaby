@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.0] - 2025-11-28
+
+### Changed - Plan 042: Comprehensive Lint Cleanup
+
+**Code Quality Release** - Establishes consistent code quality standards across TypeScript, Python, and Markdown.
+
+#### TypeScript ESLint (Milestone 1-5)
+- **Resolved**: All 272 ESLint violations (12 errors, 260 warnings → 0 errors, 0 warnings)
+- **Updated**: ESLint naming-convention rules to allow snake_case for Python bridge JSON contracts
+- **Fixed**: 9 `@typescript-eslint/no-explicit-any` by adding proper type definitions
+- **Fixed**: 9 `@typescript-eslint/no-unused-vars` by removing/prefixing unused variables
+- **Fixed**: 3 `@typescript-eslint/no-var-requires` by converting to ES module imports
+- **Auto-fixed**: 47 curly braces and useless escape warnings
+
+#### Python Linting (Milestone 6)
+- **Added**: `ruff` linter for Python bridge code (`requirements-dev.txt`)
+- **Created**: `extension/bridge/ruff.toml` configuration
+- **Resolved**: All Python lint errors (1322 → 0)
+- **Added**: `npm run lint:python` script
+
+#### Markdown Linting (Milestone 7)
+- **Updated**: `.markdownlint.json` with appropriate rule exceptions
+- **Verified**: Zero markdownlint errors on user-facing documentation
+- **Added**: `npm run lint:markdown` script
+
+### Developer Experience
+- **New**: `npm run lint:all` - Comprehensive lint check (TypeScript + Python + Markdown)
+- **New**: `npm run lint:python` - Bridge code linting with ruff
+- **New**: `npm run lint:markdown` - User-facing doc linting
+- **New**: `.github/workflows/lint.yml` - CI lint enforcement on push/PR
+
 ## [0.4.9] - 2025-11-28
 
 ### Fixed - Plan 041: Capture Command UX Fixes

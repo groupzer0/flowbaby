@@ -6,7 +6,7 @@ Tests LLM_API_KEY validation, workspace path validation, and structured error me
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -19,17 +19,17 @@ async def test_retrieve_missing_llm_api_key(temp_workspace, monkeypatch):
     """Test that retrieval fails with clear structured error when LLM_API_KEY is missing."""
     # Remove LLM_API_KEY from environment
     monkeypatch.delenv('LLM_API_KEY', raising=False)
-    
+
     # Remove .env file if it exists
     env_file = temp_workspace / '.env'
     if env_file.exists():
         env_file.unlink()
-    
+
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
         from retrieve import retrieve_context
-        
+
         result = await retrieve_context(str(temp_workspace), "test query")
-        
+
         assert result['success'] is False
         # Check for structured error format with new taxonomy
         assert 'error_code' in result
@@ -54,12 +54,12 @@ async def test_retrieve_success_with_llm_api_key(temp_workspace, mock_env):
         mock_cognee.config = MagicMock()
         mock_cognee.search = AsyncMock(return_value=[])
         mock_cognee.prune.prune_data = AsyncMock()
-        
+
         with patch.dict('sys.modules', {'cognee': mock_cognee, 'cognee.modules.search.types': MagicMock()}):
             from retrieve import retrieve_context
-            
+
             result = await retrieve_context(str(temp_workspace), "test query")
-            
+
             assert result['success'] is True
             assert 'results' in result
             assert 'result_count' in result
@@ -89,17 +89,17 @@ async def test_retrieve_with_search_results(temp_workspace, mock_env):
         )
         mock_cognee.search = AsyncMock(return_value=[mock_search_result])
         mock_cognee.prune.prune_data = AsyncMock()
-        
+
         with patch.dict('sys.modules', {'cognee': mock_cognee, 'cognee.modules.search.types': MagicMock()}):
             from retrieve import retrieve_context
-            
+
             result = await retrieve_context(str(temp_workspace), "Python", max_results=5)
-            
+
             assert result['success'] is True
             assert result['result_count'] == 1
             assert result['total_results'] == 1
             assert len(result['results']) == 1
-            
+
             # Verify result structure
             first_result = result['results'][0]
             assert 'text' in first_result
@@ -110,7 +110,7 @@ async def test_retrieve_with_search_results(temp_workspace, mock_env):
             assert 'recency_multiplier' in first_result
             assert 'status_multiplier' in first_result
             assert 'tokens' in first_result
-            
+
             # Verify scoring calculations
             assert 0 <= first_result['score'] <= 1
             assert 0 <= first_result['recency_multiplier'] <= 1
@@ -130,12 +130,12 @@ async def test_retrieve_default_score(temp_workspace, mock_env):
         )
         mock_cognee.search = AsyncMock(return_value=[mock_search_result])
         mock_cognee.prune.prune_data = AsyncMock()
-        
+
         with patch.dict('sys.modules', {'cognee': mock_cognee, 'cognee.modules.search.types': MagicMock()}):
             from retrieve import retrieve_context
-            
+
             result = await retrieve_context(str(temp_workspace), "test")
-            
+
             assert result['success'] is True
             # Plan 023 Hotfix: Synthesized answers (score 0.0) should NOT be filtered
             # Plan 026: Synthesized answers (score 0.0) are mapped to 1.0 with high confidence label
@@ -151,7 +151,7 @@ async def test_retrieve_token_limit_enforcement(temp_workspace, mock_env):
         # Mock cognee module with multiple results
         mock_cognee = MagicMock()
         mock_cognee.config = MagicMock()
-        
+
         # Create results that would exceed token limit
         large_text = "word " * 500  # ~500 tokens
         mock_results = [
@@ -161,13 +161,13 @@ async def test_retrieve_token_limit_enforcement(temp_workspace, mock_env):
         ]
         mock_cognee.search = AsyncMock(return_value=mock_results)
         mock_cognee.prune.prune_data = AsyncMock()
-        
+
         with patch.dict('sys.modules', {'cognee': mock_cognee, 'cognee.modules.search.types': MagicMock()}):
             from retrieve import retrieve_context
-            
+
             # Set low token limit
             result = await retrieve_context(str(temp_workspace), "test", max_tokens=600)
-            
+
             assert result['success'] is True
             # Should only include first result due to token limit
             assert result['result_count'] == 1
@@ -180,18 +180,18 @@ def test_main_missing_arguments(capsys):
     with patch('sys.argv', ['retrieve.py']):
         with patch('sys.exit') as mock_exit:
             from retrieve import main
-            
+
             try:
                 main()
             except Exception:
                 # Expected: execution continues after sys.exit(1) is patched
                 pass
-            
+
             mock_exit.assert_any_call(1)
-            
+
             captured = capsys.readouterr()
             output = json.loads(captured.out.strip().split('\n')[0])
-            
+
             assert output['success'] is False
             assert 'Missing required arguments' in output['error']
 
@@ -201,18 +201,18 @@ def test_main_invalid_workspace_path(capsys):
     with patch('sys.argv', ['retrieve.py', '/nonexistent/path', 'query']):
         with patch('sys.exit') as mock_exit:
             from retrieve import main
-            
+
             try:
                 main()
             except Exception:
                 # Expected: execution continues after sys.exit(1) is patched
                 pass
-            
+
             mock_exit.assert_any_call(1)
-            
+
             captured = capsys.readouterr()
             output = json.loads(captured.out.strip().split('\n')[0])
-            
+
             assert output['success'] is False
             assert 'Workspace path does not exist' in output['error']
 
@@ -222,26 +222,27 @@ def test_main_invalid_max_results(capsys):
     with patch('sys.argv', ['retrieve.py', '/tmp', 'query', 'not-a-number']):
         with patch('sys.exit') as mock_exit:
             from retrieve import main
-            
+
             try:
                 main()
             except Exception:
                 # Expected: execution continues after sys.exit(1) is patched
                 pass
-            
+
             mock_exit.assert_any_call(1)
-            
+
             captured = capsys.readouterr()
             output = json.loads(captured.out.strip().split('\n')[0])
-            
+
             assert output['success'] is False
             assert 'Invalid max_results' in output['error']
 
 
 def test_recency_multiplier_calculation():
     """Test recency multiplier calculation for various timestamps."""
-    from retrieve import calculate_recency_multiplier
     from datetime import datetime, timedelta, timezone
+
+    from retrieve import calculate_recency_multiplier
 
     half_life_days = 7.0
 
@@ -252,7 +253,7 @@ def test_recency_multiplier_calculation():
     # datetime.now(timezone.utc).isoformat() produces "2023-10-27T10:00:00+00:00"
     # The retrieve function does: timestamp_str.replace('Z', '+00:00')
     # So if we pass "+00:00", it's fine.
-    
+
     recent_multiplier = calculate_recency_multiplier(recent, half_life_days)
     assert 0.85 <= recent_multiplier <= 1.0
 
@@ -271,13 +272,13 @@ def test_recency_multiplier_calculation():
 def test_estimate_tokens():
     """Test token estimation for various text lengths."""
     from retrieve import estimate_tokens
-    
+
     # Short text
     assert estimate_tokens("hello world") == 2
-    
+
     # Empty text
     assert estimate_tokens("") == 0
-    
+
     # Longer text
     text = "This is a longer piece of text with many words to test the token estimation function."
     tokens = estimate_tokens(text)
