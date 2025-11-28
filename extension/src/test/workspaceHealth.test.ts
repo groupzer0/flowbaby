@@ -76,7 +76,9 @@ suite('FlowbabySetupService.checkWorkspaceHealth (Plan 039 M3)', () => {
         mock.restore();
     });
 
-    test('returns BROKEN when .flowbaby exists but bridge-env.json is missing', async () => {
+    test('returns FRESH when .flowbaby exists but bridge-env.json is missing (Plan 040 M3)', async () => {
+        // Plan 040 M3: Fresh workspaces with only .flowbaby/logs or system subdirectories
+        // should return FRESH (setup required) not BROKEN (repair required)
         mock({
             [testWorkspacePath]: {
                 '.flowbaby': {
@@ -92,7 +94,7 @@ suite('FlowbabySetupService.checkWorkspaceHealth (Plan 039 M3)', () => {
         );
 
         const status = await service.checkWorkspaceHealth();
-        assert.strictEqual(status, 'BROKEN');
+        assert.strictEqual(status, 'FRESH');
 
         mock.restore();
     });
@@ -236,7 +238,9 @@ suite('FlowbabySetupService.checkWorkspaceHealth (Plan 039 M3)', () => {
         mock.restore();
     });
 
-    test('returns BROKEN when bridge-env.json is malformed', async () => {
+    test('returns FRESH when bridge-env.json is malformed (Plan 040 M3)', async () => {
+        // Plan 040 M3: Malformed bridge-env.json is treated the same as missing bridge-env.json
+        // - the environment needs to be set up from scratch
         mock({
             [testWorkspacePath]: {
                 '.flowbaby': {
@@ -252,7 +256,7 @@ suite('FlowbabySetupService.checkWorkspaceHealth (Plan 039 M3)', () => {
         );
 
         const status = await service.checkWorkspaceHealth();
-        assert.strictEqual(status, 'BROKEN');
+        assert.strictEqual(status, 'FRESH');
 
         mock.restore();
     });

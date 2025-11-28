@@ -454,12 +454,19 @@ export class FlowbabySetupService {
      * Plan 039 M3: Proactive Workspace Health Check
      * 
      * Determines the health state of the Flowbaby workspace environment:
-     * - FRESH: No .flowbaby directory exists → user needs to initialize
-     * - BROKEN: .flowbaby exists but is corrupt or incomplete → user needs to repair
+     * - FRESH: No .flowbaby directory exists OR .flowbaby exists but no bridge-env.json
+     *          → user needs to initialize
+     * - BROKEN: .flowbaby exists with bridge-env.json but environment is corrupt
+     *           → user needs to repair
      * - VALID: All components present and healthy → proceed with client initialization
      * 
-     * This enables the activation flow to provide targeted guidance based on
-     * the actual workspace state rather than generic error messages.
+     * Plan 040 M3: Refined FRESH vs BROKEN distinction. Missing bridge-env.json is now
+     * treated as FRESH (not BROKEN) since this is the expected state for workspaces
+     * where only the logs directory has been created by VS Code or a previous failed run.
+     * 
+     * Note: These changes are additive refinements to the existing file/folder-based
+     * health-check logic. No additional UX surfaces need to be audited beyond the
+     * status bar and initialization prompts that already consume health state.
      * 
      * @returns Promise<WorkspaceHealthStatus> - 'FRESH' | 'BROKEN' | 'VALID'
      */
@@ -472,21 +479,24 @@ export class FlowbabySetupService {
             return 'FRESH';
         }
         
-        // Scenario 2: .flowbaby exists but bridge-env.json is missing or corrupt → BROKEN
+        // Scenario 2: .flowbaby exists but bridge-env.json is missing → FRESH
+        // Plan 040 M3: This is the expected state for new workspaces where only
+        // .flowbaby/logs has been created. Treat as FRESH, not BROKEN.
         const bridgeEnv = await this.readBridgeEnv();
         if (!bridgeEnv) {
-            debugLog('Workspace health check: BROKEN (bridge-env.json missing or corrupt)');
-            return 'BROKEN';
+            debugLog('Workspace health check: FRESH (bridge-env.json missing - new workspace)');
+            return 'FRESH';
         }
         
-        // Scenario 2b (R3): Check for migration marker indicating unresolved migration
+        // Scenario 3: Check for migration marker indicating unresolved migration
+        // This IS a broken state since it indicates an interrupted migration
         const migrationMarkerPath = path.join(flowbabyDir, '.migration-in-progress');
         if (this.fs.existsSync(migrationMarkerPath)) {
             debugLog('Workspace health check: BROKEN (migration marker exists)');
             return 'BROKEN';
         }
         
-        // Scenario 3: bridge-env.json exists, check Python environment health
+        // Scenario 4: bridge-env.json exists, check Python environment health
         const pythonPath = bridgeEnv.pythonPath;
         const venvDir = path.dirname(path.dirname(pythonPath)); // Go up from bin/python to venv
         

@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.4.7] - 2025-11-28
+
+### Fixed - Plan 040: Initialization JSON Errors and No-Reload Workflow
+
+**User Experience Release** - Enables frictionless first-run experience by fixing JSON parse errors, eliminating window reloads, and providing clearer health status messaging.
+
+#### M1: Fix `init.py` Stdout Pollution (Critical)
+- **Bug**: The cognee SDK prints "User X has registered" and other messages to stdout during database initialization, corrupting the JSON output and causing `JSON.parse()` failures in the TypeScript client
+- **Root Cause**: `create_db_and_tables()`, `get_graph_engine()`, and other cognee operations print directly to stdout
+- **Fix**: Added `suppress_stdout()` context manager that captures all stdout/stderr during cognee operations and redirects to file logger
+- **Contract**: `init.py` now emits exactly one JSON line to stdout and nothing else
+
+#### M2: Chain `flowbabyClient.initialize()` After Environment Setup
+- **Bug**: The "Initialize Workspace" command only created the venv but did not initialize the Flowbaby client, forcing users to reload the window
+- **Fix**: After successful environment creation, the command now chains into `flowbabyClient.initialize()`, sets `clientInitialized = true`, and registers all providers/tools
+- **Benefit**: Users can immediately use `@flowbaby` after clicking "Initialize" without any page reload
+- **Added**: Structured error handling with user-facing notifications and Output channel logging for initialization failures
+
+#### M3: Unify Health Check Logic for Fresh Workspaces
+- **Bug**: Fresh workspaces with only `.flowbaby/logs` directory were incorrectly marked as "BROKEN" instead of "FRESH"
+- **Root Cause**: `checkWorkspaceHealth()` returned `BROKEN` if `.flowbaby` existed but `bridge-env.json` was missing
+- **Fix**: Missing `bridge-env.json` now correctly returns `FRESH` (setup required), not `BROKEN` (repair required)
+- **Benefit**: Fresh workspaces show "Initialize" prompt instead of confusing "Repair Environment" prompt
+- **Updated**: UX messaging now clearly distinguishes between "needs setup" (FRESH) and "needs repair" (BROKEN) states
+
+#### M4: Increase Initialization Timeout
+- **Bug**: First-run initialization could time out prematurely (15s) during database creation on slower machines or when downloading LanceDB embedding models
+- **Fix**: Increased timeout from 15 seconds to 60 seconds for first-run initialization
+- **Benefit**: Slow first-run initializations complete successfully without false timeout failures
+
+### User Experience Improvements
+- **No-reload workflow**: Complete initialization from setup to ready state without any window reload
+- **Clear messaging**: Distinct prompts for fresh workspaces ("Initialize") vs broken environments ("Repair")
+- **Error transparency**: Initialization failures now show user-facing notifications with actionable guidance
+
 ## [0.4.6] - 2025-06-14
 
 ### Fixed - Plan 039: Initialization UX and Security Hardening

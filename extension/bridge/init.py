@@ -24,9 +24,11 @@ instead of volatile venv package location. This prevents data loss on package re
 """
 
 import asyncio
+import io
 import json
 import os
 import sys
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -35,6 +37,62 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import bridge_logger
 from workspace_utils import generate_dataset_name, canonicalize_workspace_path
 from ontology_provider import load_ontology, OntologyLoadError
+
+
+@contextmanager
+def suppress_stdout(logger=None):
+    """
+    Context manager to suppress stdout/stderr during operations that may print unwanted output.
+    
+    Plan 040 Milestone 1: The cognee SDK prints "User X has registered" and other messages
+    to stdout during database initialization, which corrupts our JSON output. This context
+    manager captures all stdout/stderr and redirects it to the logger.
+    
+    STDOUT CONTRACT: init.py must emit exactly one JSON line to stdout and nothing else.
+    All human-readable diagnostics must go through the file logger or stderr.
+    
+    Args:
+        logger: Optional logger instance to log captured output
+        
+    Yields:
+        Captured output object with .stdout and .stderr properties
+    """
+    class CapturedOutput:
+        def __init__(self):
+            self.stdout = ""
+            self.stderr = ""
+    
+    captured = CapturedOutput()
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    
+    # Create StringIO buffers to capture output
+    stdout_buffer = io.StringIO()
+    stderr_buffer = io.StringIO()
+    
+    try:
+        sys.stdout = stdout_buffer
+        sys.stderr = stderr_buffer
+        yield captured
+    finally:
+        # Restore original stdout/stderr BEFORE accessing buffers
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        
+        # Get captured content
+        captured.stdout = stdout_buffer.getvalue()
+        captured.stderr = stderr_buffer.getvalue()
+        
+        # Log captured output if logger is provided and there's content
+        if logger:
+            if captured.stdout.strip():
+                logger.debug(f"Suppressed stdout: {captured.stdout.strip()}")
+            if captured.stderr.strip():
+                logger.debug(f"Suppressed stderr: {captured.stderr.strip()}")
+        
+        # Clean up buffers
+        stdout_buffer.close()
+        stderr_buffer.close()
 
 
 def workspace_has_data(system_dir: Path) -> bool:
@@ -210,9 +268,11 @@ async def initialize_cognee(workspace_path: str) -> dict:
         logger.debug(f"Set environment variables: SYSTEM_ROOT_DIRECTORY={system_root}, DATA_ROOT_DIRECTORY={data_root}")
         
         # NOW import cognee - it will read the env vars we just set
+        # Plan 040 M1: Wrap import in stdout suppression as SDK may print during module init
         logger.debug("Importing cognee SDK")
-        import cognee
-        from cognee.infrastructure.databases.relational import create_db_and_tables
+        with suppress_stdout(logger):
+            import cognee
+            from cognee.infrastructure.databases.relational import create_db_and_tables
         
         # ============================================================================
         # Belt-and-suspenders: Also call cognee.config methods after import
@@ -318,21 +378,28 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 
                 # Initialize relational database tables (SQLite)
                 # This is required for user registration and basic system function
+                # Plan 040 M1: Wrap in stdout suppression - create_db_and_tables() prints
+                # "User X has registered" which corrupts JSON output
                 logger.info("Initializing relational database tables...")
-                await create_db_and_tables()
+                with suppress_stdout(logger):
+                    await create_db_and_tables()
                 logger.info("Relational database tables created")
                 
                 # Initialize Graph DB (Kuzu)
+                # Plan 040 M1: Wrap in stdout suppression as Kuzu may print diagnostics
                 logger.info("Initializing graph database (Kuzu)...")
-                from cognee.infrastructure.databases.graph import get_graph_engine
-                await get_graph_engine()
+                with suppress_stdout(logger):
+                    from cognee.infrastructure.databases.graph import get_graph_engine
+                    await get_graph_engine()
                 
                 # Initialize Vector DB (LanceDB) via dummy ingestion
+                # Plan 040 M1: Wrap in stdout suppression as LanceDB may print during setup
                 logger.info("Initializing vector database (LanceDB) via setup marker...")
-                await cognee.add(
-                    data=["Flowbaby environment setup completed"],
-                    dataset_name=dataset_name
-                )
+                with suppress_stdout(logger):
+                    await cognee.add(
+                        data=["Flowbaby environment setup completed"],
+                        dataset_name=dataset_name
+                    )
                 logger.info("Vector database initialized")
                 
                 marker_metadata = {
@@ -374,7 +441,9 @@ async def initialize_cognee(workspace_path: str) -> dict:
                         logger.warning("=" * 60)
                         
                         # Perform global prune (removes only untagged legacy data)
-                        await cognee.prune.prune_system()
+                        # Plan 040 M1: Wrap in stdout suppression
+                        with suppress_stdout(logger):
+                            await cognee.prune.prune_system()
                         migration_performed = True
                         
                         # Calculate data directory size after pruning

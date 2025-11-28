@@ -313,3 +313,208 @@ class TestEnvVarSetupBeforeImport:
             "SYSTEM_ROOT_DIRECTORY should NOT contain '.cognee'"
         assert '.cognee' not in os.environ['DATA_ROOT_DIRECTORY'], \
             "DATA_ROOT_DIRECTORY should NOT contain '.cognee'"
+
+
+# ============================================================================
+# Plan 040: Stdout Suppression Tests
+# ============================================================================
+
+class TestSuppressStdout:
+    """
+    Tests for Plan 040 Milestone 1: Stdout suppression context manager.
+    
+    The cognee SDK prints "User X has registered" and other messages to stdout
+    during database initialization, corrupting the JSON output. The suppress_stdout()
+    context manager captures all stdout/stderr and redirects it to the logger.
+    
+    STDOUT CONTRACT: init.py must emit exactly one JSON line to stdout and nothing else.
+    """
+
+    def test_suppresses_stdout(self):
+        """
+        Verify suppress_stdout() captures stdout output.
+        
+        Plan 040 M1: Core functionality test - stdout must be captured.
+        """
+        from init import suppress_stdout
+        
+        with suppress_stdout() as captured:
+            print("This should be captured, not visible")
+        
+        assert "This should be captured" in captured.stdout
+    
+    def test_suppresses_stderr(self):
+        """
+        Verify suppress_stdout() captures stderr output.
+        
+        Plan 040 M1: stderr must also be captured to prevent pollution.
+        """
+        from init import suppress_stdout
+        
+        with suppress_stdout() as captured:
+            print("This is stderr", file=sys.stderr)
+        
+        assert "This is stderr" in captured.stderr
+    
+    def test_restores_stdout_after_context(self):
+        """
+        Verify stdout is restored after context manager exits.
+        
+        Plan 040 M1: Critical - stdout must work normally after suppression.
+        """
+        from init import suppress_stdout
+        import io
+        
+        original_stdout = sys.stdout
+        
+        with suppress_stdout():
+            pass  # Just enter and exit the context
+        
+        assert sys.stdout is original_stdout, \
+            "stdout must be restored after context manager exits"
+    
+    def test_restores_on_exception(self):
+        """
+        Verify stdout is restored even when an exception occurs.
+        
+        Plan 040 M1: Exception safety - stdout must be restored on error.
+        """
+        from init import suppress_stdout
+        
+        original_stdout = sys.stdout
+        
+        try:
+            with suppress_stdout():
+                raise ValueError("Test exception")
+        except ValueError:
+            pass
+        
+        assert sys.stdout is original_stdout, \
+            "stdout must be restored even after exception"
+    
+    def test_logs_captured_output(self):
+        """
+        Verify captured output is sent to logger when provided.
+        
+        Plan 040 M1: Suppressed output should be logged for debugging.
+        """
+        from init import suppress_stdout
+        from unittest.mock import MagicMock
+        
+        mock_logger = MagicMock()
+        
+        with suppress_stdout(logger=mock_logger) as captured:
+            print("Logged message")
+            print("Logged error", file=sys.stderr)
+        
+        # Verify logger.debug was called with captured content
+        assert mock_logger.debug.call_count == 2
+        debug_calls = [str(call) for call in mock_logger.debug.call_args_list]
+        assert any("Logged message" in call for call in debug_calls)
+        assert any("Logged error" in call for call in debug_calls)
+    
+    def test_no_logging_on_empty_output(self):
+        """
+        Verify logger is not called when there's no captured output.
+        
+        Plan 040 M1: Avoid noisy logging for clean operations.
+        """
+        from init import suppress_stdout
+        from unittest.mock import MagicMock
+        
+        mock_logger = MagicMock()
+        
+        with suppress_stdout(logger=mock_logger):
+            pass  # No output
+        
+        mock_logger.debug.assert_not_called()
+    
+    def test_captures_multiline_output(self):
+        """
+        Verify suppress_stdout() captures multiple lines of output.
+        
+        Plan 040 M1: Real SDK output may be multiple lines.
+        """
+        from init import suppress_stdout
+        
+        with suppress_stdout() as captured:
+            print("Line 1")
+            print("Line 2")
+            print("Line 3")
+        
+        assert "Line 1" in captured.stdout
+        assert "Line 2" in captured.stdout
+        assert "Line 3" in captured.stdout
+    
+    def test_simulates_cognee_user_registration_message(self):
+        """
+        Simulate the actual "User X has registered" message from cognee SDK.
+        
+        Plan 040 M1: This is the specific bug being fixed. When cognee's
+        create_db_and_tables() runs, it prints "User X has registered" to stdout
+        which corrupts our JSON output.
+        """
+        from init import suppress_stdout
+        
+        with suppress_stdout() as captured:
+            # Simulate what cognee SDK does
+            print("User test-user-id has registered")
+        
+        assert "User test-user-id has registered" in captured.stdout
+        # After exiting context, we should be able to print normally
+        # (This is what init.py does - prints JSON after suppressed operations)
+    
+    def test_json_output_not_corrupted_after_suppression(self, capsys):
+        """
+        Verify that JSON output after suppression is clean.
+        
+        Plan 040 M1: This is the end-to-end behavior test. After suppressing
+        stdout during cognee operations, the JSON output must be parseable.
+        """
+        from init import suppress_stdout
+        
+        # Simulate cognee SDK pollution
+        with suppress_stdout():
+            print("User test-user-id has registered")
+            print("Some other SDK debug message")
+        
+        # Now output our clean JSON (what main() does)
+        result = {"success": True, "dataset_name": "test"}
+        print(json.dumps(result))
+        
+        # Capture what actually went to stdout
+        captured = capsys.readouterr()
+        
+        # The captured stdout should be ONLY the JSON, no prefix
+        lines = captured.out.strip().split('\n')
+        assert len(lines) == 1, \
+            f"Expected exactly 1 line of output, got {len(lines)}: {lines}"
+        
+        # Parse the single line as JSON
+        parsed = json.loads(lines[0])
+        assert parsed == result, \
+            "JSON output should be uncorrupted by suppressed SDK output"
+    
+    def test_nested_suppression(self):
+        """
+        Verify nested suppress_stdout() calls work correctly.
+        
+        Plan 040 M1: init.py wraps multiple operations, some may be nested.
+        """
+        from init import suppress_stdout
+        
+        original_stdout = sys.stdout
+        
+        with suppress_stdout() as outer:
+            print("Outer message")
+            with suppress_stdout() as inner:
+                print("Inner message")
+            print("After inner")
+        
+        # Verify capture worked
+        assert "Outer message" in outer.stdout
+        assert "After inner" in outer.stdout
+        assert "Inner message" in inner.stdout
+        
+        # Verify restoration
+        assert sys.stdout is original_stdout

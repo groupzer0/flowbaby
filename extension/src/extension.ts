@@ -164,11 +164,85 @@ export async function activate(_context: vscode.ExtensionContext) {
         // Plan 039 M2: Register initializeWorkspace command with consistent Flowbaby namespace
         // This is the canonical command for workspace initialization
         // setupEnvironment is retained as an alias for backward compatibility
+        // Plan 040 M2: Chain flowbabyClient.initialize() after environment setup so user can
+        // immediately use @flowbaby without reloading the window
         const initializeWorkspaceCommand = vscode.commands.registerCommand(
             'Flowbaby.initializeWorkspace',
             async () => {
                 // Delegate to setupService.createEnvironment() for unified behavior
-                await setupService.createEnvironment();
+                const success = await setupService.createEnvironment();
+                
+                // Plan 040 M2: If environment creation succeeded, chain client initialization
+                if (success && flowbabyClient) {
+                    const outputChannel = getFlowbabyOutputChannel();
+                    outputChannel.appendLine('[Plan 040] Environment created, initializing Flowbaby client...');
+                    
+                    try {
+                        // Show progress during initialization
+                        await vscode.window.withProgress({
+                            location: vscode.ProgressLocation.Notification,
+                            title: "Initializing Flowbaby databases...",
+                            cancellable: false
+                        }, async () => {
+                            const initialized = await flowbabyClient!.initialize();
+                            
+                            if (initialized) {
+                                clientInitialized = true;
+                                clientInitializationFailed = false;
+                                statusBar.setStatus(FlowbabyStatus.Ready);
+                                
+                                // Initialize FlowbabyContextProvider if not already done
+                                if (!flowbabyContextProvider) {
+                                    const { FlowbabyContextProvider } = await import('./flowbabyContextProvider');
+                                    flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient!, agentOutputChannel);
+                                    console.log('FlowbabyContextProvider initialized after workspace setup');
+                                    
+                                    // Register agent commands
+                                    registerIngestForAgentCommand(_context, flowbabyClient!, agentOutputChannel);
+                                    registerRetrieveForAgentCommand(_context, flowbabyContextProvider, agentOutputChannel);
+                                    
+                                    // Register language model tools
+                                    registerLanguageModelTool(_context, agentOutputChannel);
+                                }
+                                
+                                outputChannel.appendLine('[Plan 040] ✅ Flowbaby client initialized successfully');
+                                vscode.window.showInformationMessage('Flowbaby is ready!');
+                            } else {
+                                throw new Error('Client initialization returned false');
+                            }
+                        });
+                    } catch (error) {
+                        // Plan 040 M2: Handle initialization failures gracefully
+                        clientInitialized = false;
+                        clientInitializationFailed = true;
+                        statusBar.setStatus(FlowbabyStatus.Error);
+                        
+                        const errorMessage = error instanceof Error ? error.message : String(error);
+                        
+                        // Structured error logging per system-architecture.md §10.2
+                        outputChannel.appendLine('[Plan 040] ❌ Flowbaby client initialization failed');
+                        outputChannel.appendLine(JSON.stringify({
+                            error_code: 'INIT_FAILED',
+                            message: errorMessage,
+                            remediation: 'Check Output > Flowbaby for details. Try "Flowbaby: Refresh Bridge Dependencies" or reload the window.',
+                            timestamp: new Date().toISOString()
+                        }, null, 2));
+                        outputChannel.show();
+                        
+                        // User-facing notification per Plan 040 acceptance criteria
+                        vscode.window.showErrorMessage(
+                            'Flowbaby initialization failed. Check Output for details.',
+                            'Open Output',
+                            'Refresh Dependencies'
+                        ).then(action => {
+                            if (action === 'Open Output') {
+                                outputChannel.show();
+                            } else if (action === 'Refresh Dependencies') {
+                                vscode.commands.executeCommand('Flowbaby.refreshDependencies');
+                            }
+                        });
+                    }
+                }
             }
         );
         _context.subscriptions.push(initializeWorkspaceCommand);
@@ -194,7 +268,8 @@ export async function activate(_context: vscode.ExtensionContext) {
         debugLog('Workspace health check result', { healthStatus });
         
         if (healthStatus === 'FRESH') {
-            // No .flowbaby directory - user needs to initialize
+            // No .flowbaby directory or missing bridge-env.json - user needs to initialize
+            // Plan 040 M3: Unified messaging for fresh workspaces
             console.log('Flowbaby workspace not initialized');
             statusBar.setStatus(FlowbabyStatus.SetupRequired);
             clientInitialized = false;
@@ -202,11 +277,11 @@ export async function activate(_context: vscode.ExtensionContext) {
             
             // Non-blocking prompt for initialization
             vscode.window.showInformationMessage(
-                'Flowbaby needs to set up a Python environment for this workspace.',
-                'Initialize Workspace',
+                'Flowbaby needs to be set up. Initialize now?',
+                'Initialize',
                 'Later'
             ).then(action => {
-                if (action === 'Initialize Workspace') {
+                if (action === 'Initialize') {
                     vscode.commands.executeCommand('Flowbaby.initializeWorkspace');
                 }
             });
@@ -216,19 +291,21 @@ export async function activate(_context: vscode.ExtensionContext) {
         }
         
         if (healthStatus === 'BROKEN') {
-            // .flowbaby exists but is corrupt/incomplete - user needs to repair
-            console.warn('Flowbaby workspace environment is broken');
-            statusBar.setStatus(FlowbabyStatus.SetupRequired);
+            // .flowbaby exists with bridge-env.json but environment is corrupt - user needs to repair
+            // Plan 040 M3: Distinguished messaging for broken workspaces (not just "needs setup")
+            console.warn('Flowbaby workspace environment needs repair');
+            statusBar.setStatus(FlowbabyStatus.Error);
             clientInitialized = false;
             clientInitializationFailed = true;
             
             const outputChannel = getFlowbabyOutputChannel();
-            outputChannel.appendLine('Flowbaby workspace environment is corrupted or incomplete.');
+            outputChannel.appendLine('Flowbaby workspace environment needs repair.');
+            outputChannel.appendLine('The Python environment may be missing or corrupted.');
             outputChannel.appendLine('Use "Flowbaby: Initialize Workspace" to repair.');
             
-            // Non-blocking prompt for repair
+            // Non-blocking prompt for repair with warning styling
             vscode.window.showWarningMessage(
-                'Flowbaby workspace environment needs repair.',
+                'Flowbaby environment needs repair.',
                 'Repair Environment',
                 'Later'
             ).then(action => {
@@ -244,12 +321,14 @@ export async function activate(_context: vscode.ExtensionContext) {
         // healthStatus === 'VALID' - proceed with client initialization
 
         // Add timeout to initialization to prevent extension activation hang (Issue 1)
+        // Plan 040 M4: Increase timeout from 15s to 60s to handle first-run database creation
+        // (creating SQLite, Kuzu, and LanceDB databases can exceed 15s on slower machines)
         const initPromise = flowbabyClient.initialize();
         const timeoutPromise = new Promise<boolean>((resolve) => {
             setTimeout(() => {
-                console.warn('Flowbaby initialization timed out after 15s');
+                console.warn('Flowbaby initialization timed out after 60s');
                 resolve(false);
-            }, 15000);
+            }, 60000);
         });
 
         const initialized = await Promise.race([initPromise, timeoutPromise]);
