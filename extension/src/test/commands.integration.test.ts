@@ -107,30 +107,42 @@ suite('Commands Integration (no production changes)', () => {
         assert.ok(infoMsgStub.called, 'success info message should be shown');
     });
 
-    test('Capture command falls back to clipboard when input empty', async () => {
+    test('Capture command shows cancel message when Escape pressed (undefined)', async () => {
         const cb = registered['Flowbaby.captureMessage'];
         assert.ok(cb, 'capture command not registered');
 
-    inputBoxStub.resolves(undefined); // Simulate cancel/empty
-    await vscode.env.clipboard.writeText('Clipboard content to capture');
+        inputBoxStub.resolves(undefined); // Simulate Escape/cancel
 
         await cb();
 
-        assert.ok(ingestAsyncStub.calledOnce, 'ingestAsync should be called once on clipboard path');
-        assert.ok(infoMsgStub.called, 'success info message should be shown');
+        assert.ok(ingestAsyncStub.notCalled, 'ingestAsync should NOT be called on cancel');
+        assert.ok(infoMsgStub.calledWith('Capture cancelled'), 'cancel info message should be shown');
     });
 
-    test('Capture command warns when no input and empty clipboard', async () => {
+    test('Capture command falls back to clipboard when input is empty string', async () => {
         const cb = registered['Flowbaby.captureMessage'];
         assert.ok(cb, 'capture command not registered');
 
-    inputBoxStub.resolves(undefined);
-    await vscode.env.clipboard.writeText('');
+        inputBoxStub.resolves(''); // Empty string = explicit submit
+        await vscode.env.clipboard.writeText('Clipboard content to capture');
+
+        await cb();
+
+        assert.ok(ingestAsyncStub.calledOnce, 'ingestAsync should be called once on clipboard fallback');
+        assert.ok(infoMsgStub.called, 'success info message should be shown');
+    });
+
+    test('Capture command shows nothing to capture when empty input and empty clipboard', async () => {
+        const cb = registered['Flowbaby.captureMessage'];
+        assert.ok(cb, 'capture command not registered');
+
+        inputBoxStub.resolves(''); // Empty string = explicit submit
+        await vscode.env.clipboard.writeText('');
 
         await cb();
 
         assert.ok(ingestAsyncStub.notCalled, 'ingestAsync should not be called when no content');
-        assert.ok(warnMsgStub.called, 'warning should be shown for no content');
+        assert.ok(infoMsgStub.calledWith('Nothing to capture'), 'nothing to capture info message should be shown');
     });
 
     test('Toggle command flips enabled flag in workspace configuration', async () => {

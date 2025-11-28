@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.4.9] - 2025-11-28
+
+### Fixed - Plan 041: Capture Command UX Fixes
+
+**UX Improvement Release** - Improves the `Ctrl+Alt+C` (Cmd+Alt+C on Mac) capture workflow for intuitive behavior.
+
+#### Editor Selection Prioritization
+- **Fixed**: `Ctrl+Alt+C` capture command now correctly uses highlighted text from the active editor
+- **Behavior**: When text is selected in the editor, the input box pre-fills with that selection
+- **Benefit**: Users can capture highlighted code or notes directly without manual copying
+
+#### Cancellation Logic Fix
+- **Fixed**: Pressing Escape now properly cancels the capture operation
+- **Previous**: Escape would fall back to clipboard content, causing unintended captures
+- **Now**: Escape shows "Capture cancelled" message and aborts without any ingestion
+
+#### Clipboard Fallback (Power User Feature)
+- **Preserved**: Submitting an empty input box (Enter with no text) still reads from clipboard
+- **Use Case**: Power users can copy content to clipboard, press `Ctrl+Alt+C`, then Enter to capture
+
+#### Content Source Transparency
+- **Improved**: Output channel now logs the source of captured content:
+  - "Capturing from Editor Selection (X chars)"
+  - "Capturing from User Input (X chars)"
+  - "Capturing from Clipboard (X chars)"
+- **Benefit**: Users can verify what content was actually captured via Output > Flowbaby
+
+#### Empty-All-Sources Handling
+- **Added**: When no selection exists, input is empty, and clipboard is empty, shows "Nothing to capture" info message
+- **Benefit**: Clear feedback instead of silent failure when there's nothing to capture
+
 ## [0.4.8] - 2025-11-28
 
 ### Fixed - Plan 040.1: First-Time Initialization Hotfix

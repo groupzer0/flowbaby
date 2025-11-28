@@ -594,84 +594,107 @@ function registerCaptureCommands(
     context: vscode.ExtensionContext,
     client: FlowbabyClient
 ) {
-    // VALIDATION 1: Test capture command with keyboard shortcut
-    // NOTE: Context menu API (chat/message/context) does not exist - using fallback approach
+    // Capture command for keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C)
+    // Plan 041: Refactored to prioritize editor selection, fix cancellation, and log content source
     const captureCommand = vscode.commands.registerCommand(
         'Flowbaby.captureMessage',
         async () => {
-            console.log('=== VALIDATION 1: Capture Command Test (Fallback Approach) ===');
-            console.log('Command triggered via keyboard shortcut or command palette');
+            console.log('=== Flowbaby Capture Command ===');
             
-            // Fallback: Show input box to capture user text or use clipboard
             try {
+                // Step 1: Check for editor selection to pre-fill the input box
+                let initialValue = '';
+                const editor = vscode.window.activeTextEditor;
+                if (editor && !editor.selection.isEmpty) {
+                    initialValue = editor.document.getText(editor.selection);
+                    console.log(`Pre-filling with editor selection (${initialValue.length} chars)`);
+                }
+                
+                // Step 2: Show input box with pre-filled selection (if any)
                 const options: vscode.InputBoxOptions = {
-                    prompt: 'Enter text to capture to Flowbaby (or leave empty to capture from clipboard)',
-                    placeHolder: 'Example: Discussed Redis caching with 15-minute TTL',
+                    value: initialValue,
+                    prompt: 'Edit or enter text to capture (Escape to cancel)',
+                    placeHolder: initialValue ? undefined : 'Example: Discussed Redis caching with 15-minute TTL',
                     ignoreFocusOut: true
                 };
                 
                 const userInput = await vscode.window.showInputBox(options);
                 
-                // If user cancels, check clipboard as fallback
-                let content: string;
-                if (!userInput) {
-                    content = await vscode.env.clipboard.readText();
-                    if (!content || content.trim().length === 0) {
-                        vscode.window.showWarningMessage('No content to capture. Please enter text or copy content to clipboard.');
-                        return;
-                    }
-                    console.log('Using clipboard content:', content.substring(0, 100) + (content.length > 100 ? '...' : ''));
-                } else {
-                    content = userInput;
-                    console.log('Using user input:', content.substring(0, 100) + (content.length > 100 ? '...' : ''));
+                // Step 3: Handle cancellation (Escape pressed) - userInput is undefined
+                if (userInput === undefined) {
+                    vscode.window.showInformationMessage('Capture cancelled');
+                    console.log('Capture cancelled by user (Escape pressed)');
+                    return;
                 }
                 
-                // VALIDATION SUCCESS: If we got here with content
-                if (content && content.trim().length > 0) {
-                    vscode.window.showInformationMessage(
-                        `✅ VALIDATION PASS: Capture command works! Got ${content.length} chars`
-                    );
-                    
-                    // Test ingestion with async mode per Plan 017
-                    console.log('Testing async ingestion...');
-                    
-                    try {
-                        // For manual capture, treat as user note
-                        const userMsg = 'Manual note: ' + content;
-                        const assistantMsg = 'Captured via Ctrl+Alt+C (Cmd+Alt+C on Mac) shortcut';
-                        
-                        // Get BackgroundOperationManager instance
-                        const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
-                        const manager = BackgroundOperationManager.getInstance();
-                        
-                        // Use async ingestion
-                        const result = await client.ingestAsync(userMsg, assistantMsg, manager);
-                        
-                        if (result.success && result.staged) {
-                            // Show staged messaging per Plan 017
-                            vscode.window.showInformationMessage(
-                                "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."
-                            );
-                        } else {
-                            vscode.window.showWarningMessage(
-                                `⚠️ Capture failed: ${result.error || 'Unknown error'}`
-                            );
-                        }
-                    } catch (error) {
-                        vscode.window.showWarningMessage(
-                            `⚠️ Ingestion error: ${error instanceof Error ? error.message : String(error)}`
-                        );
+                // Step 4: Determine content and source
+                let content: string;
+                let contentSource: string;
+                
+                if (userInput.trim().length > 0) {
+                    // User provided/edited text
+                    content = userInput;
+                    // Distinguish between unmodified selection and user-typed input
+                    if (initialValue && userInput === initialValue) {
+                        contentSource = 'Editor Selection';
+                    } else if (initialValue) {
+                        contentSource = 'User Input (edited selection)';
+                    } else {
+                        contentSource = 'User Input';
                     }
                 } else {
+                    // Empty string submitted - clipboard fallback (power user feature)
+                    content = await vscode.env.clipboard.readText();
+                    if (!content || content.trim().length === 0) {
+                        // Empty-all-sources case: no selection, no input, no clipboard
+                        vscode.window.showInformationMessage('Nothing to capture');
+                        console.log('Nothing to capture: no selection, no input, and empty clipboard');
+                        return;
+                    }
+                    contentSource = 'Clipboard';
+                }
+                
+                // Step 5: Log content source to Output channel
+                const outputChannel = vscode.window.createOutputChannel('Flowbaby');
+                outputChannel.appendLine(`Capturing from ${contentSource} (${content.length} chars)`);
+                console.log(`Capturing from ${contentSource} (${content.length} chars)`);
+                
+                // Step 6: Ingest the content
+                try {
+                    // For manual capture, treat as user note
+                    const userMsg = 'Manual note: ' + content;
+                    const assistantMsg = 'Captured via Ctrl+Alt+C (Cmd+Alt+C on Mac) shortcut';
+                    
+                    // Get BackgroundOperationManager instance
+                    const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
+                    const manager = BackgroundOperationManager.getInstance();
+                    
+                    // Use async ingestion
+                    const result = await client.ingestAsync(userMsg, assistantMsg, manager);
+                    
+                    if (result.success && result.staged) {
+                        // Show staged messaging per Plan 017
+                        vscode.window.showInformationMessage(
+                            "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."
+                        );
+                        outputChannel.appendLine('Memory staged successfully');
+                    } else {
+                        vscode.window.showWarningMessage(
+                            `⚠️ Capture failed: ${result.error || 'Unknown error'}`
+                        );
+                        outputChannel.appendLine(`Capture failed: ${result.error || 'Unknown error'}`);
+                    }
+                } catch (error) {
                     vscode.window.showWarningMessage(
-                        '⚠️ No content provided - cancelling capture'
+                        `⚠️ Ingestion error: ${error instanceof Error ? error.message : String(error)}`
                     );
+                    outputChannel.appendLine(`Ingestion error: ${error instanceof Error ? error.message : String(error)}`);
                 }
                 
             } catch (error) {
                 console.error('Capture error:', error);
                 vscode.window.showErrorMessage(
-                    `❌ VALIDATION ERROR: ${error instanceof Error ? error.message : String(error)}`
+                    `❌ Capture error: ${error instanceof Error ? error.message : String(error)}`
                 );
             }
         }
