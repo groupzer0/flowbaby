@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.4.8] - 2025-11-28
+
+### Fixed - Plan 040.1: First-Time Initialization Hotfix
+
+**Critical Hotfix** - Resolves first-time workspace initialization failure introduced in v0.4.7 that required window reload.
+
+#### FlowbabyClient Recreation After Environment Setup (M1)
+- **Bug**: Fresh workspaces showed "No module named 'cognee'" error after clicking "Initialize" because FlowbabyClient was created at activation time with system Python before venv existed
+- **Root Cause**: When `createEnvironment()` succeeded, the existing client retained its stale `pythonPath: "python3"` instead of detecting the newly-created `.flowbaby/venv`
+- **Fix**: Recreate FlowbabyClient after successful environment creation to detect the new venv Python interpreter
+- **Benefit**: Users can now use `@flowbaby` immediately after initialization without any window reload
+
+#### Initialization Timeout Fix (M1.1)
+- **Bug**: First-run database creation could timeout on slower machines because `initialize()` used the default 10-second timeout
+- **Fix**: Increased `init.py` timeout from 10 seconds to 60 seconds
+- **Benefit**: First-run initialization (SQLite, Kuzu, LanceDB setup) completes successfully on slower systems
+
+#### Initialization Logging (M2, M3)
+- Added detailed progress logging throughout the initialization flow:
+  - `[Plan 040] Starting workspace initialization...`
+  - `[Setup] Virtual environment created successfully.`
+  - `[Setup] Starting dependency installation...`
+  - `[Setup] Dependency installation complete.`
+  - `[Plan 040] ✅ Environment created successfully`
+  - `[Plan 040] Recreating FlowbabyClient with new environment...`
+  - `[Plan 040] ✅ Flowbaby client initialized successfully`
+- **Benefit**: Users and support can trace initialization issues via Output > Flowbaby channel
+
+### User Experience Improvements
+- **No-reload workflow**: First-time initialization now completes in a single process
+- **Clear progress**: Setup notifications show venv creation → dependency install → database init
+- **Error transparency**: Detailed logging aids troubleshooting when issues occur
+
 ## [0.4.7] - 2025-11-28
 
 ### Fixed - Plan 040: Initialization JSON Errors and No-Reload Workflow

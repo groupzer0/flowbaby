@@ -272,10 +272,13 @@ export class FlowbabySetupService {
                 this.log('Creating virtual environment in .flowbaby/venv...');
                 debugLog('Creating venv', { venvPath });
                 await this.runCommand(pythonCommand, ['-m', 'venv', venvPath], this.workspacePath);
+                this.log('Virtual environment created successfully.');
 
                 // 4. Install dependencies
                 progress.report({ message: "Installing dependencies (this may take 1-2 minutes)..." });
+                this.log('Starting dependency installation...');
                 await this.installDependencies();
+                this.log('Dependency installation complete.');
 
                 // 5. Verify installation
                 progress.report({ message: "Verifying installation..." });

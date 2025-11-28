@@ -169,13 +169,31 @@ export async function activate(_context: vscode.ExtensionContext) {
         const initializeWorkspaceCommand = vscode.commands.registerCommand(
             'Flowbaby.initializeWorkspace',
             async () => {
+                const outputChannel = getFlowbabyOutputChannel();
+                outputChannel.appendLine('[Plan 040] Starting workspace initialization...');
+                
                 // Delegate to setupService.createEnvironment() for unified behavior
                 const success = await setupService.createEnvironment();
                 
+                if (!success) {
+                    outputChannel.appendLine('[Plan 040] ❌ Environment creation failed');
+                    return;
+                }
+                
+                outputChannel.appendLine('[Plan 040] ✅ Environment created successfully');
+                
                 // Plan 040 M2: If environment creation succeeded, chain client initialization
                 if (success && flowbabyClient) {
-                    const outputChannel = getFlowbabyOutputChannel();
-                    outputChannel.appendLine('[Plan 040] Environment created, initializing Flowbaby client...');
+                    outputChannel.appendLine('[Plan 040] Preparing to initialize Flowbaby client...');
+                    
+                    // CRITICAL FIX: Recreate FlowbabyClient to pick up the new .flowbaby/venv Python path
+                    // The client was created at activation time with system Python (python3) before
+                    // the venv existed. Now that createEnvironment() has successfully created the venv
+                    // and installed dependencies, we must recreate the client so it detects and uses
+                    // the new Python interpreter with cognee installed.
+                    outputChannel.appendLine('[Plan 040] Recreating FlowbabyClient with new environment...');
+                    debugLog('Recreating FlowbabyClient after environment setup');
+                    flowbabyClient = new FlowbabyClient(workspacePath, _context);
                     
                     try {
                         // Show progress during initialization

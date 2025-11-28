@@ -195,7 +195,9 @@ export class FlowbabyClient {
         this.log('INFO', 'Initializing Flowbaby', { workspace: this.workspacePath });
 
         try {
-            const result = await this.runPythonScript('init.py', [this.workspacePath]);
+            // Plan 040.1: Use 60-second timeout for initialization
+            // First-run database creation (SQLite, Kuzu, LanceDB) can exceed default 10s on slower machines
+            const result = await this.runPythonScript('init.py', [this.workspacePath], 60000);
             const duration = Date.now() - startTime;
 
             if (result.success) {
