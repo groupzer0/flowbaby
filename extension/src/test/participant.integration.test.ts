@@ -10,7 +10,7 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
     let sandbox: sinon.SinonSandbox;
     let handler: Handler | undefined;
     // Mutable config state accessible to tests
-    const configState = { enabled: true, autoIngest: false };
+    const configState = { enabled: true };
 
     // Common stubs
     let retrieveStub: sinon.SinonStub;
@@ -69,14 +69,12 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
         const fakeConfig: vscode.WorkspaceConfiguration = {
             get: ((key: string, defaultValue?: any) => {
                 if (key === 'enabled') {return configState.enabled;}
-                if (key === 'autoIngestConversations') {return configState.autoIngest;}
                 return defaultValue;
             }) as any,
             has: (() => true) as any,
             inspect: (() => undefined) as any,
             update: (async (section: string, value: any) => {
                 if (section === 'enabled') {configState.enabled = Boolean(value);}
-                if (section === 'autoIngestConversations') {configState.autoIngest = Boolean(value);}
             }) as any
         };
         sandbox.stub(vscode.workspace, 'getConfiguration').callsFake(() => fakeConfig);
@@ -209,18 +207,5 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
         const joined = outputs.join('\n');
         assert.ok(/Memory 1 \(500 chars\)/.test(joined), 'Should show length indicator for >100 chars');
         assert.ok(!joined.includes('showing 2000'), 'Should not include truncation message when below limit');
-    });
-
-    test('Step 6 auto-ingest: gated by configuration flag', async () => {
-        // Enable auto-ingest for this test only
-        configState.enabled = true;
-        configState.autoIngest = true;
-
-        retrieveStub.resolves([{ summaryText: 'memory', text: 'memory', score: 0.9, decisions: [], rationale: [], openQuestions: [], nextSteps: [], references: [] }]);
-        const { req, stream, token } = makeInvocation('Question');
-        await handler!(req, {} as any, stream, token);
-
-        assert.ok(ingestStub.calledOnce, 'ingest should be called when autoIngestConversations=true');
-        configState.autoIngest = false;
     });
 });

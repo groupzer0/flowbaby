@@ -77,7 +77,8 @@ cognee/
 - [Extension CHANGELOG](extension/CHANGELOG.md) - Version history and release notes
 - [Extension Distribution Guide](extension/DISTRIBUTION.md) - Release and packaging process
 - [Planning Documents](planning/) - Implementation plans and architecture decisions
-- [Official Flowbaby Docs](https://docs.cognee.ai)
+- [Official Flowbaby Docs](https://docs.flowbaby.ai)
+- [Flowbaby VS Code Extension Docs](https://docs.flowbaby.ai)
 
 ## License
 

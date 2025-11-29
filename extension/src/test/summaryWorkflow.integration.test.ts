@@ -15,7 +15,7 @@ type Handler = vscode.ChatRequestHandler;
 suite('Summary Generation Workflow (Plan 014)', () => {
     let sandbox: sinon.SinonSandbox;
     let handler: Handler | undefined;
-    const configState = { enabled: true, autoIngest: false };
+    const configState = { enabled: true };
 
     let ingestSummaryStub: sinon.SinonStub;
     let sendRequestSpy: sinon.SinonSpy;
@@ -133,14 +133,12 @@ Nov 18 10:00-11:30`;
         const fakeConfig: vscode.WorkspaceConfiguration = {
             get: ((key: string, defaultValue?: any) => {
                 if (key === 'enabled') {return configState.enabled;}
-                if (key === 'autoIngestConversations') {return configState.autoIngest;}
                 return defaultValue;
             }) as any,
             has: (() => true) as any,
             inspect: (() => undefined) as any,
             update: (async (section: string, value: any) => {
                 if (section === 'enabled') {configState.enabled = Boolean(value);}
-                if (section === 'autoIngestConversations') {configState.autoIngest = Boolean(value);}
             }) as any
         };
         sandbox.stub(vscode.workspace, 'getConfiguration').callsFake(() => fakeConfig);

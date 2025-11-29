@@ -1449,54 +1449,11 @@ function registerFlowbabyParticipant(
                     };
                 }
 
-                // STEP 6: Capture conversation for feedback loop (async fire-and-forget)
-                // This is CRITICAL - enables self-improving memory
-                // NOTE: Cognee 0.4.0 has an intermittent file hashing bug that may cause ingestion failures
-                // We silently handle these failures to avoid disrupting user experience
-                if (memoryEnabled && fullResponse.length > 0) {
-                    console.log('=== STEP 6: Capturing conversation for feedback loop ===');
-                    
-                    const userMessage = `User query: ${request.prompt}`;
-                    const assistantMessage = `Retrieved context: ${retrievedMemories.length} memories\n\nGenerated response:\n${fullResponse}`;
-
-                    // Step 6: Conversation Capture (Feedback Loop)
-                    // DISABLED BY DEFAULT due to Cognee 0.4.0 file storage bug
-                    // Enable via Flowbaby.autoIngestConversations setting for experimental testing
-                    const autoIngest = config.get<boolean>('autoIngestConversations', false);
-                    
-                    if (autoIngest) {
-                        // Fire-and-forget ingestion (don't block return)
-                        flowbabyClient.ingest(userMessage, assistantMessage)
-                            .then((success) => {
-                                if (success) {
-                                    console.log('✅ Conversation captured for feedback loop');
-                                } else {
-                                    // Known issue: Cognee 0.4.0 file hashing inconsistency
-                                    // This is non-blocking - retrieval still works with manually captured conversations
-                                    console.warn('⚠️ Step 6 ingestion failed (known Cognee bug, non-blocking)');
-                                }
-                            })
-                            .catch((error) => {
-                                // Known issue: Cognee 0.4.0 file storage bug
-                                // Log for debugging but don't surface to user (retrieval still works)
-                                const errorMsg = error instanceof Error ? error.message : String(error);
-                                if (errorMsg.includes('File not found')) {
-                                    console.warn('⚠️ Step 6 failed due to Cognee file storage bug (non-blocking)');
-                                } else {
-                                    console.error('Step 6 ingestion error (non-blocking):', error);
-                                }
-                            });
-                    } else {
-                        console.log('ℹ️ Step 6 automatic ingestion disabled (enable via Flowbaby.autoIngestConversations)');
-                    }
-                }
-
                 // Success - return metadata for telemetry
                 return {
                     metadata: {
                         memoriesRetrieved: retrievedMemories.length,
-                        responseLength: fullResponse.length,
-                        feedbackLoopEnabled: memoryEnabled
+                        responseLength: fullResponse.length
                     }
                 };
 

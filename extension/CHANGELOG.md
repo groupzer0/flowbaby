@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.2] - 2025-11-29
+
+### Removed - Plan 044: Remove Non-Functional Auto-Ingest Setting
+
+**Configuration Cleanup Release** - Removes experimental setting that never functioned.
+
+#### Removed
+- **Setting**: `Flowbaby.autoIngestConversations` removed from VS Code settings
+- **Code**: Step 6 "feedback loop" code block removed from chat participant
+- **Rationale**: Feature was introduced as experimental but never worked due to Cognee SDK limitations (file hashing bug). Keeping non-functional settings creates user confusion.
+
+#### Impact
+- Users who had this setting enabled will see no behavior change (it was already non-functional)
+- Configuration surface is now cleaner and only exposes working features
+- Any future auto-ingest or feedback-loop features will be redesigned under the current architecture (e.g., via structured summaries and Flowbaby tools) rather than reusing this removed pattern
+
 ## [0.5.1] - 2025-11-28
 
 ### Changed - Plan 043: Tool Descriptions and UX Improvements

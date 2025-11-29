@@ -2,27 +2,54 @@
   "name": "flowbaby",
   "displayName": "Flowbaby",
   "description": "Automatic memory for GitHub Copilot chat using Flowbaby knowledge graphs",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publisher": "flowbaby",
   "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.106.0"
   },
   "categories": [
     "AI",
     "Chat",
-    "Machine Learning"
+    "Other"
+  ],
+  "screenshots": [
+    {
+      "path": "media/auto-search.png",
+      "caption": "Automatic context search"
+    },
+    {
+      "path": "media/auto-store.png",
+      "caption": "Automatic memory storage"
+    },
+    {
+      "path": "media/interactive-chat-participant.png",
+      "caption": "Interactive @flowbaby chat participant"
+    },
+    {
+      "path": "media/manual-store-summary.png",
+      "caption": "Manual memory capture via command palette"
+    }
   ],
   "keywords": [
     "flowbaby",
-    "memory",
-    "chat",
     "copilot",
-    "knowledge-graph",
-    "context",
-    "ai",
+    "github copilot",
+    "chat",
+    "memory",
+    "workspace memory",
+    "knowledge graph",
     "llm",
-    "context-retrieval"
+    "context",
+    "retrieval",
+    "rags",
+    "agent",
+    "vs code",
+    "developer productivity"
   ],
   "activationEvents": [
     "onStartupFinished",
@@ -324,11 +351,6 @@
           "minimum": 0.5,
           "maximum": 90,
           "markdownDescription": "Half-life (in days) used for recency-aware ranking. Memories older than this value will have their relevance score halved. Leave between 0.5 and 90 days to balance freshness vs. semantic similarity."
-        },
-        "Flowbaby.autoIngestConversations": {
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "**Experimental**: Automatically capture @flowbaby conversations for feedback loop. Currently disabled by default due to Cognee 0.4.0 file storage issues. Enable to test self-improving memory (may fail intermittently)."
         },
         "Flowbaby.pythonPath": {
           "type": "string",

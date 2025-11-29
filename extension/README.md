@@ -2,21 +2,21 @@
 
 > Memory-augmented Copilot chat for VS Code
 
-Flowbaby automatically captures and summarizes key moments from your GitHub Copilot chats, then surfaces them as context in future conversations to reduce drift in long-running work. Each workspace gets its own isolated memory and Python environment, and no code from your repository ever leaves your machine—only the chat content already sent to Copilot is summarized and reused, under your control.
+Flowbaby captures and summarizes key moments from your GitHub Copilot chats, then surfaces them as context in future conversations to reduce drift in long-running work. Each workspace gets its own isolated memory and Python environment, and no code from your repository ever leaves your machine—only the chat content already sent to Copilot is summarized and reused, under your control.
 
 ## Features
 
-- **Context aware automatic memory search** - Flowbaby is configured to use chat conversation cues to search memory and add that memory context to the chat - keeping your Copilot agent from drifting and saving you from having to explain what happened all over again. 
-![Screenshot](media/auto-search.png)
-- **Context aware automatic memory storage** - Flowbaby knows when it's a good time to summarize and store memories based on the chat context. 
-![Screenshot](media/auto-store.png)
-- **@flowbaby chat participant** – A dedicated Copilot participant that recalls past conversations and surfaces relevant memories into new chats to reduce drift over long sessions.
-![Screenshot](media/interactive-chat-participant.png)
+-- **Context aware automatic memory search** - Flowbaby is configured to use chat conversation cues to search memory and add that memory context to the chat - keeping your Copilot agent from drifting and saving you from having to explain what happened all over again. 
+![Automatic Search](media/auto-search.png)
+-- **Context aware automatic memory storage** - Flowbaby knows when it's a good time to summarize and store memories based on the chat context. 
+![Automatic Store](media/auto-store.png)
+-- **@flowbaby chat participant** – A dedicated Copilot participant that recalls past conversations and surfaces relevant memories into new chats to reduce drift over long sessions.
+![Interactive Chat Participant](media/interactive-chat-participant.png)
 - **Configurable memory behavior via stored prompts** – Guide Flowbaby with stored natural-language instructions (e.g., what to store, what to ignore, how aggressively to retrieve) so each workspace can have its own memory style.
 - **Agent tools for storage and retrieval** – Exposes two standard Copilot tools (for storing and retrieving memories) that are available to GitHub Copilot just like any other tool, so agents can autonomously call them when helpful.
 - **Keyboard Shortcut Workflow** – Press Ctrl+Alt+F / Cmd+Alt+F to capture important snippets from chat or code with a quick confirmation flow.
 - **Command Palette Alternative** – Run “Flowbaby: Capture to Memory” if you prefer command-palette based capture.
-![Screenshot](media/manual-store-summary.png)
+![Manual Store](media/manual-store-summary.png)
 - **Workspace Isolation** – Each workspace has its own separate memory and Python environment—no cross-project leakage.
 - **Hybrid Graph-Vector Search** – Combines knowledge-graph structure with vector similarity for higher-quality, controllable retrieval.
 - **Privacy-First Design** – All data stays on your machine; only chat content already sent to GitHub Copilot is summarized, and no repository files or file content are sent to any external LLM.
@@ -32,7 +32,7 @@ Flowbaby automatically creates and manages its own isolated Python environment (
 
 ## Installation
 
-### Method 1: Install from VS Code Marketplace (Recommended)
+### Install from VS Code Marketplace
 
 1. Open VS Code
 2. Go to the Extensions view (`Ctrl+Shift+X` / `Cmd+Shift+X`)
@@ -40,18 +40,11 @@ Flowbaby automatically creates and manages its own isolated Python environment (
 4. Click **Install**
 5. Reload VS Code when prompted
 
-### Method 2: Install from VSIX
-
-1. Download the latest `.vsix` file from [GitHub Releases](https://github.com/lsalsich/flowbaby/releases)
-2. Open VS Code
-3. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS)
-4. Type **"Install from VSIX"** and select the command
-5. Navigate to the downloaded `.vsix` file and select it
-6. Reload VS Code when prompted
-
 ## Setup
 
 After installation, configure your workspace:
+
+> Optional but recommended: Add `.flowbaby/` to your workspace `.gitignore` if you don't want Flowbaby's local data and virtual environment committed to your repository. You can always keep it versioned if you prefer.
 
 ### 1. Initialize Workspace (Automated)
 
@@ -83,174 +76,214 @@ This stores the key securely and applies to all workspaces automatically.
 2. If you see **"Flowbaby: Setup Required"** (yellow warning), click it to run setup
 3. Optional: Open the Output panel (**View → Output**) and select **"Flowbaby"** to see logs
 
+## Memory-Aware Copilot Instructions (Strong Defaults)
+
+To get the full value from Flowbaby, you don’t have to start from scratch with custom prompting—Flowbaby already nudges GitHub Copilot to store and retrieve memory when it makes sense. However, strong Copilot instructions are still important if you want Copilot-initiated memory storage and retrieval to match your workflow (what to remember, what to ignore, how aggressive to be). The template below is a recommended starting point you can customize.
+
+Create or modify an `.agent.md`, `.chatmode.md` or `.copilot-instructions.md` file in your workspace and add something like thexample below, or use it exactly as-is.
+
+**Example Copilot instructions:**
+
+```markdown
+---
+name: Memory-Aware Code Assistant
+description: Copilot assistant with access to workspace memory
+tools: ['search', 'flowbabyStoreSummary', 'flowbabyRetrieveMemory']
+---
+
+You are a code assistant with access to workspace-specific memory powered by Flowbaby.
+
+# 1. Retrieval (start of turn)
+
+Treat the user’s current request and open documents as the primary source of truth. Use Flowbaby memory to augment and cross-check, not to override active specs.
+
+At the start of any turn where past work might matter (prior plans, decisions, constraints, patterns):
+
+1. Call #flowbabyRetrieveMemory **before** deep planning or multi-step reasoning.
+2. Use a natural-language query that:
+   - Describes the current task or question
+   - Mentions the area of the codebase or system involved
+   - States what you are looking for (e.g., prior decisions, constraints, risks, patterns, open questions)
+3. Prefer a small set of high-value memories (default: 3) rather than many low-signal items.
+
+You MAY make at most one follow-up retrieval in the same turn, but only if:
+
+- The first call returned nothing useful and a slightly more general query is warranted, or
+- You have a clear new question (e.g., “Have we already decided how to handle this exact edge case?”).
+
+Do NOT chain multiple retrievals just to explore history. If more context seems useful, summarize what you know, note uncertainties, and say what you would ask the user for.
+
+# 2. Using Retrieved Memory
+
+When memory is available:
+
+- Use it to reveal historical decisions, constraints, and tradeoffs.
+- Check for prior attempts and repeated failures before proposing new work.
+- Call out when current plans might conflict with older decisions.
+
+If memory conflicts with current instructions or docs:
+
+- Treat current instructions, specs, and architecture docs as the source of truth.
+- Treat memory as historical context unless the user explicitly says otherwise.
+- Briefly surface only material conflicts that would change risk, scope, or recommendations.
+
+# 3. Summarization (end of work / milestones)
+
+Use #flowbabyStoreSummary to maintain accurate long-term memory. Store a summary when:
+
+- You complete meaningful work or a plan milestone
+- You make or refine important decisions
+- You discover new constraints, risks, or assumptions
+- A conversation branches into a new line of work
+
+Each summary should be 300–1500 characters and semantically dense. Capture:
+
+- Goal or question
+- Key findings and decisions
+- Important reasoning and tradeoffs
+- Rejected options and why they were rejected
+- Notable constraints, risks, and assumptions
+- Current status (ongoing, blocked, or complete)
+
+Use fields like:
+
+- `topic`: short 3–7 word title
+- `context`: rich narrative summary
+- `decisions`: list of important decisions
+- `rationale`: reasons and tradeoffs
+- `metadata.status`: e.g., `Active`, `Superseded`, or `DecisionRecord`
+
+After storing, explicitly tell the user that you saved progress to Flowbaby memory.
+
+# 4. Behavioral Requirements
+
+- Begin each turn by asking: “Could prior work matter here?” If yes, retrieve.
+- Never let memory silently override current specs, plans, or architecture.
+- Reference memory explicitly when it shapes your recommendations.
+- Avoid retrieval rabbit holes: at most one follow-up retrieval per turn.
+- Regularly create summaries so future work can build on stable, well-structured context instead of raw chat logs.
+- When multiple options are discussed, record both chosen and rejected paths (with rationale) in summaries.
+```
+
 ## Usage
 
-### Environment Management (v0.3.14+)
+### 1. Context-Aware Automatic Memory Search
 
-Flowbaby includes tools to keep your environment healthy:
+Flowbaby can automatically search your workspace memory and surface relevant context into GitHub Copilot chats.
 
-- **Status Bar**: Shows real-time health (Ready, Setup Required, Refreshing, Error)
-- **Refresh Dependencies**: If you encounter issues, run **"Flowbaby: Refresh Bridge Dependencies"** to safely reinstall the environment without losing data.
-- **Background Safety**: Refresh operations automatically pause background tasks to prevent conflicts.
+**How it works**:
+- Flowbaby watches for conversation cues (e.g., "How did I implement…?", "What did we decide about…?").
+- When it detects a good opportunity, it runs a background search against your knowledge graph.
+- Retrieved memories are added to the Copilot request as additional context so you don't have to restate prior work.
 
-### Async Ingestion Behavior (v0.3.3+)
+**What you'll see**:
+- In Copilot Chat, Flowbaby shows a section like **"📚 Retrieved memories"** with short previews.
+- Copilot's answer incorporates those memories directly into its response.
 
-Starting in v0.3.3, memory ingestion operates asynchronously to prevent blocking your workflow. Here's what to expect:
+### 2. Context-Aware Automatic Memory Storage
 
-**Timing Expectations**:
-- **Capture Response**: 5-10 seconds—you can continue working immediately after capture
-- **Background Processing**: 60-90 seconds—knowledge graph construction happens in the background
-- **Total Time**: ~1-2 minutes from capture to searchable memory
+Flowbaby can also decide when to summarize and store parts of the conversation as long-term memory.
 
-**Staged Messaging**:
+**How it works**:
+- Flowbaby looks for moments where you've reached a decision, finished a debugging session, or explained an important concept.
+- It generates a structured summary and stores it in your workspace knowledge graph (after any required confirmation, depending on settings).
 
-When you capture a memory (via keyboard shortcut, command palette, or agent tools), you'll see:
+**Benefits**:
+- You build up high-value memory over time with minimal manual effort.
+- Later queries can retrieve these summaries instead of raw, noisy chat logs.
 
-> **"Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."**
+### 3. Using the @flowbaby Chat Participant
 
-This means:
-- ✅ Your content has been safely staged for processing
-- ✅ You can continue working without waiting
-- ⏳ Knowledge graph construction is running in the background
-- 🔔 You'll receive a notification when processing completes
+The `@flowbaby` participant lets you directly query your workspace memory.
 
-**Completion Notifications**:
+**How to use**:
+1. Open GitHub Copilot Chat (`Ctrl+Alt+I` or click the chat icon).
+2. Address Flowbaby explicitly: `@flowbaby How did I implement caching?`
+3. Flowbaby:
+   - Retrieves relevant memories from your knowledge graph.
+   - Shows previews under **"📚 Retrieved memories"**.
+   - Augments your question with that context.
+   - Generates a context-aware response.
 
-After background processing finishes, you'll receive one of two notifications:
-
-- **Success** (ℹ️ Info): "✅ Flowbaby finished" with workspace name, summary digest, elapsed time, and entity count. Click "View Status" to see all background operations.
-- **Failure** (⚠️ Warning): "⚠️ Flowbaby failed" with workspace name, summary digest, and remediation guidance. Click "Retry" to re-process or "View Logs" for error details.
-
-**Why Async?**
-
-Previously, memory capture blocked for 60-90 seconds while the knowledge graph was being built. This made agents unresponsive and disrupted your workflow. With async ingestion:
-- Agents return responses in <10 seconds
-- You can store multiple memories without waiting
-- Background processing doesn't interrupt your work
-- You're only notified if there's an error
-
-**Background Status**:
-
-To check all in-flight operations:
-1. Press `Cmd+Shift+P` (or `Ctrl+Shift+P` on Linux/Windows)
-2. Type "Flowbaby: View Background Operations"
-3. View pending, running, completed, and failed operations
-
-### Capturing Conversations
-
-**Keyboard Shortcut (Primary Method)**:
-1. View a valuable chat message (from any participant: @workspace, @terminal, GitHub Copilot, etc.)
-2. Press **Ctrl+Alt+F** (or **Cmd+Alt+F** on macOS)
-3. Paste the message content in the input box (or leave empty to use clipboard)
-4. Press Enter to capture
-5. See "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done." confirmation
-6. Continue working—you'll receive a completion notification when ready
-
-**Command Palette (Alternative)**:
-1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-2. Type "Flowbaby: Capture to Memory"
-3. Follow the same workflow as keyboard shortcut
-
-**What Gets Captured**:
-- Chat conversations from ANY participant (@workspace, @terminal, GitHub Copilot, etc.)
-- Manual notes and observations you type
-- Code explanations and discussions
-- Only content YOU choose to capture (selective, user-controlled)
-
-### Retrieving Context with @flowbaby
-
-**How to Use**:
-1. Open GitHub Copilot Chat (`Ctrl+Alt+I` or click chat icon)
-2. Type: `@flowbaby How did I implement caching?`
-3. The participant:
-   - Retrieves relevant memories from your workspace knowledge graph
-   - Shows previews: "📚 Retrieved memories"
-   - Augments your question with retrieved context
-   - Generates a contextually-aware response
-   - Optionally captures the conversation for future retrieval (if enabled via config)
-
-**Example Queries**:
+**Example queries**:
 - `@flowbaby What problems did we discuss about the authentication system?`
 - `@flowbaby What solutions did we consider for rate limiting?`
 - `@flowbaby Summarize our decisions about database architecture`
 
-### Creating Conversation Summaries (Plan 014)
+### 4. Keyboard Shortcut and Command Palette Capture
 
-**What are Conversation Summaries?**
+Use these flows when you want to explicitly capture important information.
 
-Conversation summaries are structured records that capture the essence of a chat session, including:
-- Main topic and context
-- Key decisions made
-- Rationale behind decisions
-- Open questions still unresolved
-- Next steps to take
-- References to files, plans, or other resources
+**Keyboard shortcut**:
+1. View a valuable chat message (from any participant: @workspace, @terminal, GitHub Copilot, etc.).
+2. Press **Ctrl+Alt+F** (or **Cmd+Alt+F** on macOS).
+3. Paste or confirm the content in the capture input.
+4. Press Enter to capture.
+5. You'll see a staged message (e.g., "Memory staged – processing will finish in ~1–2 minutes").
 
-Summaries are more valuable than raw chat logs because they're organized, searchable, and focus on what matters most.
+**Command Palette**:
+1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`).
+2. Run **"Flowbaby: Capture to Memory"**.
+3. Follow the same flow as the keyboard shortcut.
 
-**When to Create Summaries**:
+### 5. Background Async Ingestion
 
-Create a summary when you've:
-- Completed a design discussion with important decisions
-- Resolved a complex debugging issue with lessons learned
-- Made architectural choices that should be remembered
-- Discussed tradeoffs between different approaches
-- Reached conclusions about implementation direction
+Flowbaby processes captured memories asynchronously so your editor stays responsive.
 
-**How to Create a Summary**:
+**Timeline**:
+- Capture confirmation: ~5–10 seconds.
+- Background processing and graph construction: ~60–90 seconds.
+- Total time from capture to searchable memory: ~1–2 minutes.
 
-1. **Open GitHub Copilot Chat** (`Ctrl+Alt+I` / `Cmd+Alt+I`)
-2. **Start a conversation with @flowbaby** and type:
+You'll receive a notification when ingestion finishes (success or failure), including a brief digest and basic metrics in the logs.
+
+### 6. Viewing Background Operations
+
+To inspect everything Flowbaby is doing in the background:
+1. Open Command Palette.
+2. Run **"Flowbaby: View Background Operations"**.
+3. Review pending, running, completed, and failed ingestion tasks.
+
+### 7. How Flowbaby Stores Summaries
+
+In normal use, Flowbaby creates and maintains summaries for you automatically.
+
+**Automatic summary creation**:
+- When you reach an important conclusion, finish a debugging session, or make a design decision, Flowbaby may create a structured summary in the background.
+- These summaries capture topic, key decisions, rationale, open questions, and next steps.
+- They are stored in your workspace knowledge graph and later used by automatic search and the `@flowbaby` participant.
+
+**Manual and agent-driven summaries (optional)**:
+- You can still ask Flowbaby to create a summary explicitly if you want tighter control.
+- In Copilot Chat, you can say things like:
    - `@flowbaby summarize this conversation`
-   - Or: `@flowbaby remember this session`
-   - Or: `@flowbaby create summary`
+   - `@flowbaby remember this session`
+   - `@flowbaby create summary for this plan`
+- Custom agents can also store summaries directly using Flowbaby's tools and APIs (see the Flowbaby docs at [docs.flowbaby.ai](https://docs.flowbaby.ai)).
 
-3. **Review the scope preview**:
-   - Extension shows: "I'll summarize the last 15 turns (from 5 mins ago)."
-   - Default is last 15 conversation turns
+The key idea: you don't need to manage summaries manually unless you want to – Flowbaby's automatic storage is usually enough.
 
-4. **Adjust turn count (optional)**:
-   - Type a number to change scope: `30` → "I'll summarize the last 30 turns..."
-   - Repeat to iteratively adjust: `20` → "I'll summarize the last 20 turns..."
-   - Say `confirm` when ready to proceed
+### 8. How Flowbaby Retrieves Summaries
 
-5. **Review the generated summary**:
-   - Extension uses LLM to analyze conversation history
-   - Displays structured summary with all sections (Topic, Context, Decisions, etc.)
-   - Shows metadata: Status, timestamps, plan IDs if detected
+Flowbaby uses summaries as a primary source of truth when answering questions about past work.
 
-6. **Confirm storage**:
-   - Extension asks: "Should I store this summary in Flowbaby memory?"
-   - Reply `yes`, `store it`, or `save` to confirm
-   - Reply `no` or `cancel` to discard
-   - Summary is only stored after explicit confirmation
+**Automatic retrieval**:
+- When context-aware search (Section 1) or the `@flowbaby` participant runs a query, Flowbaby searches both raw captured conversations and structured summaries.
+- When a good match is found, you'll see a **"📚 Retrieved memories"** section with previews of the most relevant items.
 
-### Retrieving Summaries
+**What summaries look like**:
+- Organized sections: topic, key decisions, open questions, next steps, rationale.
+- Rich, human-readable text designed to be useful both to you and to the LLM.
 
-When you query `@flowbaby`, the extension searches both raw captured conversations and structured summaries. Summaries display with rich metadata when available.
+**How to prompt for past work**:
+- `@flowbaby What did we decide about Plan 013?`
+- `@flowbaby What questions are still open about memory transparency?`
+- `@flowbaby What are the next steps for the authentication system?`
+- `@flowbaby Show me the rationale for using enriched text format`
 
-**What You'll See in Retrieval Results**:
+You don't need a separate "retrieve summary" command—just ask `@flowbaby` questions about previous sessions or decisions, and Flowbaby will use summaries automatically when available.
 
-Enriched summaries:
-
-- **Structured sections**: Topic, Key Decisions, Open Questions, Next Steps
-- **Full transparency**: Up to 32000 characters shown with explicit truncation indicator if longer
-
-**Example Retrieval Queries**:
-
-- `@flowbaby What did we decide about Plan 013?` → Retrieves relevant summaries with decisions highlighted
-- `@flowbaby What questions are still open about memory transparency?` → Finds Open Questions sections from summaries
-- `@flowbaby What are the next steps for the authentication system?` → Retrieves Next Steps from related summaries
-- `@flowbaby Show me the rationale for using enriched text format` → Finds Rationale sections explaining design choices
-
-**Retrieval Benefits**:
-
-- **Faster answers**: Structured summaries surface key points without reading full conversations
-- **Better context**: LLM sees organized decisions/rationale instead of scattered chat logs
-- **Temporal awareness**: Timestamps help distinguish recent vs historical decisions
-- **Status tracking**: Know if decisions are still Active or have been Superseded
-
-### Memory Management Commands
+### 9. Memory Management Commands
 
 **Toggle Memory On/Off**:
 - Command Palette → "Flowbaby: Toggle Memory"
@@ -260,126 +293,44 @@ Enriched summaries:
 - Command Palette → "Flowbaby: Clear Workspace Memory"
 - Deletes all captured conversations for current workspace (requires confirmation)
 
-## For Agent Developers
-
-Flowbaby Chat Memory provides an API for GitHub Copilot agents and third-party VS Code extensions to store and retrieve structured summaries programmatically.
-
-### Use Cases
-
-- **Agent Continuity**: Agents can maintain context across sessions without requiring manual redirection
-- **Multi-Agent Collaboration**: Different agents can share memory via a common knowledge base per workspace
-
-### Agent Ingestion API
-
-The `Flowbaby.ingestForAgent` command allows agents to write structured summaries to Flowbaby:
-
-```typescript
-const payload = {
-  topic: "Plan 015 Implementation Discussion",
-  context: "User discussed agent ingestion command design with architect.",
-  decisions: ["Use VS Code commands as primary surface", "Implement workspace-global access model"],
-  rationale: ["Commands are accessible to Copilot agents", "VS Code doesn't expose caller identity"],
-  metadata: {
-    topicId: "plan-015-implementation",
-    sessionId: "session-2025-11-19-001",
-    planId: "015",
-    status: "Active",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
-};
-
-const responseJson = await vscode.commands.executeCommand<string>(
-  'Flowbaby.ingestForAgent',
-  JSON.stringify(payload)
-);
-
-const response = JSON.parse(responseJson);
-
-if (response.success) {
-  console.log(`✅ Ingested ${response.ingested_chars} characters`);
-} else {
-  console.error(`❌ Error: ${response.error} (${response.errorCode})`);
-}
-```
-
-### Configuration
-
-Flowbaby tools are controlled exclusively through VS Code's **Configure Tools** UI (see Quick Start below). No additional workspace settings are required for authorization.
-
-### Documentation
-
-- **Complete API Guide**: [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md)
-  - TypeScript examples and error handling
-  - Security model and best practices
-  - Troubleshooting guide
-- **Bridge Contract**: [bridge/INGEST_CONTRACT.md](./bridge/INGEST_CONTRACT.md)
-  - JSON schema specification
-  - Error codes reference
-  - Performance characteristics
-- **Test Agent**: [test-agent/](../test-agent/)
-  - Reference implementation validating all scenarios
-  - Can be used as template for custom agents
-
 ### Automatic Detection
 
-**`.flowbaby/venv`?** This location prevents conflicts with project virtual environments (e.g., Python Jedi language server overwriting Flowbaby's dependencies). The `.flowbaby/` directory is also automatically added to `.gitignore`.
+**`.flowbaby/venv`** This location prevents conflicts with project virtual environments (e.g., Python Jedi language server overwriting Flowbaby's dependencies).
 
-### When to Configure Manually
-
-Set `Flowbaby.pythonPath` explicitly if:
-- Virtual environment is outside workspace directory
-- Using conda or pyenv environments (not auto-detected)
-- Want to share a Python environment across multiple workspaces
-
-Example configuration in VS Code settings:
-
-```json
-{
-  "Flowbaby.pythonPath": "/path/to/your/.flowbaby/venv/bin/python"
-}
-```
-
-**Platform-specific examples**:
-- Linux/macOS: `/home/user/project/.flowbaby/venv/bin/python`
-- Windows: `C:\Users\user\project\.flowbaby\venv\Scripts\python.exe`
-
-### Unsupported Contexts (v0.2.0)
+### Unsupported Contexts
 
 The following contexts are **not validated or supported** in this release:
 - **Remote Development**: VS Code Remote-SSH, WSL, Dev Containers
 - **Multi-root Workspaces**: Workspaces with multiple folder roots
-- **Conda Environments**: Automatic detection not implemented (use explicit config)
-- **Pyenv Environments**: Automatic detection not implemented (use explicit config)
+- **Multi-user Workstations**: Memories are stored per workspace, not per user
 
 Support for these contexts may be added in future releases.
 
 ### Configuration
 
-Access settings via **File → Preferences → Settings → Extensions → Flowbaby Memory**:
+Access settings via **File → Preferences → Settings → Extensions → Flowbaby**:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `Flowbaby.enabled` | Toggle memory capture and retrieval on/off | `true` |
-| `Flowbaby.maxContextResults` | Maximum number of memory results to retrieve | `3` |
-| `Flowbaby.maxContextTokens` | Token budget for retrieved context | `32000` |
-| `Flowbaby.searchTopK` | Maximum candidates to request from search engine before ranking | `10` |
-| `Flowbaby.ranking.halfLifeDays` | Half-life (in days) for recency-aware ranking | `7` |
-| `Flowbaby.autoIngestConversations` | **Experimental**: Auto-capture @flowbaby conversations | `false` |
-| `flowbaby.notifications.showIngestionSuccess` | Show success notifications for memory ingestion | `true` |
-| `Flowbaby.pythonPath` | Path to Python interpreter | `python3` |
-| `Flowbaby.logLevel` | Logging verbosity: error, warn, info, debug | `info` |
-| `Flowbaby.debugLogging` | Show debug output channel (for troubleshooting) | `false` |
+| `Flowbaby.enabled` | Enable/disable automatic memory capture and retrieval | `true` |
+| `Flowbaby.maxContextResults` | Maximum number of memory results to inject into Copilot context | `3` |
+| `Flowbaby.maxContextTokens` | Maximum token budget for retrieved context (higher values may increase latency and memory usage) | `32000` |
+| `Flowbaby.searchTopK` | Maximum number of candidates to request from the Flowbaby search engine before ranking (normalized to be ≥ `maxContextResults`, hard-capped at 100) | `10` |
+| `Flowbaby.ranking.halfLifeDays` | Recency half-life (in days) used for ranking; older memories past this window have their relevance score halved | `7` |
+| `flowbaby.notifications.showIngestionSuccess` | Show toast notifications when memory ingestion completes successfully (errors are always shown) | `true` |
+| `Flowbaby.pythonPath` | Python interpreter to use for the Flowbaby bridge; leave as `python3` for auto-detection of workspace `.venv`, or set an explicit path | `python3` |
+| `Flowbaby.logLevel` | Logging verbosity level: `error`, `warn`, `info`, or `debug` | `info` |
+| `Flowbaby.debugLogging` | Enable a dedicated debug output channel with detailed bridge and extension diagnostics | `false` |
 
 ### LLM Configuration
 
-Configure your LLM provider via **File → Preferences → Settings → Extensions → Flowbaby Memory**:
+Configure your LLM provider via **File → Preferences → Settings → Extensions → Flowbaby**:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `Flowbaby.llm.provider` | LLM provider (openai, anthropic, ollama, etc.) | `openai` |
-| `Flowbaby.llm.model` | Model name (e.g., gpt-4o-mini, claude-3-opus) | `gpt-4o-mini` |
-| `Flowbaby.llm.endpoint` | Custom API endpoint (for self-hosted models) | *(empty)* |
+| `Flowbaby.llm.provider` | LLM provider (e.g., `openai`, `anthropic`, `azure`, `ollama`, `custom`) | `openai` |
+| `Flowbaby.llm.model` | LLM model name (e.g., `gpt-4o-mini`, `claude-3-haiku-20240307`, `llama2`) | `gpt-4o-mini` |
+| `Flowbaby.llm.endpoint` | Custom LLM endpoint URL for Azure, Ollama, or self-hosted deployments; leave empty for provider defaults | *(empty)* |
 
 **Provider Examples**:
 - **OpenAI (default)**: Leave provider as `openai`, model as `gpt-4o-mini`
@@ -388,7 +339,6 @@ Configure your LLM provider via **File → Preferences → Settings → Extensio
 
 **Additional Examples**:
 - To disable memory temporarily, set `Flowbaby.enabled` to `false` in settings
-- To enable experimental auto-capture of @flowbaby conversations (feedback loop), set `Flowbaby.autoIngestConversations` to `true`
 
 ## Using Flowbaby Tools with Custom Agents
 
@@ -397,8 +347,9 @@ Flowbaby Chat Memory provides **Language Model Tools** that allow GitHub Copilot
 ### Quick Start
 
 1. **Enable Tools via Configure Tools UI**:
-   - Open Copilot chat → Click "Tools" (⚙️ icon) → "Configure Tools"
-   - Find "Store Memory in Flowbaby" and "Retrieve Flowbaby Memory"
+   - Open Copilot chat → Click "Tools" icon → "Configure Tools"
+   - Find the "Flowbaby" section
+   - Toggle "Store Memory in Flowbaby" and "Retrieve Flowbaby Memory"
    - Toggle tools on/off individually (disabled by default for privacy)
 
 2. **Use in Chat**:
@@ -409,29 +360,6 @@ Flowbaby Chat Memory provides **Language Model Tools** that allow GitHub Copilot
 3. **Transparency**:
    - All tool invocations logged in Output channel ("Flowbaby Agent Activity")
    - Configure Tools UI provides visual feedback for tool state
-
-### Custom Agent Example
-
-Create a `.agent.md` file in your workspace to define a memory-aware agent:
-
-```markdown
----
-name: Memory-Aware Code Assistant
-description: Copilot assistant with access to workspace memory
-tools: ['search', 'flowbabyStoreSummary', 'flowbabyRetrieveMemory']
----
-
-You are a code assistant with access to workspace-specific memory.
-
-When the user asks about past decisions or implementations:
-1. Use #flowbabyRetrieveMemory to search for relevant context
-2. Ground your answer in the retrieved memories
-3. If no memories exist, use your training data but clarify it's not workspace-specific
-
-When the user completes an important implementation or makes a decision:
-1. Offer to store a summary using #flowbabyStoreSummary
-2. Include topic, context, and key decisions in the summary
-```
 
 ### Available Tools
 
@@ -465,15 +393,7 @@ When agents use Flowbaby, you see:
 - **Output Channel**: All tool invocations logged in "Flowbaby Agent Activity"
 - **Configure Tools UI**: Visual feedback for which tools are enabled/disabled
 - **Chat Autocomplete**: `#flowbaby*` commands only appear when tools are enabled
-
-### For Extension Developers
-
-See [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md) for:
-- Complete API documentation with TypeScript examples
-- Command signatures (`Flowbaby.ingestForAgent`, `Flowbaby.retrieveForAgent`)
-- Error codes and handling strategies
-- Request/response schemas
-- Testing and troubleshooting guides
+- **Workspace Logs**: Detailed bridge and ingestion logs are stored under `.flowbaby/logs` in each workspace
 
 ## Troubleshooting
 
@@ -534,16 +454,6 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 4. Remember: The first conversation in a new workspace has no context (memory starts empty)
 5. Each workspace has separate memory—switching workspaces means different context
 6. If retrieval fails, you'll see "⚠️ Memory retrieval unavailable" but participant continues without context
-
-### Common Error Patterns
-
-| Symptom | Likely Cause | Recommended Action |
-|---------|--------------|-------------------|
-| "Python script exited with code 1" (empty stderr) | Interpreter mismatch: `cognee` or `python-dotenv` not installed in detected Python environment | Set `Flowbaby.pythonPath` in VS Code settings to correct interpreter (Linux/macOS: `.venv/bin/python`, Windows: `.venv\Scripts\python.exe`) |
-| "No module named 'cognee'" | Missing `cognee` package in Python environment | Run **"Flowbaby: Initialize Workspace"** to set up environment automatically |
-| "LLM_API_KEY not found" | Missing API key in `.env` file or environment | Create `.env` file in workspace root with valid `LLM_API_KEY`, then reload window |
-| Script timeout (retrieval: 15s, ingestion: 120s) | Network issues, slow LLM provider, or filesystem delay | Ingestion timeout is generous (120s); if timeout occurs but data appears via @flowbaby, ingestion succeeded in background. Check Output Channel for timing metrics. |
-| JSON parse error in logs | Script produced non-JSON output | Report as bug. Check for conflicting print statements in bridge scripts. |
 
 **Note**: Auto-detection works for standard `.venv` setups on Linux, macOS, and Windows. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, or pyenv, use explicit `Flowbaby.pythonPath` configuration.
 
@@ -609,39 +519,6 @@ We welcome contributions! See [CONTRIBUTING.md](../CONTRIBUTING.md) for:
 - How to run tests
 - Code style guidelines
 - Pull request process
-
-### Debugging
-
-For extension developers:
-
-#### Launch Extension Development Host
-
-1. Open the `extension/` folder in VS Code (not the repository root)
-2. Press **F5** in VS Code
-3. New window opens with extension loaded
-4. Check Debug Console for activation logs (View → Debug Console)
-
-#### Set Breakpoints
-
-- Click left margin in TypeScript files to set breakpoints
-- Breakpoints pause execution in Extension Host
-- Source maps enable debugging original TypeScript code
-
-#### View Logs
-
-The extension outputs logs to different locations:
-
-- **Debug Console**: Extension activation and runtime logs (View → Debug Console)
-- **Output Channel**: FlowbabyClient bridge operations—select "Flowbaby Memory" from dropdown (View → Output)
-- **Developer Tools**: Extension Host errors—open with Help → Toggle Developer Tools
-
-#### Test Changes
-
-After modifying code:
-
-- **Rebuild**: Run `npm run compile` in the `extension/` directory
-- **Reload**: Press **Ctrl+R** (or **Cmd+R** on Mac) in the Extension Development Host window
-- **Auto-compile**: The `preLaunchTask` in `.vscode/launch.json` auto-compiles when pressing F5
 
 ## License
 
