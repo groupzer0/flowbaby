@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.1] - 2025-11-28
+
+### Changed - Plan 043: Tool Descriptions and UX Improvements
+
+**Agent Integration & UX Polish Release** - Enhances tool descriptions for better agent behavior and improves user experience.
+
+#### Enhanced Tool Descriptions (Milestone 1)
+- **Updated**: `flowbaby_storeMemory` and `flowbaby_retrieveMemory` tools now include comprehensive, structured instructions (~1,800 characters each) that encode the full Flowbaby memory contract
+- **Benefit**: Agents automatically understand when, how, and what to store/retrieve without requiring custom `.agent.md` files
+- **Content**: Descriptions include guidance on timing, query construction, what to capture, retrieval limits, and structure guidance
+
+#### Configurable Success Notifications (Milestone 2)
+- **New Setting**: `flowbaby.notifications.showIngestionSuccess` (default: `true`)
+- **Behavior**: When `false`, suppresses success toast notifications ("Memory staged...", "Flowbaby finished...") while preserving all error notifications
+- **Use Case**: Power users who find frequent success toasts distracting can disable them while still receiving critical error alerts
+
+#### Keyboard Shortcut Change (Milestone 3)
+- **Changed**: Default capture shortcut from `Ctrl+Alt+C` / `Cmd+Alt+C` to `Ctrl+Alt+F` / `Cmd+Alt+F`
+- **Rationale**: Avoids potential conflicts with other extensions and common VS Code operations
+- **Migration**: Users with custom keybindings should update to the new shortcut
+
+### Documentation
+- Updated README.md with new keyboard shortcut references
+- Added `flowbaby.notifications.showIngestionSuccess` to Configuration table
+- Updated walkthrough step to reflect new shortcut
+
 ## [0.5.0] - 2025-11-28
 
 ### Changed - Plan 042: Comprehensive Lint Cleanup
@@ -38,7 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **New**: `npm run lint:markdown` - User-facing doc linting
 - **New**: `.github/workflows/lint.yml` - CI lint enforcement on push/PR
 
-## [0.4.9] - 2025-11-28
+## [0.4.9]
 
 ### Fixed - Plan 041: Capture Command UX Fixes
 
@@ -69,7 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Added**: When no selection exists, input is empty, and clipboard is empty, shows "Nothing to capture" info message
 - **Benefit**: Clear feedback instead of silent failure when there's nothing to capture
 
-## [0.4.8] - 2025-11-28
+## [0.4.8]
 
 ### Fixed - Plan 040.1: First-Time Initialization Hotfix
 
@@ -102,7 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Clear progress**: Setup notifications show venv creation → dependency install → database init
 - **Error transparency**: Detailed logging aids troubleshooting when issues occur
 
-## [0.4.7] - 2025-11-28
+## [0.4.7]
 
 ### Fixed - Plan 040: Initialization JSON Errors and No-Reload Workflow
 
@@ -137,7 +163,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Clear messaging**: Distinct prompts for fresh workspaces ("Initialize") vs broken environments ("Repair")
 - **Error transparency**: Initialization failures now show user-facing notifications with actionable guidance
 
-## [0.4.6] - 2025-06-14
+## [0.4.6]
 
 ### Fixed - Plan 039: Initialization UX and Security Hardening
 
@@ -193,7 +219,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Security-relevant operations logged to audit trail
 - Data deletion uses soft-delete with recovery option
 
-## [0.4.5] - 2025-11-27
+## [0.4.5]
 
 ### Fixed - Plan 034: Initialization Bugs and Background Notification Issues
 
@@ -219,7 +245,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Legacy `.cognee/background_ops` stubs will be ignored (no functional impact)
 - No migration required from v0.4.4
 
-## [0.4.4] - 2025-11-26
+## [0.4.4]
 
 ### Fixed - Plan 033: Complete Environment Variable Hotfix
 
@@ -252,7 +278,7 @@ This invariant is enforced because Cognee SDK uses `pydantic-settings` with `@lr
 - `test_creates_flowbaby_dirs_not_cognee_dirs` - filesystem regression test
 - `test_env_vars_contain_flowbaby_path` - path validation
 
-## [0.4.3] - 2025-11-27
+## [0.4.3]
 
 ### Fixed - Hotfix: Cognee SDK Environment Variable Names
 
@@ -269,7 +295,7 @@ v0.4.2 used incorrect environment variable names (`COGNEE_SYSTEM_ROOT_DIRECTORY`
 - Background cognify operations now correctly use workspace-local `.flowbaby/` paths
 - New data files appear in `.flowbaby/data/` instead of `~/.cognee_data`
 
-## [0.4.2] - 2025-11-27
+## [0.4.2]
 
 ### Fixed - Plan 032: Activation and Background Processing Bugs
 
@@ -305,7 +331,7 @@ v0.4.2 used incorrect environment variable names (`COGNEE_SYSTEM_ROOT_DIRECTORY`
 - No migration required from v0.4.1; users can update seamlessly
 - Log file location unchanged: `.flowbaby/logs/flowbaby.log`
 
-## [0.4.1] - 2025-11-26
+## [0.4.1]
 
 ### Fixed - Plan 031: Background API Key and Logging Consolidation
 
@@ -332,7 +358,7 @@ v0.4.2 used incorrect environment variable names (`COGNEE_SYSTEM_ROOT_DIRECTORY`
 - **README.md**: Fixed Windows path example to use `.flowbaby` instead of `.cognee`.
 - **extension.ts**: Fixed incorrect pip install instruction - changed "pip install flowbaby" to "pip install cognee" (flowbaby is the VS Code extension name, not a Python package).
 
-## [0.4.0] - 2025-11-26
+## [0.4.0]
 
 ### ⚠️ BREAKING CHANGES
 
@@ -378,7 +404,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 4. Update any custom keybindings from `cognee.*` to `Flowbaby.*`
 5. Update any agent definitions to use new tool names
 
-## [0.3.17] - 2025-11-25
+## [0.3.17]
 
 ### Fixed - Plan 028: Post-v0.3.16 Bug Fixes and Developer Experience
 
@@ -400,7 +426,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Python Interpreter Detection**: Priority order updated to: explicit setting > `.flowbaby/venv` > `.venv` (legacy) > system python3.
 - **Documentation**: Updated README and SETUP docs to reflect new setup flow, removed global pip install requirement, documented new features and troubleshooting steps.
 
-## [0.3.16] - 2025-11-25
+## [0.3.16]
 
 ### Fixed - Plan 027: Migration Marker Data Loss Bug
 
@@ -414,7 +440,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 ### Testing
 - Added `extension/bridge/tests/test_init_migration.py` with 15 test cases covering marker location, safety checks, and integrity status.
 
-## [0.3.15] - 2025-11-25
+## [0.3.15]
 
 ### Fixed - Plan 026: Path Canonicalization and Retrieval Scoring
 
@@ -423,7 +449,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Synthesized Answer Scoring**: Fixed confusing display of synthesized graph answers (which have a raw score of 0.00). The bridge now detects this sentinel, assigns a high ranking score, and attaches a `confidenceLabel="synthesized_high"` metadata field.
 - **Qualitative UI Labels**: The UI now displays "High relevance (synthesized)" for graph completions instead of overloading the numeric score or showing 0.00.
 
-## [0.3.14] - 2025-11-24
+## [0.3.14]
 
 ### Added - Plan 025: Simplified Python Environment Setup
 
@@ -435,7 +461,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Enhanced Walkthrough**: The "Get Started" walkthrough now guides users through the automated setup process with context-aware completion steps.
 - **Robust Metadata**: Tracks environment state and version compatibility in `.flowbaby/bridge-env.json` to ensure stability across updates.
 
-## [0.3.13] - 2025-11-24
+## [0.3.13]
 
 ### Added - Plan 024: Configurable Search Parameters
 
@@ -445,7 +471,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Normalization & Logging**: When a user-provided `top_k` is raised to meet `max_results` or clamped to the ceiling, the bridge logs a structured warning with both requested and effective values for easier debugging.
 - **Client Logging & Truncation**: `CogneeClient` logs the configured `searchTopK` value on each retrieval and passes it through to the bridge. Output-channel payloads remain truncated to keep the VS Code UI responsive.
 
-## [0.3.12] - 2025-11-24
+## [0.3.12]
 
 ### Fixed - Plan 022: Retrieval Filtering and Truncation
 
@@ -454,7 +480,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Error Logging**: Improved error reporting to capture and log both stdout and stderr when JSON parsing fails, aiding in debugging bridge issues.
 - **Telemetry**: Added `filtered_count` to retrieval telemetry to track how many items are filtered by the bridge.
 
-## [0.3.11] - 2025-11-24
+## [0.3.11]
 
 ### Fixed - Plan 021: Retrieval Display for Synthesized Answers
 
@@ -462,14 +488,14 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Sentinel-Aware Filter**: Updated `CogneeContextProvider` to explicitly allow results with `score === 0.0` (sentinel for synthesized answers) while maintaining strict filtering for low-confidence noise (e.g., 0.001 - 0.009).
 - **Logging**: Added debug logging to indicate when synthesized answers are included in retrieval results.
 
-## [0.3.10] - 2025-11-23
+## [0.3.10]
 
 ### Fixed - Plan 023: Retrieval Scoring Hotfix
 
 - **Retrieval Regression**: Fixed an issue where valid `GRAPH_COMPLETION` answers (synthesized strings) were discarded because they lacked a semantic score and hit the strict `score <= 0.01` filter introduced in v0.3.9.
 - **Logic Update**: `retrieve.py` now bypasses the strict score filter for synthesized answers (which default to score 0.0) while maintaining the filter for `NO_RELEVANT_CONTEXT` responses.
 
-## [0.3.9] - 2025-11-23
+## [0.3.9]
 
 ### Added - Plan 021: Logging Infrastructure Overhaul
 
@@ -483,7 +509,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 ### Testing
 - Added `extension/bridge/tests/test_logging_overhaul.py` covering log file creation, ingestion metrics, retrieval scoring telemetry, and stderr formatting.
 
-## [0.3.8] - 2025-11-22
+## [0.3.8]
 
 ### Added - Plan 021: Memory Visibility and Trust
 
@@ -498,7 +524,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Integration Test Stability**: Fixed path resolution errors in integration tests by correctly injecting `extensionPath` into the mock context. All 149 tests now pass.
 - **Branding Cleanup**: Removed "formerly Cognee" references from extension description and UI strings for a cleaner "Flowbaby" identity.
 
-## [0.3.7] - 2025-11-22
+## [0.3.7]
 
 ### Fixed - Plan 019: Flowbaby Rebranding Gaps
 
@@ -507,7 +533,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Documentation Alignment**: `README.md` and `AGENT_INTEGRATION.md` now show the correct tool names and usage examples, preventing confusion for agent developers.
 - **Test Coverage**: Integration tests updated to ensure the new tool identifiers register correctly with GitHub Copilot chat and that UI instructions stay in sync.
 
-## [0.3.6] - 2025-11-22
+## [0.3.6]
 
 ### Added - Plan 019: Retrieval Fabrication and Silent Failure Fix
 
@@ -534,7 +560,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Proactive Prevention**: Enforced 100k character limit on ingestion payloads to prevent bridge crashes and memory exhaustion.
 - **UX Enhancements**: Added timestamps to `Flowbaby: Show Background Operations` quick pick items for better visibility.
 
-## [0.3.5] - 2025-11-21
+## [0.3.5]
 
 ### Added - Plan 018: Metadata Infrastructure and Ranking
 
@@ -555,7 +581,7 @@ This release rebrands the extension from "RecallFlow Chat Memory" to "Flowbaby" 
 - **Ranking Quality**: Addressed issue where old, less relevant memories cluttered retrieval results.
 - **Status Visibility**: Superseded plans and decisions no longer confuse agents.
 
-## [0.3.4] - 2025-11-21
+## [0.3.4]
 
 ### Release
 
@@ -563,7 +589,7 @@ This release packages the async cognify() optimization (Plan 017) with no functi
 
 All features, improvements, and technical details remain as documented in v0.3.3 below. This is a packaging-only release to formalize the deployment.
 
-## [0.3.3] - 2025-11-20
+## [0.3.3]
 
 ### Added - Plan 017: Async cognify() Optimization
 
@@ -637,7 +663,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - Better debugging: diagnostic logs visible in Output > "Flowbaby" channel
 - Faster resolution of bridge issues: progress markers identify exactly where operations block
 
-## [0.3.2] - 2025-11-19
+## [0.3.2]
 
 ### Fixed - Plan 016.1: Tool Lifecycle and Bridge Timeouts Hotfix
 
@@ -666,7 +692,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - Better debugging: diagnostic logs visible in Output > "Flowbaby" channel
 - Faster resolution of bridge issues: progress markers identify exactly where operations block
 
-## [0.3.1] - 2025-11-19
+## [0.3.1]
 
 ### Added - Plan 015: Agent Ingestion Command
 
@@ -773,7 +799,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - **VS Code Test Coverage**: 77 total tests passing (up from 63), no regressions
 - **Documentation Accuracy**: Snapshot tests catch template/README divergence automatically
 
-## [0.3.0] - 2025-11-18
+## [0.3.0]
 
 ### Added - Plan 014: Structured Conversation Summaries
 
@@ -810,7 +836,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - **TypeScript Tests**: 59/59 passing with updated RetrievalResult mocks
 - **Python Tests**: 16/16 passing with enriched text formatting and contract validation
 
-## [0.2.3] - 2025-11-17
+## [0.2.3]
 
 ### Fixed
 
@@ -830,7 +856,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - Extension logs include both Node-side and Python-side duration metrics for correlation
 - Step-level metrics (load_env, init_cognee, config_llm, dataset_ontology, add, cognify) enable bottleneck identification
 
-## [0.2.2] - 2025-11-17
+## [0.2.2]
 
 ### Fixed
 
@@ -843,7 +869,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - Clear truncation indication when memories exceed 2000 chars (shows "showing X of Y chars")
 - Query length now shown in debug logs when queries exceed 200 chars
 
-## [0.2.1] - 2025-11-14
+## [0.2.1]
 
 ### Breaking Changes
 
@@ -861,7 +887,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - Removed fallback parameter retries; signature mismatches now surface as clear errors
 - Enhanced error logging with structured details (exception type, parameters, context)
 
-## [0.2.0] - 2025-11-13
+## [0.2.0]
 
 ### Added
 
@@ -929,7 +955,7 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - Comprehensive integration test suite (27 passing tests)
 - VS Code Chat API v1.105+ compatibility
 
-## [0.1.0] - 2025-11-10
+## [0.1.0]
 
 ### Added
 

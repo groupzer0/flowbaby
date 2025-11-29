@@ -1,32 +1,46 @@
 # Flowbaby Chat Memory
 
-> Memory-augmented chat for VS Code using Flowbaby knowledge graphs
+> Memory-augmented Copilot chat for VS Code
 
-Flowbaby Chat Memory is a VS Code extension that lets you selectively capture important chat conversations and retrieve them as context through the `@flowbaby-memory` participant. Each workspace maintains its own isolated memory, creating a personalized knowledge graph that grows with your project.
+Flowbaby automatically captures and summarizes key moments from your GitHub Copilot chats, then surfaces them as context in future conversations to reduce drift in long-running work. Each workspace gets its own isolated memory and Python environment, and no code from your repository ever leaves your machine—only the chat content already sent to Copilot is summarized and reused, under your control.
 
 ## Features
 
-- **Selective Capture** - Use keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C) to capture valuable conversations worth remembering
-- **@flowbaby-memory Participant** - Retrieves relevant context and generates informed responses when you explicitly invoke it
-- **Keyboard Shortcut Workflow** - Press Ctrl+Alt+C, paste or type content, instant capture with confirmation
-- **Command Palette Alternative** - Run "Flowbaby: Capture to Memory" for the same capture workflow
-- **Workspace Isolation** - Each workspace has its own separate memory—no cross-project leakage
-- **Hybrid Graph-Vector Search** - Combines relationship traversal with semantic similarity for superior context relevance
-- **User Control** - You decide what gets captured; explicit memory actions put you in full control
-- **Privacy-First Design** - All data stays on your local machine; no cloud services or telemetry
+- **Context aware automatic memory search** - Flowbaby is configured to use chat conversation cues to search memory and add that memory context to the chat - keeping your Copilot agent from drifting and saving you from having to explain what happened all over again. 
+![Screenshot](media/auto-search.png)
+- **Context aware automatic memory storage** - Flowbaby knows when it's a good time to summarize and store memories based on the chat context. 
+![Screenshot](media/auto-store.png)
+- **@flowbaby chat participant** – A dedicated Copilot participant that recalls past conversations and surfaces relevant memories into new chats to reduce drift over long sessions.
+![Screenshot](media/interactive-chat-participant.png)
+- **Configurable memory behavior via stored prompts** – Guide Flowbaby with stored natural-language instructions (e.g., what to store, what to ignore, how aggressively to retrieve) so each workspace can have its own memory style.
+- **Agent tools for storage and retrieval** – Exposes two standard Copilot tools (for storing and retrieving memories) that are available to GitHub Copilot just like any other tool, so agents can autonomously call them when helpful.
+- **Keyboard Shortcut Workflow** – Press Ctrl+Alt+F / Cmd+Alt+F to capture important snippets from chat or code with a quick confirmation flow.
+- **Command Palette Alternative** – Run “Flowbaby: Capture to Memory” if you prefer command-palette based capture.
+![Screenshot](media/manual-store-summary.png)
+- **Workspace Isolation** – Each workspace has its own separate memory and Python environment—no cross-project leakage.
+- **Hybrid Graph-Vector Search** – Combines knowledge-graph structure with vector similarity for higher-quality, controllable retrieval.
+- **Privacy-First Design** – All data stays on your machine; only chat content already sent to GitHub Copilot is summarized, and no repository files or file content are sent to any external LLM.
 
 ## Prerequisites
 
 Before installing the extension, ensure you have:
 
-- **VS Code** 1.85.0 or higher
-- **Python** 3.8+ installed and available in PATH
+- **VS Code** 1.106.0 or higher
+- **Python** 3.8+ installed on your system
 
-**Note**: Flowbaby now manages its own Python environment automatically. You no longer need to manually install `cognee` globally.
+Flowbaby automatically creates and manages its own isolated Python environment (`.flowbaby/venv`) in each workspace. You do not need to install any Python packages manually.
 
 ## Installation
 
-### Method 1: Install from VSIX (Recommended)
+### Method 1: Install from VS Code Marketplace (Recommended)
+
+1. Open VS Code
+2. Go to the Extensions view (`Ctrl+Shift+X` / `Cmd+Shift+X`)
+3. Search for **"Flowbaby"**
+4. Click **Install**
+5. Reload VS Code when prompted
+
+### Method 2: Install from VSIX
 
 1. Download the latest `.vsix` file from [GitHub Releases](https://github.com/lsalsich/flowbaby/releases)
 2. Open VS Code
@@ -34,10 +48,6 @@ Before installing the extension, ensure you have:
 4. Type **"Install from VSIX"** and select the command
 5. Navigate to the downloaded `.vsix` file and select it
 6. Reload VS Code when prompted
-
-### Method 2: Build from Source
-
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for developer setup instructions.
 
 ## Setup
 
@@ -57,7 +67,7 @@ Flowbaby now manages its own Python environment automatically.
 
 ### 2. Configure API Key
 
-**Recommended: Global API Key (Stored Securely)**
+**Global API Key (Stored Securely)**
 
 Use the built-in command to set your API key once, securely stored via VS Code's SecretStorage:
 
@@ -67,21 +77,11 @@ Use the built-in command to set your API key once, securely stored via VS Code's
 
 This stores the key securely and applies to all workspaces automatically.
 
-**Alternative: Workspace-Specific `.env` File**
-
-For per-workspace configuration, create a `.env` file in your workspace root:
-
-```env
-LLM_API_KEY=sk-your-key-here
-```
-
-**Priority Order**: Workspace `.env` file > SecretStorage (global) > System environment variable
-
 ### 3. Verify Extension Activation
 
-1. Check the status bar for **"Flowbaby: Ready"** (green checkmark)
+1. Check the status bar for **"Flowbaby"** (checkmark)
 2. If you see **"Flowbaby: Setup Required"** (yellow warning), click it to run setup
-3. Open the Output panel (**View → Output**) and select **"Flowbaby Memory"** to see logs
+3. Optional: Open the Output panel (**View → Output**) and select **"Flowbaby"** to see logs
 
 ## Usage
 
@@ -118,8 +118,8 @@ This means:
 
 After background processing finishes, you'll receive one of two notifications:
 
-- **Success** (ℹ️ Info): "✅ Cognify finished" with workspace name, summary digest, elapsed time, and entity count. Click "View Status" to see all background operations.
-- **Failure** (⚠️ Warning): "⚠️ Cognify failed" with workspace name, summary digest, and remediation guidance. Click "Retry" to re-process or "View Logs" for error details.
+- **Success** (ℹ️ Info): "✅ Flowbaby finished" with workspace name, summary digest, elapsed time, and entity count. Click "View Status" to see all background operations.
+- **Failure** (⚠️ Warning): "⚠️ Flowbaby failed" with workspace name, summary digest, and remediation guidance. Click "Retry" to re-process or "View Logs" for error details.
 
 **Why Async?**
 
@@ -140,7 +140,7 @@ To check all in-flight operations:
 
 **Keyboard Shortcut (Primary Method)**:
 1. View a valuable chat message (from any participant: @workspace, @terminal, GitHub Copilot, etc.)
-2. Press **Ctrl+Alt+C** (or **Cmd+Alt+C** on macOS)
+2. Press **Ctrl+Alt+F** (or **Cmd+Alt+F** on macOS)
 3. Paste the message content in the input box (or leave empty to use clipboard)
 4. Press Enter to capture
 5. See "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done." confirmation
@@ -157,22 +157,22 @@ To check all in-flight operations:
 - Code explanations and discussions
 - Only content YOU choose to capture (selective, user-controlled)
 
-### Retrieving Context with @flowbaby-memory
+### Retrieving Context with @flowbaby
 
 **How to Use**:
 1. Open GitHub Copilot Chat (`Ctrl+Alt+I` or click chat icon)
-2. Type: `@flowbaby-memory How did I implement caching?`
+2. Type: `@flowbaby How did I implement caching?`
 3. The participant:
    - Retrieves relevant memories from your workspace knowledge graph
-   - Shows previews: "📚 Retrieved 3 memories"
+   - Shows previews: "📚 Retrieved memories"
    - Augments your question with retrieved context
    - Generates a contextually-aware response
    - Optionally captures the conversation for future retrieval (if enabled via config)
 
 **Example Queries**:
-- `@flowbaby-memory What problems did we discuss about the authentication system?`
-- `@flowbaby-memory What solutions did we consider for rate limiting?`
-- `@flowbaby-memory Summarize our decisions about database architecture`
+- `@flowbaby What problems did we discuss about the authentication system?`
+- `@flowbaby What solutions did we consider for rate limiting?`
+- `@flowbaby Summarize our decisions about database architecture`
 
 ### Creating Conversation Summaries (Plan 014)
 
@@ -197,61 +197,13 @@ Create a summary when you've:
 - Discussed tradeoffs between different approaches
 - Reached conclusions about implementation direction
 
-**Summary Schema**:
-
-Each summary follows this structured format:
-
-```markdown
-Summary: [Short title]
-
-Topic: [Main focus of the conversation]
-Context: [1-3 sentences explaining what you were working on and why]
-Decisions:
-- [Key decision 1]
-- [Key decision 2]
-Rationale:
-- [Why decision 1 was made]
-Open Questions:
-- [Unresolved question 1]
-Next Steps:
-- [Action item 1]
-References:
-- [File path, plan ID, or other reference]
-Time Scope: [Time range, e.g., "Nov 17 14:00-16:30"]
-```
-
-**Example Summary**:
-
-```markdown
-Summary: Plan 013 - Memory Display Transparency
-
-Topic: Plan 013 - Memory Display Transparency
-Context: Discussed removing the 150-char truncation in chat participant to improve user trust and align with transparency goals.
-Decisions:
-- Remove hardcoded 150-char limit in participant preview
-- Show full memory content up to 2000 chars with explicit truncation indicator
-- Update logging to show full query or clearly annotate preview length
-Rationale:
-- Users need to see what context the LLM is using to trust the system
-- Truncated previews create mistrust despite LLM receiving full text
-Open Questions:
-- Should we add pagination for very long memories?
-Next Steps:
-- Implement transparency changes in TypeScript layer
-- Update tests to verify full content display
-References:
-- Plan 013 documentation
-- System architecture §4.3
-Time Scope: Nov 16 10:00-12:30
-```
-
 **How to Create a Summary**:
 
 1. **Open GitHub Copilot Chat** (`Ctrl+Alt+I` / `Cmd+Alt+I`)
-2. **Start a conversation with @flowbaby-memory** and type:
-   - `@flowbaby-memory summarize this conversation`
-   - Or: `@flowbaby-memory remember this session`
-   - Or: `@flowbaby-memory create summary`
+2. **Start a conversation with @flowbaby** and type:
+   - `@flowbaby summarize this conversation`
+   - Or: `@flowbaby remember this session`
+   - Or: `@flowbaby create summary`
 
 3. **Review the scope preview**:
    - Extension shows: "I'll summarize the last 15 turns (from 5 mins ago)."
@@ -273,44 +225,23 @@ Time Scope: Nov 16 10:00-12:30
    - Reply `no` or `cancel` to discard
    - Summary is only stored after explicit confirmation
 
-**Turn Count Guidance**:
-
-- **Short sessions (5-15 turns)**: Good for focused discussions, bug fixes, quick decisions
-- **Medium sessions (15-30 turns)**: Typical for feature planning, architecture discussions
-- **Long sessions (30-50 turns)**: Complex multi-topic conversations; consider breaking into multiple summaries
-- **Very long (>50 turns)**: May include multiple unrelated topics; review scope carefully
-
-**Best Practices**:
-
-- **Create summaries at natural breakpoints**: After reaching a decision, completing a design, or resolving an issue
-- **Keep summaries focused**: One main topic per summary for better retrieval precision
-- **Review before storing**: Check that LLM correctly identified key points; adjust turn count if summary misses context
-- **Include explicit references**: Mention plan IDs (e.g., "Plan 014"), file paths, or issue numbers in conversation for automatic extraction
-- **Balance detail and brevity**: Aim for 300-600 tokens total; focus on decisions and rationale, not verbatim conversation
-
 ### Retrieving Summaries
 
-When you query `@flowbaby-memory`, the extension searches both raw captured conversations and structured summaries. Summaries display with rich metadata when available.
+When you query `@flowbaby`, the extension searches both raw captured conversations and structured summaries. Summaries display with rich metadata when available.
 
 **What You'll See in Retrieval Results**:
 
-For enriched summaries (created via Plan 014):
+Enriched summaries:
 
-- **Metadata badges**: 📋 Status | 📅 Created timestamp | 🏷️ Plan ID
 - **Structured sections**: Topic, Key Decisions, Open Questions, Next Steps
-- **Full transparency**: Up to 2000 characters shown with explicit truncation indicator if longer
-
-For legacy memories (captured before Plan 014):
-
-- **Plain text format**: Raw conversation content as originally captured
-- **No metadata**: Legacy memories don't include structured fields
+- **Full transparency**: Up to 32000 characters shown with explicit truncation indicator if longer
 
 **Example Retrieval Queries**:
 
-- `@flowbaby-memory What did we decide about Plan 013?` → Retrieves relevant summaries with decisions highlighted
-- `@flowbaby-memory What questions are still open about memory transparency?` → Finds Open Questions sections from summaries
-- `@flowbaby-memory What are the next steps for the authentication system?` → Retrieves Next Steps from related summaries
-- `@flowbaby-memory Show me the rationale for using enriched text format` → Finds Rationale sections explaining design choices
+- `@flowbaby What did we decide about Plan 013?` → Retrieves relevant summaries with decisions highlighted
+- `@flowbaby What questions are still open about memory transparency?` → Finds Open Questions sections from summaries
+- `@flowbaby What are the next steps for the authentication system?` → Retrieves Next Steps from related summaries
+- `@flowbaby Show me the rationale for using enriched text format` → Finds Rationale sections explaining design choices
 
 **Retrieval Benefits**:
 
@@ -335,15 +266,9 @@ Flowbaby Chat Memory provides an API for GitHub Copilot agents and third-party V
 
 ### Use Cases
 
-- **Agent Continuity**: Agents can maintain context across sessions without requiring manual capture
-- **Multi-Agent Collaboration**: Different agents can share memory via a common knowledge base
-- **Custom Workflows**: Extensions can build custom agent memory patterns
+- **Agent Continuity**: Agents can maintain context across sessions without requiring manual redirection
+- **Multi-Agent Collaboration**: Different agents can share memory via a common knowledge base per workspace
 
-### Agent Ingestion API
-
-The `Flowbaby.ingestForAgent` command allows agents to write structured summaries to Flowbaby:
-
-```typescript
 ### Agent Ingestion API
 
 The `Flowbaby.ingestForAgent` command allows agents to write structured summaries to Flowbaby:
@@ -396,21 +321,9 @@ Flowbaby tools are controlled exclusively through VS Code's **Configure Tools** 
   - Reference implementation validating all scenarios
   - Can be used as template for custom agents
 
-## Python Environment
-
-The extension requires Python 3.8+ with the following packages:
-- `cognee` (version 0.3.4 or compatible)
-- `python-dotenv`
-
 ### Automatic Detection
 
-The extension automatically detects your Python interpreter in this order:
-1. **Explicit Setting**: `Flowbaby.pythonPath` if configured (highest priority)
-2. **Flowbaby Environment**: `.flowbaby/venv/bin/python` (isolated from project venvs)
-3. **Legacy Location**: `.venv/bin/python` (Linux/macOS) or `.venv/Scripts/python.exe` (Windows)
-4. **System Python**: `python3` as fallback
-
-**Why `.flowbaby/venv`?** This location prevents conflicts with project virtual environments (e.g., Python Jedi language server overwriting Flowbaby's dependencies). The `.flowbaby/` directory is also automatically added to `.gitignore`.
+**`.flowbaby/venv`?** This location prevents conflicts with project virtual environments (e.g., Python Jedi language server overwriting Flowbaby's dependencies). The `.flowbaby/` directory is also automatically added to `.gitignore`.
 
 ### When to Configure Manually
 
@@ -449,11 +362,12 @@ Access settings via **File → Preferences → Settings → Extensions → Flowb
 |---------|-------------|---------|
 | `Flowbaby.enabled` | Toggle memory capture and retrieval on/off | `true` |
 | `Flowbaby.maxContextResults` | Maximum number of memory results to retrieve | `3` |
-| `Flowbaby.maxContextTokens` | Token budget for retrieved context | `2000` |
-| `Flowbaby.recencyWeight` | Weight for prioritizing recent conversations (0-1) | `0.3` |
-| `Flowbaby.importanceWeight` | Weight for prioritizing marked conversations (0-1) | `0.2` |
-| `Flowbaby.autoIngestConversations` | **Experimental**: Auto-capture @flowbaby-memory conversations (disabled due to Cognee 0.4.0 bug) | `false` |
-| `Flowbaby.pythonPath` | Path to Python interpreter (must have Cognee installed) | `python3` |
+| `Flowbaby.maxContextTokens` | Token budget for retrieved context | `32000` |
+| `Flowbaby.searchTopK` | Maximum candidates to request from search engine before ranking | `10` |
+| `Flowbaby.ranking.halfLifeDays` | Half-life (in days) for recency-aware ranking | `7` |
+| `Flowbaby.autoIngestConversations` | **Experimental**: Auto-capture @flowbaby conversations | `false` |
+| `flowbaby.notifications.showIngestionSuccess` | Show success notifications for memory ingestion | `true` |
+| `Flowbaby.pythonPath` | Path to Python interpreter | `python3` |
 | `Flowbaby.logLevel` | Logging verbosity: error, warn, info, debug | `info` |
 | `Flowbaby.debugLogging` | Show debug output channel (for troubleshooting) | `false` |
 
@@ -474,7 +388,7 @@ Configure your LLM provider via **File → Preferences → Settings → Extensio
 
 **Additional Examples**:
 - To disable memory temporarily, set `Flowbaby.enabled` to `false` in settings
-- To enable experimental auto-capture of @flowbaby-memory conversations (feedback loop), set `Flowbaby.autoIngestConversations` to `true` (may fail intermittently due to known Cognee bug)
+- To enable experimental auto-capture of @flowbaby conversations (feedback loop), set `Flowbaby.autoIngestConversations` to `true`
 
 ## Using Flowbaby Tools with Custom Agents
 
@@ -577,15 +491,9 @@ See [AGENT_INTEGRATION.md](./AGENT_INTEGRATION.md) for:
 
 #### 1. "LLM_API_KEY not found"
 
-**Solution**: Use the **"Flowbaby: Set API Key"** command (recommended), or create a `.env` file in your workspace root with:
-
-```env
-LLM_API_KEY=sk-your-key-here
-```
+**Solution**: Use the **"Flowbaby: Set API Key"** command
 
 Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
-
-**Note**: As of v0.2.1, `OPENAI_API_KEY` is no longer supported. Use `LLM_API_KEY` to align with Cognee 0.4.0.
 
 #### 2. "Python not found" or "cognee module not found"
 
@@ -609,24 +517,11 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 - Reduce `maxContextResults` to 1-2 for faster retrieval
 - Reduce `maxContextTokens` to 1000 for lighter processing
 
-#### 5. Python Jedi Language Server Conflict
-
-**Symptom**: Flowbaby stops working after using Python IntelliSense; the `.venv` or Python environment gets overwritten with different packages.
-
-**Cause**: The Python Jedi language server (Pylance) may modify or replace packages in the active virtual environment.
-
-**Solution**: Flowbaby now uses an isolated environment at `.flowbaby/venv` (instead of `.venv`) to prevent conflicts:
-
-1. Run **"Flowbaby: Initialize Workspace"** to create the isolated environment
-2. If prompted about an existing `.venv`, choose "Use Flowbaby's .flowbaby/venv (Recommended)"
-
-**Advanced**: If you prefer to use your existing `.venv`, choose "Use existing .venv (Advanced)" when prompted.
-
-#### 6. Capture or Retrieval Not Working
+#### 5. Capture or Retrieval Not Working
 
 **Capture Issues**:
 
-1. Verify keyboard shortcut (Ctrl+Alt+C / Cmd+Alt+C) is not conflicting with other extensions
+1. Verify keyboard shortcut (Ctrl+Alt+F / Cmd+Alt+F) is not conflicting with other extensions
 2. Check Command Palette for "Flowbaby: Capture to Memory" as alternative
 3. Ensure you see confirmation message after capture ("✅ Captured to memory")
 4. Check Output Channel logs for ingestion errors
@@ -634,7 +529,7 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 **Retrieval Issues**:
 
 1. Verify `Flowbaby.enabled` is `true` in settings
-2. Type `@flowbaby-memory` in chat to invoke the participant explicitly
+2. Type `@flowbaby` in chat to invoke the participant explicitly
 3. Check Output Channel logs for retrieval attempts and timing
 4. Remember: The first conversation in a new workspace has no context (memory starts empty)
 5. Each workspace has separate memory—switching workspaces means different context
@@ -645,9 +540,9 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 | Symptom | Likely Cause | Recommended Action |
 |---------|--------------|-------------------|
 | "Python script exited with code 1" (empty stderr) | Interpreter mismatch: `cognee` or `python-dotenv` not installed in detected Python environment | Set `Flowbaby.pythonPath` in VS Code settings to correct interpreter (Linux/macOS: `.venv/bin/python`, Windows: `.venv\Scripts\python.exe`) |
-| "No module named 'cognee'" | Missing `cognee` package in Python environment | Install with: `pip install cognee==0.3.4` (or activate virtual environment first) |
+| "No module named 'cognee'" | Missing `cognee` package in Python environment | Run **"Flowbaby: Initialize Workspace"** to set up environment automatically |
 | "LLM_API_KEY not found" | Missing API key in `.env` file or environment | Create `.env` file in workspace root with valid `LLM_API_KEY`, then reload window |
-| Script timeout (retrieval: 15s, ingestion: 120s) | Network issues, slow LLM provider, or filesystem delay | Ingestion timeout is generous (120s); if timeout occurs but data appears via @flowbaby-memory, ingestion succeeded in background. Check Output Channel for timing metrics. |
+| Script timeout (retrieval: 15s, ingestion: 120s) | Network issues, slow LLM provider, or filesystem delay | Ingestion timeout is generous (120s); if timeout occurs but data appears via @flowbaby, ingestion succeeded in background. Check Output Channel for timing metrics. |
 | JSON parse error in logs | Script produced non-JSON output | Report as bug. Check for conflicting print statements in bridge scripts. |
 
 **Note**: Auto-detection works for standard `.venv` setups on Linux, macOS, and Windows. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, or pyenv, use explicit `Flowbaby.pythonPath` configuration.
@@ -656,40 +551,9 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 
 To reset your workspace memory (e.g., to start fresh or clear sensitive data):
 
-```bash
-rm -rf .flowbaby/
-```
+Use `Flowbaby: Clear Workspace Memory` command from the command pallette. This moves your current data to .flowbaby/.trash until you decide to delete it permanently. 
 
 The extension will reinitialize on next activation, creating a fresh knowledge graph.
-
-## Architecture
-
-**How It Works**:
-
-- **TypeScript Extension** communicates with Python bridge scripts via subprocess calls
-- **Python Bridge Scripts** use the Cognee library for knowledge graph operations
-- **Workspace Isolation** is achieved through unique dataset identifiers (SHA1 hash of workspace path) and workspace-local storage directories
-- **Data Storage** is in workspace-local directories (`.flowbaby/system/` and `.flowbaby/data/`) created in each workspace root (v0.2.1+)
-- **Ontology** defines chat-specific entities: User, Question, Answer, Topic, Concept, Problem, Solution, Decision
-
-**Data Flow**:
-
-**Capture Flow**:
-1. User presses Ctrl+Alt+C (or uses Command Palette)
-2. Extension shows input box for content
-3. User pastes chat message or types manually
-4. Extension calls Python bridge (`ingest.py`) via subprocess
-5. Cognee stores conversation in workspace-specific knowledge graph
-
-**Retrieval Flow**:
-1. User types `@flowbaby-memory [question]` in chat
-2. Extension calls Python bridge (`retrieve.py`) via subprocess
-3. Cognee searches knowledge graph using hybrid graph-vector search
-4. Extension formats retrieved context with previews
-5. Extension augments user's question with context
-6. Extension sends augmented prompt to language model
-7. Response streams back to user
-8. (Optional) Extension captures Q&A conversation for future retrieval (if `autoIngestConversations` enabled)
 
 ## Privacy and Data Storage
 
@@ -708,55 +572,34 @@ rm -rf .flowbaby/ .flowbaby/system/ .flowbaby/data/  # In workspace root
 ## Known Limitations
 
 - **Workspace Required** - Extension doesn't work in single-file mode
-- **Python Dependency** - Python and Cognee must be installed separately (not bundled)
-- **Manual Capture** - Keyboard shortcut requires copy-paste workflow; cannot extract message from chat UI directly (VS Code API limitation)
-- **Explicit Participant Invocation** - Must type `@flowbaby-memory` to trigger retrieval; cannot inject context into other participants (@workspace, GitHub Copilot, etc.)
-- **First Conversation** - The first conversation in a new workspace has no context (memory starts empty)
-- **Step 6 Auto-Ingestion Disabled by Default** - Automatic capture of @flowbaby-memory conversations (feedback loop) is experimental due to Cognee 0.4.0 file hashing bug; enable via `Flowbaby.autoIngestConversations` for testing
+- **Python Dependency** - Requires Python 3.8+ on your system; Cognee and dependencies are installed automatically in an isolated environment
 - **Platform Support** - Primarily tested on macOS and Linux; Windows support may require additional configuration
-
-## Known Issues
-
-### Cognee 0.4.0 File Hashing Bug (Auto-Ingestion)
-
-**Issue**: Cognee v0.4.0 has an intermittent file hashing bug that causes ingestion to fail unpredictably when the same conversation is ingested multiple times. This affects automatic capture of @flowbaby-memory conversations (Step 6 feedback loop).
-
-**Symptoms**:
-- Conversations fail to ingest with hash mismatch errors
-- Intermittent failures (some ingests succeed, others fail for identical content)
-- Errors logged in Output Channel: "File not found" or hash-related issues
-
-**Workaround**:
-- **Default**: `Flowbaby.autoIngestConversations` is set to `false` (auto-ingestion disabled)
-- **Manual Capture**: Use keyboard shortcut (Ctrl+Alt+C) to capture conversations manually—this does NOT trigger the bug
-- **Experimental Testing**: Set `Flowbaby.autoIngestConversations` to `true` to test feedback loop (may experience intermittent failures)
-- **Graceful Degradation**: Ingestion failures are logged to Output Channel but do NOT crash the extension or interrupt chat participant functionality
-
-**Status**: Monitoring Cognee updates for bug fix; will enable auto-ingestion by default when resolved.
-
-**Reference**: See implementation documentation in `implementation/008-chat-participant-memory-integration-implementation.md` for detailed validation findings and error logs.
 
 ## Screenshots
 
-### Automatic Context Retrieval
+### Automatic Context Search
 
-![Context Retrieval](media/screenshot-retrieval.png)
+![Automatic Search](media/auto-search.png)
 
-*Example: The extension automatically retrieves relevant memories before responding*
+*Flowbaby automatically searches memory based on chat context*
 
-### Configuration Options
+### Automatic Memory Storage
 
-![Settings](media/screenshot-settings.png)
+![Automatic Store](media/auto-store.png)
 
-*Configure memory behavior through VS Code settings*
+*Flowbaby knows when to store memories based on conversation cues*
 
-### Initialization Logs
+### Interactive Chat Participant
 
-![Output Channel](media/screenshot-output.png)
+![Interactive Chat](media/interactive-chat-participant.png)
 
-*Monitor extension activity through the Output Channel*
+*Use @flowbaby to query your workspace memory*
 
-**Note**: Screenshots will be added before the initial release.
+### Manual Memory Storage
+
+![Manual Store](media/manual-store-summary.png)
+
+*Capture important context with keyboard shortcuts*
 
 ## Contributing
 
@@ -800,17 +643,16 @@ After modifying code:
 - **Reload**: Press **Ctrl+R** (or **Cmd+R** on Mac) in the Extension Development Host window
 - **Auto-compile**: The `preLaunchTask` in `.vscode/launch.json` auto-compiles when pressing F5
 
-See [SETUP.md](SETUP.md) for complete development environment setup.
-
 ## License
 
-This extension is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+This extension is licensed under the PolyForm Strict License 1.0.0. See [LICENSE](LICENSE) for details.
+
+This extension uses [Cognee](https://github.com/topoteretes/cognee) under the Apache 2.0 license. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
 
 ## Support
 
-- 📚 **Documentation**: [docs.flowbaby.ai](https://docs.flowbaby.ai)
-- **Report Bugs**: [GitHub Issues](https://github.com/lsalsich/flowbaby/issues)
-- **Feature Requests**: [GitHub Discussions](https://github.com/lsalsich/flowbaby/discussions)
+- **Report Bugs**: [GitHub Issues](https://github.com/lsalsich/flowbaby-issues/issues)
+- **Feature Requests**: [GitHub Discussions](https://github.com/lsalsich/flowbaby-issues/discussions)
 
 ## Changelog
 
@@ -818,4 +660,4 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
 ---
 
-**Built with** [Cognee](https://github.com/topoteretes/cognee) - A knowledge graph library for LLM applications.
+**Built with** [Cognee](https://github.com/topoteretes/cognee) for knowledge graph operations.

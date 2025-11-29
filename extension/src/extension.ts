@@ -673,10 +673,14 @@ function registerCaptureCommands(
                     const result = await client.ingestAsync(userMsg, assistantMsg, manager);
                     
                     if (result.success && result.staged) {
-                        // Show staged messaging per Plan 017
-                        vscode.window.showInformationMessage(
-                            "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."
-                        );
+                        // Plan 043: Check if success notifications are enabled
+                        const showSuccessNotifications = vscode.workspace.getConfiguration('flowbaby.notifications').get<boolean>('showIngestionSuccess', true);
+                        if (showSuccessNotifications) {
+                            // Show staged messaging per Plan 017
+                            vscode.window.showInformationMessage(
+                                "Memory staged – processing will finish in ~1–2 minutes. You'll get a notification when it's done."
+                            );
+                        }
                         outputChannel.appendLine('Memory staged successfully');
                     } else {
                         vscode.window.showWarningMessage(

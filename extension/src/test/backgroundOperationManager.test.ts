@@ -507,3 +507,198 @@ suite('BackgroundOperationManager - runPythonJson Env Injection (Plan 031)', () 
         // LLM vars should come from process.env, not injected
     });
 });
+
+/**
+ * Plan 043 - Notification Setting Tests
+ * 
+ * Tests for the flowbaby.notifications.showIngestionSuccess setting
+ * that controls whether success notifications are shown.
+ */
+suite('BackgroundOperationManager - Notification Setting (Plan 043)', () => {
+    let workspacePath: string;
+    let context: vscode.ExtensionContext;
+    let output: vscode.OutputChannel;
+    let outputLines: string[];
+    let manager: BackgroundOperationManager;
+    let infoStub: sinon.SinonStub;
+    let warnStub: sinon.SinonStub;
+    let configStub: sinon.SinonStub;
+
+    const resetSingleton = () => {
+        (BackgroundOperationManager as unknown as { instance?: BackgroundOperationManager }).instance = undefined;
+    };
+
+    setup(async () => {
+        workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-notify-'));
+        outputLines = [];
+        context = {
+            subscriptions: [],
+            globalState: {
+                get: sinon.stub().returns(undefined),
+                update: sinon.stub().resolves()
+            },
+            secrets: {
+                get: sinon.stub().resolves(undefined),
+                store: sinon.stub().resolves(),
+                delete: sinon.stub().resolves(),
+                onDidChange: sinon.stub()
+            }
+        } as unknown as vscode.ExtensionContext;
+        output = {
+            appendLine: (line: string) => { outputLines.push(line); }
+        } as unknown as vscode.OutputChannel;
+
+        resetSingleton();
+        manager = BackgroundOperationManager.initialize(context, output);
+        await manager.initializeForWorkspace(workspacePath);
+
+        infoStub = sinon.stub(vscode.window, 'showInformationMessage').resolves(undefined as any);
+        warnStub = sinon.stub(vscode.window, 'showWarningMessage').resolves(undefined as any);
+        configStub = sinon.stub(vscode.workspace, 'getConfiguration');
+    });
+
+    teardown(async () => {
+        infoStub.restore();
+        warnStub.restore();
+        configStub.restore();
+        await manager.shutdown();
+        resetSingleton();
+        fs.rmSync(workspacePath, { recursive: true, force: true });
+    });
+
+    test('success notification is shown when showIngestionSuccess is true (default)', async () => {
+        // Configure setting to be true (default behavior)
+        configStub.withArgs('flowbaby.notifications').returns({
+            get: (key: string, defaultValue: boolean) => {
+                if (key === 'showIngestionSuccess') { return true; }
+                return defaultValue;
+            }
+        });
+        // Need to return empty object for other config calls
+        configStub.withArgs('Flowbaby.llm').returns({ get: () => undefined });
+
+        // Create and start an operation
+        const spawnStub = sinon.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
+            const operationId = args[0] as string;
+            const entry = manager.getStatus(operationId) as OperationEntry;
+            entry.status = 'running';
+            entry.pid = 12345;
+            entry.lastUpdate = new Date().toISOString();
+        });
+
+        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'test context' } };
+        const opId = await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+        
+        // Complete the operation with success
+        await manager.completeOperation(opId, { elapsedMs: 1000, entityCount: 5 });
+
+        // Verify showInformationMessage was called (success notification shown)
+        assert.ok(infoStub.called, 'showInformationMessage should be called when setting is true');
+        assert.ok(infoStub.calledWith('✅ Flowbaby processing finished'), 'Should show correct success message');
+
+        spawnStub.restore();
+    });
+
+    test('success notification is suppressed when showIngestionSuccess is false', async () => {
+        // Configure setting to be false
+        configStub.withArgs('flowbaby.notifications').returns({
+            get: (key: string, defaultValue: boolean) => {
+                if (key === 'showIngestionSuccess') { return false; }
+                return defaultValue;
+            }
+        });
+        configStub.withArgs('Flowbaby.llm').returns({ get: () => undefined });
+
+        // Create and start an operation
+        const spawnStub = sinon.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
+            const operationId = args[0] as string;
+            const entry = manager.getStatus(operationId) as OperationEntry;
+            entry.status = 'running';
+            entry.pid = 12345;
+            entry.lastUpdate = new Date().toISOString();
+        });
+
+        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'test context' } };
+        const opId = await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+        
+        // Complete the operation with success
+        await manager.completeOperation(opId, { elapsedMs: 1000, entityCount: 5 });
+
+        // Verify showInformationMessage was NOT called (success notification suppressed)
+        assert.ok(!infoStub.called, 'showInformationMessage should NOT be called when setting is false');
+        
+        // Verify log message indicates suppression
+        const suppressionLog = outputLines.find(line => line.includes('Success notification suppressed'));
+        assert.ok(suppressionLog, 'Should log that success notification was suppressed');
+        assert.ok(suppressionLog!.includes('flowbaby.notifications.showIngestionSuccess=false'), 'Log should mention the setting');
+
+        spawnStub.restore();
+    });
+
+    test('failure notification is ALWAYS shown regardless of showIngestionSuccess setting', async () => {
+        // Configure showIngestionSuccess to false
+        configStub.withArgs('flowbaby.notifications').returns({
+            get: (key: string, defaultValue: boolean) => {
+                if (key === 'showIngestionSuccess') { return false; }
+                return defaultValue;
+            }
+        });
+        configStub.withArgs('Flowbaby.llm').returns({ get: () => undefined });
+
+        // Create and start an operation
+        const spawnStub = sinon.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
+            const operationId = args[0] as string;
+            const entry = manager.getStatus(operationId) as OperationEntry;
+            entry.status = 'running';
+            entry.pid = 12345;
+            entry.lastUpdate = new Date().toISOString();
+        });
+
+        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'test context' } };
+        const opId = await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+        
+        // Mark operation as failed
+        await manager.failOperation(opId, {
+            code: 'COGNEE_INTERNAL_ERROR',
+            message: 'Test failure',
+            remediation: 'Check the logs'
+        });
+
+        // Verify warning message WAS called (failure notification always shown)
+        assert.ok(warnStub.called, 'showWarningMessage should ALWAYS be called for failures');
+        assert.ok(warnStub.calledWith('⚠️ Flowbaby processing failed'), 'Should show correct failure message');
+
+        spawnStub.restore();
+    });
+
+    test('success notification respects default value of true when setting is undefined', async () => {
+        // Configure setting to return undefined (should default to true)
+        configStub.withArgs('flowbaby.notifications').returns({
+            get: (key: string, defaultValue: boolean) => {
+                if (key === 'showIngestionSuccess') { return defaultValue; } // Returns the default (true)
+                return defaultValue;
+            }
+        });
+        configStub.withArgs('Flowbaby.llm').returns({ get: () => undefined });
+
+        // Create and start an operation
+        const spawnStub = sinon.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
+            const operationId = args[0] as string;
+            const entry = manager.getStatus(operationId) as OperationEntry;
+            entry.status = 'running';
+            entry.pid = 12345;
+            entry.lastUpdate = new Date().toISOString();
+        });
+
+        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'test context' } };
+        const opId = await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+        
+        // Complete the operation with success
+        await manager.completeOperation(opId, { elapsedMs: 1000, entityCount: 5 });
+
+        // Verify showInformationMessage was called (default is true)
+        assert.ok(infoStub.called, 'showInformationMessage should be called when setting defaults to true');
+
+        spawnStub.restore();
+    });
+});

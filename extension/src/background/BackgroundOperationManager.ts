@@ -439,8 +439,16 @@ export class BackgroundOperationManager {
      * Schedule success notification (info-level, throttled)
      * Plan 017 architecture: "✅ Flowbaby processing finished" with workspace, summary, time, entity count
      * Plan 032 M4: Updated branding from "Cognify" to "Flowbaby"
+     * Plan 043: Respect flowbaby.notifications.showIngestionSuccess setting
      */
     private async scheduleSuccessNotification(entry: OperationEntry): Promise<void> {
+        // Plan 043: Check if success notifications are enabled
+        const showSuccessNotifications = vscode.workspace.getConfiguration('flowbaby.notifications').get<boolean>('showIngestionSuccess', true);
+        if (!showSuccessNotifications) {
+            this.outputChannel.appendLine(`[BACKGROUND] Success notification suppressed by user setting (flowbaby.notifications.showIngestionSuccess=false)`);
+            return;
+        }
+
         const workspaceName = path.basename(entry.datasetPath);
         const throttle = this.getOrCreateThrottle(entry.datasetPath);
         

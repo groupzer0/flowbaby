@@ -2,7 +2,7 @@
   "name": "flowbaby",
   "displayName": "Flowbaby",
   "description": "Automatic memory for GitHub Copilot chat using Flowbaby knowledge graphs",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publisher": "flowbaby",
   "icon": "media/icon.png",
   "engines": {
@@ -122,8 +122,8 @@
     "keybindings": [
       {
         "command": "Flowbaby.captureMessage",
-        "key": "ctrl+alt+c",
-        "mac": "cmd+alt+c",
+        "key": "ctrl+alt+f",
+        "mac": "cmd+alt+f",
         "when": "editorTextFocus || chatIsVisible"
       }
     ],
@@ -142,7 +142,7 @@
         "toolReferenceName": "flowbabyStoreSummary",
         "canBeReferencedInPrompt": true,
         "icon": "$(database)",
-        "modelDescription": "Primary tool for writing episodic long-term memory into Flowbaby's knowledge graph. Agents should call this after meaningful progress, at the end of multi-step reasoning, or when concluding a task, to persist a rich summary of what was done and why. Use this tool proactively as a state checkpoint; do not wait for the user to explicitly ask to save memory. Summaries should be 300–1500 characters and describe goals, actions, important files, decisions, and rationale. Use it to record durable decisions, plans, and implementation notes that will be useful in future turns in this workspace. Do not use this for trivial or ephemeral chit-chat.\n\nExample usage (conceptual): after completing a refactor or design decision, call this tool with topic=\"Auth refactor step 1\" and context summarizing the work, and include any key decisions and rationale. Data stays in this workspace.",
+        "modelDescription": "Primary tool for writing episodic long-term memory into Flowbaby's knowledge graph. Using this tool is a core responsibility, not optional.\n\n**When to use**:\n- After meaningful progress, after a decision, at task boundaries, or every 5 turns during prolonged work\n- Use proactively as a state checkpoint—do not wait for the user to ask\n- After storing, acknowledge: \"Saved progress to Flowbaby memory.\"\n\n**What to capture** (summaries must be 300–1500 characters, semantically dense):\n- Goal and key findings\n- Decisions made and reasoning/tradeoffs behind them\n- Rejected approaches and why they were rejected\n- Constraints, risks, and assumptions uncovered\n- Current status (ongoing or complete)\n\n**Additional context to include**:\n- When multiple options were considered, include rejected paths and rationale for rejection\n- When user preferences, constraints, or unspoken assumptions shaped direction, infer and record these as decision context\n- When you identify high-level patterns, strategic tradeoffs, or conflict resolutions that will matter across future tasks, create meta-memories capturing these insights\n\n**What NOT to store**:\n- Trivial or ephemeral chit-chat\n- Raw execution logs without reasoning\n- Duplicate information already stored\n\n**Structure guidance**:\n- topic: Short 3–7 word title identifying the work or decision\n- context: Rich summary describing goals, findings, reasoning, tradeoffs, and nuanced context—not just actions taken\n- decisions: Durable decisions that will matter for future work\n- rationale: Why decisions were made (tradeoffs, constraints, risks)\n- metadata.status: \"Active\" for current approaches, \"Superseded\" for replaced ones, \"DecisionRecord\" for stable decisions\n\nData stays in this workspace.",
         "userDescription": "Store a structured conversation or work summary into Flowbaby's knowledge graph for future retrieval. Data stays in this workspace.",
         "inputSchema": {
           "type": "object",
@@ -209,7 +209,7 @@
         "toolReferenceName": "flowbabyRetrieveMemory",
         "canBeReferencedInPrompt": true,
         "icon": "$(search)",
-        "modelDescription": "Primary mechanism for retrieving past context, decisions, and implementation details from Flowbaby's knowledge graph. Agents should call this at the start of a turn, or before planning an answer, whenever the user request might relate to prior work, previous discussions, or existing decisions in this workspace. Use a natural-language query that describes the user goal or task (not just keywords), and retrieve a small number of highly relevant memories to ground reasoning. The tool returns human-readable markdown plus structured JSON with topic, context, decisions, rationale, and metadata, which should be used to guide current planning and responses. If no results are relevant, the agent should proceed but note that no prior memory was found.\n\nExample usage (conceptual): when asked \"How did we implement caching?\" call this tool with query=\"Previous decisions and implementation details for redis caching\" and review the returned summaries before answering. Data stays in this workspace.",
+        "modelDescription": "Primary mechanism for retrieving past context, decisions, and implementation details from Flowbaby's knowledge graph.\n\n**When to use**:\n- At the start of any turn where prior context, decisions, patterns, or constraints may influence the outcome\n- BEFORE planning, deep reasoning, or proposing strategic recommendations\n- When the user request might relate to prior work, previous discussions, or existing decisions in this workspace\n\n**How to construct queries**:\n- Use natural-language, semantically descriptive queries aligned with your current objective—not just the user's literal words\n- Include: the goal or value statement, the area of codebase/system under investigation, relevant constraints (performance, security, UX), and whether you seek decisions, assumptions, constraints, risks, or meta-patterns\n- Avoid short keyword fragments; describe the intent of the task\n\n**What to retrieve**:\n- Prefer a small set (default: 3) of high-leverage, strategic memories over many granular action logs\n- Look for: architectural choices, roadmap tradeoffs, process patterns, or meta-memories summarizing repeated issues and cross-plan themes\n\n**How to use retrieved memory**:\n- Integrate by revealing historical decisions and constraints, checking for prior attempts or repeated failures, and identifying where current work may conflict with or build on past decisions\n- Treat current instructions and documents as primary—use memory to augment and cross-check, not override\n- If memory conflicts with current documentation, prefer current docs and note the discrepancy only if it materially affects risk or recommendations\n\n**Retrieval limits**:\n- Perform at most one follow-up retrieval per turn, only if you can state the concrete question it answers\n- If more context seems useful, summarize what you know and recommend what to ask the user instead of auto-querying deeper\n\n**If no memory found**: Proceed normally but note the absence where relevant. Data stays in this workspace.",
         "userDescription": "Search Flowbaby knowledge graph for relevant stored summaries, decisions, and context from past work. Data stays in this workspace.",
         "inputSchema": {
           "type": "object",
@@ -273,7 +273,7 @@
           {
             "id": "tryCapture",
             "title": "Try Capture",
-            "description": "Select text in your editor and press `Ctrl+Alt+C` (or `Cmd+Alt+C` on Mac) to capture it to memory.",
+            "description": "Select text in your editor and press `Ctrl+Alt+F` (or `Cmd+Alt+F` on Mac) to capture it to memory.",
             "completionEvents": [
               "onCommand:Flowbaby.captureMessage"
             ]
@@ -351,6 +351,11 @@
           "default": false,
           "markdownDescription": "Enable debug output channel for extension diagnostics. Shows detailed logs for activation, Python bridge communication, setup operations, and status bar events. Use this when troubleshooting issues."
         },
+        "flowbaby.notifications.showIngestionSuccess": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show toast notifications when memory ingestion completes successfully. Error notifications are always shown regardless of this setting."
+        },
         "Flowbaby.llm.provider": {
           "type": "string",
           "enum": [
@@ -415,7 +420,7 @@
     "typescript": "^5.9.3"
   },
   "author": "Flowbaby Team",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
     "url": "https://github.com/lsalsich/flowbaby.git"
