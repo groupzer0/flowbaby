@@ -5,10 +5,6 @@
   "version": "0.5.3",
   "publisher": "Flowbaby",
   "icon": "media/flowbaby-icon-tightcrop.png",
-  "galleryBanner": {
-    "color": "#fab34c",
-    "theme": "light"
-  },
   "engines": {
     "vscode": "^1.106.0"
   },
@@ -301,6 +297,10 @@
             "id": "tryCapture",
             "title": "Try Capture",
             "description": "Select text in your editor and press `Ctrl+Alt+F` (or `Cmd+Alt+F` on Mac) to capture it to memory.",
+            "media": {
+              "image": "media/flowbaby-icon-tightcrop.png",
+              "altText": "Flowbaby Logo"
+            },
             "completionEvents": [
               "onCommand:Flowbaby.captureMessage"
             ]
@@ -309,6 +309,10 @@
             "id": "tryRetrieval",
             "title": "Try Retrieval",
             "description": "Open Copilot Chat and ask `@flowbaby` a question about your captured context.",
+            "media": {
+              "image": "media/flowbaby-icon-tightcrop.png",
+              "altText": "Flowbaby Logo"
+            },
             "completionEvents": [
               "onView:flowbaby"
             ]
