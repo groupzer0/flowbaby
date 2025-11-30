@@ -4,7 +4,7 @@
   "description": "Automatic memory for GitHub Copilot chat using Flowbaby knowledge graphs",
   "version": "0.5.2",
   "publisher": "flowbaby",
-  "icon": "media/icon-new.png",
+  "icon": "media/flowbaby-icon-tightcrop.png",
   "galleryBanner": {
     "color": "#1e1e1e",
     "theme": "dark"
@@ -279,7 +279,7 @@
             "title": "Setup Python Environment",
             "description": "Flowbaby requires a Python environment with `cognee` installed. We can set this up for you automatically.\n[Initialize Workspace](command:Flowbaby.initializeWorkspace)",
             "media": {
-              "image": "media/icon.png",
+              "image": "media/flowbaby-icon-tightcrop.png",
               "altText": "Flowbaby Logo"
             },
             "completionEvents": [
@@ -291,7 +291,7 @@
             "title": "Configure API Key",
             "description": "Create a `.env` file in your workspace root with your LLM API key.\n[Configure API Key](command:Flowbaby.configureApiKey)",
             "media": {
-              "markdown": "media/icon.png"
+              "markdown": "media/flowbaby-icon-tightcrop.png"
             },
             "completionEvents": [
               "onCommand:Flowbaby.configureApiKey"
