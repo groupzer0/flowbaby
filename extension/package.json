@@ -2,7 +2,7 @@
   "name": "flowbaby",
   "displayName": "Flowbaby",
   "description": "Automatic memory for GitHub Copilot chat",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "publisher": "Flowbaby",
   "icon": "media/flowbaby-icon-tightcrop.png",
   "galleryBanner": {
@@ -445,10 +445,10 @@
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lsalsich/flowbaby.git"
+    "url": "https://github.com/lsalsich/flowbaby-issues.git"
   },
   "bugs": {
-    "url": "https://github.com/lsalsich/flowbaby/issues"
+    "url": "https://github.com/lsalsich/flowbaby-issues/issues"
   },
   "homepage": "https://flowbaby.ai",
   "dependencies": {

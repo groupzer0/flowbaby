@@ -2,21 +2,21 @@
 
 > Memory-augmented Copilot chat for VS Code
 
-Flowbaby captures and summarizes key moments from your GitHub Copilot chats, then surfaces them as context in future conversations to reduce drift in long-running work. Each workspace gets its own isolated memory and Python environment, and no code from your repository ever leaves your machine—only the chat content already sent to Copilot is summarized and reused, under your control.
+Flowbaby captures and summarizes key moments from your GitHub Copilot chats, then surfaces them as context in future conversations to reduce drift in long-running work. Each workspace gets its own isolated memory and Python environment, and no code from your repository ever leaves your machine - only the chat content already sent to Copilot is summarized and reused, under your control.
 
 ## Features
 
 - **Context aware automatic memory search** - Flowbaby is configured to use chat conversation cues to search memory and add that memory context to the chat - keeping your Copilot agent from drifting and saving you from having to explain what happened all over again.
 
-![Automatic Search](media/auto-search.png)
+![Automatic Search](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/auto-search.png)
 
 - **Context aware automatic memory storage** - Flowbaby knows when it's a good time to summarize and store memories based on the chat context.
 
-![Automatic Store](media/auto-store.png)
+![Automatic Store](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/auto-store.png)
 
 - **@flowbaby chat participant** – A dedicated Copilot participant that recalls past conversations and surfaces relevant memories into new chats to reduce drift over long sessions.
 
-![Interactive Chat Participant](media/interactive-chat-participant.png)
+![Interactive Chat Participant](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/interactive-chat-participant.png)
 
 - **Configurable memory behavior via stored prompts** – Guide Flowbaby with stored natural-language instructions (e.g., what to store, what to ignore, how aggressively to retrieve) so each workspace can have its own memory style.
 
@@ -26,7 +26,7 @@ Flowbaby captures and summarizes key moments from your GitHub Copilot chats, the
 
 - **Command Palette Alternative** – Run “Flowbaby: Capture to Memory” if you prefer command-palette based capture.
 
-![Manual Store](media/manual-store-summary.png)
+![Manual Store](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/manual-store-summary.png)
 
 - **Workspace Isolation** – Each workspace has its own separate memory and Python environment—no cross-project leakage.
 
@@ -500,25 +500,25 @@ rm -rf .flowbaby/ .flowbaby/system/ .flowbaby/data/  # In workspace root
 
 ### Automatic Context Search
 
-![Automatic Search](media/auto-search.png)
+![Automatic Search](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/auto-search.png)
 
 *Flowbaby automatically searches memory based on chat context*
 
 ### Automatic Memory Storage
 
-![Automatic Store](media/auto-store.png)
+![Automatic Store](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/auto-store.png)
 
 *Flowbaby knows when to store memories based on conversation cues*
 
 ### Interactive Chat Participant
 
-![Interactive Chat](media/interactive-chat-participant.png)
+![Interactive Chat](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/interactive-chat-participant.png)
 
 *Use @flowbaby to query your workspace memory*
 
 ### Manual Memory Storage
 
-![Manual Store](media/manual-store-summary.png)
+![Manual Store](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/manual-store-summary.png)
 
 *Capture important context with keyboard shortcuts*
 
