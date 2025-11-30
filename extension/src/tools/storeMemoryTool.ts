@@ -94,6 +94,17 @@ export class StoreMemoryTool implements vscode.LanguageModelTool<StoreMemoryTool
                 ]);
             }
             
+            // Issue 1 (v0.5.7): Show failure notification for failed ingestions
+            // This is always shown regardless of showIngestionSuccess setting
+            vscode.window.showWarningMessage(
+                `⚠️ Memory ingestion failed: ${response.error || 'Unknown error'}`,
+                'View Logs'
+            ).then(action => {
+                if (action === 'View Logs') {
+                    this.outputChannel.show();
+                }
+            });
+            
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(JSON.stringify({
                     success: response.success,

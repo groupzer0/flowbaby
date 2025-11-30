@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.7] - 2025-11-30
+
+### Fixed - Hotfix: Smoke Test Issues from v0.5.6
+
+**Hotfix Release** - Addresses five UX issues discovered during v0.5.6 smoke testing.
+
+#### Issues Resolved
+
+1. **Ingestion failure notifications not showing**: Failed memory ingestions via `flowbaby_storeMemory` tool now show warning toast with "View Logs" option. (Note: success notifications can be disabled via `flowbaby.notifications.showIngestionSuccess`, but failure notifications always show.)
+
+2. **Chat participant icon missing**: `@flowbaby` icon now displays correctly in chat. Fixed icon path from non-existent `icon.png` to actual `flowbaby-icon-tightcrop.png`.
+
+3. **Missing API key causes infinite "working..." state**: When API key is not configured, `@flowbaby` chat now shows helpful error message with link to configure instead of hanging indefinitely.
+
+4. **API key setup notice auto-dismissing**: Post-initialization API key prompt now uses modal dialog that stays until user explicitly dismisses it.
+
+5. **Status bar not updating after API key config**: After setting API key via command, status bar now updates from yellow "API Key Required" to green "Ready" state.
+
+#### Technical Changes
+
+- Added failure notification to `StoreMemoryTool.invoke()` for non-success responses
+- Fixed `participant.iconPath` to use correct file path
+- Added API key check in chat participant before retrieval operations
+- Changed post-init prompt to modal dialog (`{ modal: true }`)
+- Added status bar update in `Flowbaby.setApiKey` command handler
+
 ## [0.5.6] - 2025-11-30
 
 ### Fixed - Plan 045 Hotfix: Smoke Test Issues

@@ -112,6 +112,13 @@ export async function activate(_context: vscode.ExtensionContext) {
                         debugLog('API key stored via SecretStorage');
                         // Plan 039 M6: Audit log API key set
                         getAuditLogger().logApiKeySet(true, 'command');
+                        
+                        // Issue 5 (v0.5.7): After setting API key, update status bar to Ready
+                        // if we have a working environment
+                        if (statusBar && clientInitialized) {
+                            statusBar.setStatus(FlowbabyStatus.Ready);
+                            debugLog('Status bar updated to Ready after API key configuration');
+                        }
                     } catch (error) {
                         // Plan 039 M6: Audit log failure
                         getAuditLogger().logApiKeySet(false, 'command');
@@ -251,10 +258,12 @@ export async function activate(_context: vscode.ExtensionContext) {
                         
                         // Plan 045 Fix: Show post-init prompt AFTER withProgress completes
                         // This ensures progress notification dismisses immediately
+                        // Issue 4 (v0.5.7): Use modal warning that stays until dismissed
                         if (!flowbabyClient!.getApiKeyState()?.llmReady) {
-                            // Non-blocking prompt for API key setup
+                            // Modal prompt ensures user sees it - won't auto-dismiss
                             vscode.window.showWarningMessage(
-                                'Flowbaby initialized. Set your API key to enable LLM operations.',
+                                'Flowbaby initialized successfully! Configure your API key to enable memory operations.',
+                                { modal: true },
                                 'Set API Key',
                                 'Later'
                             ).then(action => {
@@ -449,10 +458,12 @@ export async function activate(_context: vscode.ExtensionContext) {
             registerLanguageModelTool(_context, agentOutputChannel);
             
             // Plan 045: Show post-init API key prompt if needed
+            // Issue 4 (v0.5.7): Use modal warning that stays until dismissed
             if (!initResult.apiKeyState.llmReady) {
-                // Non-blocking prompt for API key setup
+                // Modal prompt ensures user sees it - won't auto-dismiss
                 vscode.window.showWarningMessage(
-                    'Flowbaby initialized. Set your API key to enable memory operations.',
+                    'Flowbaby initialized successfully! Configure your API key to enable memory operations.',
+                    { modal: true },
                     'Set API Key',
                     'Later'
                 ).then(action => {
@@ -1220,6 +1231,19 @@ function registerFlowbabyParticipant(
                     return { metadata: { disabled: true } };
                 }
 
+                // Issue 3 (v0.5.7): Check API key status before proceeding
+                // If no API key configured, show helpful error instead of hanging on "working..."
+                const hasApiKey = await flowbabyClient.hasApiKey();
+                if (!hasApiKey) {
+                    stream.markdown('🔑 **API Key Required**\n\n');
+                    stream.markdown('Flowbaby needs an LLM API key to process memory operations.\n\n');
+                    stream.markdown('**Quick Fix:**\n');
+                    stream.markdown('1. Run command: `Flowbaby: Set API Key`\n');
+                    stream.markdown('2. Enter your OpenAI, Anthropic, or other LLM provider API key\n\n');
+                    stream.markdown('[Set API Key Now](command:Flowbaby.setApiKey)');
+                    return { metadata: { error: 'api_key_required' } };
+                }
+
                 // PLAN 014 MILESTONE 5: Show help text for empty queries or explicit help requests
                 const trimmedPrompt = request.prompt.trim().toLowerCase();
                 const isHelpRequest = trimmedPrompt === '' || 
@@ -1537,7 +1561,8 @@ function registerFlowbabyParticipant(
     );
 
     // Set participant description (shows in UI)
-    participant.iconPath = vscode.Uri.file(path.join(__dirname, '..', 'media', 'icon.png'));
+    // Issue 2 (v0.5.7): Fixed icon path - icon.png doesn't exist, use flowbaby-icon-tightcrop.png
+    participant.iconPath = vscode.Uri.file(path.join(__dirname, '..', 'media', 'flowbaby-icon-tightcrop.png'));
 
     console.log('✅ @flowbaby participant registered successfully');
 
