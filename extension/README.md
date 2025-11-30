@@ -101,7 +101,7 @@ At the start of any turn where past work might matter (prior plans, decisions, c
 
 1. Call #flowbabyRetrieveMemory **before** deep planning or multi-step reasoning.
 2. Use a natural-language query that:
-   - Describes the current task or question
+   - Describes the current task,question, or challenge
    - Mentions the area of the codebase or system involved
    - States what you are looking for (e.g., prior decisions, constraints, risks, patterns, open questions)
 3. Prefer a small set of high-value memories (default: 3) rather than many low-signal items.
