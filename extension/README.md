@@ -524,12 +524,7 @@ rm -rf .flowbaby/ .flowbaby/system/ .flowbaby/data/  # In workspace root
 
 ## Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](../CONTRIBUTING.md) for:
-
-- Development setup instructions
-- How to run tests
-- Code style guidelines
-- Pull request process
+We welcome contributions! See [discussions](https://github.com/lsalsich/flowbaby-issues/discussions)
 
 ## License
 

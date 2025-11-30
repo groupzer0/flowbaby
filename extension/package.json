@@ -1,9 +1,9 @@
 {
   "name": "flowbaby",
   "displayName": "Flowbaby",
-  "description": "Automatic memory for GitHub Copilot chat using Flowbaby knowledge graphs",
+  "description": "Automatic memory for GitHub Copilot chat",
   "version": "0.5.2",
-  "publisher": "flowbaby",
+  "publisher": "Flowbaby",
   "icon": "media/flowbaby-icon-tightcrop.png",
   "galleryBanner": {
     "color": "#1e1e1e",
@@ -450,7 +450,7 @@
   "bugs": {
     "url": "https://github.com/lsalsich/flowbaby/issues"
   },
-  "homepage": "https://github.com/lsalsich/flowbaby/tree/main/extension",
+  "homepage": "https://flowbaby.ai",
   "dependencies": {
     "dotenv": "^17.2.3"
   }
