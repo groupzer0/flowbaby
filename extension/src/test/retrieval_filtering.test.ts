@@ -27,6 +27,8 @@ suite('Retrieval Filtering Test Suite (Plan 021)', () => {
 
         // Create mock client
         mockClient = sandbox.createStubInstance(FlowbabyClient);
+        // Plan 045: Stub hasApiKey to return true by default for tests
+        mockClient.hasApiKey.resolves(true);
         
         // Mock configuration
         const mockConfig = {

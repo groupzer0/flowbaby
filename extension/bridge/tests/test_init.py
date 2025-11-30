@@ -16,7 +16,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 @pytest.mark.asyncio
 async def test_initialize_missing_llm_api_key(temp_workspace, monkeypatch):
-    """Test that initialization fails with clear error when LLM_API_KEY is missing."""
+    """
+    Test that initialization succeeds without LLM_API_KEY.
+    
+    Plan 045 Contract: Initialization no longer requires API key to succeed.
+    - success: True (init completes for non-LLM operations)
+    - api_key_configured: False (indicates key is not set)
+    - llm_ready: False (LLM operations will fail until key is provided)
+    """
     # Remove LLM_API_KEY from environment
     monkeypatch.delenv('LLM_API_KEY', raising=False)
 
@@ -30,12 +37,13 @@ async def test_initialize_missing_llm_api_key(temp_workspace, monkeypatch):
 
         result = await initialize_cognee(str(temp_workspace))
 
-        assert result['success'] is False
-        # Check for new structured error format
-        assert 'error_code' in result
-        assert result['error_code'] == 'MISSING_API_KEY'
-        # Error message now in 'error' field, not 'user_message'
-        assert 'LLM_API_KEY' in result['error']
+        # Plan 045: Initialization succeeds without API key
+        assert result['success'] is True
+        # Plan 045: New fields indicate API key status
+        assert result['api_key_configured'] is False
+        assert result['llm_ready'] is False
+        # No error_code field in success response
+        assert 'error_code' not in result
 
 
 @pytest.mark.asyncio
@@ -60,7 +68,14 @@ async def test_initialize_workspace_storage_directories(temp_workspace, mock_env
 
 @pytest.mark.asyncio
 async def test_initialize_success_with_llm_api_key(temp_workspace, mock_env, mock_cognee_module, sample_ontology):
-    """Test successful initialization with valid LLM_API_KEY."""
+    """
+    Test successful initialization with valid LLM_API_KEY.
+    
+    Plan 045: When API key is provided:
+    - success: True
+    - api_key_configured: True
+    - llm_ready: True
+    """
     # Mock load_ontology to return sample ontology data
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
         with patch('init.load_ontology') as mock_load_ontology:
@@ -79,6 +94,9 @@ async def test_initialize_success_with_llm_api_key(temp_workspace, mock_env, moc
             assert result['ontology_loaded'] is True
             assert result['ontology_entities'] == 8
             assert result['ontology_relationships'] == 12  # Actual count from real ontology.ttl
+            # Plan 045: Verify API key status fields
+            assert result['api_key_configured'] is True
+            assert result['llm_ready'] is True
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { FlowbabyClient, RetrievalResult } from './flowbabyClient';
+import { FlowbabyClient, RetrievalResult, InitializeResult } from './flowbabyClient';
 import { ConversationSummary } from './summaryTemplate';
 import { parseSummaryFromText } from './summaryParser';
 import { registerIngestForAgentCommand } from './commands/ingestForAgent';
@@ -202,12 +202,18 @@ export async function activate(_context: vscode.ExtensionContext) {
                             title: "Initializing Flowbaby databases...",
                             cancellable: false
                         }, async () => {
-                            const initialized = await flowbabyClient!.initialize();
+                            const initResult = await flowbabyClient!.initialize();
                             
-                            if (initialized) {
+                            if (initResult.success) {
                                 clientInitialized = true;
                                 clientInitializationFailed = false;
-                                statusBar.setStatus(FlowbabyStatus.Ready);
+                                
+                                // Plan 045: Set status bar based on API key state
+                                if (initResult.apiKeyState.llmReady) {
+                                    statusBar.setStatus(FlowbabyStatus.Ready);
+                                } else {
+                                    statusBar.setStatus(FlowbabyStatus.NeedsApiKey);
+                                }
                                 
                                 // Initialize FlowbabyContextProvider if not already done
                                 if (!flowbabyContextProvider) {
@@ -224,9 +230,23 @@ export async function activate(_context: vscode.ExtensionContext) {
                                 }
                                 
                                 outputChannel.appendLine('[Plan 040] ✅ Flowbaby client initialized successfully');
-                                vscode.window.showInformationMessage('Flowbaby is ready!');
+                                
+                                // Plan 045: Show different message based on API key state
+                                if (initResult.apiKeyState.llmReady) {
+                                    vscode.window.showInformationMessage('Flowbaby is ready!');
+                                } else {
+                                    // Post-init API key prompt
+                                    const action = await vscode.window.showWarningMessage(
+                                        'Flowbaby initialized. Set your API key to enable LLM operations.',
+                                        'Set API Key',
+                                        'Later'
+                                    );
+                                    if (action === 'Set API Key') {
+                                        vscode.commands.executeCommand('Flowbaby.setApiKey');
+                                    }
+                                }
                             } else {
-                                throw new Error('Client initialization returned false');
+                                throw new Error(initResult.error || 'Client initialization failed');
                             }
                         });
                     } catch (error) {
@@ -342,20 +362,37 @@ export async function activate(_context: vscode.ExtensionContext) {
         // Plan 040 M4: Increase timeout from 15s to 60s to handle first-run database creation
         // (creating SQLite, Kuzu, and LanceDB databases can exceed 15s on slower machines)
         const initPromise = flowbabyClient.initialize();
-        const timeoutPromise = new Promise<boolean>((resolve) => {
+        
+        // Plan 045: Timeout now returns a failed InitializeResult instead of false
+        const timeoutPromise = new Promise<InitializeResult>((resolve) => {
             setTimeout(() => {
                 console.warn('Flowbaby initialization timed out after 60s');
-                resolve(false);
+                resolve({
+                    success: false,
+                    apiKeyState: {
+                        pythonConfigured: false,
+                        typescriptConfigured: false,
+                        llmReady: false,
+                        statusMessage: 'Initialization timed out'
+                    },
+                    error: 'Initialization timed out after 60s'
+                });
             }, 60000);
         });
 
-        const initialized = await Promise.race([initPromise, timeoutPromise]);
+        const initResult = await Promise.race([initPromise, timeoutPromise]);
 
-        if (initialized) {
+        if (initResult.success) {
             const initDuration = Date.now() - activationStart;
             console.log('Flowbaby client initialized successfully');
             debugLog('Client initialization successful', { duration_ms: initDuration });
-            statusBar.setStatus(FlowbabyStatus.Ready);
+            
+            // Plan 045: Set status bar based on API key state
+            if (initResult.apiKeyState.llmReady) {
+                statusBar.setStatus(FlowbabyStatus.Ready);
+            } else {
+                statusBar.setStatus(FlowbabyStatus.NeedsApiKey);
+            }
             
             // Plan 032 M1: Mark client as initialized for graceful degradation
             clientInitialized = true;
@@ -394,6 +431,20 @@ export async function activate(_context: vscode.ExtensionContext) {
             
             // Plan 016.1: Register languageModelTools unconditionally (Configure Tools is sole opt-in)
             registerLanguageModelTool(_context, agentOutputChannel);
+            
+            // Plan 045: Show post-init API key prompt if needed
+            if (!initResult.apiKeyState.llmReady) {
+                // Non-blocking prompt for API key setup
+                vscode.window.showWarningMessage(
+                    'Flowbaby initialized. Set your API key to enable memory operations.',
+                    'Set API Key',
+                    'Later'
+                ).then(action => {
+                    if (action === 'Set API Key') {
+                        vscode.commands.executeCommand('Flowbaby.setApiKey');
+                    }
+                });
+            }
         } else {
             const initDuration = Date.now() - activationStart;
             console.warn('Flowbaby client initialization failed (see Output Channel)');

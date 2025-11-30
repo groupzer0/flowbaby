@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.5] - 2025-11-30
+
+### Fixed - Plan 045: Fix Fresh Install API Key Blocking
+
+**Fresh Install Experience Release** - Eliminates API key blocking issue that prevented new users from completing setup.
+
+#### Problem Resolved
+- **Issue**: Fresh installations failed with "LLM_API_KEY not found in environment" error
+- **Impact**: New users couldn't complete Flowbaby setup without already having an API key configured
+- **Root Cause**: `init.py` required API key before user had opportunity to set it
+
+#### Changes
+
+##### Python Bridge (`init.py`)
+- **Modified**: API key validation now logs warning instead of returning error
+- **Added**: `api_key_configured` and `llm_ready` fields to initialization response
+- **Behavior**: Initialization completes successfully, directories and databases created without API key
+
+##### TypeScript Client (`flowbabyClient.ts`)
+- **Added**: `ApiKeyState` interface for centralized API key tracking
+- **Added**: `InitializeResult` interface with success status and API key state
+- **Added**: `hasApiKey()` public method for pre-checking API key availability
+- **Modified**: `initialize()` now returns `InitializeResult` with API key state
+
+##### Status Bar (`FlowbabyStatusBar.ts`)
+- **Added**: `NeedsApiKey` status with distinct key icon and warning background
+- **Behavior**: Shows $(key) icon when initialized but API key not configured
+
+##### Extension Activation (`extension.ts`)
+- **Added**: Post-initialization API key prompt when no key configured
+- **Added**: Graceful handling of `InitializeResult` return type
+- **Behavior**: Shows "Set your API key to enable LLM operations" with action button
+
+##### Graceful Degradation
+- **Added**: Pre-check in `ingestForAgent` and `FlowbabyContextProvider.retrieveContext`
+- **Behavior**: If no API key, prompts user with "Set API Key" action before attempting operation
+- **Message**: "Flowbaby memory operations require an API key."
+
+#### User Experience
+1. Fresh install now completes successfully
+2. Status bar shows key icon indicating API key needed
+3. User prompted to set API key after initialization
+4. Memory operations prompt for API key if not configured
+5. All existing functionality preserved when API key is set
+
 ## [0.5.2] - 2025-11-29
 
 ### Removed - Plan 044: Remove Non-Functional Auto-Ingest Setting

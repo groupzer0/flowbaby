@@ -1,11 +1,17 @@
 import * as vscode from 'vscode';
 import { debugLog } from '../outputChannels';
 
+/**
+ * Status bar states for Flowbaby extension
+ * Plan 045: Added NeedsApiKey state for fresh installs without API key
+ */
 export enum FlowbabyStatus {
     Ready = 'Ready',
     SetupRequired = 'SetupRequired',
     Refreshing = 'Refreshing',
-    Error = 'Error'
+    Error = 'Error',
+    /** Plan 045: Core initialized but API key not configured */
+    NeedsApiKey = 'NeedsApiKey'
 }
 
 export class FlowbabyStatusBar {
@@ -118,6 +124,12 @@ export class FlowbabyStatusBar {
                 this.statusBarItem.text = '$(error) Flowbaby';
                 this.statusBarItem.tooltip = `Flowbaby: Error - ${this.message}`;
                 this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+                break;
+            case FlowbabyStatus.NeedsApiKey:
+                // Plan 045: Distinct state for initialized but missing API key
+                this.statusBarItem.text = '$(key) Flowbaby';
+                this.statusBarItem.tooltip = 'Flowbaby: API Key Required - Click to configure';
+                this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
                 break;
         }
     }

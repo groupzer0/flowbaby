@@ -38,6 +38,8 @@ suite('FlowbabyContextProvider Test Suite', () => {
 
         // Create mock client
         mockClient = sandbox.createStubInstance(FlowbabyClient);
+        // Plan 045: Stub hasApiKey to return true by default for tests
+        mockClient.hasApiKey.resolves(true);
     });
 
     teardown(() => {
@@ -528,6 +530,68 @@ suite('FlowbabyContextProvider Test Suite', () => {
 
             // Verify FIFO order
             assert.deepStrictEqual(executionOrder, [1, 2, 3], 'Should execute in FIFO order');
+        });
+    });
+
+    suite('API Key Pre-Check (Plan 045)', () => {
+        test('Returns INVALID_REQUEST error when API key is missing', async () => {
+            const provider = createProvider();
+            
+            // Mock hasApiKey to return false (no API key configured)
+            mockClient.hasApiKey.resolves(false);
+            
+            // Stub the warning message to avoid UI interaction in tests
+            const showWarningStub = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+            
+            const response = await provider.retrieveContext({ query: 'test query' });
+
+            // Verify error response
+            assert.strictEqual('error' in response, true, 'Should return error response');
+            if ('error' in response) {
+                assert.strictEqual(response.error, AgentErrorCode.INVALID_REQUEST);
+                assert.ok(response.message.includes('API key not configured'));
+                assert.ok(response.message.includes('Set API Key'));
+            }
+            
+            // Verify client.retrieve was NOT called (short-circuit)
+            assert.strictEqual(mockClient.retrieve.called, false, 'Should not call bridge when API key missing');
+            
+            // Verify user was prompted
+            assert.strictEqual(showWarningStub.called, true, 'Should show warning to user');
+        });
+
+        test('Proceeds with retrieval when API key is configured', async () => {
+            const provider = createProvider();
+            
+            // Mock hasApiKey to return true (API key configured)
+            mockClient.hasApiKey.resolves(true);
+            mockClient.retrieve.resolves(createMockResults(1));
+            
+            const response = await provider.retrieveContext({ query: 'test query' });
+
+            // Verify success response
+            assert.strictEqual('error' in response, false, 'Should not return error');
+            if ('entries' in response) {
+                assert.strictEqual(response.entries.length, 1);
+            }
+            
+            // Verify client.retrieve WAS called
+            assert.strictEqual(mockClient.retrieve.called, true, 'Should call bridge when API key present');
+        });
+
+        test('Logs API key missing to output channel', async () => {
+            const provider = createProvider();
+            mockClient.hasApiKey.resolves(false);
+            sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+            
+            await provider.retrieveContext({ query: 'test query' });
+
+            // Verify logging
+            const appendLineCalls = (outputChannel.appendLine as sinon.SinonStub).getCalls();
+            const hasApiKeyLog = appendLineCalls.some(call => 
+                call.args[0].includes('API key not configured')
+            );
+            assert.strictEqual(hasApiKeyLog, true, 'Should log API key missing');
         });
     });
 });

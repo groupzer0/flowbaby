@@ -97,8 +97,12 @@ suite('Agent Ingestion Integration Tests', () => {
                     operationId: 'test-operation'
             });
 
+            // Plan 045: Stub hasApiKey to return true so pre-check passes
+            const hasApiKeyStub = sinon.stub().resolves(true);
+
             const fakeClient = {
-                ingestSummaryAsync: ingestStub
+                ingestSummaryAsync: ingestStub,
+                hasApiKey: hasApiKeyStub
             } as unknown as FlowbabyClient;
 
             const fakeOutput = {
@@ -200,6 +204,147 @@ suite('Agent Ingestion Integration Tests', () => {
                 console.warn('Command not available or timed out in test environment:', error);
                 this.skip();
             }
+        });
+    });
+
+    suite('API Key Pre-Check (Plan 045)', () => {
+        let sandbox: sinon.SinonSandbox;
+
+        setup(() => {
+            sandbox = sinon.createSandbox();
+        });
+
+        teardown(() => {
+            sandbox.restore();
+        });
+
+        test('returns MISSING_API_KEY when API key not configured', async function() {
+            this.timeout(5000);
+
+            // Create stubs for mock client
+            const hasApiKeyStub = sandbox.stub().resolves(false);
+            const ingestStub = sandbox.stub().rejects(new Error('Should not be called'));
+            const appendLineStub = sandbox.stub();
+
+            const mockClient = {
+                hasApiKey: hasApiKeyStub,
+                ingest: ingestStub
+            } as unknown as FlowbabyClient;
+
+            const mockOutputChannel = {
+                appendLine: appendLineStub,
+                append: sandbox.stub(),
+                clear: sandbox.stub(),
+                show: sandbox.stub(),
+                hide: sandbox.stub(),
+                dispose: sandbox.stub(),
+                name: 'Flowbaby',
+                replace: sandbox.stub()
+            } as unknown as vscode.OutputChannel;
+
+            const mockContext = {
+                subscriptions: [],
+                extensionPath: '/tmp/test'
+            } as unknown as vscode.ExtensionContext;
+
+            // Stub the warning message to avoid UI interaction
+            sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
+
+            const validPayload = {
+                topic: 'Test Topic',
+                context: 'Test context for API key pre-check',
+                decisions: ['Test decision'],
+                metadata: {
+                    topicId: 'test-api-key-check',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                agentName: 'Test Agent'
+            };
+
+            const responseJson = await handleIngestForAgent(
+                JSON.stringify(validPayload),
+                mockClient,
+                mockOutputChannel,
+                mockContext
+            );
+            const response = JSON.parse(responseJson);
+
+            // Verify error response
+            expect(response.success).to.be.false;
+            expect(response.errorCode).to.equal('MISSING_API_KEY');
+            expect(response.error).to.include('API key not configured');
+            expect(response.error).to.include('Set API Key');
+
+            // Verify ingest was NOT called (short-circuit)
+            expect(ingestStub.called).to.be.false;
+
+            // Verify logging occurred
+            expect(appendLineStub.called).to.be.true;
+            const logCalls = appendLineStub.getCalls();
+            const hasApiKeyLog = logCalls.some((call: sinon.SinonSpyCall) => 
+                call.args[0].includes('API key not configured')
+            );
+            expect(hasApiKeyLog).to.be.true;
+        });
+
+        test('proceeds past API key check when key is configured', async function() {
+            this.timeout(5000);
+
+            // Create stubs for mock client  
+            const hasApiKeyStub = sandbox.stub().resolves(true);
+            // ingestSummaryAsync will throw since BackgroundOperationManager isn't mocked,
+            // but we're testing that the API key check passes first
+            const ingestSummaryAsyncStub = sandbox.stub().throws(new Error('Expected - testing API key check passed'));
+
+            const mockClient = {
+                hasApiKey: hasApiKeyStub,
+                ingestSummaryAsync: ingestSummaryAsyncStub
+            } as unknown as FlowbabyClient;
+
+            const mockOutputChannel = {
+                appendLine: sandbox.stub(),
+                append: sandbox.stub(),
+                clear: sandbox.stub(),
+                show: sandbox.stub(),
+                hide: sandbox.stub(),
+                dispose: sandbox.stub(),
+                name: 'Flowbaby',
+                replace: sandbox.stub()
+            } as unknown as vscode.OutputChannel;
+
+            const mockContext = {
+                subscriptions: [],
+                extensionPath: '/tmp/test'
+            } as unknown as vscode.ExtensionContext;
+
+            const validPayload = {
+                topic: 'Test Topic',
+                context: 'Test context for successful ingestion',
+                decisions: ['Test decision'],
+                metadata: {
+                    topicId: 'test-with-api-key',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                agentName: 'Test Agent'
+            };
+
+            const responseJson = await handleIngestForAgent(
+                JSON.stringify(validPayload),
+                mockClient,
+                mockOutputChannel,
+                mockContext
+            );
+            const response = JSON.parse(responseJson);
+
+            // The API key check passes, so we get a COGNEE_ERROR (from BackgroundOperationManager not being set up)
+            // instead of MISSING_API_KEY - this proves the API key gate was passed
+            expect(response.success).to.be.false;
+            expect(response.errorCode).to.not.equal('MISSING_API_KEY');
+            
+            // Verify hasApiKey was called and returned true
+            expect(hasApiKeyStub.called).to.be.true;
         });
     });
 });

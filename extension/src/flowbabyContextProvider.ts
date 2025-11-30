@@ -138,6 +138,31 @@ export class FlowbabyContextProvider {
     async retrieveContext(
         req: FlowbabyContextRequest
     ): Promise<FlowbabyContextResponse | AgentErrorResponse> {
+        // Plan 045: Pre-check API key availability for faster feedback
+        const hasApiKey = await this.client.hasApiKey();
+        if (!hasApiKey) {
+            this.outputChannel.appendLine(
+                `[FlowbabyContextProvider] ${new Date().toISOString()} - API key not configured`
+            );
+            
+            // Surface actionable prompt to user
+            const action = await vscode.window.showWarningMessage(
+                'Flowbaby memory operations require an API key.',
+                'Set API Key',
+                'Cancel'
+            );
+            
+            if (action === 'Set API Key') {
+                await vscode.commands.executeCommand('Flowbaby.setApiKey');
+            }
+            
+            return {
+                error: AgentErrorCode.INVALID_REQUEST,
+                message: 'API key not configured. Use "Flowbaby: Set API Key" command.',
+                details: 'LLM operations require a valid API key'
+            };
+        }
+        
         // Validate request
         if (!req.query || req.query.trim().length === 0) {
             return {

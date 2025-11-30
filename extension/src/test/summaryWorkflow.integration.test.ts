@@ -153,10 +153,21 @@ Nov 18 10:00-11:30`;
         });
 
         const FlowbabyClientMod = await import('../flowbabyClient');
-        sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'initialize').resolves(true);
+        // Plan 045: initialize() now returns InitializeResult instead of boolean
+        sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'initialize').resolves({
+            success: true,
+            apiKeyState: {
+                pythonConfigured: true,
+                typescriptConfigured: true,
+                llmReady: true,
+                statusMessage: 'API key configured'
+            }
+        });
         sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'retrieve').resolves([]);
         sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'ingest').resolves(true);
         ingestSummaryStub = sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'ingestSummary').resolves(true);
+        // Plan 045: Stub hasApiKey to return true so API key checks pass
+        sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'hasApiKey').resolves(true);
 
         // Plan 039 M3: Stub health check to return VALID so tests can proceed with initialization
         const FlowbabySetupMod = await import('../setup/FlowbabySetupService');

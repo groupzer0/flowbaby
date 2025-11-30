@@ -38,6 +38,33 @@ interface FlowbabyResult {
 }
 
 /**
+ * Plan 045: Centralized API key state model
+ * Tracks both Python-side (from init.py) and TypeScript-side (SecretStorage) API key status
+ */
+export interface ApiKeyState {
+    /** Whether init.py detected LLM_API_KEY in its environment */
+    pythonConfigured: boolean;
+    /** Whether TypeScript layer has API key in SecretStorage or env */
+    typescriptConfigured: boolean;
+    /** Combined readiness - true if either source has API key */
+    llmReady: boolean;
+    /** User-friendly message about API key status */
+    statusMessage: string;
+}
+
+/**
+ * Plan 045: Result from initialize() with API key state
+ */
+export interface InitializeResult {
+    /** Whether core initialization succeeded (directories, DB, ontology) */
+    success: boolean;
+    /** API key configuration state */
+    apiKeyState: ApiKeyState;
+    /** Error message if success is false */
+    error?: string;
+}
+
+/**
  * Retrieval result with structured metadata per RETRIEVE_CONTRACT.md
  * Supports mixed-mode: enriched summaries (full metadata) and legacy memories (null metadata)
  */
@@ -208,13 +235,35 @@ export class FlowbabyClient {
     /**
      * Initialize Flowbaby for workspace
      * 
-     * Calls init.py to configure Flowbaby with API key from workspace .env
+     * Calls init.py to configure Flowbaby directories, databases, and ontology.
+     * Plan 045: API key is now optional - initialization succeeds without it.
      * 
-     * @returns Promise<boolean> - true if initialized, false on error
+     * @returns Promise<InitializeResult> - Result with success status and API key state
      */
-    async initialize(): Promise<boolean> {
+    async initialize(): Promise<InitializeResult> {
         const startTime = Date.now();
         this.log('INFO', 'Initializing Flowbaby', { workspace: this.workspacePath });
+
+        // Plan 045: Build API key state by checking both TypeScript and Python sources
+        const buildApiKeyState = async (pythonConfigured: boolean): Promise<ApiKeyState> => {
+            const tsApiKey = await this.resolveApiKey();
+            const typescriptConfigured = !!tsApiKey;
+            const llmReady = pythonConfigured || typescriptConfigured;
+            
+            let statusMessage: string;
+            if (llmReady) {
+                statusMessage = 'API key configured - LLM operations ready';
+            } else {
+                statusMessage = 'API key not configured - use "Flowbaby: Set API Key" command';
+            }
+            
+            return {
+                pythonConfigured,
+                typescriptConfigured,
+                llmReady,
+                statusMessage
+            };
+        };
 
         try {
             // Plan 040.1: Use 60-second timeout for initialization
@@ -271,7 +320,21 @@ export class FlowbabyClient {
                     });
                 }
 
-                return true;
+                // Plan 045: Extract API key state from init.py response
+                const pythonConfigured = result.api_key_configured === true;
+                const apiKeyState = await buildApiKeyState(pythonConfigured);
+                
+                // Log API key status
+                this.log('INFO', 'API key status', {
+                    python_configured: apiKeyState.pythonConfigured,
+                    typescript_configured: apiKeyState.typescriptConfigured,
+                    llm_ready: apiKeyState.llmReady
+                });
+
+                return {
+                    success: true,
+                    apiKeyState
+                };
             } else {
                 this.log('ERROR', 'Flowbaby initialization failed', {
                     duration,
@@ -280,7 +343,14 @@ export class FlowbabyClient {
                 vscode.window.showWarningMessage(
                     `Flowbaby initialization failed: ${result.error}`
                 );
-                return false;
+                
+                // Even on failure, provide API key state
+                const apiKeyState = await buildApiKeyState(false);
+                return {
+                    success: false,
+                    apiKeyState,
+                    error: result.error
+                };
             }
         } catch (error) {
             const duration = Date.now() - startTime;
@@ -292,7 +362,14 @@ export class FlowbabyClient {
             vscode.window.showWarningMessage(
                 `Flowbaby initialization error: ${errorMessage}`
             );
-            return false;
+            
+            // Even on exception, provide API key state
+            const apiKeyState = await buildApiKeyState(false);
+            return {
+                success: false,
+                apiKeyState,
+                error: errorMessage
+            };
         }
     }
 
@@ -1466,6 +1543,19 @@ export class FlowbabyClient {
         }
         
         return env;
+    }
+
+    /**
+     * Plan 045: Check if API key is configured
+     * 
+     * Public method to check API key availability without exposing the key.
+     * Used by extension.ts to determine if API key prompt is needed.
+     * 
+     * @returns Promise<boolean> - true if API key is available
+     */
+    async hasApiKey(): Promise<boolean> {
+        const apiKey = await this.resolveApiKey();
+        return !!apiKey;
     }
 
     /**

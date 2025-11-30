@@ -229,18 +229,15 @@ async def initialize_cognee(workspace_path: str) -> dict:
         # Workspace .env loading removed per Plan 037 F2 security finding
         # (plaintext API keys in .env files are a credential exposure risk)
 
-        # Check for API key (provided by TypeScript via LLM_API_KEY environment variable)
+        # Plan 045: Check for API key but don't fail if missing
+        # Per Architectural Decision 1: Initialization no longer implies LLM readiness
+        # The TypeScript layer will handle prompting users to configure the API key
         api_key = os.getenv('LLM_API_KEY')
+        api_key_configured = bool(api_key)
+        
         if not api_key:
-            error_msg = 'LLM_API_KEY not found in environment'
-            logger.error(error_msg)
-            return {
-                'success': False,
-                'error_code': 'MISSING_API_KEY',
-                'user_message': 'LLM_API_KEY not found. Use "Flowbaby: Set API Key" command for secure storage.',
-                'remediation': 'Run "Flowbaby: Set API Key" from Command Palette to configure your API key securely.',
-                'error': error_msg
-            }
+            logger.warning('LLM_API_KEY not found in environment - initialization will continue without LLM configuration')
+            logger.info('User will be prompted to set API key after initialization completes')
 
         # ============================================================================
         # PLAN 033 FIX: Set environment variables BEFORE importing cognee SDK
@@ -394,13 +391,18 @@ async def initialize_cognee(workspace_path: str) -> dict:
 
                 # Initialize Vector DB (LanceDB) via dummy ingestion
                 # Plan 040 M1: Wrap in stdout suppression as LanceDB may print during setup
-                logger.info("Initializing vector database (LanceDB) via setup marker...")
-                with suppress_stdout(logger):
-                    await cognee.add(
-                        data=["Flowbaby environment setup completed"],
-                        dataset_name=dataset_name
-                    )
-                logger.info("Vector database initialized")
+                # Plan 045: Only perform LLM-dependent operations if API key is configured
+                if api_key_configured:
+                    logger.info("Initializing vector database (LanceDB) via setup marker...")
+                    with suppress_stdout(logger):
+                        await cognee.add(
+                            data=["Flowbaby environment setup completed"],
+                            dataset_name=dataset_name
+                        )
+                    logger.info("Vector database initialized")
+                else:
+                    logger.info("Skipping vector database initialization - API key not configured")
+                    logger.info("Vector database will be initialized when API key is provided")
 
                 marker_metadata = {
                     'migrated_at': datetime.now().isoformat(),
@@ -537,8 +539,11 @@ async def initialize_cognee(workspace_path: str) -> dict:
         logger.info("Initialization completed successfully")
 
         # 7. Return extended success JSON with migration metadata and data integrity
+        # Plan 045: Add api_key_configured and llm_ready fields
         return {
             'success': True,
+            'api_key_configured': api_key_configured,
+            'llm_ready': api_key_configured,
             'dataset_name': dataset_name,
             'workspace_path': workspace_path_str,
             'flowbaby_dir': str(flowbaby_dir.absolute()),

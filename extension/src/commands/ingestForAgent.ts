@@ -56,6 +56,32 @@ export async function handleIngestForAgent(
     const startTime = Date.now();
     
     try {
+        // Plan 045: Pre-check API key availability for faster feedback
+        const hasApiKey = await flowbabyClient.hasApiKey();
+        if (!hasApiKey) {
+            outputChannel.appendLine(
+                `[Agent Ingest] ${new Date().toISOString()} - API key not configured`
+            );
+            
+            // Surface actionable prompt to user
+            const action = await vscode.window.showWarningMessage(
+                'Flowbaby memory operations require an API key.',
+                'Set API Key',
+                'Cancel'
+            );
+            
+            if (action === 'Set API Key') {
+                await vscode.commands.executeCommand('Flowbaby.setApiKey');
+            }
+            
+            const response: FlowbabyIngestResponse = {
+                success: false,
+                error: 'API key not configured. Use "Flowbaby: Set API Key" command.',
+                errorCode: 'MISSING_API_KEY'
+            };
+            return JSON.stringify(response);
+        }
+        
         // Step 1: Parse JSON request
         let request: FlowbabyIngestRequest;
         try {
