@@ -6,8 +6,8 @@
   "publisher": "Flowbaby",
   "icon": "media/flowbaby-icon-tightcrop.png",
   "galleryBanner": {
-    "color": "#1e1e1e",
-    "theme": "dark"
+    "color": "#fab34c",
+    "theme": "light"
   },
   "engines": {
     "vscode": "^1.106.0"
