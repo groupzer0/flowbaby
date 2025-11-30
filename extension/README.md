@@ -559,7 +559,7 @@ This extension uses [Cognee](https://github.com/topoteretes/cognee) under the Ap
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
+See [CHANGELOG.md](CHANGELOG.md) for version history and release notes. 
 
 ---
 
