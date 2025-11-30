@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.6] - 2025-11-30
+
+### Fixed - Plan 045 Hotfix: Smoke Test Issues
+
+**Hotfix Release** - Addresses three issues discovered during v0.5.5 smoke testing.
+
+#### Issues Resolved
+
+1. **Progress notification stuck**: "Initializing Flowbaby databases..." progress notification no longer blocks waiting for user input. Post-init API key prompt now shows after progress completes.
+
+2. **Post-init prompt timing**: API key setup prompt now appears after initialization fully completes, not while progress is still showing.
+
+3. **Configure API Key command not found**: `Flowbaby.configureApiKey` command now works from Command Palette (was only `Flowbaby.setApiKey` before).
+
+#### Technical Changes
+
+- Moved post-init API key prompt outside `withProgress` callback to non-blocking `.then()` pattern
+- Added `Flowbaby.configureApiKey` command as alias to `Flowbaby.setApiKey`
+- Added `getApiKeyState()` method to FlowbabyClient for cached state access
+
 ## [0.5.5] - 2025-11-30
 
 ### Fixed - Plan 045: Fix Fresh Install API Key Blocking

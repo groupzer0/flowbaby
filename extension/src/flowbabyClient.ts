@@ -118,6 +118,7 @@ export class FlowbabyClient {
     private readonly outputChannel: vscode.OutputChannel;
     private readonly MAX_PAYLOAD_CHARS = 100000;
     private readonly context: vscode.ExtensionContext;  // Plan 028 M5
+    private cachedApiKeyState: ApiKeyState | null = null;  // Plan 045 Hotfix
 
     /**
      * Constructor - Load configuration and initialize output channel
@@ -330,6 +331,9 @@ export class FlowbabyClient {
                     typescript_configured: apiKeyState.typescriptConfigured,
                     llm_ready: apiKeyState.llmReady
                 });
+
+                // Plan 045 Hotfix: Cache the API key state for later access
+                this.cachedApiKeyState = apiKeyState;
 
                 return {
                     success: true,
@@ -1556,6 +1560,18 @@ export class FlowbabyClient {
     async hasApiKey(): Promise<boolean> {
         const apiKey = await this.resolveApiKey();
         return !!apiKey;
+    }
+
+    /**
+     * Plan 045 Hotfix: Get cached API key state from last initialization
+     * 
+     * Used by extension.ts to show post-init prompt after withProgress completes.
+     * Returns null if initialize() has not been called yet.
+     * 
+     * @returns ApiKeyState | null - cached state or null if not initialized
+     */
+    getApiKeyState(): ApiKeyState | null {
+        return this.cachedApiKeyState;
     }
 
     /**

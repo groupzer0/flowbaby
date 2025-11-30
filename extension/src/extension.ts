@@ -122,6 +122,17 @@ export async function activate(_context: vscode.ExtensionContext) {
         );
         _context.subscriptions.push(setApiKeyCommand);
         
+        // Plan 045 Hotfix: Register Configure API Key command as alias
+        // package.json defines Flowbaby.configureApiKey - make it work too
+        const configureApiKeyCommand = vscode.commands.registerCommand(
+            'Flowbaby.configureApiKey',
+            async () => {
+                // Delegate to setApiKey
+                await vscode.commands.executeCommand('Flowbaby.setApiKey');
+            }
+        );
+        _context.subscriptions.push(configureApiKeyCommand);
+        
         // Plan 028 M5: Register Clear API Key command
         const clearApiKeyCommand = vscode.commands.registerCommand(
             'Flowbaby.clearApiKey',
@@ -231,24 +242,29 @@ export async function activate(_context: vscode.ExtensionContext) {
                                 
                                 outputChannel.appendLine('[Plan 040] ✅ Flowbaby client initialized successfully');
                                 
-                                // Plan 045: Show different message based on API key state
-                                if (initResult.apiKeyState.llmReady) {
-                                    vscode.window.showInformationMessage('Flowbaby is ready!');
-                                } else {
-                                    // Post-init API key prompt
-                                    const action = await vscode.window.showWarningMessage(
-                                        'Flowbaby initialized. Set your API key to enable LLM operations.',
-                                        'Set API Key',
-                                        'Later'
-                                    );
-                                    if (action === 'Set API Key') {
-                                        vscode.commands.executeCommand('Flowbaby.setApiKey');
-                                    }
-                                }
+                                // Plan 045: Store init result for post-progress prompt
+                                // Don't show prompt inside withProgress - it blocks the progress indicator
                             } else {
                                 throw new Error(initResult.error || 'Client initialization failed');
                             }
                         });
+                        
+                        // Plan 045 Fix: Show post-init prompt AFTER withProgress completes
+                        // This ensures progress notification dismisses immediately
+                        if (!flowbabyClient!.getApiKeyState()?.llmReady) {
+                            // Non-blocking prompt for API key setup
+                            vscode.window.showWarningMessage(
+                                'Flowbaby initialized. Set your API key to enable LLM operations.',
+                                'Set API Key',
+                                'Later'
+                            ).then(action => {
+                                if (action === 'Set API Key') {
+                                    vscode.commands.executeCommand('Flowbaby.setApiKey');
+                                }
+                            });
+                        } else {
+                            vscode.window.showInformationMessage('Flowbaby is ready!');
+                        }
                     } catch (error) {
                         // Plan 040 M2: Handle initialization failures gracefully
                         clientInitialized = false;
