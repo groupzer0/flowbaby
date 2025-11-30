@@ -6,19 +6,32 @@ Flowbaby captures and summarizes key moments from your GitHub Copilot chats, the
 
 ## Features
 
--- **Context aware automatic memory search** - Flowbaby is configured to use chat conversation cues to search memory and add that memory context to the chat - keeping your Copilot agent from drifting and saving you from having to explain what happened all over again. 
+- **Context aware automatic memory search** - Flowbaby is configured to use chat conversation cues to search memory and add that memory context to the chat - keeping your Copilot agent from drifting and saving you from having to explain what happened all over again.
+
 ![Automatic Search](media/auto-search.png)
--- **Context aware automatic memory storage** - Flowbaby knows when it's a good time to summarize and store memories based on the chat context. 
+
+- **Context aware automatic memory storage** - Flowbaby knows when it's a good time to summarize and store memories based on the chat context.
+
 ![Automatic Store](media/auto-store.png)
--- **@flowbaby chat participant** – A dedicated Copilot participant that recalls past conversations and surfaces relevant memories into new chats to reduce drift over long sessions.
+
+- **@flowbaby chat participant** – A dedicated Copilot participant that recalls past conversations and surfaces relevant memories into new chats to reduce drift over long sessions.
+
 ![Interactive Chat Participant](media/interactive-chat-participant.png)
+
 - **Configurable memory behavior via stored prompts** – Guide Flowbaby with stored natural-language instructions (e.g., what to store, what to ignore, how aggressively to retrieve) so each workspace can have its own memory style.
+
 - **Agent tools for storage and retrieval** – Exposes two standard Copilot tools (for storing and retrieving memories) that are available to GitHub Copilot just like any other tool, so agents can autonomously call them when helpful.
+
 - **Keyboard Shortcut Workflow** – Press Ctrl+Alt+F / Cmd+Alt+F to capture important snippets from chat or code with a quick confirmation flow.
+
 - **Command Palette Alternative** – Run “Flowbaby: Capture to Memory” if you prefer command-palette based capture.
+
 ![Manual Store](media/manual-store-summary.png)
+
 - **Workspace Isolation** – Each workspace has its own separate memory and Python environment—no cross-project leakage.
+
 - **Hybrid Graph-Vector Search** – Combines knowledge-graph structure with vector similarity for higher-quality, controllable retrieval.
+
 - **Privacy-First Design** – All data stays on your machine; only chat content already sent to GitHub Copilot is summarized, and no repository files or file content are sent to any external LLM.
 
 ## Prerequisites
@@ -80,7 +93,7 @@ This stores the key securely and applies to all workspaces automatically.
 
 To get the full value from Flowbaby, you don’t have to start from scratch with custom prompting—Flowbaby already nudges GitHub Copilot to store and retrieve memory when it makes sense. However, strong Copilot instructions are still important if you want Copilot-initiated memory storage and retrieval to match your workflow (what to remember, what to ignore, how aggressive to be). The template below is a recommended starting point you can customize.
 
-Create or modify an `.agent.md`, `.chatmode.md` or `.copilot-instructions.md` file in your workspace and add something like thexample below, or use it exactly as-is.
+Create or modify an `.agent.md`, `.chatmode.md` or `.copilot-instructions.md` file in your workspace and add something like the example below, or use it exactly as-is.
 
 **Example Copilot instructions:**
 
@@ -101,7 +114,7 @@ At the start of any turn where past work might matter (prior plans, decisions, c
 
 1. Call #flowbabyRetrieveMemory **before** deep planning or multi-step reasoning.
 2. Use a natural-language query that:
-   - Describes the current task,question, or challenge
+   - Describes the current task, question, or challenge
    - Mentions the area of the codebase or system involved
    - States what you are looking for (e.g., prior decisions, constraints, risks, patterns, open questions)
 3. Prefer a small set of high-value memories (default: 3) rather than many low-signal items.
@@ -256,9 +269,9 @@ In normal use, Flowbaby creates and maintains summaries for you automatically.
 **Manual and agent-driven summaries (optional)**:
 - You can still ask Flowbaby to create a summary explicitly if you want tighter control.
 - In Copilot Chat, you can say things like:
-   - `@flowbaby summarize this conversation`
-   - `@flowbaby remember this session`
-   - `@flowbaby create summary for this plan`
+  - `@flowbaby summarize this conversation`
+  - `@flowbaby remember this session`
+  - `@flowbaby create summary for this plan`
 - Custom agents can also store summaries directly using Flowbaby's tools and APIs (see the Flowbaby docs at [docs.flowbaby.ai](https://docs.flowbaby.ai)).
 
 The key idea: you don't need to manage summaries manually unless you want to – Flowbaby's automatic storage is usually enough.
@@ -383,8 +396,6 @@ Searches Flowbaby knowledge graph for relevant memories.
 - `maxResults` (optional): Max results to return (default: 3, max: 10)
 
 **Returns**: Both narrative markdown and structured JSON for agent parsing.
-
-### Agent Integration Settings
 
 ### Transparency
 
