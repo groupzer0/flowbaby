@@ -331,10 +331,18 @@ async def retrieve_context(
                 'result_count': len(search_results) if search_results else 0
             }})
         except Exception as search_error:
-            # If database doesn't exist yet (no data ingested), return empty results
+            # If database/dataset doesn't exist yet (no data ingested), return empty results gracefully
             error_msg = str(search_error)
+            error_type = type(search_error).__name__
             logger.warning(f"Search error: {error_msg}")
-            if 'DatabaseNotCreatedError' in error_msg or 'database' in error_msg.lower():
+            
+            # v0.5.8: Handle DatasetNotFoundError (fresh workspace with no data)
+            # This is a normal condition when the user has initialized but not yet stored any memories
+            if ('DatabaseNotCreatedError' in error_msg or 
+                'DatasetNotFoundError' in error_type or
+                'No datasets found' in error_msg or
+                'database' in error_msg.lower()):
+                logger.info("Fresh workspace detected - no data ingested yet")
                 return {
                     'success': True,
                     'results': [],
@@ -344,7 +352,7 @@ async def retrieve_context(
             # Re-raise other errors with structured payload
             error_payload = {
                 'error_code': 'COGNEE_SDK_ERROR',
-                'error_type': type(search_error).__name__,
+                'error_type': error_type,
                 'message': str(search_error),
                 'traceback': str(search_error)
             }

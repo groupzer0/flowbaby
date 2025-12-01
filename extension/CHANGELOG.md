@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.8] - 2025-11-30
+
+### Fixed - Hotfix: Fresh Workspace Memory Operations
+
+**Hotfix Release** - Fixes issues discovered when using memory tools on fresh workspaces without stored data.
+
+#### Issues Resolved
+
+1. **DatasetNotFoundError on fresh workspace retrieval**: When querying `@flowbaby` or using `flowbaby_retrieveMemory` on a fresh workspace with no stored memories, the extension now gracefully returns empty results instead of throwing `DatasetNotFoundError: No datasets found`. This is the expected UX - the workspace simply has no memories yet.
+
+2. **BackgroundOperationManager not initialized error**: When using `flowbaby_storeMemory` tool before full workspace setup, the extension now shows a helpful prompt to initialize the workspace instead of failing with a confusing "BackgroundOperationManager not initialized" error.
+
+3. **Misleading success log on staging failure**: The "✅ Memory staged" log message now only appears when staging actually succeeds. Previously it showed success before checking the result, then showed failure notification.
+
+#### Technical Changes
+
+##### Python Bridge (`retrieve.py`)
+- **Added**: Detection for `DatasetNotFoundError` in search exception handler
+- **Behavior**: Fresh workspaces with no data return `{"success": true, "results": [], "message": "No data has been ingested yet"}`
+
+##### Agent Commands (`ingestForAgent.ts`)
+- **Added**: Try-catch wrapper around `BackgroundOperationManager.getInstance()` call
+- **Behavior**: Returns helpful `NOT_INITIALIZED` error with "Initialize Now" action button
+- **UX**: User sees clear path to fix instead of cryptic error
+
+##### Store Memory Tool (`storeMemoryTool.ts`)
+- **Fixed**: Success log message now appears after response check, not before
+- **Fixed**: Failure log includes actual error message from response
+
 ## [0.5.7] - 2025-11-30
 
 ### Fixed - Hotfix: Smoke Test Issues from v0.5.6

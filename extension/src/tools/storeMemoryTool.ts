@@ -73,13 +73,13 @@ export class StoreMemoryTool implements vscode.LanguageModelTool<StoreMemoryTool
             );
 
             const duration = Date.now() - startTime;
-            this.outputChannel.appendLine(`  ✅ Memory staged in ${duration}ms`);
 
             // Parse and return response
             const response = JSON.parse(responseJson || '{"success":false,"error":"No response"}');
             
             // Return staged messaging per Plan 017 architecture
             if (response.success && response.staged) {
+                this.outputChannel.appendLine(`  ✅ Memory staged in ${duration}ms`);
                 this.outputChannel.appendLine(`  📝 Operation ID: ${response.operationId}`);
                 this.outputChannel.appendLine(`  ⏳ Background processing started`);
                 
@@ -95,6 +95,9 @@ export class StoreMemoryTool implements vscode.LanguageModelTool<StoreMemoryTool
             }
             
             // Issue 1 (v0.5.7): Show failure notification for failed ingestions
+            // v0.5.8: Fixed log message to show failure, not success
+            this.outputChannel.appendLine(`  ❌ Staging failed after ${duration}ms: ${response.error || 'Unknown error'}`);
+            
             // This is always shown regardless of showIngestionSuccess setting
             vscode.window.showWarningMessage(
                 `⚠️ Memory ingestion failed: ${response.error || 'Unknown error'}`,

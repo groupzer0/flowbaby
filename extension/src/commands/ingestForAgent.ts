@@ -145,8 +145,38 @@ export async function handleIngestForAgent(
 
         try {
             // Get BackgroundOperationManager instance
-            const { BackgroundOperationManager } = await import('../background/BackgroundOperationManager');
-            const manager = BackgroundOperationManager.getInstance();
+            // v0.5.8: Handle case where manager isn't initialized (fresh workspace)
+            let manager;
+            try {
+                const { BackgroundOperationManager } = await import('../background/BackgroundOperationManager');
+                manager = BackgroundOperationManager.getInstance();
+            } catch (managerError) {
+                // Manager not initialized - this happens on fresh workspace before full setup
+                // Fall back to synchronous ingestion or provide helpful error
+                const errorMessage = managerError instanceof Error ? managerError.message : String(managerError);
+                
+                outputChannel.appendLine(
+                    `[Agent Ingest] ${new Date().toISOString()} - Agent: ${request.agentName || 'Unknown'} - Topic: ${request.topic} - Status: error - ${errorMessage}`
+                );
+                
+                const response: FlowbabyIngestResponse = {
+                    success: false,
+                    error: 'Flowbaby is not fully initialized. Please run "Flowbaby: Initialize Workspace" first.',
+                    errorCode: 'NOT_INITIALIZED'
+                };
+                
+                // Surface actionable prompt to user
+                vscode.window.showWarningMessage(
+                    'Flowbaby needs to complete setup before storing memories.',
+                    'Initialize Now'
+                ).then(action => {
+                    if (action === 'Initialize Now') {
+                        vscode.commands.executeCommand('Flowbaby.initializeWorkspace');
+                    }
+                });
+                
+                return JSON.stringify(response);
+            }
             
             const result = await flowbabyClient.ingestSummaryAsync({
                 topic: request.topic,
