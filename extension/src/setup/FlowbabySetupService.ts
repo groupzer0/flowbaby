@@ -691,7 +691,19 @@ export class FlowbabySetupService {
 
     private runCommand(command: string, args: string[], cwd: string, captureOutput: boolean = false): Promise<string> {
         return new Promise((resolve, reject) => {
-            const proc = this.spawnFn(command, args, { cwd, shell: true }); // shell: true for path resolution
+            // Plan 022: Quote command and args if they contain spaces for shell: true safety
+            // This is required because spawn with shell: true does not auto-quote on Windows
+            const quoteIfNecessary = (s: string): string => {
+                if (s.includes(' ') && !s.startsWith('"') && !s.endsWith('"')) {
+                    return `"${s}"`;
+                }
+                return s;
+            };
+
+            const quotedCommand = quoteIfNecessary(command);
+            const quotedArgs = args.map(quoteIfNecessary);
+
+            const proc = this.spawnFn(quotedCommand, quotedArgs, { cwd, shell: true }); // shell: true for path resolution
             let stdout = '';
             let stderr = '';
 

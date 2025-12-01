@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.9] - 2025-12-01
+
+### Fixed - Plan 022: Windows Path Spaces Fix
+
+**Critical Fix** - Resolves environment creation failures on Windows when the workspace path contains spaces.
+
+#### Issues Resolved
+- **Environment Creation Failure**: Fixed a bug where `Flowbaby: Initialize Workspace` would fail or create stray folders if the workspace path contained spaces (e.g., `C:\Users\My Name\Project`).
+- **Root Cause**: Node.js `spawn` with `shell: true` does not automatically quote arguments on Windows, causing paths with spaces to be split into multiple arguments.
+- **Fix**: Implemented robust quoting logic in `FlowbabySetupService` to ensure both the command and arguments are correctly quoted when they contain spaces.
+
+#### Technical Changes
+- **FlowbabySetupService**: Added `quoteIfNecessary` helper in `runCommand` to wrap paths in double quotes if they contain spaces and aren't already quoted.
+- **Cross-Platform Safety**: Verified that the quoting logic is safe for Windows (`cmd.exe`) and Unix-like systems (`/bin/sh`), ensuring no regressions on macOS/Linux.
+- **Test Coverage**: Added unit tests to `FlowbabySetupService.test.ts` to verify that commands and arguments are correctly quoted before being passed to `spawn`.
+
 ## [0.5.8] - 2025-11-30
 
 ### Fixed - Hotfix: Fresh Workspace Memory Operations
