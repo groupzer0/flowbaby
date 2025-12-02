@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { spawn, ChildProcess, SpawnOptions } from 'child_process';
+import { spawn, ChildProcess, SpawnOptions, execFileSync } from 'child_process';
 import { getFlowbabyOutputChannel, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
 
@@ -152,6 +152,9 @@ export class FlowbabyClient {
         // Detect Python interpreter using auto-detection or explicit config
         this.pythonPath = this.detectPythonInterpreter();
 
+        // Validate Python version compatibility before using the interpreter
+        this.validatePythonVersion(this.pythonPath);
+
         // Log detected interpreter with source attribution
         const configuredPath = config.get<string>('pythonPath', 'python3');
         const detectionSource = (configuredPath !== 'python3' && configuredPath !== '') 
@@ -168,6 +171,68 @@ export class FlowbabyClient {
             rankingHalfLifeDays: this.rankingHalfLifeDays,
             bridgePath: this.bridgePath
         });
+    }
+
+    /**
+     * Validate that the selected Python interpreter is within a supported version range.
+     * 
+     * Current constraint: Python 3.10–3.12 inclusive. Python 3.11 is recommended.
+     * Python 3.13 is not yet supported due to upstream native dependencies (e.g. kuzu).
+     */
+    private validatePythonVersion(pythonPath: string): void {
+        const SUPPORTED_MIN = { major: 3, minor: 10 };
+        const SUPPORTED_MAX = { major: 3, minor: 12 };
+
+        let versionOutput: string;
+        try {
+            // Use --version to avoid importing any modules; keep this as cheap as possible
+            versionOutput = execFileSync(pythonPath, ['--version'], {
+                encoding: 'utf8'
+            }).trim();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.log('ERROR', 'Failed to run python --version', {
+                pythonPath,
+                error: message
+            });
+            vscode.window.showErrorMessage(
+                'Flowbaby: Could not run the selected Python interpreter. ' +
+                'Please verify your Python installation or update the Flowbaby.pythonPath setting.'
+            );
+            throw new Error(`Failed to run python --version for ${pythonPath}: ${message}`);
+        }
+
+        const match = versionOutput.match(/Python\s+(\d+)\.(\d+)\.(\d+)/i);
+        if (!match) {
+            this.log('WARN', 'Unable to parse Python version', { pythonPath, versionOutput });
+            return; // Do not block if we cannot parse; defer to downstream errors
+        }
+
+        const major = parseInt(match[1], 10);
+        const minor = parseInt(match[2], 10);
+
+        const inRange =
+            major === SUPPORTED_MIN.major &&
+            minor >= SUPPORTED_MIN.minor &&
+            minor <= SUPPORTED_MAX.minor;
+
+        if (!inRange) {
+            const friendlyMessage =
+                `Flowbaby requires Python ${SUPPORTED_MIN.major}.${SUPPORTED_MIN.minor}–` +
+                `${SUPPORTED_MAX.major}.${SUPPORTED_MAX.minor} (Python 3.11 recommended). ` +
+                `Detected ${versionOutput} at ${pythonPath}. ` +
+                'Please install a supported Python version and update the Flowbaby.pythonPath setting, ' +
+                'then re-run "Flowbaby: Setup".';
+
+            this.log('ERROR', 'Unsupported Python version for Flowbaby bridge', {
+                pythonPath,
+                versionOutput,
+                supportedRange: '3.10–3.12'
+            });
+
+            vscode.window.showErrorMessage(friendlyMessage);
+            throw new Error(friendlyMessage);
+        }
     }
 
     /**
