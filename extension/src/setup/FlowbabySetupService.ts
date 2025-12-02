@@ -307,7 +307,13 @@ export class FlowbabySetupService {
             } catch (error: unknown) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 this.log('Setup failed: ' + errorMessage);
+                if (error instanceof Error && error.stack) {
+                    this.log('Stack trace: ' + error.stack);
+                }
                 debugLog('Environment creation failed', { error: String(error), venvPath });
+                
+                // Plan 047: Reveal output channel on failure
+                this.outputChannel.show(true);
                 
                 // Rollback
                 if (this.fs.existsSync(venvPath)) {
@@ -349,14 +355,15 @@ export class FlowbabySetupService {
                 // 1. Install dependencies into existing venv
                 progress.report({ message: "Installing dependencies..." });
                 
-                // Get pip path for existing venv
+                // Get python path for existing venv
                 const isWindows = process.platform === 'win32';
-                const pipPath = isWindows
-                    ? path.join(venvPath, 'Scripts', 'pip.exe')
-                    : path.join(venvPath, 'bin', 'pip');
+                const pythonPath = isWindows
+                    ? path.join(venvPath, 'Scripts', 'python.exe')
+                    : path.join(venvPath, 'bin', 'python');
                 
                 const requirementsPath = path.join(this.bridgePath, 'requirements.txt');
-                await this.runCommand(pipPath, ['install', '-r', requirementsPath], this.workspacePath);
+                // Plan 046: Use python -m pip for robustness
+                await this.runCommand(pythonPath, ['-m', 'pip', 'install', '-r', requirementsPath], this.workspacePath);
 
                 // 2. Verify installation
                 progress.report({ message: "Verifying installation..." });
@@ -366,9 +373,6 @@ export class FlowbabySetupService {
                 }
 
                 // 3. Write Metadata
-                const pythonPath = isWindows
-                    ? path.join(venvPath, 'Scripts', 'python.exe')
-                    : path.join(venvPath, 'bin', 'python');
                 const requirementsHash = await this.computeRequirementsHash();
                 
                 await this.writeBridgeEnv({
@@ -386,7 +390,12 @@ export class FlowbabySetupService {
                 return true;
             } catch (error: unknown) {
                 this.log('Setup into existing .venv failed: ' + (error instanceof Error ? error.message : String(error)));
+                if (error instanceof Error && error.stack) {
+                    this.log('Stack trace: ' + error.stack);
+                }
                 debugLog('Setup into existing .venv failed', { error: String(error) });
+                
+                this.outputChannel.show(true);
 
                 vscode.window.showErrorMessage('Failed to install into existing .venv. Check output for details.');
                 if (this.statusBar) {this.statusBar.setStatus(FlowbabyStatus.Error, 'Setup failed');}
@@ -400,18 +409,19 @@ export class FlowbabySetupService {
      */
     async installDependencies(): Promise<void> {
         const requirementsPath = path.join(this.bridgePath, 'requirements.txt');
-        const pipPath = this.getPipPath();
+        const pythonPath = this.getPythonPath();
         
         this.log(`Installing dependencies from ${requirementsPath}...`);
         
         // Plan 028 M2: Debug logging for pip install
         debugLog('Installing pip dependencies', { 
             requirementsPath, 
-            pipPath 
+            pythonPath 
         });
         
         try {
-            await this.runCommand(pipPath, ['install', '-r', requirementsPath], this.workspacePath);
+            // Plan 046: Use python -m pip instead of pip executable for better Windows robustness
+            await this.runCommand(pythonPath, ['-m', 'pip', 'install', '-r', requirementsPath], this.workspacePath);
             this.log('Dependencies installed successfully.');
             debugLog('Pip install completed successfully');
         } catch (e) {
@@ -617,7 +627,12 @@ export class FlowbabySetupService {
             } catch (error: unknown) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 this.log(`Refresh failed: ${errorMessage}`);
+                if (error instanceof Error && error.stack) {
+                    this.log('Stack trace: ' + error.stack);
+                }
                 debugLog('Dependencies refresh failed', { error: String(error) });
+                
+                this.outputChannel.show(true);
                 
                 // Restore backup
                 if (this.fs.existsSync(actualBackupPath)) {
@@ -668,42 +683,15 @@ export class FlowbabySetupService {
             : path.join(this.workspacePath, '.venv', 'bin', 'python');
     }
 
-    /**
-     * Get pip path for managed environment (Plan 028 M3)
-     * Priority: .flowbaby/venv > .venv (legacy fallback)
-     */
-    private getPipPath(): string {
-        const isWindows = process.platform === 'win32';
-        const cogneePip = isWindows
-            ? path.join(this.workspacePath, '.flowbaby', 'venv', 'Scripts', 'pip.exe')
-            : path.join(this.workspacePath, '.flowbaby', 'venv', 'bin', 'pip');
-        
-        // Check .flowbaby/venv first (preferred)
-        if (this.fs.existsSync(cogneePip)) {
-            return cogneePip;
-        }
-        
-        // Fallback to legacy .venv (for backward compatibility)
-        return isWindows
-            ? path.join(this.workspacePath, '.venv', 'Scripts', 'pip.exe')
-            : path.join(this.workspacePath, '.venv', 'bin', 'pip');
-    }
-
     private runCommand(command: string, args: string[], cwd: string, captureOutput: boolean = false): Promise<string> {
         return new Promise((resolve, reject) => {
-            // Plan 022: Quote command and args if they contain spaces for shell: true safety
-            // This is required because spawn with shell: true does not auto-quote on Windows
-            const quoteIfNecessary = (s: string): string => {
-                if (s.includes(' ') && !s.startsWith('"') && !s.endsWith('"')) {
-                    return `"${s}"`;
-                }
-                return s;
-            };
+            // Plan 047: Enhanced diagnostic logging
+            this.log(`[Exec] Running: ${command} ${args.join(' ')}`);
+            this.log(`[Exec] CWD: ${cwd}`);
 
-            const quotedCommand = quoteIfNecessary(command);
-            const quotedArgs = args.map(quoteIfNecessary);
-
-            const proc = this.spawnFn(quotedCommand, quotedArgs, { cwd, shell: true }); // shell: true for path resolution
+            // Plan 046: Use shell: false to let Node.js handle argument quoting
+            // This fixes issues with spaces in paths on Windows where manual quoting + shell: true was fragile
+            const proc = this.spawnFn(command, args, { cwd, shell: false });
             let stdout = '';
             let stderr = '';
 
@@ -721,11 +709,18 @@ export class FlowbabySetupService {
                 if (code === 0) {
                     resolve(stdout.trim());
                 } else {
-                    reject(new Error(`Command failed with code ${code}: ${stderr}`));
+                    // Plan 047: Include stdout in error if captured, to aid debugging
+                    const outputInfo = captureOutput ? `\nStdout: ${stdout}` : '';
+                    reject(new Error(`Command failed with code ${code}: ${stderr}${outputInfo}`));
                 }
             });
             
             proc.on('error', (err) => {
+                // Plan 047: Log system error details
+                this.log(`[Exec] Spawn error: ${err.message}`);
+                if ('code' in err) {
+                    this.log(`[Exec] Error code: ${(err as any).code}`);
+                }
                 reject(err);
             });
         });

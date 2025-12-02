@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.11] - 2025-12-01
+
+### Added - Plan 047: Enhanced Setup Diagnostics
+
+**Diagnostics Release** - Improves troubleshooting for environment setup failures by exposing detailed command execution logs and system errors.
+
+#### Improvements
+- **Command Transparency**: Setup logs now show the exact command, arguments, and working directory for every subprocess execution.
+- **System Error Codes**: Failures now report specific Node.js system error codes (e.g., `ENOENT`, `EACCES`) instead of generic messages.
+- **Full Stack Traces**: Error logs include full stack traces to pinpoint the exact failure location in the code.
+- **Automatic Log Focus**: The Flowbaby Output Channel is automatically revealed when a setup error occurs, ensuring immediate visibility of diagnostic information.
+- **Captured Output**: Standard output from failed commands (which was previously swallowed) is now included in the error logs.
+
+## [0.5.10] - 2025-02-18
+
+### Fixed - Plan 046: Windows Spawn Fix
+
+**Hotfix Release** - Resolves "Environment creation failed" error on Windows when workspace path contains spaces.
+
+#### Issues Resolved
+- **Environment Creation Failure**: Fixed a regression in v0.5.9 where `Flowbaby: Initialize Workspace` failed immediately on Windows if the path contained spaces.
+- **Root Cause**: The manual quoting logic introduced in v0.5.9 conflicted with `spawn`'s `shell: true` behavior on Windows, leading to malformed commands.
+- **Fix**: Switched `FlowbabySetupService.runCommand` to use `shell: false`, allowing Node.js to handle argument escaping natively and robustly across all platforms.
+
+#### Technical Changes
+- **FlowbabySetupService**: Removed `quoteIfNecessary` helper and manual quoting.
+- **Spawn Options**: Changed `shell: true` to `shell: false` for `python` and `pip` commands.
+- **Verification**: Confirmed that `FlowbabyClient` already uses `shell: false` and was unaffected.
+
 ## [0.5.9] - 2025-12-01
 
 ### Fixed - Plan 022: Windows Path Spaces Fix

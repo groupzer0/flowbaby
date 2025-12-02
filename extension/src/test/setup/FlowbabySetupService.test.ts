@@ -210,7 +210,7 @@ suite('FlowbabySetupService Test Suite', () => {
         assert.ok((vscode.window.showInformationMessage as sinon.SinonStub).calledWith(sinon.match(/refreshed successfully/)));
     });
 
-    test('runCommand: Quotes command and args with spaces', async () => {
+    test('runCommand: Uses shell: false and does not quote args', async () => {
         const cmd = '/path with spaces/python';
         const args = ['arg with spaces', 'normal_arg'];
         
@@ -223,8 +223,10 @@ suite('FlowbabySetupService Test Suite', () => {
 
         assert.ok(spawnStub.calledOnce);
         const call = spawnStub.firstCall;
-        assert.strictEqual(call.args[0], '"/path with spaces/python"');
-        assert.deepStrictEqual(call.args[1], ['"arg with spaces"', 'normal_arg']);
-        assert.strictEqual(call.args[2].shell, true);
+        
+        // Plan 046: Verify shell: false and NO manual quoting
+        assert.strictEqual(call.args[0], cmd); // Command passed raw
+        assert.deepStrictEqual(call.args[1], args); // Args passed raw
+        assert.strictEqual(call.args[2].shell, false); // shell: false
     });
 });

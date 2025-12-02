@@ -148,7 +148,11 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
 
     suite('FlowbabySetupService Isolation', () => {
         test('createEnvironment uses .flowbaby/venv', async () => {
-            const outputChannel = { appendLine: sandbox.stub(), append: sandbox.stub() } as any;
+            const outputChannel = { 
+                appendLine: sandbox.stub(), 
+                append: sandbox.stub(),
+                show: sandbox.stub() 
+            } as any;
             const mockFs = { existsSync: sandbox.stub().returns(false) };
             const spawnStub = sandbox.stub();
             
