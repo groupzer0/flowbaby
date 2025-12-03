@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.12] - 2025-12-03
+
+### Fixed - Windows Installation and Stability
+
+**Windows Support Release** - Resolves remaining Windows installation issues and makes the bridge fully reliable on Windows.
+
+#### Improvements
+- **Background Ingestion on Windows**: Switched background ingestion to use `pythonw.exe` when available, preventing stray console windows and improving stability for long-running operations.
+- **Initialization Race Fix**: Resolved a fresh workspace initialization race on Windows, ensuring the bridge environment and Kuzu databases are fully ready before marking setup as complete.
+- **Kuzu and DLL Handling**: Added targeted Windows Kuzu tests and fixed Python detection / Kuzu DLL load issues, resulting in the first fully working end-to-end Windows configuration.
+- **Platform Prerequisites**: Updated documentation to call out the Visual C++ Redistributable requirement on Windows, reducing installation surprises.
+
 ## [0.5.11] - 2025-12-01
 
 ### Added - Plan 047: Enhanced Setup Diagnostics
@@ -19,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Full Stack Traces**: Error logs include full stack traces to pinpoint the exact failure location in the code.
 - **Automatic Log Focus**: The Flowbaby Output Channel is automatically revealed when a setup error occurs, ensuring immediate visibility of diagnostic information.
 - **Captured Output**: Standard output from failed commands (which was previously swallowed) is now included in the error logs.
+
+#### Windows Reliability Improvements
+- **Background Ingestion on Windows**: Switched background ingestion to use `pythonw.exe` when available, preventing stray console windows and improving stability for long-running operations.
+- **Initialization Race Fix**: Resolved a fresh workspace initialization race on Windows, ensuring the bridge environment and Kuzu databases are fully ready before marking setup as complete.
+- **Kuzu and DLL Handling**: Added targeted Windows Kuzu tests and fixed Python detection / Kuzu DLL load issues, resulting in the first fully working end-to-end Windows configuration.
+- **Platform Prerequisites**: Updated documentation to call out the Visual C++ Redistributable requirement on Windows, reducing installation surprises.
 
 ## [0.5.10] - 2025-02-18
 
