@@ -10,19 +10,19 @@ Flowbaby captures and summarizes key moments from your GitHub Copilot chats, the
 
 Flowbaby is configured to use chat conversation cues to search memory and add that memory context to the chat - keeping your Copilot agent from drifting and saving you from having to explain what happened all over again.
 
-![Automatic Search](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/auto-search.png)
+![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/auto-search.png)
 
 ### Context aware automatic memory storage
 
 Flowbaby knows when it's a good time to summarize and store memories based on the chat context.
 
-![Automatic Store](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/auto-store.png)
+![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/auto-store.png)
 
 ### @flowbaby chat participant
 
 A dedicated Copilot participant that recalls past conversations and surfaces relevant memories into new chats to reduce drift over long sessions.
 
-![Interactive Chat Participant](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/interactive-chat-participant.png)
+![Interactive Chat Participant](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/interactive-chat-participant.png)
 
 ### Configurable memory behavior via stored prompts
 
@@ -40,7 +40,7 @@ Press Ctrl+Alt+F / Cmd+Alt+F to capture important snippets from chat or code wit
 
 Run "Flowbaby: Capture to Memory" if you prefer command-palette based capture.
 
-![Manual Store](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/manual-store-summary.png)
+![Manual Store](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/manual-store-summary.png)
 
 ### Workspace Isolation
 
@@ -521,31 +521,31 @@ rm -rf .flowbaby/ .flowbaby/system/ .flowbaby/data/  # In workspace root
 
 ### Automatic Context Search
 
-![Automatic Search](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/auto-search.png)
+![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/auto-search.png)
 
 *Flowbaby automatically searches memory based on chat context*
 
 ### Automatic Memory Storage
 
-![Automatic Store](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/auto-store.png)
+![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/auto-store.png)
 
 *Flowbaby knows when to store memories based on conversation cues*
 
 ### Interactive Chat Participant
 
-![Interactive Chat](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/interactive-chat-participant.png)
+![Interactive Chat](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/interactive-chat-participant.png)
 
 *Use @flowbaby to query your workspace memory*
 
 ### Manual Memory Storage
 
-![Manual Store](https://raw.githubusercontent.com/lsalsich/flowbaby-issues/main/media/manual-store-summary.png)
+![Manual Store](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/manual-store-summary.png)
 
 *Capture important context with keyboard shortcuts*
 
 ## Contributing
 
-We welcome contributions! See [discussions](https://github.com/lsalsich/flowbaby-issues/discussions)
+We welcome contributions! See [discussions](https://github.com/groupzer0/flowbaby-issues/discussions)
 
 ## License
 
@@ -555,8 +555,8 @@ This extension uses [Cognee](https://github.com/topoteretes/cognee) under the Ap
 
 ## Support
 
-- **Report Bugs**: [GitHub Issues](https://github.com/lsalsich/flowbaby-issues/issues)
-- **Feature Requests**: [GitHub Discussions](https://github.com/lsalsich/flowbaby-issues/discussions)
+- **Report Bugs**: [GitHub Issues](https://github.com/groupzer0/flowbaby-issues/issues)
+- **Feature Requests**: [GitHub Discussions](https://github.com/groupzer0/flowbaby-issues/discussions)
 
 ## Changelog
 

@@ -29,7 +29,7 @@ Thank you for contributing to the Cognee Chat Memory extension! This guide cover
 1. **Clone the repository**:
 
    ```bash
-   git clone https://github.com/lsalsich/flowbaby.git
+   git clone https://github.com/groupzer0/flowbaby.git
    cd flowbaby/extension
    ```
 
@@ -283,7 +283,7 @@ See [Commit Message Format](#commit-message-format) for guidelines.
 git push origin feat/descriptive-feature-name
 ```
 
-Open pull request on GitHub: <https://github.com/lsalsich/flowbaby/pulls>
+Open pull request on GitHub: <https://github.com/groupzer0/flowbaby/pulls>
 
 **PR Template**:
 

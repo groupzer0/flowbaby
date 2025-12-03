@@ -199,7 +199,7 @@ Verify:
 
 ### Create GitHub Release
 
-1. Navigate to: <https://github.com/lsalsich/flowbaby/releases>
+1. Navigate to: <https://github.com/groupzer0/flowbaby/releases>
 2. Click **"Draft a new release"**
 
 Fill in release form:

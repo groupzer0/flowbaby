@@ -110,7 +110,7 @@ echo "To clean up after testing:"
 echo "  rm -rf $TEST_WORKSPACE"
 echo
 echo "To uninstall extension:"
-echo "  code --uninstall-extension lsalsich.cognee-chat-memory"
+echo "  code --uninstall-extension groupzer0.cognee-chat-memory"
 echo
 
 # Test workspace path for easy access

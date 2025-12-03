@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.13] - 2025-12-03
+
+### Changed - Maintenance Release
+
+- Version bump only to align with latest internal planning and release numbering. No user-visible functionality changes beyond those already included in 0.5.12.
+
 ## [0.5.12] - 2025-12-03
 
 ### Fixed - Windows Installation and Stability
@@ -1194,4 +1200,4 @@ All features, improvements, and technical details remain as documented in v0.3.3
 - First conversation in new workspace has no context (memory starts empty)
 - macOS and Linux tested; Windows support may require additional configuration
 
-[0.1.0]: https://github.com/lsalsich/flowbaby/releases/tag/v0.1.0
+[0.1.0]: https://github.com/groupzer0/flowbaby/releases/tag/v0.1.0
