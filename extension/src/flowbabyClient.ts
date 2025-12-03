@@ -153,7 +153,7 @@ export class FlowbabyClient {
         this.pythonPath = this.detectPythonInterpreter();
 
         // Validate Python version compatibility before using the interpreter
-        this.validatePythonVersion(this.pythonPath);
+        this.pythonPath = this.validatePythonVersion(this.pythonPath);
 
         // Log detected interpreter with source attribution
         const configuredPath = config.get<string>('pythonPath', 'python3');
@@ -179,33 +179,113 @@ export class FlowbabyClient {
      * Current constraint: Python 3.10–3.12 inclusive. Python 3.11 is recommended.
      * Python 3.13 is not yet supported due to upstream native dependencies (e.g. kuzu).
      */
-    private validatePythonVersion(pythonPath: string): void {
+    /**
+     * Wrapper for execFileSync to facilitate testing
+     */
+    protected execFileSync(command: string, args: string[], options: any): string {
+        return execFileSync(command, args, options).toString();
+    }
+
+    private validatePythonVersion(pythonPath: string): string {
         const SUPPORTED_MIN = { major: 3, minor: 10 };
         const SUPPORTED_MAX = { major: 3, minor: 12 };
 
         let versionOutput: string;
         try {
             // Use --version to avoid importing any modules; keep this as cheap as possible
-            versionOutput = execFileSync(pythonPath, ['--version'], {
+            versionOutput = this.execFileSync(pythonPath, ['--version'], {
                 encoding: 'utf8'
             }).trim();
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.log('ERROR', 'Failed to run python --version', {
-                pythonPath,
-                error: message
-            });
-            vscode.window.showErrorMessage(
-                'Flowbaby: Could not run the selected Python interpreter. ' +
-                'Please verify your Python installation or update the Flowbaby.pythonPath setting.'
-            );
-            throw new Error(`Failed to run python --version for ${pythonPath}: ${message}`);
+            // On Unix-like systems, if the initial fallback command was python3,
+            // try python as a secondary fallback before giving up.
+            const isWindows = process.platform === 'win32';
+            const initialErrorMessage = error instanceof Error ? error.message : String(error);
+
+            // Windows Fallback: If 'python' fails, try 'py' (Python Launcher)
+            if (isWindows && pythonPath === 'python') {
+                this.log('WARN', 'python --version failed; attempting py (Python Launcher) as fallback', {
+                    pythonPath,
+                    error: initialErrorMessage
+                });
+
+                try {
+                    versionOutput = this.execFileSync('py', ['--version'], {
+                        encoding: 'utf8'
+                    }).trim();
+                    // If this succeeds, switch to 'py'
+                    pythonPath = 'py';
+                } catch (fallbackError) {
+                    const fallbackMessage = fallbackError instanceof Error
+                        ? fallbackError.message
+                        : String(fallbackError);
+
+                    this.log('ERROR', 'Failed to run python and py --version', {
+                        primaryError: initialErrorMessage,
+                        fallbackError: fallbackMessage
+                    });
+
+                    const friendlyMessage =
+                        'Flowbaby could not run a Python interpreter. ' +
+                        'Tried both "python" and "py" (Python Launcher) on this system. ' +
+                        'Please ensure Python 3.10–3.12 is installed and available on your PATH, ' +
+                        'or set Flowbaby.pythonPath to a valid interpreter.';
+
+                    throw new Error(friendlyMessage);
+                }
+            } else if (!isWindows && pythonPath === 'python3') {
+                this.log('WARN', 'python3 --version failed; attempting python as fallback', {
+                    pythonPath,
+                    error: initialErrorMessage
+                });
+
+                try {
+                    versionOutput = this.execFileSync('python', ['--version'], {
+                        encoding: 'utf8'
+                    }).trim();
+                    // If this succeeds, continue with version parsing below using python.
+                    pythonPath = 'python';
+                } catch (fallbackError) {
+                    const fallbackMessage = fallbackError instanceof Error
+                        ? fallbackError.message
+                        : String(fallbackError);
+
+                    this.log('ERROR', 'Failed to run python3 and python --version', {
+                        primaryError: initialErrorMessage,
+                        fallbackError: fallbackMessage
+                    });
+
+                    const friendlyMessage =
+                        'Flowbaby could not run a Python interpreter. ' +
+                        'Tried both "python3" and "python" on this system. ' +
+                        'Please ensure Python 3.10–3.12 is installed and available on your PATH, ' +
+                        'or set Flowbaby.pythonPath to a valid interpreter.';
+
+                    // Don't show toast here; the outer catch block will display it to avoid duplicates
+                    throw new Error(friendlyMessage);
+                }
+            } else {
+                this.log('ERROR', 'Failed to run python --version', {
+                    pythonPath,
+                    error: initialErrorMessage
+                });
+
+                // Build a clear, platform-specific message
+                const commandTried = isWindows ? 'python' : pythonPath;
+                const friendlyMessage =
+                    `Flowbaby could not run "${commandTried} --version". ` +
+                    'Please install Python 3.10–3.12 (3.11 recommended) and ensure it is available on your PATH, ' +
+                    'or set Flowbaby.pythonPath to the full path of a valid Python interpreter.';
+
+                // Don't show toast here; the outer catch block will display it to avoid duplicates
+                throw new Error(friendlyMessage);
+            }
         }
 
         const match = versionOutput.match(/Python\s+(\d+)\.(\d+)\.(\d+)/i);
         if (!match) {
             this.log('WARN', 'Unable to parse Python version', { pythonPath, versionOutput });
-            return; // Do not block if we cannot parse; defer to downstream errors
+            return pythonPath; // Do not block if we cannot parse; defer to downstream errors
         }
 
         const major = parseInt(match[1], 10);
@@ -222,7 +302,7 @@ export class FlowbabyClient {
                 `${SUPPORTED_MAX.major}.${SUPPORTED_MAX.minor} (Python 3.11 recommended). ` +
                 `Detected ${versionOutput} at ${pythonPath}. ` +
                 'Please install a supported Python version and update the Flowbaby.pythonPath setting, ' +
-                'then re-run "Flowbaby: Setup".';
+                'then re-run "Flowbaby: Initialize Workspace".';
 
             this.log('ERROR', 'Unsupported Python version for Flowbaby bridge', {
                 pythonPath,
@@ -230,35 +310,36 @@ export class FlowbabyClient {
                 supportedRange: '3.10–3.12'
             });
 
-            vscode.window.showErrorMessage(friendlyMessage);
+            // Don't show toast here; the outer catch block will display it to avoid duplicates
             throw new Error(friendlyMessage);
         }
+
+        return pythonPath;
     }
 
     /**
-     * Detect Python interpreter with auto-detection fallback chain (Plan 028 M3)
+     * Detect Python interpreter with auto-detection fallback chain
      * 
      * Priority order:
-     * 1. Explicit Flowbaby.pythonPath setting (if not default)
-     * 2. .flowbaby/venv virtual environment (managed environment - preferred)
-     * 3. Workspace .venv virtual environment (legacy/fallback)
-     * 4. System python3 fallback
+     * 1. Explicit Flowbaby.pythonPath setting (if set)
+     * 2. .flowbaby/venv virtual environment (managed environment)
+     * 3. System Python ("python" on Windows, "python3" on Unix with "python" fallback)
      * 
      * @returns string - Path to Python interpreter
      */
     private detectPythonInterpreter(): string {
         const config = vscode.workspace.getConfiguration('Flowbaby');
-        const configuredPath = config.get<string>('pythonPath', 'python3');
+        const configuredPath = config.get<string>('pythonPath', '');
 
         // Priority 1: Explicit config always wins (user override is sacred)
-        if (configuredPath !== 'python3' && configuredPath !== '') {
+        if (configuredPath && configuredPath.trim() !== '') {
             debugLog('Python interpreter: using explicit config', { pythonPath: configuredPath });
             return configuredPath;
         }
 
         const isWindows = process.platform === 'win32';
         
-        // Priority 2: Check .flowbaby/venv (managed environment - preferred)
+        // Priority 2: Check .flowbaby/venv (managed environment)
         const flowbabyPath = isWindows
             ? path.join(this.workspacePath, '.flowbaby', 'venv', 'Scripts', 'python.exe')
             : path.join(this.workspacePath, '.flowbaby', 'venv', 'bin', 'python');
@@ -275,26 +356,16 @@ export class FlowbabyClient {
             });
         }
 
-        // Priority 3: Auto-detect legacy workspace .venv (for backward compatibility)
-        const venvPath = isWindows
-            ? path.join(this.workspacePath, '.venv', 'Scripts', 'python.exe')
-            : path.join(this.workspacePath, '.venv', 'bin', 'python');
-
-        try {
-            if (fs.existsSync(venvPath)) {
-                debugLog('Python interpreter: using legacy .venv', { pythonPath: venvPath });
-                return venvPath;
-            }
-        } catch (error) {
-            // Permission error, missing directory, etc. - fall through to system Python
-            this.log('DEBUG', 'Legacy virtual environment detection failed', {
-                venvPath,
-                error: error instanceof Error ? error.message : String(error)
-            });
+        // Priority 3: Fall back to system Python on each platform
+        if (isWindows) {
+            debugLog('Python interpreter: using system python (Windows)');
+            return 'python';
         }
 
-        // Priority 4: Fall back to system Python
-        debugLog('Python interpreter: using system python3');
+        // On Unix-like systems, prefer python3 but fall back to python if needed.
+        // The actual failure mode (if both are missing or broken) will be surfaced
+        // by validatePythonVersion with a clear, user-friendly message.
+        debugLog('Python interpreter: preferring system python3 (Unix)');
         return 'python3';
     }
 

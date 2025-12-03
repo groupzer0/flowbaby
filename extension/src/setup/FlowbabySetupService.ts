@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { spawn } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import * as crypto from 'crypto';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 import { FlowbabyStatusBar, FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
@@ -259,7 +259,7 @@ export class FlowbabySetupService {
                 const isVersionValid = await this.checkPythonVersion(pythonCommand);
                 
                 if (!isVersionValid) {
-                    throw new Error('PYTHON_VERSION_UNSUPPORTED: Python 3.8+ is required.');
+                    throw new Error('PYTHON_VERSION_UNSUPPORTED: Python 3.10–3.12 is required.');
                 }
 
                 // 2. Ensure .flowbaby directory exists
@@ -323,7 +323,7 @@ export class FlowbabySetupService {
 
                 let userMessage = 'Setup failed.';
                 if (errorMessage.includes('PYTHON_VERSION_UNSUPPORTED')) {
-                    userMessage = 'Python 3.8+ is required. Please install it and try again.';
+                    userMessage = 'Python 3.10–3.12 is required. Please install it and try again.';
                 } else if (errorMessage.includes('VERIFICATION_FAILED')) {
                     userMessage = 'Environment verification failed. Check logs.';
                 } else {
@@ -658,8 +658,45 @@ export class FlowbabySetupService {
         });
     }
 
+    /**
+     * Wrapper for execFileSync to facilitate testing
+     */
+    protected execFileSync(command: string, args: string[], options: any): void {
+        execFileSync(command, args, options);
+    }
+
     private getSystemPythonCommand(): string {
-        return process.platform === 'win32' ? 'python' : 'python3';
+        const config = vscode.workspace.getConfiguration('Flowbaby');
+        const configuredPath = config.get<string>('pythonPath', '');
+        if (configuredPath && configuredPath.trim() !== '') {
+            return configuredPath;
+        }
+
+        if (process.platform === 'win32') {
+            try {
+                this.execFileSync('python', ['--version'], { stdio: 'ignore' });
+                return 'python';
+            } catch {
+                try {
+                    this.execFileSync('py', ['--version'], { stdio: 'ignore' });
+                    return 'py';
+                } catch {
+                    return 'python';
+                }
+            }
+        } else {
+            try {
+                this.execFileSync('python3', ['--version'], { stdio: 'ignore' });
+                return 'python3';
+            } catch {
+                try {
+                    this.execFileSync('python', ['--version'], { stdio: 'ignore' });
+                    return 'python';
+                } catch {
+                    return 'python3';
+                }
+            }
+        }
     }
 
     /**
@@ -791,12 +828,15 @@ export class FlowbabySetupService {
             if (match) {
                 const major = parseInt(match[1]);
                 const minor = parseInt(match[2]);
-                if (major > 3 || (major === 3 && minor >= 8)) {
+                // Enforce 3.10 - 3.12
+                if (major === 3 && minor >= 10 && minor <= 12) {
                     return true;
                 }
+                this.log(`Unsupported Python version detected: ${major}.${minor}. Required: 3.10-3.12`);
             }
             return false;
         } catch (e) {
+            this.log(`Failed to check Python version: ${e}`);
             return false;
         }
     }

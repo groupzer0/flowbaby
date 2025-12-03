@@ -1,10 +1,41 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import * as sinon from 'sinon';
 import { EventEmitter } from 'events';
-import mock = require('mock-fs');
 import { FlowbabyClient } from '../flowbabyClient';
+
+// Helper to create directory structure
+function createTestStructure(basePath: string, structure: any) {
+    if (!fs.existsSync(basePath)) {
+        fs.mkdirSync(basePath, { recursive: true });
+    }
+    for (const key in structure) {
+        const fullPath = path.join(basePath, key);
+        if (typeof structure[key] === 'string') {
+            // Ensure parent directory exists
+            const parentDir = path.dirname(fullPath);
+            if (!fs.existsSync(parentDir)) {
+                fs.mkdirSync(parentDir, { recursive: true });
+            }
+            fs.writeFileSync(fullPath, structure[key]);
+        } else {
+            createTestStructure(fullPath, structure[key]);
+        }
+    }
+}
+
+// Helper to clean up
+function cleanupTestStructure(basePath: string) {
+    if (fs.existsSync(basePath)) {
+        try {
+            fs.rmSync(basePath, { recursive: true, force: true });
+        } catch (e) {
+            console.error(`Failed to cleanup ${basePath}:`, e);
+        }
+    }
+}
 
 /**
  * Creates a mock VS Code ExtensionContext for testing.
@@ -42,7 +73,7 @@ function createMockContext(): vscode.ExtensionContext {
 }
 
 suite('FlowbabyClient Test Suite', () => {
-    const testWorkspacePath = '/tmp/test-workspace';
+    const testWorkspacePath = path.resolve('tmp', 'test-workspace');
     let mockContext: vscode.ExtensionContext;
 
     // Initialize mock context before each test
@@ -52,20 +83,22 @@ suite('FlowbabyClient Test Suite', () => {
 
     suite('detectPythonInterpreter', () => {
         let originalPlatform: string;
-        let _originalConfig: vscode.WorkspaceConfiguration;
+        let sandbox: sinon.SinonSandbox;
 
         setup(() => {
+            sandbox = sinon.createSandbox();
             // Save original platform
             originalPlatform = process.platform;
             
-            // Mock VS Code configuration (saved for potential future cleanup)
-            _originalConfig = vscode.workspace.getConfiguration('Flowbaby');
-            
             // Ensure mockContext is available
             mockContext = createMockContext();
+
+            // Stub execFileSync to avoid actual execution during tests
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
         });
 
         teardown(() => {
+            sandbox.restore();
             // Restore original platform
             Object.defineProperty(process, 'platform', {
                 value: originalPlatform,
@@ -82,27 +115,24 @@ suite('FlowbabyClient Test Suite', () => {
                     return defaultValue;
                 }
             };
-            const getConfigStub = sinon.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
 
             // Execute
             const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
             // Assert: Explicit config is used
             assert.strictEqual(client['pythonPath'], '/usr/bin/python3.11');
-
-            // Cleanup
-            getConfigStub.restore();
         });
 
-        test('Detects .venv/bin/python on Linux/macOS', () => {
-            // Setup: Mock Linux platform and existing .venv
+        test('Detects .flowbaby/venv/bin/python on Linux/macOS', () => {
+            // Setup: Mock Linux platform and existing .flowbaby/venv
             Object.defineProperty(process, 'platform', { value: 'linux', writable: true });
-            const venvPath = path.join(testWorkspacePath, '.venv', 'bin', 'python');
+            const venvPath = path.join(testWorkspacePath, '.flowbaby', 'venv', 'bin', 'python');
             
-            // Mock filesystem with .venv directory structure
-            mock({
-                [testWorkspacePath]: {
-                    '.venv': {
+            // Create real filesystem structure
+            createTestStructure(testWorkspacePath, {
+                '.flowbaby': {
+                    'venv': {
                         'bin': {
                             'python': ''  // Empty file is sufficient for existsSync check
                         }
@@ -110,34 +140,38 @@ suite('FlowbabyClient Test Suite', () => {
                 }
             });
             
+            console.log(`[TEST] Checking if venvPath exists: ${venvPath}`);
+            console.log(`[TEST] Exists: ${fs.existsSync(venvPath)}`);
+
             const mockConfig = {
                 get: (key: string, defaultValue?: string) => {
-                    if (key === 'pythonPath') {return 'python3';} // Default value
+                    if (key === 'pythonPath') {return '';} // Empty to trigger auto-detection
                     return defaultValue;
                 }
             };
-            const getConfigStub = sinon.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
 
             // Execute
             const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
-            // Assert: .venv is detected
+            // Assert: .flowbaby/venv is detected
+            // Note: On Windows running this test, path.join will use backslashes.
+            // The client logic uses path.join, so it should match.
             assert.strictEqual(client['pythonPath'], venvPath);
 
             // Cleanup
-            mock.restore();
-            getConfigStub.restore();
+            cleanupTestStructure(testWorkspacePath);
         });
 
-        test('Detects .venv/Scripts/python.exe on Windows', () => {
-            // Setup: Mock Windows platform and existing .venv
+        test('Detects .flowbaby/venv/Scripts/python.exe on Windows', () => {
+            // Setup: Mock Windows platform and existing .flowbaby/venv
             Object.defineProperty(process, 'platform', { value: 'win32', writable: true });
-            const venvPath = path.join(testWorkspacePath, '.venv', 'Scripts', 'python.exe');
+            const venvPath = path.join(testWorkspacePath, '.flowbaby', 'venv', 'Scripts', 'python.exe');
             
-            // Mock filesystem with .venv directory structure
-            mock({
-                [testWorkspacePath]: {
-                    '.venv': {
+            // Create real filesystem structure
+            createTestStructure(testWorkspacePath, {
+                '.flowbaby': {
+                    'venv': {
                         'Scripts': {
                             'python.exe': ''  // Empty file is sufficient for existsSync check
                         }
@@ -145,91 +179,87 @@ suite('FlowbabyClient Test Suite', () => {
                 }
             });
             
+            console.log(`[TEST] Checking if venvPath exists: ${venvPath}`);
+            console.log(`[TEST] Exists: ${fs.existsSync(venvPath)}`);
+
             const mockConfig = {
                 get: (key: string, defaultValue?: string) => {
-                    if (key === 'pythonPath') {return 'python3';} // Default value
+                    if (key === 'pythonPath') {return '';} // Empty to trigger auto-detection
                     return defaultValue;
                 }
             };
-            const getConfigStub = sinon.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
 
             // Execute
             const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
-            // Assert: .venv is detected with Windows path
+            // Assert: .flowbaby/venv is detected with Windows path
             assert.strictEqual(client['pythonPath'], venvPath);
 
             // Cleanup
-            mock.restore();
-            getConfigStub.restore();
+            cleanupTestStructure(testWorkspacePath);
         });
 
         test('Falls back to python3 when no venv found', () => {
             // Setup: Mock empty workspace (no .venv)
-            mock({
-                [testWorkspacePath]: {}  // Empty workspace directory
-            });
+            createTestStructure(testWorkspacePath, {});
             
             const mockConfig = {
                 get: (key: string, defaultValue?: string) => {
-                    if (key === 'pythonPath') {return 'python3';} // Default value
+                    if (key === 'pythonPath') {return '';} // Empty to trigger auto-detection
                     return defaultValue;
                 }
             };
-            const getConfigStub = sinon.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
 
             // Execute
             const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
             // Assert: Falls back to system python3
-            assert.strictEqual(client['pythonPath'], 'python3');
+            const expectedPython = process.platform === 'win32' ? 'python' : 'python3';
+            assert.strictEqual(client['pythonPath'], expectedPython);
 
             // Cleanup
-            mock.restore();
-            getConfigStub.restore();
+            cleanupTestStructure(testWorkspacePath);
         });
 
         test('Handles permission errors gracefully', () => {
             // Setup: Mock filesystem with permission-restricted directory
             // mock-fs doesn't directly support permission errors, but we can test
             // the try-catch by mocking an empty workspace (simulates graceful fallback)
-            mock({
-                [testWorkspacePath]: {}  // Empty workspace
-            });
+            createTestStructure(testWorkspacePath, {});
             
             const mockConfig = {
                 get: (key: string, defaultValue?: string) => {
-                    if (key === 'pythonPath') {return 'python3';} // Default value
+                    if (key === 'pythonPath') {return '';} // Empty to trigger auto-detection
                     return defaultValue;
                 }
             };
-            const getConfigStub = sinon.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
 
             // Execute
             const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
             // Assert: Falls back to system python3 despite error
             // Note: This tests the fallback path, though mock-fs cannot simulate actual permission errors
-            assert.strictEqual(client['pythonPath'], 'python3');
+            const expectedPython = process.platform === 'win32' ? 'python' : 'python3';
+            assert.strictEqual(client['pythonPath'], expectedPython);
 
             // Cleanup
-            mock.restore();
-            getConfigStub.restore();
+            cleanupTestStructure(testWorkspacePath);
         });
 
         test('Detection completes in <10ms', () => {
             // Setup: Mock empty workspace
-            mock({
-                [testWorkspacePath]: {}
-            });
+            createTestStructure(testWorkspacePath, {});
             
             const mockConfig = {
                 get: (key: string, defaultValue?: string) => {
-                    if (key === 'pythonPath') {return 'python3';}
+                    if (key === 'pythonPath') {return '';} // Empty to trigger auto-detection
                     return defaultValue;
                 }
             };
-            const getConfigStub = sinon.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
 
             // Execute: Run detection 10 times and measure average
             const iterations = 10;
@@ -247,8 +277,7 @@ suite('FlowbabyClient Test Suite', () => {
             assert.ok(averageTime < 10, `Average detection time ${averageTime}ms exceeds 10ms target`);
 
             // Cleanup
-            mock.restore();
-            getConfigStub.restore();
+            cleanupTestStructure(testWorkspacePath);
         });
     });
 

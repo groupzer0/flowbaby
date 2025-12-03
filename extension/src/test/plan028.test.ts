@@ -3,6 +3,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 import * as fs from 'fs';
+import * as path from 'path';
 import mock = require('mock-fs');
 import { FlowbabyClient } from '../flowbabyClient';
 import { FlowbabySetupService } from '../setup/FlowbabySetupService';
@@ -212,7 +213,8 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
             
             // Check that the path argument contains .flowbaby/venv
             const venvPathArg = venvCall.args[1][2]; // ['-m', 'venv', path]
-            assert.ok(venvPathArg.includes('.flowbaby/venv'), `Expected .flowbaby/venv in path, got ${venvPathArg}`);
+            const expectedPath = path.join('.flowbaby', 'venv');
+            assert.ok(venvPathArg.includes(expectedPath), `Expected ${expectedPath} in path, got ${venvPathArg}`);
         });
     });
 });

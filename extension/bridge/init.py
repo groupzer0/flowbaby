@@ -267,9 +267,22 @@ async def initialize_cognee(workspace_path: str) -> dict:
         # NOW import cognee - it will read the env vars we just set
         # Plan 040 M1: Wrap import in stdout suppression as SDK may print during module init
         logger.debug("Importing cognee SDK")
-        with suppress_stdout(logger):
-            import cognee
-            from cognee.infrastructure.databases.relational import create_db_and_tables
+        try:
+            with suppress_stdout(logger):
+                # Plan 040 Hotfix: Pre-check kuzu import to catch DLL errors early
+                import kuzu
+                import cognee
+                from cognee.infrastructure.databases.relational import create_db_and_tables
+        except ImportError as e:
+            # Plan 040 Hotfix: Catch Kuzu DLL load failure on Windows
+            if "DLL load failed" in str(e) and "_kuzu" in str(e):
+                logger.error("Kuzu DLL load failed - missing Visual C++ Redistributable")
+                raise ImportError(
+                    "Flowbaby requires the Microsoft Visual C++ Redistributable on Windows. "
+                    "Please install it from https://aka.ms/vs/17/release/vc_redist.x64.exe "
+                    "and reload the window."
+                ) from e
+            raise
 
         # ============================================================================
         # Belt-and-suspenders: Also call cognee.config methods after import

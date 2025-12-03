@@ -358,8 +358,8 @@
         },
         "Flowbaby.pythonPath": {
           "type": "string",
-          "default": "python3",
-          "markdownDescription": "Path to Python interpreter. Leave as 'python3' for auto-detection of workspace `.venv`. Explicit path overrides auto-detection. Must have `cognee` and `python-dotenv` installed."
+          "default": "",
+          "markdownDescription": "Path to Python interpreter. Leave empty for auto-detection (uses `.flowbaby/venv` if present, otherwise system Python). Set an explicit path to override auto-detection."
         },
         "Flowbaby.logLevel": {
           "type": "string",
