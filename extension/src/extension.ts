@@ -232,6 +232,22 @@ export async function activate(_context: vscode.ExtensionContext) {
                                 } else {
                                     statusBar.setStatus(FlowbabyStatus.NeedsApiKey);
                                 }
+
+                                // FIX: Initialize BackgroundOperationManager for fresh workspaces (Plan 017)
+                                // This is required because activate() returns early for FRESH/BROKEN workspaces,
+                                // skipping the default initialization block.
+                                try {
+                                    const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
+                                    const manager = BackgroundOperationManager.initialize(_context, agentOutputChannel);
+                                    await manager.initializeForWorkspace(workspacePath);
+                                    console.log('BackgroundOperationManager initialized after workspace setup');
+                                    
+                                    // Register background status command if not already registered
+                                    // (Safe to re-register as it overwrites the handler)
+                                    registerBackgroundStatusCommand(_context);
+                                } catch (error) {
+                                    console.error('Failed to initialize BackgroundOperationManager:', error);
+                                }
                                 
                                 // Initialize FlowbabyContextProvider if not already done
                                 if (!flowbabyContextProvider) {
