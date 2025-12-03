@@ -1388,7 +1388,8 @@ export class FlowbabyClient {
                         ...process.env, 
                         PYTHONUNBUFFERED: '1',
                         ...llmEnv 
-                    }
+                    },
+                    windowsHide: true
                 });
                 
                 if (!python.stdout || !python.stderr) {

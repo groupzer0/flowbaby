@@ -289,6 +289,14 @@ export class BackgroundOperationManager {
         
         return operationId;
     }
+
+    /**
+     * Check if a file exists.
+     * Protected to allow mocking in tests.
+     */
+    public checkFileExists(filePath: string): boolean {
+        return fs.existsSync(filePath);
+    }
     
     /**
      * Spawn cognify-only subprocess
@@ -309,13 +317,12 @@ export class BackgroundOperationManager {
             throw new Error(`Operation not found: ${operationId}`);
         }
         const workspacePath = datasetPathOverride || entry.datasetPath;
-        const pythonExecutable = pythonPathOverride || entry.pythonPath || this.defaultPythonPath;
+        let pythonExecutable = pythonPathOverride || entry.pythonPath || this.defaultPythonPath;
         const bridgeScriptPath = bridgeScriptPathOverride || entry.bridgeScriptPath || this.defaultBridgeScriptPath;
         if (!pythonExecutable || !bridgeScriptPath) {
             throw new Error('Missing python or bridge script path for background operation');
         }
         entry.datasetPath = workspacePath;
-        entry.pythonPath = pythonExecutable;
         entry.bridgeScriptPath = bridgeScriptPath;
         
         const args = [
@@ -330,6 +337,17 @@ export class BackgroundOperationManager {
         // By not holding the file open from TypeScript, we allow Python to rotate logs properly.
         const stdio = 'ignore' as const;
 
+        // Use pythonw.exe on Windows to prevent console window from appearing
+        // pythonw.exe is designed for GUI apps and suppresses the console
+        if (process.platform === 'win32' && pythonExecutable.endsWith('python.exe')) {
+            const pythonw = pythonExecutable.replace('python.exe', 'pythonw.exe');
+            if (this.checkFileExists(pythonw)) {
+                pythonExecutable = pythonw;
+            }
+        }
+
+        entry.pythonPath = pythonExecutable;
+
         // Get LLM environment variables for the subprocess
         const llmEnv = await this.getLLMEnvironment(workspacePath);
         
@@ -343,7 +361,8 @@ export class BackgroundOperationManager {
             detached: true,
             stdio: stdio,
             cwd: path.dirname(bridgeScriptPath),
-            env: spawnEnv
+            env: spawnEnv,
+            windowsHide: true
         });
         
         entry.pid = child.pid || null;
@@ -762,7 +781,8 @@ export class BackgroundOperationManager {
         return await new Promise((resolve, reject) => {
             const child = spawn(pythonExecutable, args, {
                 cwd,
-                env: spawnEnv
+                env: spawnEnv,
+                windowsHide: true
             });
             let stdout = '';
             let stderr = '';
