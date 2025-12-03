@@ -59,7 +59,8 @@ All data stays on your machine; only chat content already sent to GitHub Copilot
 Before installing the extension, ensure you have:
 
 - **VS Code** 1.106.0 or higher
-- **Python** 3.8+ installed on your system
+- **Python** 3.10–3.12 installed on your system
+- **Microsoft Visual C++ Redistributable** (Windows only) - [Download here](https://aka.ms/vs/17/release/vc_redist.x64.exe)
 
 Flowbaby automatically creates and manages its own isolated Python environment (`.flowbaby/venv`) in each workspace. You do not need to install any Python packages manually.
 

@@ -2,10 +2,11 @@
 
 ## Prerequisites
 
-1. **Python 3.8+** with pip
+1. **Python 3.10–3.12** with pip
 2. **Node.js 18+** with npm
 3. **VS Code** 1.105 or later
-4. **LLM API Key** (OpenAI, Anthropic, or other supported provider)
+4. **Microsoft Visual C++ Redistributable** (Windows only) - [Download here](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+5. **LLM API Key** (OpenAI, Anthropic, or other supported provider)
 
 ---
 

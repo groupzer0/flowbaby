@@ -480,9 +480,23 @@ export class FlowbabyClient {
                     duration,
                     error: result.error
                 });
-                vscode.window.showWarningMessage(
-                    `Flowbaby initialization failed: ${result.error}`
-                );
+
+                // Plan 040 Hotfix: Specific handling for missing VC++ Redistributable
+                if (result.error && result.error.includes('Visual C++ Redistributable')) {
+                    const download = 'Download Redistributable';
+                    vscode.window.showErrorMessage(
+                        'Flowbaby requires the Microsoft Visual C++ Redistributable on Windows.',
+                        download
+                    ).then(selection => {
+                        if (selection === download) {
+                            vscode.env.openExternal(vscode.Uri.parse('https://aka.ms/vs/17/release/vc_redist.x64.exe'));
+                        }
+                    });
+                } else {
+                    vscode.window.showWarningMessage(
+                        `Flowbaby initialization failed: ${result.error}`
+                    );
+                }
                 
                 // Even on failure, provide API key state
                 const apiKeyState = await buildApiKeyState(false);
@@ -499,9 +513,23 @@ export class FlowbabyClient {
                 duration,
                 error: errorMessage
             });
-            vscode.window.showWarningMessage(
-                `Flowbaby initialization error: ${errorMessage}`
-            );
+
+            // Plan 040 Hotfix: Specific handling for missing VC++ Redistributable (exception path)
+            if (errorMessage.includes('Visual C++ Redistributable')) {
+                const download = 'Download Redistributable';
+                vscode.window.showErrorMessage(
+                    'Flowbaby requires the Microsoft Visual C++ Redistributable on Windows.',
+                    download
+                ).then(selection => {
+                    if (selection === download) {
+                        vscode.env.openExternal(vscode.Uri.parse('https://aka.ms/vs/17/release/vc_redist.x64.exe'));
+                    }
+                });
+            } else {
+                vscode.window.showWarningMessage(
+                    `Flowbaby initialization error: ${errorMessage}`
+                );
+            }
             
             // Even on exception, provide API key state
             const apiKeyState = await buildApiKeyState(false);
