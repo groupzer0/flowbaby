@@ -60,12 +60,12 @@ export async function handleIngestForAgent(
         const hasApiKey = await flowbabyClient.hasApiKey();
         if (!hasApiKey) {
             outputChannel.appendLine(
-                `[Agent Ingest] ${new Date().toISOString()} - API key not configured`
+                `[Agent Ingest] ${new Date().toISOString()} - LLM API key not configured`
             );
             
             // Surface actionable prompt to user
             const action = await vscode.window.showWarningMessage(
-                'Flowbaby memory operations require an API key.',
+                'Flowbaby needs an LLM API key (OpenAI by default) for memory operations.',
                 'Set API Key',
                 'Cancel'
             );
@@ -76,7 +76,7 @@ export async function handleIngestForAgent(
             
             const response: FlowbabyIngestResponse = {
                 success: false,
-                error: 'API key not configured. Use "Flowbaby: Set API Key" command.',
+                error: 'LLM API key not configured. Use "Flowbaby: Set API Key" command.',
                 errorCode: 'MISSING_API_KEY'
             };
             return JSON.stringify(response);

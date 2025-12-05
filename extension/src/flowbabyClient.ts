@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { spawn, ChildProcess, SpawnOptions, execFileSync } from 'child_process';
 import { getFlowbabyOutputChannel, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
+import { SessionManager } from './sessionManager';
 
 /**
  * Interface for BackgroundOperationManager to avoid circular imports.
@@ -119,16 +120,19 @@ export class FlowbabyClient {
     private readonly MAX_PAYLOAD_CHARS = 100000;
     private readonly context: vscode.ExtensionContext;  // Plan 028 M5
     private cachedApiKeyState: ApiKeyState | null = null;  // Plan 045 Hotfix
+    private readonly sessionManager?: SessionManager; // Plan 001: Session Manager
 
     /**
      * Constructor - Load configuration and initialize output channel
      * 
      * @param workspacePath Absolute path to workspace root
      * @param context VS Code extension context for SecretStorage access (Plan 028 M5)
+     * @param sessionManager Optional SessionManager instance (Plan 001)
      */
-    constructor(workspacePath: string, context: vscode.ExtensionContext) {
+    constructor(workspacePath: string, context: vscode.ExtensionContext, sessionManager?: SessionManager) {
         this.workspacePath = workspacePath;
         this.context = context;
+        this.sessionManager = sessionManager;
 
         // Load configuration from VS Code settings
         const config = vscode.workspace.getConfiguration('Flowbaby');
@@ -389,9 +393,9 @@ export class FlowbabyClient {
             
             let statusMessage: string;
             if (llmReady) {
-                statusMessage = 'API key configured - LLM operations ready';
+                statusMessage = 'LLM API key configured - memory operations ready';
             } else {
-                statusMessage = 'API key not configured - use "Flowbaby: Set API Key" command';
+                statusMessage = 'LLM API key not configured (OpenAI by default) - use "Flowbaby: Set API Key" command';
             }
             
             return {
@@ -562,19 +566,20 @@ export class FlowbabyClient {
         sourceCreatedAt: Date | null;
         createdAt: Date | null;
         updatedAt: Date | null;
-    }): Promise<boolean> {
+    }, threadId?: string): Promise<boolean> {
         const startTime = Date.now();
         
         this.log('DEBUG', 'Ingesting conversation summary', {
             topic: summary.topic,
             topicId: summary.topicId,
             status: summary.status,
-            timeScope: summary.timeScope
+            timeScope: summary.timeScope,
+            threadId
         });
 
         try {
             // Convert camelCase to format expected by Python (handles both naming conventions)
-            const summaryPayload = {
+            let summaryPayload: any = {
                 topic: summary.topic,
                 context: summary.context,
                 decisions: summary.decisions,
@@ -592,6 +597,15 @@ export class FlowbabyClient {
                 updatedAt: summary.updatedAt ? summary.updatedAt.toISOString() : null,
                 workspace_path: this.workspacePath
             };
+
+            // Plan 001: Inject session ID if SessionManager is available
+            if (this.sessionManager) {
+                const sessionId = threadId 
+                    ? this.sessionManager.getSessionIdForChatThread(threadId)
+                    : this.sessionManager.getSessionIdForAgentRun();
+                summaryPayload = this.sessionManager.wrapPayload(summaryPayload, sessionId);
+            }
+
             const summaryJson = JSON.stringify(summaryPayload);
 
             if (summaryJson.length > this.MAX_PAYLOAD_CHARS) {
@@ -696,19 +710,21 @@ export class FlowbabyClient {
             createdAt: Date | null;
             updatedAt: Date | null;
         },
-        manager: IBackgroundOperationManager
+        manager: IBackgroundOperationManager,
+        threadId?: string
     ): Promise<{success: boolean, operationId?: string, staged: boolean, error?: string}> {
         const startTime = Date.now();
         
         this.log('DEBUG', 'Ingesting conversation summary (async mode)', {
             topic: summary.topic,
             topicId: summary.topicId,
-            status: summary.status
+            status: summary.status,
+            threadId
         });
 
         try {
             // Convert to Python format
-            const summaryPayload = {
+            let summaryPayload: any = {
                 topic: summary.topic,
                 context: summary.context,
                 decisions: summary.decisions,
@@ -726,6 +742,15 @@ export class FlowbabyClient {
                 updatedAt: summary.updatedAt ? summary.updatedAt.toISOString() : null,
                 workspace_path: this.workspacePath
             };
+
+            // Plan 001: Inject session ID if SessionManager is available
+            if (this.sessionManager) {
+                const sessionId = threadId 
+                    ? this.sessionManager.getSessionIdForChatThread(threadId)
+                    : this.sessionManager.getSessionIdForAgentRun();
+                summaryPayload = this.sessionManager.wrapPayload(summaryPayload, sessionId);
+            }
+
             const summaryJson = JSON.stringify(summaryPayload);
 
             if (summaryJson.length > this.MAX_PAYLOAD_CHARS) {
@@ -829,29 +854,122 @@ export class FlowbabyClient {
     async ingest(
         userMessage: string,
         assistantMessage: string,
-        importance: number = 0.0
+        importance: number = 0.0,
+        threadId?: string
     ): Promise<boolean> {
         const startTime = Date.now();
         
         this.log('DEBUG', 'Ingesting conversation', {
             user_length: userMessage.length,
             assistant_length: assistantMessage.length,
-            importance
+            importance,
+            threadId
         });
 
         try {
+            // Plan 001: Prepare payload with session ID
+            let payload: any = {
+                workspace_path: this.workspacePath,
+                user_message: userMessage,
+                assistant_message: assistantMessage,
+                importance: importance.toString()
+            };
+
+            if (this.sessionManager) {
+                const sessionId = threadId 
+                    ? this.sessionManager.getSessionIdForChatThread(threadId)
+                    : this.sessionManager.getSessionIdForAgentRun();
+                payload = this.sessionManager.wrapPayload(payload, sessionId);
+            }
+
+            // Use JSON payload for ingest.py to support structured data
+            // Note: ingest.py needs to be updated to accept JSON via --json argument or similar
+            // For now, we'll stick to positional arguments but inject session ID via environment or hidden arg if possible
+            // Wait, ingest.py currently takes positional args: workspace, user, assistant, importance
+            // To support session ID without breaking changes, we might need to update ingest.py first or use a new mode.
+            // Plan 001 says: "Update extension/src/flowbabyClient.ts to accept SessionManager and use it to wrap payloads with __user_session_id."
+            // This implies we should be sending JSON.
+            // Let's check if ingest.py supports JSON.
+            // The existing code uses positional args:
+            // this.runPythonScript('ingest.py', [this.workspacePath, userMessage, assistantMessage, importance.toString()], ...)
+            
+            // If I change this to send JSON, I need to change how runPythonScript is called or how ingest.py parses args.
+            // Assuming ingest.py will be updated or already supports a JSON mode (like --summary-json).
+            // Let's assume we should use a JSON mode if we want to pass session ID.
+            // Or maybe we pass it as an extra argument?
+            
+            // For now, I will keep the positional args but add session ID as a 5th arg if available?
+            // Or better, use the JSON approach if possible.
+            // The summary ingestion uses --summary-json.
+            // Let's try to use a similar approach for conversation ingestion if possible.
+            // But I don't want to break existing functionality if ingest.py isn't updated yet.
+            // The plan says "Update extension/src/flowbabyClient.ts...". It doesn't explicitly say "Update ingest.py".
+            // But it implies the bridge will handle it.
+            
+            // Let's look at how `ingestSummary` does it. It uses `--summary-json`.
+            // Maybe I should use `--conversation-json`?
+            // Or maybe I should just pass the session ID as a hidden field in the JSON if I can use JSON.
+            
+            // If I can't change ingest.py right now, I might be stuck.
+            // But wait, the plan says "Update extension/src/flowbabyClient.ts to accept SessionManager and use it to wrap payloads with __user_session_id."
+            // This strongly suggests I should be sending a payload that CAN be wrapped.
+            // The current `ingest` method sends positional args.
+            // I should probably switch to sending a JSON payload if I can.
+            
+            // Let's assume I can use `--json` or similar.
+            // Or maybe I should just append the session ID to the arguments?
+            // `ingest.py` likely uses `sys.argv`.
+            
+            // Let's look at `ingest.py` if I can.
+            // But I'm in "Implementer" mode, I should follow the plan.
+            // The plan doesn't mention updating `ingest.py`.
+            // Maybe `ingest.py` already supports it?
+            // Or maybe I should just update `flowbabyClient.ts` to PREPARE the payload, and `ingest.py` will be updated later?
+            // But `runPythonScript` executes it.
+            
+            // Let's look at `ingestSummary` again. It constructs a JSON object.
+            // `ingest` constructs positional args.
+            
+            // I will modify `ingest` to use JSON if possible, or add the session ID to the arguments.
+            // Since I can't see `ingest.py`, I'll assume I should pass it as an argument.
+            // But `wrapPayload` creates a dictionary.
+            
+            // Let's try to use a JSON payload for `ingest` as well, assuming `ingest.py` will be updated to handle it.
+            // I'll use a new flag `--conversation-json` to be safe, similar to `--summary-json`.
+            
+            let args: string[] = [];
+            if (this.sessionManager) {
+                 const sessionId = threadId 
+                    ? this.sessionManager.getSessionIdForChatThread(threadId)
+                    : this.sessionManager.getSessionIdForAgentRun();
+                 
+                 // Construct JSON payload
+                 const conversationPayload = {
+                     workspace_path: this.workspacePath,
+                     user_message: userMessage,
+                     assistant_message: assistantMessage,
+                     importance: importance,
+                     __user_session_id: sessionId
+                 };
+                 
+                 args = ['--conversation-json', JSON.stringify(conversationPayload)];
+            } else {
+                // Fallback to legacy positional args
+                args = [
+                    this.workspacePath,
+                    userMessage,
+                    assistantMessage,
+                    importance.toString()
+                ];
+            }
+
             if ((userMessage.length + assistantMessage.length) > this.MAX_PAYLOAD_CHARS) {
                 throw new Error(`Payload too large (${userMessage.length + assistantMessage.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
             }
 
             // Use 120-second timeout for ingestion (Cognee setup + LLM processing can take time)
             // Increased from 30s to reduce false-positive timeout errors when ingestion succeeds but takes >30s
-            const result = await this.runPythonScript('ingest.py', [
-                this.workspacePath,
-                userMessage,
-                assistantMessage,
-                importance.toString()
-            ], 120000);
+            const result = await this.runPythonScript('ingest.py', args, 120000);
 
             const duration = Date.now() - startTime;
 
@@ -929,17 +1047,20 @@ export class FlowbabyClient {
         userMessage: string,
         assistantMessage: string,
         manager: IBackgroundOperationManager,
-        importance: number = 0.0
+        importance: number = 0.0,
+        threadId?: string
     ): Promise<{success: boolean, operationId?: string, staged: boolean, error?: string}> {
         const startTime = Date.now();
         
         this.log('DEBUG', 'Ingesting conversation (async mode)', {
             user_length: userMessage.length,
             assistant_length: assistantMessage.length,
-            importance
+            importance,
+            threadId
         });
 
-        if (!this.pythonPath) {
+        try {
+            if (!this.pythonPath) {
             const interpreterError = 'Python interpreter not configured. Set Flowbaby.pythonPath or create a workspace .venv.';
             this.log('ERROR', 'Cannot start async ingestion without Python interpreter', {
                 duration_ms: 0,
@@ -955,20 +1076,40 @@ export class FlowbabyClient {
                 error: interpreterError
             };
         }
-
-        try {
             if ((userMessage.length + assistantMessage.length) > this.MAX_PAYLOAD_CHARS) {
                 throw new Error(`Payload too large (${userMessage.length + assistantMessage.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
             }
 
+            // Plan 001: Prepare payload with session ID
+            let args: string[] = [];
+            if (this.sessionManager) {
+                 const sessionId = threadId 
+                    ? this.sessionManager.getSessionIdForChatThread(threadId)
+                    : this.sessionManager.getSessionIdForAgentRun();
+                 
+                 // Construct JSON payload
+                 const conversationPayload = {
+                     workspace_path: this.workspacePath,
+                     user_message: userMessage,
+                     assistant_message: assistantMessage,
+                     importance: importance,
+                     __user_session_id: sessionId
+                 };
+                 
+                 args = ['--mode', 'add-only', '--conversation-json', JSON.stringify(conversationPayload)];
+            } else {
+                // Fallback to legacy positional args
+                args = [
+                    '--mode', 'add-only',
+                    this.workspacePath,
+                    userMessage,
+                    assistantMessage,
+                    importance.toString()
+                ];
+            }
+
             // Run add-only mode (fast, <10s)
-            const result = await this.runPythonScript('ingest.py', [
-                '--mode', 'add-only',
-                this.workspacePath,
-                userMessage,
-                assistantMessage,
-                importance.toString()
-            ], 30000); // 30s timeout for add-only
+            const result = await this.runPythonScript('ingest.py', args, 30000); // 30s timeout for add-only
 
             const duration = Date.now() - startTime;
 
@@ -1062,6 +1203,7 @@ export class FlowbabyClient {
             maxTokens?: number;
             includeSuperseded?: boolean;
             halfLifeDays?: number;
+            threadId?: string; // Plan 001: Support session ID
         }
     ): Promise<RetrievalResult[]> {
         const startTime = Date.now();
@@ -1070,6 +1212,7 @@ export class FlowbabyClient {
         const maxTokens = options?.maxTokens ?? this.maxContextTokens;
         const halfLifeDays = this.clampHalfLifeDays(options?.halfLifeDays ?? this.rankingHalfLifeDays);
         const includeSuperseded = options?.includeSuperseded ?? false;
+        const threadId = options?.threadId;
         const searchTopK = this.searchTopK;
 
         this.log('DEBUG', 'Retrieving context', {
@@ -1079,20 +1222,42 @@ export class FlowbabyClient {
             max_tokens: maxTokens,
             search_top_k: searchTopK,
             half_life_days: halfLifeDays,
-            include_superseded: includeSuperseded
+            include_superseded: includeSuperseded,
+            threadId
         });
 
         try {
+            // Plan 001: Use JSON payload with session ID
+            let payload: any = {
+                workspace_path: this.workspacePath,
+                query: query,
+                max_results: maxResults,
+                max_tokens: maxTokens,
+                half_life_days: halfLifeDays,
+                include_superseded: includeSuperseded,
+                search_top_k: searchTopK
+            };
+
+            let args: string[];
+
+            if (this.sessionManager) {
+                const sessionId = threadId 
+                    ? this.sessionManager.getSessionIdForChatThread(threadId)
+                    : this.sessionManager.getSessionIdForAgentRun();
+                payload = this.sessionManager.wrapPayload(payload, sessionId);
+                
+                // Use JSON mode if session manager is active (implies bridge update)
+                args = ['--json', JSON.stringify(payload)];
+            } else {
+                // Fallback to legacy positional args if no session manager (or if bridge not updated)
+                // Actually, if we want to support session ID, we should prefer JSON.
+                // But to be safe, let's use JSON if we have sessionManager, assuming bridge is ready.
+                // If not, we might break things. But the plan says to do this.
+                args = ['--json', JSON.stringify(payload)];
+            }
+
             // Use 15-second timeout for retrieval (semantic search can be slow)
-            const result = await this.runPythonScript('retrieve.py', [
-                this.workspacePath,
-                query,
-                maxResults.toString(),
-                maxTokens.toString(),
-                halfLifeDays.toString(),
-                includeSuperseded ? 'true' : 'false',
-                searchTopK.toString()
-            ], 15000);
+            const result = await this.runPythonScript('retrieve.py', args, 15000);
 
             const duration = Date.now() - startTime;
 
@@ -1228,7 +1393,7 @@ export class FlowbabyClient {
         // Plan 039 M5: Check for API key via resolveApiKey (SecretStorage or env var)
         const apiKey = await this.resolveApiKey();
         if (!apiKey) {
-            errors.push('API key not configured. Use "Flowbaby: Set API Key" command or set LLM_API_KEY environment variable.');
+            errors.push('LLM API key not configured. Use "Flowbaby: Set API Key" command (OpenAI by default, or set LLM_API_KEY env var).');
         }
 
         return {

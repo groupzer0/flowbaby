@@ -304,22 +304,23 @@ def test_main_invalid_importance_value(capsys):
     """Test main() exits with error when importance parameter is invalid."""
     with patch('sys.argv', ['ingest.py', '/tmp/workspace', 'user msg', 'assistant msg', 'invalid']):
         with patch('sys.exit') as mock_exit:
-            from ingest import main
+            with patch('ingest.canonicalize_workspace_path', return_value='/tmp/workspace'):
+                from ingest import main
 
-            try:
-                main()
-            except (ValueError, IndexError):
-                # Expected: execution continues after sys.exit(1) is patched
-                pass
+                try:
+                    main()
+                except (ValueError, IndexError):
+                    # Expected: execution continues after sys.exit(1) is patched
+                    pass
 
-            # When sys.exit is patched, execution may continue triggering multiple exits
-            # Assert that sys.exit(1) was called at least once
-            mock_exit.assert_any_call(1)
+                # When sys.exit is patched, execution may continue triggering multiple exits
+                # Assert that sys.exit(1) was called at least once
+                mock_exit.assert_any_call(1)
 
-            captured = capsys.readouterr()
-            # Parse only the first line of JSON output (first error message)
-            first_line = captured.out.strip().split('\n')[0]
-            output = json.loads(first_line)
+                captured = capsys.readouterr()
+                # Parse only the first line of JSON output (first error message)
+                first_line = captured.out.strip().split('\n')[0]
+                output = json.loads(first_line)
 
-            assert output['success'] is False
-            assert 'Invalid importance value' in output['error']
+                assert output['success'] is False
+                assert 'Invalid importance value' in output['error']

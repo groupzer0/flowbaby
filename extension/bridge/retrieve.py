@@ -225,7 +225,8 @@ async def retrieve_context(
     max_tokens: int = 2000,
     half_life_days: float = 7.0,
     include_superseded: bool = False,
-    top_k: int | None = None
+    top_k: int | None = None,
+    session_id: str | None = None
 ) -> dict:
     """Retrieve relevant context with recency-aware, status-aware scoring."""
 
@@ -320,13 +321,28 @@ async def retrieve_context(
         }})
 
         try:
-            search_results = await cognee.search(
-                query_type=SearchType.GRAPH_COMPLETION,
-                query_text=query,
-                datasets=[dataset_name],  # Filter to this workspace only
-                top_k=final_top_k,
-                system_prompt=SYSTEM_PROMPT
-            )
+            try:
+                search_results = await cognee.search(
+                    query_type=SearchType.GRAPH_COMPLETION,
+                    query_text=query,
+                    datasets=[dataset_name],  # Filter to this workspace only
+                    top_k=final_top_k,
+                    system_prompt=SYSTEM_PROMPT,
+                    session_id=session_id
+                )
+            except TypeError as te:
+                if "session_id" in str(te) or "unexpected keyword argument" in str(te):
+                    logger.warning("cognee.search does not support session_id, falling back to legacy call")
+                    search_results = await cognee.search(
+                        query_type=SearchType.GRAPH_COMPLETION,
+                        query_text=query,
+                        datasets=[dataset_name],  # Filter to this workspace only
+                        top_k=final_top_k,
+                        system_prompt=SYSTEM_PROMPT
+                    )
+                else:
+                    raise te
+
             logger.info("Search completed", extra={'data': {
                 'result_count': len(search_results) if search_results else 0
             }})
@@ -606,6 +622,79 @@ async def retrieve_context(
 
 def main():
     """Main entry point for the script."""
+    
+    # Plan 048: Support JSON payload via --json flag
+    if len(sys.argv) >= 3 and sys.argv[1] == '--json':
+        try:
+            payload = json.loads(sys.argv[2])
+            
+            workspace_path = payload.get('workspace_path')
+            query = payload.get('query')
+            
+            if not workspace_path or not query:
+                result = {
+                    'success': False,
+                    'error': 'JSON payload must include workspace_path and query'
+                }
+                print(json.dumps(result))
+                sys.exit(1)
+                
+            try:
+                workspace_path = canonicalize_workspace_path(workspace_path)
+            except FileNotFoundError:
+                result = {
+                    'success': False,
+                    'error': f'Workspace path does not exist: {workspace_path}'
+                }
+                print(json.dumps(result))
+                sys.exit(1)
+                
+            max_results = int(payload.get('max_results', 3))
+            max_tokens = int(payload.get('max_tokens', 2000))
+            half_life_days = clamp_half_life_days(float(payload.get('half_life_days', 7.0)))
+            include_superseded = bool(payload.get('include_superseded', False))
+            top_k = int(payload.get('search_top_k')) if payload.get('search_top_k') else None
+            session_id = payload.get('__user_session_id')
+            
+            # Validate workspace path
+            if not Path(workspace_path).is_dir():
+                result = {
+                    'success': False,
+                    'error': f'Workspace path does not exist: {workspace_path}'
+                }
+                print(json.dumps(result))
+                sys.exit(1)
+
+            # Run retrieval
+            result = asyncio.run(retrieve_context(
+                workspace_path,
+                query,
+                max_results,
+                max_tokens,
+                half_life_days,
+                include_superseded,
+                top_k,
+                session_id
+            ))
+
+            # Output JSON result
+            print(json.dumps(result))
+            sys.exit(0 if result['success'] else 1)
+            
+        except json.JSONDecodeError as e:
+            result = {'success': False, 'error': f'Invalid JSON: {str(e)}'}
+            print(json.dumps(result))
+            sys.exit(1)
+        except Exception as e:
+            import traceback
+            result = {
+                'success': False,
+                'error': f'Unexpected error: {str(e)}',
+                'traceback': traceback.format_exc()
+            }
+            print(json.dumps(result))
+            sys.exit(1)
+
     # Check command-line arguments (minimum 2 required)
     if len(sys.argv) < 3:
         result = {

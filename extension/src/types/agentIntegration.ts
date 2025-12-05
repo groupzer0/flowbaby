@@ -328,6 +328,9 @@ export interface FlowbabyContextRequest {
 
     /** Half-life parameter for recency decay (days, default configured value) */
     halfLifeDays?: number;
+
+    /** Optional chat thread ID for session context (Plan 001) */
+    threadId?: string;
 }
 
 /**

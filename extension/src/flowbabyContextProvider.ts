@@ -18,6 +18,7 @@ import {
     AgentErrorCode,
     AgentErrorResponse
 } from './types/agentIntegration';
+import { SessionManager } from './sessionManager';
 
 /**
  * Request queue item with timestamp for rate limiting
@@ -69,6 +70,7 @@ export class FlowbabyContextProvider {
     private readonly client: FlowbabyClient;
     private readonly outputChannel: vscode.OutputChannel;
     private readonly config: ProviderConfig;
+    private readonly sessionManager?: SessionManager; // Plan 001
     
     /** Currently in-flight requests */
     private inFlightRequests: Set<string> = new Set();
@@ -81,17 +83,19 @@ export class FlowbabyContextProvider {
     
     /** Next request ID counter */
     private nextRequestId = 0;
-    
     /**
      * Constructor - Initialize provider with FlowbabyClient and configuration
      * 
      * @param client - FlowbabyClient instance for bridge operations
      * @param outputChannel - Output channel for logging
+     * @param sessionManager - Optional SessionManager instance (Plan 001)
      */
-    constructor(client: FlowbabyClient, outputChannel: vscode.OutputChannel) {
+    constructor(client: FlowbabyClient, outputChannel: vscode.OutputChannel, sessionManager?: SessionManager) {
         this.client = client;
         this.outputChannel = outputChannel;
+        this.sessionManager = sessionManager;
         
+        // Load configuration with safe upper bounds
         // Load configuration with safe upper bounds
         const vsConfig = vscode.workspace.getConfiguration('Flowbaby.agentAccess');
         const maxConcurrent = vsConfig.get<number>('maxConcurrentRequests', 2);
@@ -142,12 +146,12 @@ export class FlowbabyContextProvider {
         const hasApiKey = await this.client.hasApiKey();
         if (!hasApiKey) {
             this.outputChannel.appendLine(
-                `[FlowbabyContextProvider] ${new Date().toISOString()} - API key not configured`
+                `[FlowbabyContextProvider] ${new Date().toISOString()} - LLM API key not configured`
             );
             
             // Surface actionable prompt to user
             const action = await vscode.window.showWarningMessage(
-                'Flowbaby memory operations require an API key.',
+                'Flowbaby needs an LLM API key (OpenAI by default) for memory operations.',
                 'Set API Key',
                 'Cancel'
             );
@@ -158,8 +162,8 @@ export class FlowbabyContextProvider {
             
             return {
                 error: AgentErrorCode.INVALID_REQUEST,
-                message: 'API key not configured. Use "Flowbaby: Set API Key" command.',
-                details: 'LLM operations require a valid API key'
+                message: 'LLM API key not configured. Use "Flowbaby: Set API Key" command.',
+                details: 'Memory operations require an LLM API key (OpenAI by default)'
             };
         }
         
@@ -294,7 +298,8 @@ export class FlowbabyContextProvider {
                 maxResults: request.maxResults,
                 maxTokens: request.maxTokens,
                 includeSuperseded: request.includeSuperseded,
-                halfLifeDays: request.halfLifeDays
+                halfLifeDays: request.halfLifeDays,
+                threadId: request.threadId // Plan 001: Pass threadId
             });
 
             // Filter out low confidence results (redundant check for safety)

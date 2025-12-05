@@ -12,10 +12,12 @@ import { FlowbabySetupService } from './setup/FlowbabySetupService';
 import { FlowbabyStatusBar, FlowbabyStatus } from './statusBar/FlowbabyStatusBar';
 import { getFlowbabyOutputChannel, getFlowbabyDebugChannel, disposeOutputChannels, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
+import { SessionManager } from './sessionManager';
 
 // Module-level variable to store client instance
 let flowbabyClient: FlowbabyClient | undefined;
 let flowbabyContextProvider: FlowbabyContextProvider | undefined; // Plan 016 Milestone 1
+let sessionManager: SessionManager | undefined; // Plan 001: Session Manager
 let storeMemoryToolDisposable: vscode.Disposable | undefined;
 let retrieveMemoryToolDisposable: vscode.Disposable | undefined; // Plan 016 Milestone 5
 // Plan 032: Flag to track initialization state for graceful degradation
@@ -26,6 +28,7 @@ let clientInitializationFailed: boolean = false;
 interface PendingSummary {
     summary: ConversationSummary;
     timestamp: number;
+    threadId?: string; // Plan 001: Track session context
 }
 const pendingSummaries = new Map<string, PendingSummary>();
 
@@ -40,6 +43,9 @@ export async function activate(_context: vscode.ExtensionContext) {
     // Plan 028 M2: Debug logging for activation lifecycle
     debugLog('Extension activation started', { timestamp: new Date().toISOString() });
     
+    // Plan 001: Initialize SessionManager
+    sessionManager = new SessionManager(_context);
+
     // Get workspace folder
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
@@ -56,7 +62,7 @@ export async function activate(_context: vscode.ExtensionContext) {
 
     // Initialize Flowbaby client
     try {
-        flowbabyClient = new FlowbabyClient(workspacePath, _context);
+        flowbabyClient = new FlowbabyClient(workspacePath, _context, sessionManager);
         
         // Plan 015: Create output channel early
         const agentOutputChannel = vscode.window.createOutputChannel('Flowbaby Agent Activity');
@@ -1003,7 +1009,8 @@ async function handleSummaryGeneration(
     chatContext: vscode.ChatContext,
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken,
-    _client: FlowbabyClient
+    _client: FlowbabyClient,
+    threadId?: string // Plan 001: Pass session context
 ): Promise<vscode.ChatResult> {
     console.log('=== PLAN 014: Handling summary generation request ===');
     
@@ -1129,7 +1136,7 @@ Create the summary now, following the format exactly. Use markdown formatting.`;
         }
         
         // Enrich metadata fields for storage
-        parsedSummary.sessionId = null; // Could extract from workspace session if available
+        parsedSummary.sessionId = threadId || null; // Plan 001: Use threadId as sessionId
         parsedSummary.planId = extractPlanIdFromConversation(conversationText);
         parsedSummary.status = 'Active';
         parsedSummary.createdAt = new Date();
@@ -1139,7 +1146,8 @@ Create the summary now, following the format exactly. Use markdown formatting.`;
         const summaryKey = `summary-${Date.now()}`;
         pendingSummaries.set(summaryKey, {
             summary: parsedSummary,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            threadId // Plan 001
         });
         
         // Clean up old pending summaries (>5 minutes)
@@ -1251,11 +1259,11 @@ function registerFlowbabyParticipant(
                 // If no API key configured, show helpful error instead of hanging on "working..."
                 const hasApiKey = await flowbabyClient.hasApiKey();
                 if (!hasApiKey) {
-                    stream.markdown('🔑 **API Key Required**\n\n');
-                    stream.markdown('Flowbaby needs an LLM API key to process memory operations.\n\n');
+                    stream.markdown('🔑 **LLM API Key Required**\n\n');
+                    stream.markdown('Flowbaby needs an LLM API key (OpenAI by default) to process memory operations.\n\n');
                     stream.markdown('**Quick Fix:**\n');
                     stream.markdown('1. Run command: `Flowbaby: Set API Key`\n');
-                    stream.markdown('2. Enter your OpenAI, Anthropic, or other LLM provider API key\n\n');
+                    stream.markdown('2. Enter your OpenAI API key (or Anthropic, Azure, Ollama if configured)\n\n');
                     stream.markdown('[Set API Key Now](command:Flowbaby.setApiKey)');
                     return { metadata: { error: 'api_key_required' } };
                 }
@@ -1306,7 +1314,7 @@ function registerFlowbabyParticipant(
                             stream.markdown('📝 **Storing summary...**\n\n');
                             
                             try {
-                                const success = await flowbabyClient.ingestSummary(pending.summary);
+                                const success = await flowbabyClient.ingestSummary(pending.summary, pending.threadId);
                                 
                                 if (success) {
                                     stream.markdown(`✅ **Summary stored successfully!**\n\n`);
@@ -1371,9 +1379,13 @@ function registerFlowbabyParticipant(
                     request.prompt.toLowerCase().includes(trigger)
                 );
 
+                // Plan 001: Extract thread ID (session context)
+                // Use request.sessionId if available (future API), or fallback to workspace-scoped session
+                const threadId = (request as any).sessionId || 'workspace-session';
+
                 if (isSummaryRequest) {
                     // PLAN 014 MILESTONE 2: Summary Generation Flow
-                    return await handleSummaryGeneration(request, _chatContext, stream, token, flowbabyClient);
+                    return await handleSummaryGeneration(request, _chatContext, stream, token, flowbabyClient, threadId);
                 }
 
                 // Check cancellation before expensive operations
@@ -1391,7 +1403,8 @@ function registerFlowbabyParticipant(
                     const contextResponse = await flowbabyContextProvider.retrieveContext({
                         query: request.prompt,
                         maxResults: config.get<number>('maxContextResults', 3),
-                        maxTokens: config.get<number>('maxContextTokens', 2000)
+                        maxTokens: config.get<number>('maxContextTokens', 2000),
+                        threadId // Plan 001: Pass threadId
                     });
                     
                     // Check if response is an error

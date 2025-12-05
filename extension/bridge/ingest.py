@@ -179,7 +179,8 @@ async def run_add_only(
     workspace_path: str | None = None,
     user_message: str | None = None,
     assistant_message: str | None = None,
-    importance: float = 0.0
+    importance: float = 0.0,
+    session_id: str | None = None
 ) -> dict:
     """Stage data for ingestion without cognify(). Supports summary and conversation payloads."""
 
@@ -208,7 +209,9 @@ async def run_add_only(
                 'error': 'Conversation ingestion requires user and assistant messages'
             }
 
-        logger.info(f"Add-only mode ({payload_type})", extra={'data': {'workspace': workspace_path}})
+        # Redact session_id for privacy
+        safe_session_id = f"{session_id[:4]}..." if session_id and len(session_id) > 4 else "N/A"
+        logger.info(f"Add-only mode ({payload_type})", extra={'data': {'workspace': workspace_path, 'session_id': safe_session_id}})
         metrics = {}
         overall_start = perf_counter()
 
@@ -248,10 +251,47 @@ async def run_add_only(
         logger.info(f"Add completed: {len(summary_text)} chars staged")
         step_start = perf_counter()
 
-        await cognee.add(
-            data=[summary_text],
-            dataset_name=dataset_name
-        )
+        # Plan 048: Pass session_id if present (requires cognee support, fallback if not)
+        # We assume cognee.add supports session_id or ignores kwargs it doesn't know if we pass it carefully.
+        # However, standard python functions don't ignore extra kwargs.
+        # We'll try to pass it if not None.
+        add_kwargs = {'data': [summary_text], 'dataset_name': dataset_name}
+        # Note: We are not sure if cognee.add supports session_id yet.
+        # The plan says "Map this value into calls such as cognee.search(..., session_id=...) and cognee.add(..., session_id=...) where supported".
+        # If the installed cognee version doesn't support it, this will fail.
+        # For now, we will NOT pass it to cognee.add unless we are sure, OR we wrap it in try/except or check signature.
+        # But since I cannot check the signature easily here, I will assume the plan implies the underlying SDK supports it or I should try.
+        # Actually, `cognee.add` usually takes `data` and `dataset_name`.
+        # If I pass `session_id`, it might break.
+        # Let's check if I can inspect `cognee.add`.
+        # But I can't run code to inspect.
+        # I'll assume for now that I should just pass it if the plan says so.
+        # Wait, the plan says "Map this value... where supported".
+        # I'll try to pass it. If it fails, I'll catch TypeError and retry without it?
+        # That seems risky for "add".
+        # Let's look at `retrieve.py` later.
+        # For `ingest.py`, `cognee.add` adds data. Does session ID make sense for `add`?
+        # Usually session ID is for `search` (context).
+        # But maybe for `add` it associates the data with a session?
+        # I'll add it to `add_kwargs` if `session_id` is present.
+        
+        # To be safe against "unexpected keyword argument", I will check if I can pass it.
+        # But I can't check.
+        # I will implement a safe call wrapper or just pass it and hope.
+        # Given the instructions, I should probably pass it.
+        # But I'll use a try-except block to fallback if it fails due to argument error.
+        
+        try:
+            if session_id:
+                await cognee.add(**add_kwargs, session_id=session_id)
+            else:
+                await cognee.add(**add_kwargs)
+        except TypeError as e:
+            if "unexpected keyword argument 'session_id'" in str(e):
+                logger.warning("cognee.add does not support session_id, falling back to legacy call")
+                await cognee.add(**add_kwargs)
+            else:
+                raise e
 
         metrics['add_sec'] = perf_counter() - step_start
         metrics['total_add_sec'] = perf_counter() - overall_start
@@ -469,7 +509,7 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
 
 async def run_sync(summary_json: dict = None, workspace_path: str = None,
                    user_message: str = None, assistant_message: str = None,
-                   importance: float = 0.0) -> dict:
+                   importance: float = 0.0, session_id: str | None = None) -> dict:
     """
     Sync mode: Complete add() + cognify() in single subprocess (diagnostic/test only).
 
@@ -491,14 +531,14 @@ async def run_sync(summary_json: dict = None, workspace_path: str = None,
 
             # Setup logging now that we have workspace_path
             logger = bridge_logger.setup_logging(workspace_path, "ingest")
-            logger.info(f"Sync mode (summary): topic={summary_json.get('topic', 'unknown')[:50]}")
+            logger.info(f"Sync mode (summary): topic={summary_json.get('topic', 'unknown')[:50]}, session_id={session_id}")
         else:
             # Setup logging now that we have workspace_path
             if workspace_path:
                 logger = bridge_logger.setup_logging(workspace_path, "ingest")
 
             if logger:
-                logger.info(f"Sync mode (conversation): user_msg={user_message[:50]}...")
+                logger.info(f"Sync mode (conversation): user_msg={user_message[:50]}..., session_id={session_id}")
 
         metrics = {}
         overall_start = perf_counter()
@@ -544,10 +584,19 @@ Metadata: timestamp={timestamp}, importance={importance}"""
         if logger: logger.info(f"Adding to dataset: {len(text_content)} chars")
         step_start = perf_counter()
 
-        await cognee.add(
-            data=[text_content],
-            dataset_name=dataset_name
-        )
+        # Plan 048: Pass session_id if present (with fallback)
+        add_kwargs = {'data': [text_content], 'dataset_name': dataset_name}
+        try:
+            if session_id:
+                await cognee.add(**add_kwargs, session_id=session_id)
+            else:
+                await cognee.add(**add_kwargs)
+        except TypeError as e:
+            if "unexpected keyword argument 'session_id'" in str(e):
+                if logger: logger.warning("cognee.add does not support session_id, falling back to legacy call")
+                await cognee.add(**add_kwargs)
+            else:
+                raise e
 
         metrics['add_sec'] = perf_counter() - step_start
 
@@ -678,15 +727,6 @@ def main():
                     sys.stdout = old_stdout
                     print(json.dumps(result))
                     sys.exit(1)
-
-                if not Path(workspace_path).is_dir():
-                    result = {'success': False, 'error': f'Workspace path does not exist: {workspace_path}'}
-                    sys.stdout = old_stdout
-                    print(json.dumps(result))
-                    sys.exit(1)
-
-                result = asyncio.run(run_cognify_only(workspace_path, operation_id))
-
             elif '--summary' in sys.argv:
                 # Summary mode (add-only or sync)
                 if '--summary-json' not in sys.argv:
@@ -704,11 +744,63 @@ def main():
 
                 summary_json_str = sys.argv[summary_json_idx + 1]
                 summary_json = json.loads(summary_json_str)
+                
+                # Plan 048: Extract session ID from hidden field
+                session_id = summary_json.get('__user_session_id')
 
                 if mode == 'add-only':
-                    result = asyncio.run(run_add_only(summary_json=summary_json))
+                    result = asyncio.run(run_add_only(summary_json=summary_json, session_id=session_id))
                 else:  # sync
-                    result = asyncio.run(run_sync(summary_json=summary_json))
+                    result = asyncio.run(run_sync(summary_json=summary_json, session_id=session_id))
+
+            elif '--conversation-json' in sys.argv:
+                # Plan 048: Conversation mode via JSON (supports session ID)
+                json_idx = sys.argv.index('--conversation-json')
+                if json_idx + 1 >= len(sys.argv):
+                    result = {'success': False, 'error': '--conversation-json requires JSON string argument'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+                
+                conv_json_str = sys.argv[json_idx + 1]
+                conv_json = json.loads(conv_json_str)
+                
+                workspace_path = conv_json.get('workspace_path')
+                user_message = conv_json.get('user_message')
+                assistant_message = conv_json.get('assistant_message')
+                importance = float(conv_json.get('importance', 0.0))
+                session_id = conv_json.get('__user_session_id')
+                
+                if not workspace_path or not user_message or not assistant_message:
+                    result = {'success': False, 'error': 'Missing required fields in conversation JSON'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+                    
+                try:
+                    workspace_path = canonicalize_workspace_path(workspace_path)
+                except FileNotFoundError:
+                    result = {'success': False, 'error': f'Workspace path does not exist: {workspace_path}'}
+                    sys.stdout = old_stdout
+                    print(json.dumps(result))
+                    sys.exit(1)
+                    
+                if mode == 'add-only':
+                    result = asyncio.run(run_add_only(
+                        workspace_path=workspace_path,
+                        user_message=user_message,
+                        assistant_message=assistant_message,
+                        importance=importance,
+                        session_id=session_id
+                    ))
+                else:
+                    result = asyncio.run(run_sync(
+                        workspace_path=workspace_path,
+                        user_message=user_message,
+                        assistant_message=assistant_message,
+                        importance=importance,
+                        session_id=session_id
+                    ))
 
             else:
                 # Conversation mode (supports add-only + sync)

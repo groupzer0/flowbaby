@@ -128,7 +128,7 @@ export class FlowbabyStatusBar {
             case FlowbabyStatus.NeedsApiKey:
                 // Plan 045: Distinct state for initialized but missing API key
                 this.statusBarItem.text = '$(key) Flowbaby';
-                this.statusBarItem.tooltip = 'Flowbaby: API Key Required - Click to configure';
+                this.statusBarItem.tooltip = 'Flowbaby: LLM API Key Required (OpenAI by default) - Click to configure';
                 this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
                 break;
         }

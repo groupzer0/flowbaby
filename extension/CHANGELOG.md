@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.14] - 2025-12-05
+
+### Added - Unified Session Context
+
+- Implemented unified session context for chat threads. Flowbaby now maintains conversational continuity by passing a consistent `session_id` to the memory engine for each chat thread.
+- Updated Python bridge to accept and map `__user_session_id` to Cognee's `session_id`.
+
 ## [0.5.13] - 2025-12-03
 
 ### Changed - Maintenance Release
