@@ -91,16 +91,27 @@ export class FlowbabySetupService {
                     // Check hash
                     const currentHash = await this.computeRequirementsHash();
                     if (bridgeEnv.requirementsHash !== currentHash) {
-                        vscode.window.showWarningMessage(
-                            'Flowbaby dependencies are outdated.',
-                            'Refresh Dependencies'
-                        ).then(selection => {
-                            if (selection === 'Refresh Dependencies') {
-                                this.refreshDependencies();
-                            }
-                        });
-                        // Mark verified but warn
-                        await this.setVerified(true);
+                        // Plan 049: Strict enforcement for managed envs
+                        await this.setVerified(false);
+                        if (this.statusBar) {
+                            this.statusBar.setStatus(FlowbabyStatus.SetupRequired, 'Update Required');
+                        }
+                        
+                        const selection = await vscode.window.showWarningMessage(
+                            'Flowbaby dependencies need to be updated for this version.',
+                            {
+                                modal: true,
+                                detail: 'The extension has been updated and requires new Python packages.'
+                            },
+                            'Update Now',
+                            'Later'
+                        );
+
+                        if (selection === 'Update Now') {
+                            await this.refreshDependencies();
+                            // refreshDependencies handles verification and setting verified status
+                        }
+                        // If 'Later', remains unverified
                     } else {
                         await this.setVerified(true);
                     }
@@ -119,8 +130,40 @@ export class FlowbabySetupService {
                 // External
                 this.log('Found external environment.');
                 const verified = await this.verifyEnvironment();
-                await this.setVerified(verified);
-                if (!verified) {
+                
+                if (verified) {
+                    const currentHash = await this.computeRequirementsHash();
+                    if (bridgeEnv.requirementsHash !== currentHash) {
+                        // Plan 049: Strict enforcement for external envs
+                        await this.setVerified(false);
+                        if (this.statusBar) {
+                            this.statusBar.setStatus(FlowbabyStatus.SetupRequired, 'External env out of date');
+                        }
+
+                        const selection = await vscode.window.showWarningMessage(
+                            'External Flowbaby environment requires dependency updates.',
+                            {
+                                modal: true,
+                                detail: 'The extension has been upgraded and the external Python environment must be updated to match requirements.txt.'
+                            },
+                            'Copy pip Command',
+                            'Dismiss'
+                        );
+
+                        if (selection === 'Copy pip Command') {
+                            const requirementsPath = path.join(this.bridgePath, 'requirements.txt');
+                            const pipCommand = `pip install -r "${requirementsPath}"`;
+                            await vscode.env.clipboard.writeText(pipCommand);
+                            vscode.window.showInformationMessage('Pip command copied to clipboard.');
+                        }
+                    } else {
+                        await this.setVerified(true);
+                    }
+                } else {
+                    await this.setVerified(false);
+                    if (this.statusBar) {
+                        this.statusBar.setStatus(FlowbabyStatus.Error, 'Environment Broken');
+                    }
                     vscode.window.showWarningMessage('External Python environment is missing dependencies.');
                 }
             }
@@ -150,7 +193,13 @@ export class FlowbabySetupService {
                     createdAt: new Date().toISOString(),
                     platform: process.platform
                 });
-                await this.verifyEnvironment(); // Will set verified
+                const verified = await this.verifyEnvironment();
+                if (verified) {
+                    await this.setVerified(true);
+                } else {
+                    await this.setVerified(false);
+                    vscode.window.showWarningMessage('External Python environment is missing dependencies.');
+                }
             } else if (adopt === 'Create Managed Environment') {
                 await this.createEnvironment();
             }
@@ -617,6 +666,18 @@ export class FlowbabySetupService {
                     if (this.fs.existsSync(actualBackupPath)) {
                         await fs.promises.rm(actualBackupPath, { recursive: true, force: true });
                     }
+
+                    // Plan 049: Update bridge-env.json with new hash
+                    const requirementsHash = await this.computeRequirementsHash();
+                    const pythonPath = this.getPythonPath();
+                    await this.writeBridgeEnv({
+                        pythonPath: pythonPath,
+                        ownership: 'managed',
+                        requirementsHash: requirementsHash,
+                        createdAt: new Date().toISOString(),
+                        platform: process.platform
+                    });
+
                     await this.setVerified(true);
                     vscode.window.showInformationMessage('Dependencies refreshed successfully.');
                     debugLog('Dependencies refresh completed successfully');

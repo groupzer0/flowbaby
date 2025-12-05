@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 import { FlowbabyContextProvider } from '../flowbabyContextProvider';
 import { FlowbabyClient, RetrievalResult } from '../flowbabyClient';
+import { FlowbabySetupService } from '../setup/FlowbabySetupService';
 
 suite('Retrieval Filtering Test Suite (Plan 021)', () => {
     let sandbox: sinon.SinonSandbox;
@@ -42,7 +43,10 @@ suite('Retrieval Filtering Test Suite (Plan 021)', () => {
     });
 
     function createProvider(): FlowbabyContextProvider {
-        return new FlowbabyContextProvider(mockClient as any, outputChannel);
+        const mockSetupService = {
+            isVerified: true
+        } as unknown as FlowbabySetupService;
+        return new FlowbabyContextProvider(mockClient as any, outputChannel, mockSetupService);
     }
 
     test('Allows synthesized answers with score 0.0', async () => {

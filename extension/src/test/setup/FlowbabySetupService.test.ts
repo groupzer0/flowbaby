@@ -146,9 +146,10 @@ suite('FlowbabySetupService Test Suite', () => {
 
         await service.initializeWorkspace();
 
-        assert.ok((vscode.window.showWarningMessage as sinon.SinonStub).calledWith(sinon.match(/outdated/)));
-        // Should still verify if it works, but warn
-        assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'Flowbaby.environmentVerified', true));
+        assert.ok((vscode.window.showWarningMessage as sinon.SinonStub).calledWith(sinon.match(/updated/)));
+        // Plan 049: Strict enforcement - if user ignores update, environment remains unverified
+        assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'Flowbaby.environmentVerified', false));
+        assert.ok((vscode.commands.executeCommand as sinon.SinonStub).neverCalledWith('setContext', 'Flowbaby.environmentVerified', true));
     });
 
     test('initializeWorkspace: No metadata, offers setup', async () => {

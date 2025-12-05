@@ -13,6 +13,7 @@ import * as sinon from 'sinon';
 import { StoreMemoryTool, StoreMemoryToolInput } from '../tools/storeMemoryTool';
 import { handleIngestForAgent } from '../commands/ingestForAgent';
 import { FlowbabyClient } from '../flowbabyClient';
+import { FlowbabySetupService } from '../setup/FlowbabySetupService';
 
 suite('Hotfix v0.5.8 Tests', () => {
     let sandbox: sinon.SinonSandbox;
@@ -218,11 +219,16 @@ suite('Hotfix v0.5.8 Tests', () => {
                 agentName: 'Test Agent'
             });
 
+            const fakeSetupService = {
+                isVerified: true
+            } as unknown as FlowbabySetupService;
+
             const responseJson = await handleIngestForAgent(
                 requestJson,
                 client,
                 outputChannel,
-                mockContext
+                mockContext,
+                fakeSetupService
             );
 
             const response = JSON.parse(responseJson);
@@ -271,11 +277,16 @@ suite('Hotfix v0.5.8 Tests', () => {
             // Test with invalid JSON
             const invalidJson = 'not valid json {{{';
 
+            const fakeSetupService = {
+                isVerified: true
+            } as unknown as FlowbabySetupService;
+
             const responseJson = await handleIngestForAgent(
                 invalidJson,
                 client,
                 outputChannel,
-                mockContext
+                mockContext,
+                fakeSetupService
             );
 
             const response = JSON.parse(responseJson);
@@ -491,11 +502,16 @@ suite('v0.5.8 Error Code Contract Tests', () => {
 
             const outputChannel = vscode.window.createOutputChannel('Test');
 
+            const fakeSetupService = {
+                isVerified: true
+            } as unknown as FlowbabySetupService;
+
             const responseJson = await handleIngestForAgent(
                 JSON.stringify({ topic: 'Test', context: 'Test' }),
                 client,
                 outputChannel,
-                mockContext
+                mockContext,
+                fakeSetupService
             );
 
             const response = JSON.parse(responseJson);

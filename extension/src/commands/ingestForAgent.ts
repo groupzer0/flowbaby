@@ -16,22 +16,26 @@ import {
 import { validateIngestRequest } from '../validation/summaryValidator';
 import { FlowbabyClient } from '../flowbabyClient';
 
+import { FlowbabySetupService } from '../setup/FlowbabySetupService';
+
 /**
  * Register the agent ingestion command
  * 
  * @param context VS Code extension context
  * @param flowbabyClient FlowbabyClient instance for bridge communication
  * @param outputChannel Output channel for agent activity logging
+ * @param setupService FlowbabySetupService for environment verification
  */
 export function registerIngestForAgentCommand(
     context: vscode.ExtensionContext,
     flowbabyClient: FlowbabyClient,
-    outputChannel: vscode.OutputChannel
+    outputChannel: vscode.OutputChannel,
+    setupService: FlowbabySetupService
 ): void {
     const command = vscode.commands.registerCommand(
         'Flowbaby.ingestForAgent',
         async (requestJson: string): Promise<string> => {
-            return await handleIngestForAgent(requestJson, flowbabyClient, outputChannel, context);
+            return await handleIngestForAgent(requestJson, flowbabyClient, outputChannel, context, setupService);
         }
     );
 
@@ -45,17 +49,29 @@ export function registerIngestForAgentCommand(
  * @param flowbabyClient FlowbabyClient instance
  * @param outputChannel Output channel for logging
  * @param context Extension context
+ * @param setupService FlowbabySetupService instance
  * @returns JSON string containing FlowbabyIngestResponse
  */
 export async function handleIngestForAgent(
     requestJson: string,
     flowbabyClient: FlowbabyClient,
     outputChannel: vscode.OutputChannel,
-    context: vscode.ExtensionContext
+    context: vscode.ExtensionContext,
+    setupService: FlowbabySetupService
 ): Promise<string> {
     const startTime = Date.now();
     
     try {
+        // Plan 049: Check environment verification
+        if (!setupService.isVerified) {
+            const response: FlowbabyIngestResponse = {
+                success: false,
+                error: 'Environment not initialized or dependencies outdated.',
+                errorCode: 'NOT_INITIALIZED'
+            };
+            return JSON.stringify(response);
+        }
+
         // Plan 045: Pre-check API key availability for faster feedback
         const hasApiKey = await flowbabyClient.hasApiKey();
         if (!hasApiKey) {

@@ -110,6 +110,8 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
         // Plan 039 M3: Stub health check to return VALID so tests can proceed with initialization
         const FlowbabySetupMod = await import('../setup/FlowbabySetupService');
         sandbox.stub(FlowbabySetupMod.FlowbabySetupService.prototype, 'checkWorkspaceHealth').resolves('VALID');
+        // Plan 049: Stub isVerified to return true so guardrails pass
+        sandbox.stub(FlowbabySetupMod.FlowbabySetupService.prototype, 'isVerified').get(() => true);
 
         await activate({ subscriptions: [], extensionPath: '/tmp/vscode-cognee-test-ext' } as any);
         assert.ok(handler, 'chat participant handler was not registered');

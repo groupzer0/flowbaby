@@ -40,11 +40,13 @@ interface QueuedRequest {
     reject: (error: Error) => void;
 }
 
+import { FlowbabySetupService } from './setup/FlowbabySetupService';
+
 /**
- * Configuration limits with safe upper bounds per architectural requirements
+ * Configuration for FlowbabyContextProvider
  */
-interface ProviderConfig {
-    /** Maximum concurrent bridge processes (default: 2, max: 5) */
+export interface ProviderConfig {
+    /** Maximum concurrent requests (default: 2, max: 5) */
     maxConcurrentRequests: number;
     
     /** Maximum request queue size before rejecting (default: 5) */
@@ -69,6 +71,7 @@ interface ProviderConfig {
 export class FlowbabyContextProvider {
     private readonly client: FlowbabyClient;
     private readonly outputChannel: vscode.OutputChannel;
+    private readonly setupService: FlowbabySetupService;
     private readonly config: ProviderConfig;
     private readonly sessionManager?: SessionManager; // Plan 001
     
@@ -88,14 +91,20 @@ export class FlowbabyContextProvider {
      * 
      * @param client - FlowbabyClient instance for bridge operations
      * @param outputChannel - Output channel for logging
+     * @param setupService - FlowbabySetupService for environment verification
      * @param sessionManager - Optional SessionManager instance (Plan 001)
      */
-    constructor(client: FlowbabyClient, outputChannel: vscode.OutputChannel, sessionManager?: SessionManager) {
+    constructor(
+        client: FlowbabyClient, 
+        outputChannel: vscode.OutputChannel, 
+        setupService: FlowbabySetupService,
+        sessionManager?: SessionManager
+    ) {
         this.client = client;
         this.outputChannel = outputChannel;
+        this.setupService = setupService;
         this.sessionManager = sessionManager;
         
-        // Load configuration with safe upper bounds
         // Load configuration with safe upper bounds
         const vsConfig = vscode.workspace.getConfiguration('Flowbaby.agentAccess');
         const maxConcurrent = vsConfig.get<number>('maxConcurrentRequests', 2);
@@ -142,6 +151,15 @@ export class FlowbabyContextProvider {
     async retrieveContext(
         req: FlowbabyContextRequest
     ): Promise<FlowbabyContextResponse | AgentErrorResponse> {
+        // Plan 049: Check environment verification
+        if (!this.setupService.isVerified) {
+            return {
+                error: AgentErrorCode.NOT_INITIALIZED,
+                message: 'Environment not initialized or dependencies outdated.',
+                details: 'Run "Flowbaby: Initialize Workspace" or "Flowbaby: Refresh Dependencies".'
+            };
+        }
+
         // Plan 045: Pre-check API key availability for faster feedback
         const hasApiKey = await this.client.hasApiKey();
         if (!hasApiKey) {

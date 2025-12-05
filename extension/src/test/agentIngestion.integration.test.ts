@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as sinon from 'sinon';
 import { FlowbabyClient } from '../flowbabyClient';
 import { handleIngestForAgent } from '../commands/ingestForAgent';
+import { FlowbabySetupService } from '../setup/FlowbabySetupService';
 
 suite('Agent Ingestion Integration Tests', () => {
     let testWorkspaceFolder: vscode.WorkspaceFolder;
@@ -121,12 +122,17 @@ suite('Agent Ingestion Integration Tests', () => {
                 fakeManager as unknown as ReturnType<typeof backgroundModule.BackgroundOperationManager.getInstance>
             );
 
+            const fakeSetupService = {
+                isVerified: true
+            } as unknown as FlowbabySetupService;
+
             try {
                 const responseJson = await handleIngestForAgent(
                     JSON.stringify(payload),
                     fakeClient,
                     fakeOutput,
-                    fakeContext
+                    fakeContext,
+                    fakeSetupService
                 );
                 const response = JSON.parse(responseJson);
 
@@ -262,11 +268,16 @@ suite('Agent Ingestion Integration Tests', () => {
                 agentName: 'Test Agent'
             };
 
+            const fakeSetupService = {
+                isVerified: true
+            } as unknown as FlowbabySetupService;
+
             const responseJson = await handleIngestForAgent(
                 JSON.stringify(validPayload),
                 mockClient,
                 mockOutputChannel,
-                mockContext
+                mockContext,
+                fakeSetupService
             );
             const response = JSON.parse(responseJson);
 
@@ -330,11 +341,16 @@ suite('Agent Ingestion Integration Tests', () => {
                 agentName: 'Test Agent'
             };
 
+            const fakeSetupService = {
+                isVerified: true
+            } as unknown as FlowbabySetupService;
+
             const responseJson = await handleIngestForAgent(
                 JSON.stringify(validPayload),
                 mockClient,
                 mockOutputChannel,
-                mockContext
+                mockContext,
+                fakeSetupService
             );
             const response = JSON.parse(responseJson);
 
@@ -345,6 +361,47 @@ suite('Agent Ingestion Integration Tests', () => {
             
             // Verify hasApiKey was called and returned true
             expect(hasApiKeyStub.called).to.be.true;
+        });
+    });
+
+    suite('Environment Verification (Plan 049)', () => {
+        test('returns NOT_INITIALIZED when environment is unverified', async () => {
+            const mockClient = {
+                hasApiKey: sinon.stub().resolves(true),
+                ingest: sinon.stub().resolves(true)
+            } as unknown as FlowbabyClient;
+
+            const mockOutputChannel = {
+                appendLine: sinon.stub()
+            } as unknown as vscode.OutputChannel;
+
+            const mockContext = {
+                workspaceState: {
+                    get: sinon.stub(),
+                    update: sinon.stub()
+                }
+            } as unknown as vscode.ExtensionContext;
+
+            const mockSetupService = {
+                isVerified: false
+            } as unknown as FlowbabySetupService;
+
+            const payload = {
+                topic: 'Test',
+                context: 'Test context'
+            };
+
+            const resultJson = await handleIngestForAgent(
+                JSON.stringify(payload),
+                mockClient,
+                mockOutputChannel,
+                mockContext,
+                mockSetupService
+            );
+
+            const result = JSON.parse(resultJson);
+            expect(result.success).to.be.false;
+            expect(result.errorCode).to.equal('NOT_INITIALIZED');
         });
     });
 });

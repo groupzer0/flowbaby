@@ -258,11 +258,11 @@ export async function activate(_context: vscode.ExtensionContext) {
                                 // Initialize FlowbabyContextProvider if not already done
                                 if (!flowbabyContextProvider) {
                                     const { FlowbabyContextProvider } = await import('./flowbabyContextProvider');
-                                    flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient!, agentOutputChannel);
+                                    flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient!, agentOutputChannel, setupService);
                                     console.log('FlowbabyContextProvider initialized after workspace setup');
                                     
                                     // Register agent commands
-                                    registerIngestForAgentCommand(_context, flowbabyClient!, agentOutputChannel);
+                                    registerIngestForAgentCommand(_context, flowbabyClient!, agentOutputChannel, setupService);
                                     registerRetrieveForAgentCommand(_context, flowbabyContextProvider, agentOutputChannel);
                                     
                                     // Register language model tools
@@ -449,7 +449,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             registerCaptureCommands(_context, flowbabyClient);
             
             // Plan 015: Register agent ingestion command
-            registerIngestForAgentCommand(_context, flowbabyClient, agentOutputChannel);
+            registerIngestForAgentCommand(_context, flowbabyClient, agentOutputChannel, setupService);
 
             // Plan 017: Initialize BackgroundOperationManager AFTER output channel creation
             try {
@@ -470,7 +470,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             
             // Plan 016 Milestone 1: Initialize FlowbabyContextProvider (now that client is ready)
             const { FlowbabyContextProvider } = await import('./flowbabyContextProvider');
-            flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient, agentOutputChannel);
+            flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient, agentOutputChannel, setupService);
             console.log('FlowbabyContextProvider initialized successfully');
             
             // Plan 016 Milestone 2: Register agent retrieval command

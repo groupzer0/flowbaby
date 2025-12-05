@@ -16,6 +16,8 @@ import {
     AgentErrorResponse
 } from '../types/agentIntegration';
 
+import { FlowbabySetupService } from '../setup/FlowbabySetupService';
+
 suite('FlowbabyContextProvider Test Suite', () => {
     let sandbox: sinon.SinonSandbox;
     let outputChannel: vscode.OutputChannel;
@@ -52,7 +54,7 @@ suite('FlowbabyContextProvider Test Suite', () => {
     function createProvider(config: {
         maxConcurrentRequests?: number;
         rateLimitPerMinute?: number;
-    } = {}): FlowbabyContextProvider {
+    } = {}, isVerified: boolean = true): FlowbabyContextProvider {
         const mockConfig = {
             get: (key: string, defaultValue?: any) => {
                 if (key === 'maxConcurrentRequests') {
@@ -72,7 +74,11 @@ suite('FlowbabyContextProvider Test Suite', () => {
         sandbox.stub(vscode.workspace, 'getConfiguration')
             .returns(mockConfig as any);
 
-        return new FlowbabyContextProvider(mockClient as any, outputChannel);
+        const mockSetupService = {
+            isVerified: isVerified
+        } as unknown as FlowbabySetupService;
+
+        return new FlowbabyContextProvider(mockClient as any, outputChannel, mockSetupService);
     }
 
     /**
@@ -592,6 +598,22 @@ suite('FlowbabyContextProvider Test Suite', () => {
                 call.args[0].includes('API key not configured')
             );
             assert.strictEqual(hasApiKeyLog, true, 'Should log API key missing');
+        });
+    });
+
+    suite('Environment Verification (Plan 049)', () => {
+        test('Returns NOT_INITIALIZED error when environment is unverified', async () => {
+            const provider = createProvider({}, false); // isVerified = false
+            
+            const response = await provider.retrieveContext({ query: 'test query' });
+
+            assert.strictEqual('error' in response, true, 'Should return error response');
+            if ('error' in response) {
+                assert.strictEqual(response.error, AgentErrorCode.NOT_INITIALIZED);
+                assert.ok(response.message.includes('Environment not initialized'));
+            }
+            
+            assert.strictEqual(mockClient.retrieve.called, false, 'Should not call bridge');
         });
     });
 });

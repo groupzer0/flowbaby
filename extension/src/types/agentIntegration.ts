@@ -428,7 +428,10 @@ export enum AgentErrorCode {
     BRIDGE_TIMEOUT = 'BRIDGE_TIMEOUT',
     
     /** Invalid request payload (malformed JSON, missing fields) */
-    INVALID_REQUEST = 'INVALID_REQUEST'
+    INVALID_REQUEST = 'INVALID_REQUEST',
+
+    /** Environment not initialized or dependencies outdated */
+    NOT_INITIALIZED = 'NOT_INITIALIZED'
 }
 
 /**

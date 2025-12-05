@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.17] - 2025-12-05
+
+### Added
+
+- **Dependency Enforcement**: Added strict verification of Python environment dependencies. The extension now blocks operations and prompts for updates if `requirements.txt` hashes do not match the installed environment.
+- **Environment Guardrails**: Added `FlowbabySetupService` checks to `FlowbabyContextProvider` and command handlers to prevent crashes from stale dependencies.
+- **Update Modals**: Added user-friendly modals to guide users through updating managed or external environments.
+
+### Changed
+
+- **Verification Logic**: `FlowbabySetupService` now tracks verification state and only allows operations when the environment is fully verified.
+
 ## [0.5.16] - 2025-12-05
 
 ### Fixed
