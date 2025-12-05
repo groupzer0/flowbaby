@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.16] - 2025-12-05
+
+### Fixed
+
+- **Ingestion Crash**: Fixed a critical `UnboundLocalError` in the background ingestion process (`cognify-only` mode) that caused crashes when API keys were missing.
+- **Notification Throttling**: Removed throttling for failure notifications to ensure users are always alerted to issues. Success notifications are now only suppressed by user setting, not by frequency.
+
 ## [0.5.15] - 2025-12-05
 
 ### Changed - Cognee Upgrade & Session Infrastructure

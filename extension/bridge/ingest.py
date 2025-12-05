@@ -696,6 +696,9 @@ def main():
                     sys.stdout = old_stdout
                     print(json.dumps(result))
                     sys.exit(1)
+
+                result = asyncio.run(run_cognify_only(workspace_path, operation_id))
+
             elif '--summary' in sys.argv:
                 # Summary mode (add-only or sync)
                 if '--summary-json' not in sys.argv:

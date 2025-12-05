@@ -472,10 +472,7 @@ export class BackgroundOperationManager {
         const throttle = this.getOrCreateThrottle(entry.datasetPath);
         
         const now = new Date();
-        if (throttle.lastSuccessAt && (now.getTime() - throttle.lastSuccessAt.getTime()) < this.throttleWindowMs) {
-            this.outputChannel.appendLine(`[BACKGROUND] Success notification throttled for workspace ${workspaceName}`);
-            return;
-        }
+        // Throttling removed per user request: "Only success noticices should be supressed when the user has that set in the extension settings"
         
         throttle.lastSuccessAt = now;
         
@@ -506,10 +503,7 @@ export class BackgroundOperationManager {
         const throttle = this.getOrCreateThrottle(entry.datasetPath);
         
         const now = new Date();
-        if (throttle.lastFailureAt && (now.getTime() - throttle.lastFailureAt.getTime()) < this.throttleWindowMs) {
-            this.outputChannel.appendLine(`[BACKGROUND] Failure notification throttled for workspace ${workspaceName}`);
-            return;
-        }
+        // Throttling removed per user request: "Failure notices should never be supressed"
         
         throttle.lastFailureAt = now;
         
