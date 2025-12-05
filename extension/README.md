@@ -50,6 +50,13 @@ Each workspace has its own separate memory and Python environment - no cross-pro
 
 Combines knowledge-graph structure with vector similarity for higher-quality, controllable retrieval.
 
+### Unified Session Context
+
+Flowbaby maintains conversational continuity by tracking session IDs across chat threads. This ensures that:
+- **Context Awareness**: Memory operations are scoped to the current conversation thread.
+- **Privacy**: Session IDs are redacted in logs to prevent leakage.
+- **Persistence**: Session context is maintained even if you restart VS Code, as long as the chat thread remains active.
+
 ### Privacy-First Design
 
 All data stays on your machine; only chat content already sent to GitHub Copilot is summarized, and no repository files or file content are sent to any external LLM.
