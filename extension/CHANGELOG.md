@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.15] - 2025-12-05
+
+### Changed - Cognee Upgrade & Session Infrastructure
+
+- **Cognee 0.4.1 Upgrade**: Upgraded managed Python environments to `cognee==0.4.1` for improved stability and native session management support.
+- **Session-Aware Retrieval**: Added infrastructure to pass session IDs to the memory engine when available, laying the foundation for conversational memory.
+- **Workspace Caching**: Enhanced workspace-local caching configuration (`CACHE_ROOT_DIRECTORY`) to support future session features.
+- **Isolation**: Maintained strict workspace isolation and backward compatibility for all ingestion/retrieval workflows.
+
 ## [0.5.14] - 2025-12-05
 
 ### Added - Unified Session Context

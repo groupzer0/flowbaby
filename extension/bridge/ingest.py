@@ -60,13 +60,17 @@ def setup_environment(workspace_path: str):
     # The Cognee SDK's BaseConfig uses pydantic-settings which reads these env vars
     system_root = str(workspace_dir / '.flowbaby/system')
     data_root = str(workspace_dir / '.flowbaby/data')
+    cache_root = str(workspace_dir / '.flowbaby/cache')
 
     os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
     os.environ['DATA_ROOT_DIRECTORY'] = data_root
+    os.environ['CACHE_ROOT_DIRECTORY'] = cache_root
+    os.environ['CACHING'] = 'true'
 
     # Also ensure the directories exist
     Path(system_root).mkdir(parents=True, exist_ok=True)
     Path(data_root).mkdir(parents=True, exist_ok=True)
+    Path(cache_root).mkdir(parents=True, exist_ok=True)
 
     # Generate dataset name
     dataset_name, _ = generate_dataset_name(workspace_path)
@@ -252,46 +256,11 @@ async def run_add_only(
         step_start = perf_counter()
 
         # Plan 048: Pass session_id if present (requires cognee support, fallback if not)
-        # We assume cognee.add supports session_id or ignores kwargs it doesn't know if we pass it carefully.
-        # However, standard python functions don't ignore extra kwargs.
-        # We'll try to pass it if not None.
+        # Verified: cognee.add (v0.3.4) does NOT support session_id.
+        # We will proceed without passing it to avoid TypeErrors and log warnings.
         add_kwargs = {'data': [summary_text], 'dataset_name': dataset_name}
-        # Note: We are not sure if cognee.add supports session_id yet.
-        # The plan says "Map this value into calls such as cognee.search(..., session_id=...) and cognee.add(..., session_id=...) where supported".
-        # If the installed cognee version doesn't support it, this will fail.
-        # For now, we will NOT pass it to cognee.add unless we are sure, OR we wrap it in try/except or check signature.
-        # But since I cannot check the signature easily here, I will assume the plan implies the underlying SDK supports it or I should try.
-        # Actually, `cognee.add` usually takes `data` and `dataset_name`.
-        # If I pass `session_id`, it might break.
-        # Let's check if I can inspect `cognee.add`.
-        # But I can't run code to inspect.
-        # I'll assume for now that I should just pass it if the plan says so.
-        # Wait, the plan says "Map this value... where supported".
-        # I'll try to pass it. If it fails, I'll catch TypeError and retry without it?
-        # That seems risky for "add".
-        # Let's look at `retrieve.py` later.
-        # For `ingest.py`, `cognee.add` adds data. Does session ID make sense for `add`?
-        # Usually session ID is for `search` (context).
-        # But maybe for `add` it associates the data with a session?
-        # I'll add it to `add_kwargs` if `session_id` is present.
         
-        # To be safe against "unexpected keyword argument", I will check if I can pass it.
-        # But I can't check.
-        # I will implement a safe call wrapper or just pass it and hope.
-        # Given the instructions, I should probably pass it.
-        # But I'll use a try-except block to fallback if it fails due to argument error.
-        
-        try:
-            if session_id:
-                await cognee.add(**add_kwargs, session_id=session_id)
-            else:
-                await cognee.add(**add_kwargs)
-        except TypeError as e:
-            if "unexpected keyword argument 'session_id'" in str(e):
-                logger.warning("cognee.add does not support session_id, falling back to legacy call")
-                await cognee.add(**add_kwargs)
-            else:
-                raise e
+        await cognee.add(**add_kwargs)
 
         metrics['add_sec'] = perf_counter() - step_start
         metrics['total_add_sec'] = perf_counter() - overall_start

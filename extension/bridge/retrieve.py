@@ -279,18 +279,25 @@ async def retrieve_context(
         # The Cognee SDK's BaseConfig uses pydantic-settings which reads these env vars
         system_root = str(workspace_dir / '.flowbaby/system')
         data_root = str(workspace_dir / '.flowbaby/data')
+        cache_root = str(workspace_dir / '.flowbaby/cache')
 
         os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
         os.environ['DATA_ROOT_DIRECTORY'] = data_root
+        os.environ['CACHE_ROOT_DIRECTORY'] = cache_root
+        os.environ['CACHING'] = 'true'
 
         # Ensure directories exist
         Path(system_root).mkdir(parents=True, exist_ok=True)
         Path(data_root).mkdir(parents=True, exist_ok=True)
+        Path(cache_root).mkdir(parents=True, exist_ok=True)
 
         # Import cognee AFTER setting environment variables
         logger.debug("Importing cognee SDK")
         import cognee
         from cognee.modules.search.types import SearchType
+        # Plan 049: Import session management utilities
+        from cognee.modules.users.methods import get_default_user
+        from cognee.context_global_variables import set_session_user_context_variable
 
         # Configure workspace-local storage directories (redundant but explicit for clarity)
         logger.debug("Configuring workspace storage directories")
@@ -321,27 +328,28 @@ async def retrieve_context(
         }})
 
         try:
-            try:
-                search_results = await cognee.search(
-                    query_type=SearchType.GRAPH_COMPLETION,
-                    query_text=query,
-                    datasets=[dataset_name],  # Filter to this workspace only
-                    top_k=final_top_k,
-                    system_prompt=SYSTEM_PROMPT,
-                    session_id=session_id
-                )
-            except TypeError as te:
-                if "session_id" in str(te) or "unexpected keyword argument" in str(te):
-                    logger.warning("cognee.search does not support session_id, falling back to legacy call")
-                    search_results = await cognee.search(
-                        query_type=SearchType.GRAPH_COMPLETION,
-                        query_text=query,
-                        datasets=[dataset_name],  # Filter to this workspace only
-                        top_k=final_top_k,
-                        system_prompt=SYSTEM_PROMPT
-                    )
-                else:
-                    raise te
+            # Plan 049: Initialize user context if session ID is present
+            if session_id:
+                try:
+                    default_user = await get_default_user()
+                    await set_session_user_context_variable(default_user)
+                    logger.debug(f"Initialized session context for user {default_user.id}", extra={'data': {'session_id': session_id}})
+                except Exception as session_error:
+                    logger.warning(f"Failed to initialize session context: {session_error}", extra={'data': {'session_id': session_id}})
+
+            # Verified: cognee.search (v0.4.1) supports session_id.
+            search_kwargs = {
+                'query_type': SearchType.GRAPH_COMPLETION,
+                'query_text': query,
+                'datasets': [dataset_name],  # Filter to this workspace only
+                'top_k': final_top_k,
+                'system_prompt': SYSTEM_PROMPT
+            }
+            
+            if session_id:
+                search_kwargs['session_id'] = session_id
+
+            search_results = await cognee.search(**search_kwargs)
 
             logger.info("Search completed", extra={'data': {
                 'result_count': len(search_results) if search_results else 0
