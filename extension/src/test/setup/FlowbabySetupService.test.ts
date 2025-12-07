@@ -5,6 +5,7 @@ import * as sinon from 'sinon';
 import * as fs from 'fs';
 import { FlowbabySetupService, BridgeEnvMetadata } from '../../setup/FlowbabySetupService';
 import { BackgroundOperationManager } from '../../background/BackgroundOperationManager';
+import { FlowbabyStatusBar, FlowbabyStatus } from '../../statusBar/FlowbabyStatusBar';
 import { EventEmitter } from 'events';
 
 suite('FlowbabySetupService Test Suite', () => {
@@ -15,6 +16,7 @@ suite('FlowbabySetupService Test Suite', () => {
     let spawnStub: sinon.SinonStub;
     let mockFs: { existsSync: sinon.SinonStub };
     let bgManagerStub: any;
+    let statusBar: FlowbabyStatusBar;
 
     const workspacePath = '/test/workspace';
 
@@ -70,12 +72,16 @@ suite('FlowbabySetupService Test Suite', () => {
         });
         sandbox.stub(vscode.commands, 'executeCommand');
 
+        statusBar = Object.create(FlowbabyStatusBar.prototype) as FlowbabyStatusBar;
+        const statusStub = sandbox.stub(statusBar, 'setStatus');
+
         service = new FlowbabySetupService(
             { extensionPath: '/ext' } as any, 
             workspacePath, 
             outputChannel,
             mockFs,
-            spawnStub as any
+            spawnStub as any,
+            statusBar
         );
         
         // Stub computeRequirementsHash to return a fixed hash by default
@@ -100,6 +106,56 @@ suite('FlowbabySetupService Test Suite', () => {
 
         return processMock;
     }
+
+    suite('checkRequirementsUpToDate', () => {
+        test('returns mismatch and marks environment unverified on hash mismatch', async () => {
+            const metadata: BridgeEnvMetadata = {
+                pythonPath: '/test/workspace/.venv/bin/python',
+                ownership: 'managed',
+                requirementsHash: 'stale-hash',
+                createdAt: '2025-01-01T00:00:00Z',
+                platform: 'linux'
+            };
+
+            sandbox.stub(service as any, 'readBridgeEnv').resolves(metadata);
+            (vscode.commands.executeCommand as sinon.SinonStub).resetHistory();
+
+            const result = await service.checkRequirementsUpToDate();
+
+            assert.strictEqual(result, 'mismatch');
+            assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'Flowbaby.environmentVerified', false));
+            const statusBarStub = statusBar.setStatus as sinon.SinonStub;
+            assert.ok(statusBarStub.calledWith(FlowbabyStatus.SetupRequired, 'Update Required'));
+        });
+
+        test('returns match and marks environment verified when hashes align', async () => {
+            const metadata: BridgeEnvMetadata = {
+                pythonPath: '/test/workspace/.venv/bin/python',
+                ownership: 'managed',
+                requirementsHash: 'fixed-hash',
+                createdAt: '2025-01-01T00:00:00Z',
+                platform: 'linux'
+            };
+
+            sandbox.stub(service as any, 'readBridgeEnv').resolves(metadata);
+            (vscode.commands.executeCommand as sinon.SinonStub).resetHistory();
+
+            const result = await service.checkRequirementsUpToDate();
+
+            assert.strictEqual(result, 'match');
+            assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'Flowbaby.environmentVerified', true));
+        });
+
+        test('returns unknown when metadata is missing', async () => {
+            sandbox.stub(service as any, 'readBridgeEnv').resolves(null);
+            (vscode.commands.executeCommand as sinon.SinonStub).resetHistory();
+
+            const result = await service.checkRequirementsUpToDate();
+
+            assert.strictEqual(result, 'unknown');
+            assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'Flowbaby.environmentVerified', false));
+        });
+    });
 
     test('initializeWorkspace: Managed environment healthy', async () => {
         // Setup: bridge-env.json exists and is managed

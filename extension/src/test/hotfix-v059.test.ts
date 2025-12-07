@@ -2,29 +2,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
-import * as path from 'path';
 import { FlowbabyClient } from '../flowbabyClient';
-
-// Subclass to expose protected methods for testing
-class TestableFlowbabyClient extends FlowbabyClient {
-    public mockExecOutput: string = '';
-    public mockExecError: Error | null = null;
-
-    protected execFileSync(command: string, args: string[], options: any): string {
-        if (this.mockExecError) {
-            throw this.mockExecError;
-        }
-        return this.mockExecOutput;
-    }
-    
-    // Expose for testing
-    public testValidatePythonVersion(pythonPath: string): string {
-        // @ts-ignore - accessing private method via bracket notation or just calling the public constructor logic?
-        // The constructor calls validatePythonVersion. We can't easily call private methods.
-        // But we can instantiate the class and see if it throws.
-        return pythonPath; // Placeholder, actual test will use constructor
-    }
-}
 
 suite('Hotfix v0.5.9 Test Suite', () => {
     let sandbox: sinon.SinonSandbox;
@@ -49,7 +27,7 @@ suite('Hotfix v0.5.9 Test Suite', () => {
         const client = new FlowbabyClient('/tmp/workspace', context);
         
         // Mock runPythonScript to return the specific error
-        const runPythonScriptStub = sandbox.stub(client as any, 'runPythonScript').resolves({
+        sandbox.stub(client as unknown as { runPythonScript: typeof client['runPythonScript'] }, 'runPythonScript').resolves({
             success: false,
             error: 'ImportError: DLL load failed while importing _kuzu. Flowbaby requires the Microsoft Visual C++ Redistributable on Windows.'
         });
@@ -76,7 +54,7 @@ suite('Hotfix v0.5.9 Test Suite', () => {
         const client = new FlowbabyClient('/tmp/workspace', context);
         
         // Mock runPythonScript to return a generic error
-        const runPythonScriptStub = sandbox.stub(client as any, 'runPythonScript').resolves({
+        sandbox.stub(client as unknown as { runPythonScript: typeof client['runPythonScript'] }, 'runPythonScript').resolves({
             success: false,
             error: 'Some other error'
         });

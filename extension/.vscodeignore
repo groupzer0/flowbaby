@@ -67,3 +67,4 @@ bridge/.pytest_cache/**
 
 # OS-specific files
 Thumbs.db
+.coverage

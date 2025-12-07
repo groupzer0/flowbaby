@@ -234,7 +234,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
         # The TypeScript layer will handle prompting users to configure the API key
         api_key = os.getenv('LLM_API_KEY')
         api_key_configured = bool(api_key)
-        
+
         if not api_key:
             logger.warning('LLM_API_KEY not found in environment - initialization will continue without LLM configuration')
             logger.info('User will be prompted to set API key after initialization completes')
@@ -270,8 +270,8 @@ async def initialize_cognee(workspace_path: str) -> dict:
         try:
             with suppress_stdout(logger):
                 # Plan 040 Hotfix: Pre-check kuzu import to catch DLL errors early
-                import kuzu
                 import cognee
+                import kuzu  # noqa: F401
                 from cognee.infrastructure.databases.relational import create_db_and_tables
         except ImportError as e:
             # Plan 040 Hotfix: Catch Kuzu DLL load failure on Windows

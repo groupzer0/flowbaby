@@ -20,9 +20,39 @@ let flowbabyContextProvider: FlowbabyContextProvider | undefined; // Plan 016 Mi
 let sessionManager: SessionManager | undefined; // Plan 001: Session Manager
 let storeMemoryToolDisposable: vscode.Disposable | undefined;
 let retrieveMemoryToolDisposable: vscode.Disposable | undefined; // Plan 016 Milestone 5
-// Plan 032: Flag to track initialization state for graceful degradation
-let clientInitialized: boolean = false;
-let clientInitializationFailed: boolean = false;
+// Plan 050: Track initialization per workspace to avoid cross-workspace contamination
+interface WorkspaceInitState {
+    initialized: boolean;
+    initFailed: boolean;
+}
+
+const workspaceInitState = new Map<string, WorkspaceInitState>();
+
+function getActiveWorkspacePath(): string | undefined {
+    const editor = vscode.window.activeTextEditor;
+    if (editor) {
+        const folder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+        if (folder) {
+            return folder.uri.fsPath;
+        }
+    }
+    const folders = vscode.workspace.workspaceFolders;
+    return folders && folders.length > 0 ? folders[0].uri.fsPath : undefined;
+}
+
+function getInitState(workspacePath: string): WorkspaceInitState {
+    if (!workspaceInitState.has(workspacePath)) {
+        workspaceInitState.set(workspacePath, { initialized: false, initFailed: false });
+    }
+    return workspaceInitState.get(workspacePath)!;
+}
+
+function setInitState(workspacePath: string, updates: Partial<WorkspaceInitState>): WorkspaceInitState {
+    const current = getInitState(workspacePath);
+    const next = { ...current, ...updates };
+    workspaceInitState.set(workspacePath, next);
+    return next;
+}
 
 // Module-level storage for pending summary confirmations (Plan 014 Milestone 2)
 interface PendingSummary {
@@ -56,6 +86,7 @@ export async function activate(_context: vscode.ExtensionContext) {
     }
 
     const workspacePath = workspaceFolders[0].uri.fsPath;
+    setInitState(workspacePath, { initialized: false, initFailed: false });
 
     // Plan 039 M6: Initialize AuditLogger early for security event tracking
     getAuditLogger().initialize(workspacePath);
@@ -121,7 +152,8 @@ export async function activate(_context: vscode.ExtensionContext) {
                         
                         // Issue 5 (v0.5.7): After setting API key, update status bar to Ready
                         // if we have a working environment
-                        if (statusBar && clientInitialized) {
+                        const activeWorkspace = getActiveWorkspacePath() || workspacePath;
+                        if (statusBar && activeWorkspace && getInitState(activeWorkspace).initialized) {
                             statusBar.setStatus(FlowbabyStatus.Ready);
                             debugLog('Status bar updated to Ready after API key configuration');
                         }
@@ -229,8 +261,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                             const initResult = await flowbabyClient!.initialize();
                             
                             if (initResult.success) {
-                                clientInitialized = true;
-                                clientInitializationFailed = false;
+                                setInitState(workspacePath, { initialized: true, initFailed: false });
                                 
                                 // Plan 045: Set status bar based on API key state
                                 if (initResult.apiKeyState.llmReady) {
@@ -258,7 +289,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                                 // Initialize FlowbabyContextProvider if not already done
                                 if (!flowbabyContextProvider) {
                                     const { FlowbabyContextProvider } = await import('./flowbabyContextProvider');
-                                    flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient!, agentOutputChannel, setupService);
+                                    flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient!, agentOutputChannel, setupService, sessionManager);
                                     console.log('FlowbabyContextProvider initialized after workspace setup');
                                     
                                     // Register agent commands
@@ -298,8 +329,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                         }
                     } catch (error) {
                         // Plan 040 M2: Handle initialization failures gracefully
-                        clientInitialized = false;
-                        clientInitializationFailed = true;
+                        setInitState(workspacePath, { initialized: false, initFailed: true });
                         statusBar.setStatus(FlowbabyStatus.Error);
                         
                         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -357,8 +387,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             // Plan 040 M3: Unified messaging for fresh workspaces
             console.log('Flowbaby workspace not initialized');
             statusBar.setStatus(FlowbabyStatus.SetupRequired);
-            clientInitialized = false;
-            clientInitializationFailed = true;
+            setInitState(workspacePath, { initialized: false, initFailed: true });
             
             // Non-blocking prompt for initialization
             vscode.window.showInformationMessage(
@@ -380,8 +409,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             // Plan 040 M3: Distinguished messaging for broken workspaces (not just "needs setup")
             console.warn('Flowbaby workspace environment needs repair');
             statusBar.setStatus(FlowbabyStatus.Error);
-            clientInitialized = false;
-            clientInitializationFailed = true;
+            setInitState(workspacePath, { initialized: false, initFailed: true });
             
             const outputChannel = getFlowbabyOutputChannel();
             outputChannel.appendLine('Flowbaby workspace environment needs repair.');
@@ -404,6 +432,22 @@ export async function activate(_context: vscode.ExtensionContext) {
         }
         
         // healthStatus === 'VALID' - proceed with client initialization
+
+        // Plan 050: Early dependency hash check to surface mismatches before initialization
+        const requirementsStatus = await setupService.checkRequirementsUpToDate();
+        if (requirementsStatus === 'mismatch') {
+            setInitState(workspacePath, { initialized: false, initFailed: true });
+            vscode.window.showWarningMessage(
+                'Flowbaby dependencies are out of date for this workspace. Refresh now?',
+                'Refresh Dependencies',
+                'Later'
+            ).then(action => {
+                if (action === 'Refresh Dependencies') {
+                    vscode.commands.executeCommand('Flowbaby.refreshDependencies');
+                }
+            });
+            return;
+        }
 
         // Add timeout to initialization to prevent extension activation hang (Issue 1)
         // Plan 040 M4: Increase timeout from 15s to 60s to handle first-run database creation
@@ -442,8 +486,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             }
             
             // Plan 032 M1: Mark client as initialized for graceful degradation
-            clientInitialized = true;
-            clientInitializationFailed = false;
+            setInitState(workspacePath, { initialized: true, initFailed: false });
             
             // Register commands for Milestone 1: Context Menu Capture
             registerCaptureCommands(_context, flowbabyClient);
@@ -470,7 +513,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             
             // Plan 016 Milestone 1: Initialize FlowbabyContextProvider (now that client is ready)
             const { FlowbabyContextProvider } = await import('./flowbabyContextProvider');
-            flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient, agentOutputChannel, setupService);
+            flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient, agentOutputChannel, setupService, sessionManager);
             console.log('FlowbabyContextProvider initialized successfully');
             
             // Plan 016 Milestone 2: Register agent retrieval command
@@ -500,8 +543,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             debugLog('Client initialization failed', { duration_ms: initDuration });
             statusBar.setStatus(FlowbabyStatus.SetupRequired);
             
-            clientInitialized = false;
-            clientInitializationFailed = true;
+            setInitState(workspacePath, { initialized: false, initFailed: true });
             
             // Check if it's an API key issue and provide helpful guidance
             // Use singleton output channel (Plan 028 M1)
@@ -1233,8 +1275,11 @@ function registerFlowbabyParticipant(
 
             try {
                 // Plan 032 M1: Graceful degradation if client not yet initialized
-                if (!clientInitialized || !flowbabyClient || !flowbabyContextProvider) {
-                    if (clientInitializationFailed) {
+                const activeWorkspace = getActiveWorkspacePath();
+                const initState = activeWorkspace ? getInitState(activeWorkspace) : { initialized: false, initFailed: false };
+
+                if (!initState.initialized || !flowbabyClient || !flowbabyContextProvider) {
+                    if (initState.initFailed) {
                         stream.markdown('❌ **Flowbaby initialization failed**\n\n');
                         stream.markdown('Please check the Output channel for details and try reloading the window.\n\n');
                         return { metadata: { error: 'initialization_failed' } };
@@ -1381,7 +1426,13 @@ function registerFlowbabyParticipant(
 
                 // Plan 001: Extract thread ID (session context)
                 // Use request.sessionId if available (future API), or fallback to workspace-scoped session
-                const threadId = (request as any).sessionId || 'workspace-session';
+                const threadId = (() => {
+                    const possibleSessionId = (request as { sessionId?: unknown }).sessionId;
+                    if (typeof possibleSessionId === 'string' && possibleSessionId.trim()) {
+                        return possibleSessionId;
+                    }
+                    return 'workspace-session';
+                })();
 
                 if (isSummaryRequest) {
                     // PLAN 014 MILESTONE 2: Summary Generation Flow

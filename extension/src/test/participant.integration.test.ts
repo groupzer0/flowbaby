@@ -14,7 +14,6 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
 
     // Common stubs
     let retrieveStub: sinon.SinonStub;
-    let ingestStub: sinon.SinonStub;
     let sendRequestSpy: sinon.SinonSpy;
 
     const workspacePath = '/tmp/vscode-cognee-test-ws';
@@ -29,28 +28,35 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
             }
         }
 
-        const fakeModel: any = {
-            sendRequest: async (_messages: any, _options: any, _token: vscode.CancellationToken) => {
+        const fakeModel: Pick<vscode.LanguageModelChat, 'sendRequest'> = {
+            sendRequest: async (_messages: vscode.LanguageModelChatMessage[], _options: vscode.LanguageModelChatRequestOptions, _token: vscode.CancellationToken) => {
                 // Record call for assertion
                 sendRequestSpy(_messages, _options, _token);
-                return { text: fragmentStream() };
+                return {
+                    text: fragmentStream()
+                } as unknown as vscode.LanguageModelChatResponse;
             }
         };
 
         const req: vscode.ChatRequest = {
             prompt,
             model: fakeModel as vscode.LanguageModelChat
-        } as any;
+        } as vscode.ChatRequest;
 
         const outputs: string[] = [];
         const stream: vscode.ChatResponseStream = {
-            markdown: (s: string) => outputs.push(s),
+            markdown: (s: string) => { outputs.push(s); },
             // not used in these tests
-            function: () => void 0,
-            renderData: () => void 0
-        } as any;
+            renderData: () => void 0,
+            anchor: () => void 0,
+            button: () => void 0,
+            filetree: () => void 0,
+            progress: () => void 0,
+            reference: () => void 0,
+            push: () => void 0
+        } as unknown as vscode.ChatResponseStream;
 
-        const token: vscode.CancellationToken = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose: () => {} }) } as any;
+        const token: vscode.CancellationToken = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose: () => {} }) } as vscode.CancellationToken;
 
         return { req, stream, token, outputs };
     }
@@ -67,20 +73,20 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
 
         // Stub config with toggles we can override per test
         const fakeConfig: vscode.WorkspaceConfiguration = {
-            get: ((key: string, defaultValue?: any) => {
+            get: ((key: string, defaultValue?: unknown) => {
                 if (key === 'enabled') {return configState.enabled;}
                 return defaultValue;
-            }) as any,
-            has: (() => true) as any,
-            inspect: (() => undefined) as any,
-            update: (async (section: string, value: any) => {
+            }) as vscode.WorkspaceConfiguration['get'],
+            has: (() => true) as vscode.WorkspaceConfiguration['has'],
+            inspect: (() => undefined) as vscode.WorkspaceConfiguration['inspect'],
+            update: (async (section: string, value: unknown) => {
                 if (section === 'enabled') {configState.enabled = Boolean(value);}
-            }) as any
+            }) as vscode.WorkspaceConfiguration['update']
         };
         sandbox.stub(vscode.workspace, 'getConfiguration').callsFake(() => fakeConfig);
 
         // Avoid global command registration conflicts when tests activate repeatedly
-        sandbox.stub(vscode.commands, 'registerCommand').callsFake((_id: string, _cb: (...args: any[]) => any) => {
+        sandbox.stub(vscode.commands, 'registerCommand').callsFake((_id: string, _cb: (..._args: unknown[]) => unknown) => {
             return { dispose: () => void 0 } as vscode.Disposable;
         });
 
@@ -103,7 +109,7 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
             }
         });
         retrieveStub = sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'retrieve');
-        ingestStub = sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'ingest').resolves(true);
+        sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'ingest').resolves(true);
         // Plan 045: Stub hasApiKey to return true so API key checks pass
         sandbox.stub(FlowbabyClientMod.FlowbabyClient.prototype, 'hasApiKey').resolves(true);
 

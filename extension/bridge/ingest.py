@@ -259,7 +259,7 @@ async def run_add_only(
         # Verified: cognee.add (v0.3.4) does NOT support session_id.
         # We will proceed without passing it to avoid TypeErrors and log warnings.
         add_kwargs = {'data': [summary_text], 'dataset_name': dataset_name}
-        
+
         await cognee.add(**add_kwargs)
 
         metrics['add_sec'] = perf_counter() - step_start
@@ -716,7 +716,7 @@ def main():
 
                 summary_json_str = sys.argv[summary_json_idx + 1]
                 summary_json = json.loads(summary_json_str)
-                
+
                 # Plan 048: Extract session ID from hidden field
                 session_id = summary_json.get('__user_session_id')
 
@@ -733,22 +733,22 @@ def main():
                     sys.stdout = old_stdout
                     print(json.dumps(result))
                     sys.exit(1)
-                
+
                 conv_json_str = sys.argv[json_idx + 1]
                 conv_json = json.loads(conv_json_str)
-                
+
                 workspace_path = conv_json.get('workspace_path')
                 user_message = conv_json.get('user_message')
                 assistant_message = conv_json.get('assistant_message')
                 importance = float(conv_json.get('importance', 0.0))
                 session_id = conv_json.get('__user_session_id')
-                
+
                 if not workspace_path or not user_message or not assistant_message:
                     result = {'success': False, 'error': 'Missing required fields in conversation JSON'}
                     sys.stdout = old_stdout
                     print(json.dumps(result))
                     sys.exit(1)
-                    
+
                 try:
                     workspace_path = canonicalize_workspace_path(workspace_path)
                 except FileNotFoundError:
@@ -756,7 +756,7 @@ def main():
                     sys.stdout = old_stdout
                     print(json.dumps(result))
                     sys.exit(1)
-                    
+
                 if mode == 'add-only':
                     result = asyncio.run(run_add_only(
                         workspace_path=workspace_path,

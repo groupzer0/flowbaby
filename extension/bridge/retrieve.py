@@ -18,6 +18,7 @@ Returns JSON to stdout:
 
 import asyncio
 import json
+import logging
 import os
 import re
 import sys
@@ -233,6 +234,10 @@ async def retrieve_context(
     # Initialize logger
     logger = bridge_logger.setup_logging(workspace_path, "retrieve")
 
+    # Plan 050: Gate graph retriever debug output behind extension debugLogging setting
+    debug_enabled = os.getenv('FLOWBABY_DEBUG_LOGGING', '').lower() in {'1', 'true', 'yes', 'on'}
+    logger.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+
     try:
         max_results = max(1, min(50, int(max_results)))
         # Clamp max_tokens into architectural window [100, 100000]
@@ -294,10 +299,10 @@ async def retrieve_context(
         # Import cognee AFTER setting environment variables
         logger.debug("Importing cognee SDK")
         import cognee
-        from cognee.modules.search.types import SearchType
-        # Plan 049: Import session management utilities
-        from cognee.modules.users.methods import get_default_user
         from cognee.context_global_variables import set_session_user_context_variable
+        from cognee.modules.search.types import SearchType
+        from cognee.modules.users.methods import get_default_user
+        # Plan 049: Import session management utilities
 
         # Configure workspace-local storage directories (redundant but explicit for clarity)
         logger.debug("Configuring workspace storage directories")
@@ -345,7 +350,7 @@ async def retrieve_context(
                 'top_k': final_top_k,
                 'system_prompt': SYSTEM_PROMPT
             }
-            
+
             if session_id:
                 search_kwargs['session_id'] = session_id
 
@@ -359,10 +364,10 @@ async def retrieve_context(
             error_msg = str(search_error)
             error_type = type(search_error).__name__
             logger.warning(f"Search error: {error_msg}")
-            
+
             # v0.5.8: Handle DatasetNotFoundError (fresh workspace with no data)
             # This is a normal condition when the user has initialized but not yet stored any memories
-            if ('DatabaseNotCreatedError' in error_msg or 
+            if ('DatabaseNotCreatedError' in error_msg or
                 'DatasetNotFoundError' in error_type or
                 'No datasets found' in error_msg or
                 'database' in error_msg.lower()):
@@ -630,15 +635,15 @@ async def retrieve_context(
 
 def main():
     """Main entry point for the script."""
-    
+
     # Plan 048: Support JSON payload via --json flag
     if len(sys.argv) >= 3 and sys.argv[1] == '--json':
         try:
             payload = json.loads(sys.argv[2])
-            
+
             workspace_path = payload.get('workspace_path')
             query = payload.get('query')
-            
+
             if not workspace_path or not query:
                 result = {
                     'success': False,
@@ -646,7 +651,7 @@ def main():
                 }
                 print(json.dumps(result))
                 sys.exit(1)
-                
+
             try:
                 workspace_path = canonicalize_workspace_path(workspace_path)
             except FileNotFoundError:
@@ -656,14 +661,14 @@ def main():
                 }
                 print(json.dumps(result))
                 sys.exit(1)
-                
+
             max_results = int(payload.get('max_results', 3))
             max_tokens = int(payload.get('max_tokens', 2000))
             half_life_days = clamp_half_life_days(float(payload.get('half_life_days', 7.0)))
             include_superseded = bool(payload.get('include_superseded', False))
             top_k = int(payload.get('search_top_k')) if payload.get('search_top_k') else None
             session_id = payload.get('__user_session_id')
-            
+
             # Validate workspace path
             if not Path(workspace_path).is_dir():
                 result = {
@@ -688,7 +693,7 @@ def main():
             # Output JSON result
             print(json.dumps(result))
             sys.exit(0 if result['success'] else 1)
-            
+
         except json.JSONDecodeError as e:
             result = {'success': False, 'error': f'Invalid JSON: {str(e)}'}
             print(json.dumps(result))

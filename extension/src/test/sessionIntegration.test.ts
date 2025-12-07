@@ -107,6 +107,41 @@ suite('Session Integration Test Suite', () => {
         assert.strictEqual(payload.__user_session_id, expectedSessionId, 'Payload should contain correct session ID');
     });
 
+    test('FlowbabyClient omits session ID when session management is disabled', async () => {
+        const manager = new SessionManager(mockContext);
+
+        // Stub configuration to disable session management while keeping other defaults
+        const flowConfig = {
+            get: (key: string, defaultValue?: any) => {
+                if (key === 'pythonPath') {return '/usr/bin/python3';}
+                if (key === 'debugLogging') {return false;}
+                return defaultValue;
+            }
+        } as any;
+        const rankingConfig = { get: (_key: string, defaultValue?: any) => defaultValue } as any;
+        const sessionConfig = { get: () => false } as any;
+
+        sandbox.stub(vscode.workspace, 'getConfiguration').callsFake((section?: string) => {
+            if (section === 'Flowbaby.sessionManagement') {return sessionConfig;}
+            if (section === 'Flowbaby.ranking') {return rankingConfig;}
+            return flowConfig;
+        });
+
+        sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+        const client = new FlowbabyClient(testWorkspacePath, mockContext, manager);
+        const runScriptStub = sandbox.stub(client as any, 'runPythonScript').resolves([]);
+
+        await client.retrieve('query', { threadId: 'thread-disabled' });
+
+        assert.ok(runScriptStub.calledOnce, 'Should call runPythonScript');
+        const args = runScriptStub.firstCall.args[1];
+        const jsonArgIndex = args.indexOf('--json');
+        assert.ok(jsonArgIndex >= 0, 'Should use JSON payload');
+        const payload = JSON.parse(args[jsonArgIndex + 1]);
+        assert.strictEqual(payload.__user_session_id, undefined, 'Payload should not include session ID when disabled');
+    });
+
     test('FlowbabyClient falls back to legacy mode without SessionManager', async () => {
         // Create client WITHOUT session manager
         const client = new FlowbabyClient(testWorkspacePath, mockContext, undefined);

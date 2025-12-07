@@ -156,6 +156,66 @@ suite('Commands Integration (no production changes)', () => {
         assert.ok(infoMsgStub.calledWith('Nothing to capture'), 'nothing to capture info message should be shown');
     });
 
+    test('Capture command works with no active editor (global shortcut context)', async () => {
+        const cb = registered['Flowbaby.captureMessage'];
+        assert.ok(cb, 'capture command not registered');
+
+        // Simulate invocation from a non-editor context (no activeTextEditor)
+        sandbox.stub(vscode.window, 'activeTextEditor').value(undefined);
+
+        inputBoxStub.resolves('Note from non-editor context');
+
+        await cb();
+
+        assert.ok(ingestAsyncStub.calledOnce, 'ingestAsync should be called once even without active editor');
+        assert.ok(infoMsgStub.called, 'success info message should be shown');
+    });
+
+    const viewScenarios: Array<{ label: string; prep: () => void }> = [
+        {
+            label: 'Explorer',
+            prep: () => {
+                sandbox.stub(vscode.window, 'activeTextEditor').value(undefined);
+            }
+        },
+        {
+            label: 'Problems',
+            prep: () => {
+                sandbox.stub(vscode.window, 'activeTextEditor').value(undefined);
+            }
+        },
+        {
+            label: 'Search',
+            prep: () => {
+                sandbox.stub(vscode.window, 'activeTextEditor').value(undefined);
+            }
+        },
+        {
+            label: 'Terminal',
+            prep: () => {
+                sandbox.stub(vscode.window, 'activeTextEditor').value(undefined);
+                sandbox.stub(vscode.window, 'activeTerminal').value({ name: 'Mock Terminal' } as vscode.Terminal);
+            }
+        }
+    ];
+
+    for (const scenario of viewScenarios) {
+        test(`Capture command works from ${scenario.label} view context`, async () => {
+            const cb = registered['Flowbaby.captureMessage'];
+            assert.ok(cb, 'capture command not registered');
+
+            ingestAsyncStub.resetHistory();
+            infoMsgStub.resetHistory();
+            scenario.prep();
+            inputBoxStub.resolves(`Note from ${scenario.label} view`);
+
+            await cb();
+
+            assert.ok(ingestAsyncStub.calledOnce, 'ingestAsync should be called once');
+            assert.ok(infoMsgStub.called, 'success info message should be shown');
+        });
+    }
+
     test('Toggle command flips enabled flag in workspace configuration', async () => {
         const cb = registered['Flowbaby.toggleMemory'];
         assert.ok(cb, 'toggle command not registered');

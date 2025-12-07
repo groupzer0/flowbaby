@@ -16,7 +16,7 @@ export interface InternalBridgeEnvelope {
     /**
      * Allow other properties to pass through (the actual payload).
      */
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 /**
@@ -74,8 +74,8 @@ export class SessionManager {
     /**
      * Wraps a payload in the internal bridge envelope, injecting the session ID.
      */
-    public wrapPayload(payload: any, sessionId?: string): InternalBridgeEnvelope {
-        const envelope: InternalBridgeEnvelope = { ...payload };
+    public wrapPayload<T extends Record<string, unknown>>(payload: T, sessionId?: string): InternalBridgeEnvelope & T {
+        const envelope: InternalBridgeEnvelope & T = { ...payload };
         if (sessionId) {
             envelope.__user_session_id = sessionId;
         }

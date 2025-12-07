@@ -1031,4 +1031,100 @@ suite('FlowbabyClient Test Suite', () => {
             assert.strictEqual(errorCall!.args[2].stderr_preview, 'Error details in stderr', 'Log should include stderr preview');
         });
     });
+
+    suite('Plan 050: Debug logging propagation', () => {
+        const workspacePath = '/tmp/test-workspace-plan050-debug';
+        let sandbox: sinon.SinonSandbox;
+
+        function stubConfigs(debugLogging: boolean) {
+            sandbox.stub(vscode.workspace, 'getConfiguration').callsFake((section?: string) => {
+                if (section === 'Flowbaby.sessionManagement') {
+                    return { get: () => true } as any;
+                }
+                if (section === 'Flowbaby.ranking') {
+                    return { get: (_key: string, defaultValue?: any) => defaultValue } as any;
+                }
+                return {
+                    get: (key: string, defaultValue?: any) => {
+                        if (key === 'pythonPath') {return '/usr/bin/python3';}
+                        if (key === 'debugLogging') {return debugLogging;}
+                        return defaultValue;
+                    }
+                } as any;
+            });
+        }
+
+        setup(() => {
+            sandbox = sinon.createSandbox();
+        });
+
+        teardown(() => {
+            sandbox.restore();
+        });
+
+        function createMockProcess() {
+            const mockProcess = new EventEmitter() as any;
+            mockProcess.stdout = new EventEmitter();
+            mockProcess.stderr = new EventEmitter();
+            mockProcess.kill = sandbox.stub();
+            return mockProcess;
+        }
+
+        test('runPythonScript sets FLOWBABY_DEBUG_LOGGING when debug logging is enabled', async () => {
+            stubConfigs(true);
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = createMockProcess();
+            const envCapture: any = {};
+
+            sandbox.stub(client as any, 'spawnProcess').callsFake((...args: any[]) => {
+                const options = args[2] as any;
+                envCapture.env = options?.env;
+                setTimeout(() => {
+                    mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                    mockProcess.emit('close', 0);
+                }, 0);
+                return mockProcess;
+            });
+
+            await (client as any).runPythonScript('retrieve.py', []);
+
+            assert.strictEqual(envCapture.env?.FLOWBABY_DEBUG_LOGGING, 'true', 'Should propagate debug flag to bridge environment');
+        });
+
+        test('runPythonScript sets FLOWBABY_DEBUG_LOGGING=false when debug logging is disabled', async () => {
+            stubConfigs(false);
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = createMockProcess();
+            const envCapture: any = {};
+
+            sandbox.stub(client as any, 'spawnProcess').callsFake((...args: any[]) => {
+                const options = args[2] as any;
+                envCapture.env = options?.env;
+                setTimeout(() => {
+                    mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                    mockProcess.emit('close', 0);
+                }, 0);
+                return mockProcess;
+            });
+
+            await (client as any).runPythonScript('retrieve.py', []);
+
+            assert.strictEqual(envCapture.env?.FLOWBABY_DEBUG_LOGGING, 'false', 'Should propagate disabled debug flag to bridge environment');
+        });
+
+        test('constructor reads sessionManagement.enabled flag', () => {
+            // Arrange: sessionManagement.enabled should default to true when not set explicitly
+            stubConfigs(false);
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+
+            assert.strictEqual(anyClient.sessionManagementEnabled, true, 'Session management should default to enabled');
+        });
+    });
 });

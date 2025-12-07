@@ -2,7 +2,7 @@
   "name": "flowbaby",
   "displayName": "Flowbaby",
   "description": "The only memory system that isn’t wearing a memory costume. No drift. No drama",
-  "version": "0.5.17",
+  "version": "0.5.18",
   "publisher": "Flowbaby",
   "icon": "media/flowbaby-icon-tightcrop.png",
   "engines": {
@@ -146,8 +146,7 @@
       {
         "command": "Flowbaby.captureMessage",
         "key": "ctrl+alt+f",
-        "mac": "cmd+alt+f",
-        "when": "editorTextFocus || chatIsVisible"
+        "mac": "cmd+alt+f"
       }
     ],
     "chatParticipants": [
@@ -376,6 +375,11 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Enable debug output channel for extension diagnostics. Shows detailed logs for activation, Python bridge communication, setup operations, and status bar events. Use this when troubleshooting issues."
+        },
+        "Flowbaby.sessionManagement.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Control whether Flowbaby groups interactions into sessions. When enabled, Flowbaby attaches a session ID to retrieval and ingestion so related chats stay together. Disable to make interactions stateless."
         },
         "flowbaby.notifications.showIngestionSuccess": {
           "type": "boolean",

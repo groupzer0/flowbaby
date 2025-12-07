@@ -6,7 +6,7 @@ import * as path from 'path';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
-import { spawn, ChildProcess } from 'child_process';
+import { ChildProcess } from 'child_process';
 
 suite('BackgroundOperationManager - Windows Specific', () => {
     let workspacePath: string;
@@ -126,7 +126,7 @@ suite('BackgroundOperationManager - Windows Specific', () => {
             summary: { topic: 'test', context: 'context' }
         };
 
-        const opId = await manager.startOperation('test summary', workspacePath, pythonPath, bridgePath, payload);
+        await manager.startOperation('test summary', workspacePath, pythonPath, bridgePath, payload);
 
         // Verify spawn was called with original python.exe
         assert.ok(spawnStub.calledOnce);

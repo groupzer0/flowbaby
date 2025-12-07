@@ -2,9 +2,10 @@
 Unit tests for Kuzu DLL load error handling in init.py.
 """
 import sys
-import pytest
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -32,10 +33,10 @@ async def test_initialize_kuzu_dll_load_failed(temp_workspace, mock_env):
 
         with patch('builtins.__import__', side_effect=side_effect):
             from init import initialize_cognee
-            
+
             # The function catches the exception and returns a dict
             result = await initialize_cognee(str(temp_workspace))
-            
+
             assert result['success'] is False
             assert "Flowbaby requires the Microsoft Visual C++ Redistributable on Windows" in result['error']
             assert "https://aka.ms/vs/17/release/vc_redist.x64.exe" in result['error']
@@ -62,9 +63,9 @@ async def test_initialize_other_import_error(temp_workspace, mock_env):
 
         with patch('builtins.__import__', side_effect=side_effect):
             from init import initialize_cognee
-            
+
             result = await initialize_cognee(str(temp_workspace))
-            
+
             assert result['success'] is False
             # Should NOT contain the VC++ message
             assert "Flowbaby requires the Microsoft Visual C++ Redistributable" not in result['error']

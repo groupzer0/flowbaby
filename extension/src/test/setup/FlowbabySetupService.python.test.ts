@@ -2,8 +2,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
-import * as fs from 'fs';
-import * as child_process from 'child_process';
 import { FlowbabySetupService } from '../../setup/FlowbabySetupService';
 import { BackgroundOperationManager } from '../../background/BackgroundOperationManager';
 
@@ -11,7 +9,7 @@ suite('FlowbabySetupService Python Detection Test Suite', () => {
     let sandbox: sinon.SinonSandbox;
     let outputChannel: vscode.OutputChannel;
     let service: FlowbabySetupService;
-    let mockConfig: any;
+    let mockConfig: vscode.WorkspaceConfiguration;
     let spawnStub: sinon.SinonStub;
     let execFileSyncStub: sinon.SinonStub;
     let mockFs: { existsSync: sinon.SinonStub };
@@ -38,7 +36,7 @@ suite('FlowbabySetupService Python Detection Test Suite', () => {
         // Mock configuration
         mockConfig = {
             get: sandbox.stub().returns('')
-        };
+        } as unknown as vscode.WorkspaceConfiguration;
         sandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig);
 
         // Mock fs
@@ -131,7 +129,7 @@ suite('FlowbabySetupService Python Detection Test Suite', () => {
         });
 
         test('Respects explicit configuration', () => {
-            mockConfig.get.withArgs('pythonPath', '').returns('/custom/python');
+            (mockConfig.get as sinon.SinonStub).withArgs('pythonPath', '').returns('/custom/python');
             const cmd = (service as any).getSystemPythonCommand();
             assert.strictEqual(cmd, '/custom/python');
         });

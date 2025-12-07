@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 async def test_initialize_missing_llm_api_key(temp_workspace, monkeypatch):
     """
     Test that initialization succeeds without LLM_API_KEY.
-    
+
     Plan 045 Contract: Initialization no longer requires API key to succeed.
     - success: True (init completes for non-LLM operations)
     - api_key_configured: False (indicates key is not set)
@@ -70,7 +70,7 @@ async def test_initialize_workspace_storage_directories(temp_workspace, mock_env
 async def test_initialize_success_with_llm_api_key(temp_workspace, mock_env, mock_cognee_module, sample_ontology):
     """
     Test successful initialization with valid LLM_API_KEY.
-    
+
     Plan 045: When API key is provided:
     - success: True
     - api_key_configured: True

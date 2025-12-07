@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { spawn, execFileSync } from 'child_process';
+import { spawn, execFileSync, ExecFileSyncOptions } from 'child_process';
 import * as crypto from 'crypto';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 import { FlowbabyStatusBar, FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
@@ -74,6 +74,36 @@ export class FlowbabySetupService {
         this.fs = fileSystem || fs;
         this.spawnFn = spawnFunction || spawn;
         this.statusBar = statusBar;
+    }
+
+    /**
+     * Plan 050: Early dependency mismatch detection (hash-based, no Python spawn)
+     * Returns 'match' when hashes align, 'mismatch' when update is needed, 'unknown' on missing metadata/errors.
+     */
+    async checkRequirementsUpToDate(): Promise<'match' | 'mismatch' | 'unknown'> {
+        const bridgeEnv = await this.readBridgeEnv();
+        if (!bridgeEnv) {
+            await this.setVerified(false);
+            return 'unknown';
+        }
+
+        try {
+            const currentHash = await this.computeRequirementsHash();
+            if (bridgeEnv.requirementsHash !== currentHash) {
+                await this.setVerified(false);
+                if (this.statusBar) {
+                    this.statusBar.setStatus(FlowbabyStatus.SetupRequired, 'Update Required');
+                }
+                return 'mismatch';
+            }
+
+            await this.setVerified(true);
+            return 'match';
+        } catch (error) {
+            debugLog('Failed to compute requirements hash during mismatch check', { error: String(error) });
+            await this.setVerified(false);
+            return 'unknown';
+        }
     }
 
     /**
@@ -722,7 +752,7 @@ export class FlowbabySetupService {
     /**
      * Wrapper for execFileSync to facilitate testing
      */
-    protected execFileSync(command: string, args: string[], options: any): void {
+    protected execFileSync(command: string, args: string[], options: ExecFileSyncOptions): void {
         execFileSync(command, args, options);
     }
 
@@ -813,11 +843,11 @@ export class FlowbabySetupService {
                 }
             });
             
-            proc.on('error', (err) => {
+            proc.on('error', (err: NodeJS.ErrnoException) => {
                 // Plan 047: Log system error details
                 this.log(`[Exec] Spawn error: ${err.message}`);
-                if ('code' in err) {
-                    this.log(`[Exec] Error code: ${(err as any).code}`);
+                if (err.code) {
+                    this.log(`[Exec] Error code: ${err.code}`);
                 }
                 reject(err);
             });

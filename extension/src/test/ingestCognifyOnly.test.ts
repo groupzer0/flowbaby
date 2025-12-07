@@ -1,6 +1,5 @@
 import * as assert from 'assert';
 import * as path from 'path';
-import * as fs from 'fs';
 import { spawnSync } from 'child_process';
 
 suite('Ingest Script Cognify-Only Mode', () => {

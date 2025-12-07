@@ -57,5 +57,18 @@ suite('SessionManager Test Suite', () => {
         
         assert.strictEqual(wrapped.foo, 'bar');
         assert.strictEqual(wrapped.__user_session_id, sessionId);
+        assert.strictEqual((payload as any).__user_session_id, undefined, 'original payload should not be mutated');
+    });
+
+    test('wrapPayload preserves arbitrary fields when session ID omitted', () => {
+        const manager = new SessionManager(context);
+        const payload = { topic: 't', context: 'c', nested: { value: true } } as const;
+
+        const wrapped = manager.wrapPayload(payload);
+
+        assert.strictEqual(wrapped.__user_session_id, undefined, 'session ID should be absent');
+        assert.strictEqual(wrapped.topic, 't');
+        assert.strictEqual(wrapped.context, 'c');
+        assert.deepStrictEqual(wrapped.nested, { value: true });
     });
 });

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { spawn, ChildProcess, SpawnOptions, execFileSync } from 'child_process';
+import { spawn, ChildProcess, SpawnOptions, execFileSync, ExecFileSyncOptions } from 'child_process';
 import { getFlowbabyOutputChannel, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
 import { SessionManager } from './sessionManager';
@@ -91,6 +91,45 @@ export interface RetrievalResult {
     tokens?: number;
 }
 
+type SummaryPayload = {
+    topic: string;
+    context: string;
+    decisions: string[];
+    rationale: string[];
+    openQuestions: string[];
+    nextSteps: string[];
+    references: string[];
+    timeScope: string;
+    topicId: string | null;
+    sessionId: string | null;
+    planId: string | null;
+    status: 'Active' | 'Superseded' | 'DecisionRecord' | null;
+    sourceCreatedAt: string | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+    workspace_path: string;
+    __user_session_id?: string;
+};
+
+type ConversationPayload = {
+    workspace_path: string;
+    user_message: string;
+    assistant_message: string;
+    importance: number;
+    __user_session_id?: string;
+};
+
+type RetrievePayload = {
+    workspace_path: string;
+    query: string;
+    max_results: number;
+    max_tokens: number;
+    half_life_days: number;
+    include_superseded: boolean;
+    search_top_k: number;
+    __user_session_id?: string;
+};
+
 /**
  * Log level enumeration
  */
@@ -121,6 +160,8 @@ export class FlowbabyClient {
     private readonly context: vscode.ExtensionContext;  // Plan 028 M5
     private cachedApiKeyState: ApiKeyState | null = null;  // Plan 045 Hotfix
     private readonly sessionManager?: SessionManager; // Plan 001: Session Manager
+    private readonly sessionManagementEnabled: boolean; // Plan 050: User toggle for sessions
+    private readonly debugLoggingEnabled: boolean; // Plan 050: Propagate debug gate to bridge
 
     /**
      * Constructor - Load configuration and initialize output channel
@@ -146,6 +187,12 @@ export class FlowbabyClient {
         // Map log level string to enum
         const logLevelStr = config.get<string>('logLevel', 'info');
         this.logLevel = this.parseLogLevel(logLevelStr);
+
+        // Plan 050: Read session management and debug logging toggles
+        this.sessionManagementEnabled = vscode.workspace
+            .getConfiguration('Flowbaby.sessionManagement')
+            .get<boolean>('enabled', true);
+        this.debugLoggingEnabled = config.get<boolean>('debugLogging', false);
 
         // Use singleton Output Channel for logging (Plan 028 M1)
         this.outputChannel = getFlowbabyOutputChannel();
@@ -173,7 +220,9 @@ export class FlowbabyClient {
             maxContextTokens: this.maxContextTokens,
             searchTopK: this.searchTopK,
             rankingHalfLifeDays: this.rankingHalfLifeDays,
-            bridgePath: this.bridgePath
+            bridgePath: this.bridgePath,
+            sessionManagementEnabled: this.sessionManagementEnabled,
+            debugLoggingEnabled: this.debugLoggingEnabled
         });
     }
 
@@ -186,7 +235,7 @@ export class FlowbabyClient {
     /**
      * Wrapper for execFileSync to facilitate testing
      */
-    protected execFileSync(command: string, args: string[], options: any): string {
+    protected execFileSync(command: string, args: string[], options: ExecFileSyncOptions): string {
         return execFileSync(command, args, options).toString();
     }
 
@@ -579,7 +628,7 @@ export class FlowbabyClient {
 
         try {
             // Convert camelCase to format expected by Python (handles both naming conventions)
-            let summaryPayload: any = {
+            let summaryPayload: SummaryPayload = {
                 topic: summary.topic,
                 context: summary.context,
                 decisions: summary.decisions,
@@ -599,7 +648,7 @@ export class FlowbabyClient {
             };
 
             // Plan 001: Inject session ID if SessionManager is available
-            if (this.sessionManager) {
+            if (this.sessionManager && this.sessionManagementEnabled) {
                 const sessionId = threadId 
                     ? this.sessionManager.getSessionIdForChatThread(threadId)
                     : this.sessionManager.getSessionIdForAgentRun();
@@ -724,7 +773,7 @@ export class FlowbabyClient {
 
         try {
             // Convert to Python format
-            let summaryPayload: any = {
+            let summaryPayload: SummaryPayload = {
                 topic: summary.topic,
                 context: summary.context,
                 decisions: summary.decisions,
@@ -744,7 +793,7 @@ export class FlowbabyClient {
             };
 
             // Plan 001: Inject session ID if SessionManager is available
-            if (this.sessionManager) {
+            if (this.sessionManager && this.sessionManagementEnabled) {
                 const sessionId = threadId 
                     ? this.sessionManager.getSessionIdForChatThread(threadId)
                     : this.sessionManager.getSessionIdForAgentRun();
@@ -867,101 +916,27 @@ export class FlowbabyClient {
         });
 
         try {
-            // Plan 001: Prepare payload with session ID
-            let payload: any = {
+            const payload: ConversationPayload = {
                 workspace_path: this.workspacePath,
                 user_message: userMessage,
                 assistant_message: assistantMessage,
-                importance: importance.toString()
+                importance
             };
 
-            if (this.sessionManager) {
-                const sessionId = threadId 
-                    ? this.sessionManager.getSessionIdForChatThread(threadId)
-                    : this.sessionManager.getSessionIdForAgentRun();
-                payload = this.sessionManager.wrapPayload(payload, sessionId);
-            }
-
-            // Use JSON payload for ingest.py to support structured data
-            // Note: ingest.py needs to be updated to accept JSON via --json argument or similar
-            // For now, we'll stick to positional arguments but inject session ID via environment or hidden arg if possible
-            // Wait, ingest.py currently takes positional args: workspace, user, assistant, importance
-            // To support session ID without breaking changes, we might need to update ingest.py first or use a new mode.
-            // Plan 001 says: "Update extension/src/flowbabyClient.ts to accept SessionManager and use it to wrap payloads with __user_session_id."
-            // This implies we should be sending JSON.
-            // Let's check if ingest.py supports JSON.
-            // The existing code uses positional args:
-            // this.runPythonScript('ingest.py', [this.workspacePath, userMessage, assistantMessage, importance.toString()], ...)
-            
-            // If I change this to send JSON, I need to change how runPythonScript is called or how ingest.py parses args.
-            // Assuming ingest.py will be updated or already supports a JSON mode (like --summary-json).
-            // Let's assume we should use a JSON mode if we want to pass session ID.
-            // Or maybe we pass it as an extra argument?
-            
-            // For now, I will keep the positional args but add session ID as a 5th arg if available?
-            // Or better, use the JSON approach if possible.
-            // The summary ingestion uses --summary-json.
-            // Let's try to use a similar approach for conversation ingestion if possible.
-            // But I don't want to break existing functionality if ingest.py isn't updated yet.
-            // The plan says "Update extension/src/flowbabyClient.ts...". It doesn't explicitly say "Update ingest.py".
-            // But it implies the bridge will handle it.
-            
-            // Let's look at how `ingestSummary` does it. It uses `--summary-json`.
-            // Maybe I should use `--conversation-json`?
-            // Or maybe I should just pass the session ID as a hidden field in the JSON if I can use JSON.
-            
-            // If I can't change ingest.py right now, I might be stuck.
-            // But wait, the plan says "Update extension/src/flowbabyClient.ts to accept SessionManager and use it to wrap payloads with __user_session_id."
-            // This strongly suggests I should be sending a payload that CAN be wrapped.
-            // The current `ingest` method sends positional args.
-            // I should probably switch to sending a JSON payload if I can.
-            
-            // Let's assume I can use `--json` or similar.
-            // Or maybe I should just append the session ID to the arguments?
-            // `ingest.py` likely uses `sys.argv`.
-            
-            // Let's look at `ingest.py` if I can.
-            // But I'm in "Implementer" mode, I should follow the plan.
-            // The plan doesn't mention updating `ingest.py`.
-            // Maybe `ingest.py` already supports it?
-            // Or maybe I should just update `flowbabyClient.ts` to PREPARE the payload, and `ingest.py` will be updated later?
-            // But `runPythonScript` executes it.
-            
-            // Let's look at `ingestSummary` again. It constructs a JSON object.
-            // `ingest` constructs positional args.
-            
-            // I will modify `ingest` to use JSON if possible, or add the session ID to the arguments.
-            // Since I can't see `ingest.py`, I'll assume I should pass it as an argument.
-            // But `wrapPayload` creates a dictionary.
-            
-            // Let's try to use a JSON payload for `ingest` as well, assuming `ingest.py` will be updated to handle it.
-            // I'll use a new flag `--conversation-json` to be safe, similar to `--summary-json`.
-            
-            let args: string[] = [];
-            if (this.sessionManager) {
-                 const sessionId = threadId 
-                    ? this.sessionManager.getSessionIdForChatThread(threadId)
-                    : this.sessionManager.getSessionIdForAgentRun();
-                 
-                 // Construct JSON payload
-                 const conversationPayload = {
-                     workspace_path: this.workspacePath,
-                     user_message: userMessage,
-                     assistant_message: assistantMessage,
-                     importance: importance,
-                     __user_session_id: sessionId
-                 };
-                 
-                 args = ['--conversation-json', JSON.stringify(conversationPayload)];
-            } else {
-                // Fallback to legacy positional args
-                args = [
+            const args = (this.sessionManager && this.sessionManagementEnabled)
+                ? (() => {
+                    const sessionId = threadId
+                        ? this.sessionManager.getSessionIdForChatThread(threadId)
+                        : this.sessionManager.getSessionIdForAgentRun();
+                    const wrapped = this.sessionManager.wrapPayload(payload, sessionId);
+                    return ['--conversation-json', JSON.stringify(wrapped)];
+                })()
+                : [
                     this.workspacePath,
                     userMessage,
                     assistantMessage,
                     importance.toString()
                 ];
-            }
 
             if ((userMessage.length + assistantMessage.length) > this.MAX_PAYLOAD_CHARS) {
                 throw new Error(`Payload too large (${userMessage.length + assistantMessage.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
@@ -1082,7 +1057,7 @@ export class FlowbabyClient {
 
             // Plan 001: Prepare payload with session ID
             let args: string[] = [];
-            if (this.sessionManager) {
+                if (this.sessionManager && this.sessionManagementEnabled) {
                  const sessionId = threadId 
                     ? this.sessionManager.getSessionIdForChatThread(threadId)
                     : this.sessionManager.getSessionIdForAgentRun();
@@ -1228,7 +1203,7 @@ export class FlowbabyClient {
 
         try {
             // Plan 001: Use JSON payload with session ID
-            let payload: any = {
+            let payload: RetrievePayload = {
                 workspace_path: this.workspacePath,
                 query: query,
                 max_results: maxResults,
@@ -1238,23 +1213,15 @@ export class FlowbabyClient {
                 search_top_k: searchTopK
             };
 
-            let args: string[];
-
-            if (this.sessionManager) {
+            if (this.sessionManager && this.sessionManagementEnabled) {
                 const sessionId = threadId 
                     ? this.sessionManager.getSessionIdForChatThread(threadId)
                     : this.sessionManager.getSessionIdForAgentRun();
                 payload = this.sessionManager.wrapPayload(payload, sessionId);
-                
-                // Use JSON mode if session manager is active (implies bridge update)
-                args = ['--json', JSON.stringify(payload)];
-            } else {
-                // Fallback to legacy positional args if no session manager (or if bridge not updated)
-                // Actually, if we want to support session ID, we should prefer JSON.
-                // But to be safe, let's use JSON if we have sessionManager, assuming bridge is ready.
-                // If not, we might break things. But the plan says to do this.
-                args = ['--json', JSON.stringify(payload)];
             }
+
+            // Always prefer JSON payloads; session ID added only when enabled
+            const args = ['--json', JSON.stringify(payload)];
 
             // Use 15-second timeout for retrieval (semantic search can be slow)
             const result = await this.runPythonScript('retrieve.py', args, 15000);
@@ -1552,7 +1519,8 @@ export class FlowbabyClient {
                     env: { 
                         ...process.env, 
                         PYTHONUNBUFFERED: '1',
-                        ...llmEnv 
+                        ...llmEnv,
+                        FLOWBABY_DEBUG_LOGGING: this.debugLoggingEnabled ? 'true' : 'false'
                     },
                     windowsHide: true
                 });

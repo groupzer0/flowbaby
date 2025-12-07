@@ -2,7 +2,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
-import * as child_process from 'child_process';
 import * as path from 'path';
 import { FlowbabyClient } from '../flowbabyClient';
 
@@ -12,6 +11,7 @@ suite('FlowbabyClient Python Validation Test Suite', () => {
     let execFileSyncStub: sinon.SinonStub;
     let originalPlatform: string;
     let mockContext: vscode.ExtensionContext;
+    let callValidatePythonVersion: (pythonPath: string) => string;
 
     const testWorkspacePath = '/test/workspace';
 
@@ -23,19 +23,31 @@ suite('FlowbabyClient Python Validation Test Suite', () => {
         const mockConfig = {
             get: sandbox.stub().returns('')
         };
-        sandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+        sandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as unknown as vscode.WorkspaceConfiguration);
 
         // Mock Output Channel
-        const mockOutputChannel = {
-            appendLine: sandbox.stub(),
-            append: sandbox.stub(),
-            show: sandbox.stub(),
-            dispose: sandbox.stub()
+        const mockOutputChannel: vscode.LogOutputChannel = {
+            name: 'Flowbaby',
+            logLevel: vscode.LogLevel.Info,
+            onDidChangeLogLevel: new vscode.EventEmitter<vscode.LogLevel>().event,
+            appendLine: () => undefined,
+            append: () => undefined,
+            replace: () => undefined,
+            clear: () => undefined,
+            show: () => undefined,
+            hide: sandbox.stub(),
+            dispose: sandbox.stub(),
+            trace: sandbox.stub(),
+            debug: sandbox.stub(),
+            info: sandbox.stub(),
+            warn: sandbox.stub(),
+            error: sandbox.stub()
         };
-        sandbox.stub(vscode.window, 'createOutputChannel').returns(mockOutputChannel as any);
+        sandbox.stub(vscode.window, 'createOutputChannel').returns(mockOutputChannel);
 
         // Mock child_process.execFileSync - Stub prototype since it's called in constructor
-        execFileSyncStub = sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync');
+        const prototype = FlowbabyClient.prototype as unknown as { execFileSync: typeof FlowbabyClient.prototype['execFileSync'] };
+        execFileSyncStub = sandbox.stub(prototype, 'execFileSync');
 
         // Mock ExtensionContext
         mockContext = {
@@ -48,7 +60,7 @@ suite('FlowbabyClient Python Validation Test Suite', () => {
             subscriptions: [],
             extensionUri: vscode.Uri.file('/mock/extension'),
             asAbsolutePath: (p: string) => path.join('/mock/extension', p)
-        } as any;
+        } as unknown as vscode.ExtensionContext;
 
         // Instantiate client
         // Note: The constructor calls detectPythonInterpreter and validatePythonVersion.
@@ -64,6 +76,10 @@ suite('FlowbabyClient Python Validation Test Suite', () => {
         
         // Reset stub history after constructor
         execFileSyncStub.resetHistory();
+
+        callValidatePythonVersion = (pythonPath: string) => (
+            client as unknown as { validatePythonVersion: (pythonPath: string) => string }
+        ).validatePythonVersion(pythonPath);
     });
 
     teardown(() => {
@@ -79,7 +95,7 @@ suite('FlowbabyClient Python Validation Test Suite', () => {
             Object.defineProperty(process, 'platform', { value: 'win32' });
             execFileSyncStub.withArgs('python', ['--version']).returns('Python 3.11.0');
 
-            const result = (client as any).validatePythonVersion('python');
+            const result = callValidatePythonVersion('python');
             assert.strictEqual(result, 'python');
         });
 
@@ -88,7 +104,7 @@ suite('FlowbabyClient Python Validation Test Suite', () => {
             execFileSyncStub.withArgs('python', ['--version']).throws(new Error('Not found'));
             execFileSyncStub.withArgs('py', ['--version']).returns('Python 3.11.0');
 
-            const result = (client as any).validatePythonVersion('python');
+            const result = callValidatePythonVersion('python');
             assert.strictEqual(result, 'py');
         });
 
@@ -98,7 +114,7 @@ suite('FlowbabyClient Python Validation Test Suite', () => {
             execFileSyncStub.withArgs('py', ['--version']).throws(new Error('Not found'));
 
             assert.throws(() => {
-                (client as any).validatePythonVersion('python');
+                callValidatePythonVersion('python');
             }, /Flowbaby could not run a Python interpreter/);
         });
 
@@ -106,7 +122,7 @@ suite('FlowbabyClient Python Validation Test Suite', () => {
             Object.defineProperty(process, 'platform', { value: 'linux' });
             execFileSyncStub.withArgs('python3', ['--version']).returns('Python 3.11.0');
 
-            const result = (client as any).validatePythonVersion('python3');
+            const result = callValidatePythonVersion('python3');
             assert.strictEqual(result, 'python3');
         });
 
@@ -115,7 +131,7 @@ suite('FlowbabyClient Python Validation Test Suite', () => {
             execFileSyncStub.withArgs('python3', ['--version']).throws(new Error('Not found'));
             execFileSyncStub.withArgs('python', ['--version']).returns('Python 3.11.0');
 
-            const result = (client as any).validatePythonVersion('python3');
+            const result = callValidatePythonVersion('python3');
             assert.strictEqual(result, 'python');
         });
 
@@ -125,33 +141,33 @@ suite('FlowbabyClient Python Validation Test Suite', () => {
             execFileSyncStub.withArgs('python', ['--version']).throws(new Error('Not found'));
 
             assert.throws(() => {
-                (client as any).validatePythonVersion('python3');
+                callValidatePythonVersion('python3');
             }, /Flowbaby could not run a Python interpreter/);
         });
 
         test('Validates Python 3.10', () => {
             execFileSyncStub.returns('Python 3.10.5');
-            const result = (client as any).validatePythonVersion('python');
+            const result = callValidatePythonVersion('python');
             assert.strictEqual(result, 'python');
         });
 
         test('Validates Python 3.12', () => {
             execFileSyncStub.returns('Python 3.12.1');
-            const result = (client as any).validatePythonVersion('python');
+            const result = callValidatePythonVersion('python');
             assert.strictEqual(result, 'python');
         });
 
         test('Rejects Python 3.9', () => {
             execFileSyncStub.returns('Python 3.9.10');
             assert.throws(() => {
-                (client as any).validatePythonVersion('python');
+                callValidatePythonVersion('python');
             }, /Detected Python 3.9.10/);
         });
 
         test('Rejects Python 3.13', () => {
             execFileSyncStub.returns('Python 3.13.0');
             assert.throws(() => {
-                (client as any).validatePythonVersion('python');
+                callValidatePythonVersion('python');
             }, /Detected Python 3.13.0/);
         });
     });
