@@ -622,19 +622,27 @@ export class FlowbabySetupService {
             return;
         }
 
-        const bgManager = BackgroundOperationManager.getInstance();
-        
-        // 1. Pause Background Ops
-        const paused = await bgManager.pause(5000); // 5s timeout
-        if (!paused) {
-            const action = await vscode.window.showWarningMessage(
-                'Background operations are running. Cancel them to proceed with refresh?',
-                'Cancel Operations',
-                'Abort'
-            );
-            if (action !== 'Cancel Operations') {
-                bgManager.resume();
-                return;
+        let bgManager: BackgroundOperationManager | null = null;
+        try {
+            bgManager = BackgroundOperationManager.getInstance();
+        } catch (error) {
+            // When activation stops early (e.g., stale deps) the manager might not exist yet; proceed without pause/resume
+            debugLog('Refresh dependencies without BackgroundOperationManager (not initialized yet)', { error: String(error) });
+        }
+
+        // 1. Pause Background Ops (only if manager available)
+        if (bgManager) {
+            const paused = await bgManager.pause(5000); // 5s timeout
+            if (!paused) {
+                const action = await vscode.window.showWarningMessage(
+                    'Background operations are running. Cancel them to proceed with refresh?',
+                    'Cancel Operations',
+                    'Abort'
+                );
+                if (action !== 'Cancel Operations') {
+                    bgManager.resume();
+                    return;
+                }
             }
         }
 
@@ -744,7 +752,7 @@ export class FlowbabySetupService {
                 vscode.window.showErrorMessage(msg + ' Previous environment restored.');
                 if (this.statusBar) {this.statusBar.setStatus(FlowbabyStatus.Error, msg);}
             } finally {
-                bgManager.resume();
+                if (bgManager) {bgManager.resume();}
             }
         });
     }

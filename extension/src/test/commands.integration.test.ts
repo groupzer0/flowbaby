@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 
 // Import activate so we can register commands without depending on compiled dist
-import { activate } from '../extension';
+import { activate, deactivate } from '../extension';
 
 suite('Commands Integration (no production changes)', () => {
     let sandbox: sinon.SinonSandbox;
@@ -96,11 +96,12 @@ suite('Commands Integration (no production changes)', () => {
         await activate({ subscriptions: [], extensionPath: '/tmp/vscode-cognee-test-ext' } as any);
     });
 
-    teardown(() => {
+    teardown(async () => {
         sandbox.restore();
         // Cleanup captured commands
         for (const key of Object.keys(registered)) {delete registered[key];}
         lastEnabledValue = undefined;
+        await deactivate();
     });
 
     test('Capture command uses user input when provided and ingests', async () => {

@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
-import { activate } from '../extension';
+import { activate, deactivate } from '../extension';
 import { FlowbabyStatusBar, FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
 import { FlowbabySetupService } from '../setup/FlowbabySetupService';
 
@@ -57,8 +57,9 @@ suite('Plan 050: Workspace initialization isolation', () => {
         sandbox.stub(FlowbabySetupService.prototype, 'checkRequirementsUpToDate').resolves('match');
     });
 
-    teardown(() => {
+    teardown(async () => {
         sandbox.restore();
+        await deactivate();
     });
 
     test('activation marks workspace as initialized on successful init', async () => {
@@ -78,6 +79,8 @@ suite('Plan 050: Workspace initialization isolation', () => {
         sandbox.stub(flowbabyClientMod.FlowbabyClient.prototype, 'initialize').callsFake(initStub as any);
 
         await activate(mockContext);
+
+        await deactivate();
 
         // Test is intentionally light-touch: we only assert that activation
         // completed without throwing. Detailed per-workspace state isolation
@@ -100,6 +103,7 @@ suite('Plan 050: Workspace initialization isolation', () => {
         const initSpy = sandbox.spy(flowbabyClientMod.FlowbabyClient.prototype, 'initialize');
 
         await activate(mockContext);
+        await deactivate();
 
         // When requirements are out of date, activation should not initialize the client
         assert.ok(initSpy.notCalled, 'FlowbabyClient.initialize should not be called on mismatch');
@@ -129,6 +133,8 @@ suite('Plan 050: Workspace initialization isolation', () => {
         ]);
 
         await activate(mockContext);
+
+        await deactivate();
         assert.ok(initSpy.notCalled, 'Initialization should be skipped for mismatch workspace');
 
         // Second workspace (healthy)
@@ -138,6 +144,7 @@ suite('Plan 050: Workspace initialization isolation', () => {
 
         await activate(mockContext);
         assert.ok(initSpy.calledOnce, 'Healthy workspace should initialize even after a prior mismatch');
+        await deactivate();
     });
 
     test('healthy workspaces remain isolated across healthy -> mismatch -> healthy sequence', async () => {
@@ -157,18 +164,21 @@ suite('Plan 050: Workspace initialization isolation', () => {
             { uri: vscode.Uri.file('/tmp/flowbaby-plan050-workspace-a'), name: 'wsa', index: 0 } as vscode.WorkspaceFolder,
         ]);
         await activate(mockContext);
+        await deactivate();
 
         // Workspace B (mismatch)
         workspaceFoldersStub.value([
             { uri: vscode.Uri.file('/tmp/flowbaby-plan050-workspace-b'), name: 'wsb', index: 0 } as vscode.WorkspaceFolder,
         ]);
         await activate(mockContext);
+        await deactivate();
 
         // Workspace C (healthy again)
         workspaceFoldersStub.value([
             { uri: vscode.Uri.file('/tmp/flowbaby-plan050-workspace-c'), name: 'wsc', index: 0 } as vscode.WorkspaceFolder,
         ]);
         await activate(mockContext);
+        await deactivate();
 
         assert.strictEqual(initSpy.callCount, 2, 'Only healthy workspaces should initialize across the sequence');
     });

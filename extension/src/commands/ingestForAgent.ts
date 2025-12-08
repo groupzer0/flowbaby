@@ -17,6 +17,7 @@ import { validateIngestRequest } from '../validation/summaryValidator';
 import { FlowbabyClient } from '../flowbabyClient';
 
 import { FlowbabySetupService } from '../setup/FlowbabySetupService';
+import { safePush } from '../lifecycle/registrationHelper';
 
 /**
  * Register the agent ingestion command
@@ -38,8 +39,8 @@ export function registerIngestForAgentCommand(
             return await handleIngestForAgent(requestJson, flowbabyClient, outputChannel, context, setupService);
         }
     );
-
-    context.subscriptions.push(command);
+    
+    safePush(context, command);
 }
 
 /**

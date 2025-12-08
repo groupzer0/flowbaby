@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.19] - 2025-12-07
+
+### Added
+
+- Activation ledger now records workspace path, health/requirements state, registration guards, and deactivation details for every activation, enabling lifecycle reconstruction across test runs.
+- Structured safePush diagnostics capture context fingerprints, host tool snapshots, and test-mode push probes so DisposableStore anomalies can be attributed to specific intents.
+- Workspace initialization isolation from Plan 050 is preserved under repeated activations, with each workspace tracked independently so a broken workspace cannot contaminate others sharing the same window or host.
+- Single-activation lifecycle model from Plan 051 is enforced via registration helpers and activation ledger state, ensuring that extension-owned registrations are routed through lifecycle-safe paths and never pushed into known-disposed contexts.
+
+### Changed
+
+- Language model tool and chat participant registration skip when host inventory already contains Flowbaby assets, reducing duplicate registration noise in reused test hosts.
+- Test-mode prompt handling now logs suppression reasons with activation metadata and avoids modal dialogs that block CI runs.
+- Debug logging automatically enables in test mode to surface lifecycle and registration traces during automated suites.
+
 ## [0.5.18] - 2025-12-07
 
 ### Added

@@ -15,6 +15,7 @@ import * as vscode from 'vscode';
 // Module-level singleton instances (lazy initialization)
 let flowbabyOutputChannel: vscode.OutputChannel | undefined;
 let flowbabyDebugChannel: vscode.OutputChannel | undefined;
+let flowbabyAgentOutputChannel: vscode.OutputChannel | undefined;
 
 /**
  * Get the singleton Flowbaby output channel.
@@ -40,7 +41,9 @@ export function getFlowbabyOutputChannel(): vscode.OutputChannel {
  */
 export function getFlowbabyDebugChannel(): vscode.OutputChannel | undefined {
     const config = vscode.workspace.getConfiguration('Flowbaby');
-    const debugLoggingEnabled = config.get<boolean>('debugLogging', false);
+    const debugLoggingEnabled = config.get<boolean>('debugLogging', false)
+        || process.env.FLOWBABY_DEBUG_LOGGING === 'true'
+        || process.env.NODE_ENV === 'test';
     
     if (!debugLoggingEnabled) {
         return undefined;
@@ -50,6 +53,17 @@ export function getFlowbabyDebugChannel(): vscode.OutputChannel | undefined {
         flowbabyDebugChannel = vscode.window.createOutputChannel('Flowbaby Debug');
     }
     return flowbabyDebugChannel;
+}
+
+/**
+ * Get the singleton Flowbaby Agent Activity channel.
+ * This is used for agent instrumentation and should not create duplicate entries.
+ */
+export function getFlowbabyAgentOutputChannel(): vscode.OutputChannel {
+    if (!flowbabyAgentOutputChannel) {
+        flowbabyAgentOutputChannel = vscode.window.createOutputChannel('Flowbaby Agent Activity');
+    }
+    return flowbabyAgentOutputChannel;
 }
 
 /**
@@ -83,5 +97,9 @@ export function disposeOutputChannels(): void {
     if (flowbabyDebugChannel) {
         flowbabyDebugChannel.dispose();
         flowbabyDebugChannel = undefined;
+    }
+    if (flowbabyAgentOutputChannel) {
+        flowbabyAgentOutputChannel.dispose();
+        flowbabyAgentOutputChannel = undefined;
     }
 }

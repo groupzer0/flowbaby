@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 
-import { activate } from '../extension';
+import { activate, deactivate } from '../extension';
 
 type Handler = vscode.ChatRequestHandler;
 
@@ -123,7 +123,8 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
         assert.ok(handler, 'chat participant handler was not registered');
     });
 
-    teardown(() => {
+    teardown(async () => {
+        await deactivate();
         sandbox.restore();
         handler = undefined;
     });

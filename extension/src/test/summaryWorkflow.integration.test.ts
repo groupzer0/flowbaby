@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 
-import { activate } from '../extension';
+import { activate, deactivate } from '../extension';
 import { formatSummaryAsText, createDefaultSummary, TEMPLATE_VERSION } from '../summaryTemplate';
 import { parseSummaryFromText } from '../summaryParser';
 
@@ -177,7 +177,8 @@ Nov 18 10:00-11:30`;
         assert.ok(handler, 'chat participant handler was not registered');
     });
 
-    teardown(() => {
+    teardown(async () => {
+        await deactivate();
         sandbox.restore();
         handler = undefined;
     });

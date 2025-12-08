@@ -267,6 +267,48 @@ suite('FlowbabySetupService Test Suite', () => {
         assert.ok((vscode.window.showInformationMessage as sinon.SinonStub).calledWith(sinon.match(/refreshed successfully/)));
     });
 
+    test('refreshDependencies: runs when BackgroundOperationManager is not initialized', async () => {
+        const metadata: BridgeEnvMetadata = {
+            pythonPath: '/test/workspace/.venv/bin/python',
+            ownership: 'managed',
+            requirementsHash: 'old-hash',
+            createdAt: '2025-01-01T00:00:00Z',
+            platform: 'linux'
+        };
+
+        sandbox.stub(service as any, 'readBridgeEnv').resolves(metadata);
+        sandbox.stub(service as any, 'installDependencies').resolves();
+        sandbox.stub(service as any, 'verifyEnvironment').resolves(true);
+        sandbox.stub(service as any, 'getSystemPythonCommand').returns('/usr/bin/python');
+        sandbox.stub(service as any, 'getPythonPath').returns('/test/workspace/.flowbaby/venv/bin/python');
+
+        // BackgroundOperationManager not initialized should not block refresh
+        (BackgroundOperationManager.getInstance as sinon.SinonStub).throws(new Error('Not initialized'));
+
+        mockFs.existsSync.callsFake((p: string) => {
+            if (p.includes('bridge-env.json')) {return true;}
+            if (p.includes('.flowbaby/venv.backup')) {return false;}
+            if (p.includes('.flowbaby/venv')) {return false;}
+            if (p.includes('.flowbaby')) {return true;}
+            return false;
+        });
+
+        const venvMock = createMockProcess(0);
+        const pipMock = createMockProcess(0);
+        const verifyMock = createMockProcess(0, JSON.stringify({ status: 'ok' }));
+
+        spawnStub.onCall(0).returns(venvMock);
+        spawnStub.onCall(1).returns(pipMock);
+        spawnStub.onCall(2).returns(verifyMock);
+
+        await assert.doesNotReject(service.refreshDependencies());
+
+        assert.ok(bgManagerStub.pause.notCalled);
+        assert.ok(bgManagerStub.resume.notCalled);
+        assert.ok(spawnStub.called);
+        assert.ok((fs.promises.writeFile as sinon.SinonStub).calledWith(sinon.match(/bridge-env.json/)));
+    });
+
     test('runCommand: Uses shell: false and does not quote args', async () => {
         const cmd = '/path with spaces/python';
         const args = ['arg with spaces', 'normal_arg'];

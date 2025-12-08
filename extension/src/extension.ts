@@ -13,6 +13,28 @@ import { FlowbabyStatusBar, FlowbabyStatus } from './statusBar/FlowbabyStatusBar
 import { getFlowbabyOutputChannel, getFlowbabyDebugChannel, disposeOutputChannels, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
 import { SessionManager } from './sessionManager';
+import {
+    areToolsRegistered,
+    disposeFallbackRegistrations,
+    getActiveContextDiagnostics,
+    isActive as isExtensionCurrentlyActive,
+    markActiveContextDisposed,
+    recordActivationCompletion,
+    recordActivationMetadata,
+    recordRegistrationGuardEvent,
+    resetRegistrationGuards,
+    safePush,
+    setActiveContext,
+    setExtensionActive,
+    setParticipantRegistered,
+    setToolsRegistered,
+    isParticipantRegistered
+} from './lifecycle/registrationHelper';
+
+// Re-exported for focused tests (Plan 052) so they can exercise
+// the host-aware participant guard without re-running full
+// activation. VS Code still uses activate() as the entry point.
+export { registerFlowbabyParticipant };
 
 // Module-level variable to store client instance
 let flowbabyClient: FlowbabyClient | undefined;
@@ -68,6 +90,43 @@ const pendingSummaries = new Map<string, PendingSummary>();
  */
 export async function activate(_context: vscode.ExtensionContext) {
     const activationStart = Date.now();
+    const wasActive = isExtensionCurrentlyActive();
+    const previousContext = getActiveContextDiagnostics();
+    setExtensionActive(true);
+    setActiveContext(_context);
+
+    // Get workspace folder
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    const workspacePath = workspaceFolders && workspaceFolders.length > 0
+        ? workspaceFolders[0].uri.fsPath
+        : undefined;
+
+    if (workspacePath) {
+        recordActivationMetadata({ workspacePath });
+    }
+
+    if (wasActive && previousContext?.context === _context && !previousContext?.disposed) {
+        debugLog('Activation skipped: already active with healthy context', {
+            activationId: previousContext.activationId,
+            workspacePath,
+            activationCountSinceLastDeactivation: previousContext.activationCountSinceLastDeactivation,
+            suiteTag: previousContext.suiteTag
+        });
+        return;
+    }
+
+    const contextDiagnostics = getActiveContextDiagnostics();
+    if (contextDiagnostics?.disposed) {
+        debugLog('Activation aborted: context subscriptions are disposed', {
+            activationId: contextDiagnostics.activationId,
+            workspacePath,
+            suiteTag: contextDiagnostics.suiteTag
+        });
+        recordActivationCompletion({ initResult: { success: false, error: 'context_disposed' } });
+        setExtensionActive(false);
+        return;
+    }
+
     console.log('Flowbaby extension activated');
     
     // Plan 028 M2: Debug logging for activation lifecycle
@@ -76,16 +135,16 @@ export async function activate(_context: vscode.ExtensionContext) {
     // Plan 001: Initialize SessionManager
     sessionManager = new SessionManager(_context);
 
-    // Get workspace folder
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
+    if (!workspaceFolders || workspaceFolders.length === 0 || !workspacePath) {
         vscode.window.showWarningMessage(
             'Flowbaby requires an open workspace folder'
         );
+        markActiveContextDisposed();
+        recordActivationCompletion({ initResult: { success: false, error: 'no_workspace' } });
+        setExtensionActive(false);
         return;
     }
 
-    const workspacePath = workspaceFolders[0].uri.fsPath;
     setInitState(workspacePath, { initialized: false, initFailed: false });
 
     // Plan 039 M6: Initialize AuditLogger early for security event tracking
@@ -297,7 +356,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                                     registerRetrieveForAgentCommand(_context, flowbabyContextProvider, agentOutputChannel);
                                     
                                     // Register language model tools
-                                    registerLanguageModelTool(_context, agentOutputChannel);
+                                    await registerLanguageModelTool(_context, agentOutputChannel);
                                 }
                                 
                                 outputChannel.appendLine('[Plan 040] ✅ Flowbaby client initialized successfully');
@@ -401,6 +460,11 @@ export async function activate(_context: vscode.ExtensionContext) {
             });
             
             // Skip client initialization attempt - environment not ready
+            recordActivationCompletion({
+                healthStatus,
+                initResult: { success: false, error: 'workspace_fresh' }
+            });
+            setExtensionActive(false);
             return;
         }
         
@@ -428,6 +492,11 @@ export async function activate(_context: vscode.ExtensionContext) {
             });
             
             // Skip client initialization attempt - environment broken
+            recordActivationCompletion({
+                healthStatus,
+                initResult: { success: false, error: 'workspace_broken' }
+            });
+            setExtensionActive(false);
             return;
         }
         
@@ -446,8 +515,15 @@ export async function activate(_context: vscode.ExtensionContext) {
                     vscode.commands.executeCommand('Flowbaby.refreshDependencies');
                 }
             });
+            recordActivationCompletion({
+                healthStatus,
+                requirementsStatus,
+                initResult: { success: false, error: 'requirements_mismatch' }
+            });
+            setExtensionActive(false);
             return;
         }
+        recordActivationMetadata({ healthStatus, requirementsStatus });
 
         // Add timeout to initialization to prevent extension activation hang (Issue 1)
         // Plan 040 M4: Increase timeout from 15s to 60s to handle first-run database creation
@@ -520,7 +596,14 @@ export async function activate(_context: vscode.ExtensionContext) {
             registerRetrieveForAgentCommand(_context, flowbabyContextProvider, agentOutputChannel);
             
             // Plan 016.1: Register languageModelTools unconditionally (Configure Tools is sole opt-in)
-            registerLanguageModelTool(_context, agentOutputChannel);
+            await registerLanguageModelTool(_context, agentOutputChannel);
+            recordActivationCompletion({
+                healthStatus,
+                requirementsStatus,
+                initResult: { success: true },
+                toolsRegistered: areToolsRegistered(),
+                participantRegistered: isParticipantRegistered()
+            });
             
             // Plan 045: Show post-init API key prompt if needed
             // Issue 4 (v0.5.7): Use modal warning that stays until dismissed
@@ -558,6 +641,12 @@ export async function activate(_context: vscode.ExtensionContext) {
             outputChannel.appendLine('   - Use "Flowbaby: Initialize Workspace" to set up the environment');
             outputChannel.appendLine('   - Or use "Flowbaby: Refresh Bridge Dependencies" to repair');
             outputChannel.show();
+            recordActivationCompletion({
+                healthStatus,
+                requirementsStatus,
+                initResult: { success: false, error: initResult.error }
+            });
+            setExtensionActive(false);
             
             // Plan 039 M1: Non-blocking warning message to prevent activation hang
             // Use .then() instead of await to allow activate() to return immediately
@@ -576,6 +665,8 @@ export async function activate(_context: vscode.ExtensionContext) {
         }
     } catch (error) {
         console.error('Failed to create Flowbaby client:', error);
+        recordActivationCompletion({ initResult: { success: false, error: error instanceof Error ? error.message : String(error) } });
+        setExtensionActive(false);
         vscode.window.showErrorMessage(
             `Flowbaby initialization error: ${error}`
         );
@@ -587,19 +678,61 @@ export async function activate(_context: vscode.ExtensionContext) {
  * Tools register unconditionally at activation; VS Code's Configure Tools UI is the sole opt-in control
  * Both tools (storeMemory and retrieveMemory) register atomically
  */
-function registerLanguageModelTool(_context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel) {
-    // Register BOTH tools unconditionally (Configure Tools controls enablement)
-    if (flowbabyContextProvider) {
+async function registerLanguageModelTool(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel) {
+    if (!flowbabyContextProvider) {
+        recordRegistrationGuardEvent('tool', { reason: 'missing-context-provider' });
+        return;
+    }
+
+    let hostTools: { names?: string[]; hasFlowbabyTools?: boolean; error?: string } = {};
+    try {
+        const tools = await vscode.lm.tools;
+        const names = tools.map(tool => tool.name);
+        hostTools = {
+            names,
+            hasFlowbabyTools: names.some(name => name === 'flowbaby_storeMemory' || name === 'flowbaby_retrieveMemory')
+        };
+    } catch (error) {
+        hostTools = { error: error instanceof Error ? error.message : String(error) };
+    }
+
+    if (areToolsRegistered()) {
+        recordRegistrationGuardEvent('tool', { reason: 'already-registered', hostTools });
+        return;
+    }
+
+    if (hostTools.hasFlowbabyTools) {
+        recordRegistrationGuardEvent('tool', { reason: 'host-tools-present', hostTools });
+        setToolsRegistered(true);
+        return;
+    }
+
+    try {
         const storeTool = new StoreMemoryTool(outputChannel);
         storeMemoryToolDisposable = vscode.lm.registerTool('flowbaby_storeMemory', storeTool);
-        
+
         const retrieveTool = new RetrieveMemoryTool(flowbabyContextProvider, outputChannel);
         retrieveMemoryToolDisposable = vscode.lm.registerTool('flowbaby_retrieveMemory', retrieveTool);
-        
+
+        setToolsRegistered(true);
+
+        if (storeMemoryToolDisposable) {
+            safePush(context, storeMemoryToolDisposable, { intent: { kind: 'tool', id: 'flowbaby_storeMemory' }, hostTools });
+        }
+        if (retrieveMemoryToolDisposable) {
+            safePush(context, retrieveMemoryToolDisposable, { intent: { kind: 'tool', id: 'flowbaby_retrieveMemory' }, hostTools });
+        }
+
         outputChannel.appendLine('=== Plan 016.1: Language Model Tools Registered ===');
         outputChannel.appendLine('✅ flowbaby_storeMemory registered - Copilot agents can store memories');
         outputChannel.appendLine('✅ flowbaby_retrieveMemory registered - Copilot agents can retrieve memories');
         outputChannel.appendLine('ℹ️  Enable/disable tools via Configure Tools UI in GitHub Copilot Chat');
+    } catch (error) {
+        recordRegistrationGuardEvent('tool', {
+            reason: 'registration-failed',
+            hostTools,
+            error: error instanceof Error ? error.message : String(error)
+        });
     }
 }
 
@@ -693,6 +826,8 @@ function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
  */
 export async function deactivate() {
     console.log('Flowbaby extension deactivated');
+    markActiveContextDisposed();
+    setExtensionActive(false);
     
     // Plan 017: Shutdown BackgroundOperationManager (sends SIGTERM to running processes)
     try {
@@ -715,6 +850,8 @@ export async function deactivate() {
     
     // Plan 028 M1: Dispose singleton output channels
     disposeOutputChannels();
+    disposeFallbackRegistrations();
+    resetRegistrationGuards();
     
     flowbabyClient = undefined;
     flowbabyContextProvider = undefined;
@@ -1261,15 +1398,29 @@ function registerFlowbabyParticipant(
 ) {
     console.log('=== MILESTONE 2: Registering @flowbaby Chat Participant ===');
 
+    if (isParticipantRegistered()) {
+        recordRegistrationGuardEvent('participant', { reason: 'already-registered' });
+        return;
+    }
+
+    // Host-aware participant guard (Plan 052 Milestone 3): we do not have a
+    // public chat participant inventory, so we rely on registration outcomes
+    // and host errors as signals while still emitting a structured snapshot.
+    const hostParticipantSnapshot: { hasFlowbabyParticipant?: boolean; error?: string } = {
+        hasFlowbabyParticipant: false
+    };
+
     // Register chat participant with ID matching package.json
-    const participant = vscode.chat.createChatParticipant(
-        'flowbaby',
-        async (
-            request: vscode.ChatRequest,
-            _chatContext: vscode.ChatContext,
-            stream: vscode.ChatResponseStream,
-            token: vscode.CancellationToken
-        ): Promise<vscode.ChatResult> => {
+    let participant: vscode.ChatParticipant | undefined;
+    try {
+        participant = vscode.chat.createChatParticipant(
+            'flowbaby',
+            async (
+                request: vscode.ChatRequest,
+                _chatContext: vscode.ChatContext,
+                stream: vscode.ChatResponseStream,
+                token: vscode.CancellationToken
+            ): Promise<vscode.ChatResult> => {
             console.log('=== @flowbaby participant invoked ===');
             console.log('User query:', request.prompt);
 
@@ -1637,8 +1788,27 @@ function registerFlowbabyParticipant(
                     } 
                 };
             }
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // Treat known host duplication signals as guards instead of hard failures.
+        if (/agent already has implementation/i.test(message) || /No agent with handle/i.test(message)) {
+            recordRegistrationGuardEvent('participant', {
+                reason: 'host-participant-present',
+                error: message,
+                hostParticipantSnapshot
+            });
+            setParticipantRegistered(true);
+            return;
         }
-    );
+
+        recordRegistrationGuardEvent('participant', {
+            reason: 'registration-failed',
+            error: message,
+            hostParticipantSnapshot
+        });
+        return;
+    }
 
     // Set participant description (shows in UI)
     // Issue 2 (v0.5.7): Fixed icon path - icon.png doesn't exist, use flowbaby-icon-tightcrop.png
@@ -1647,5 +1817,12 @@ function registerFlowbabyParticipant(
     console.log('✅ @flowbaby participant registered successfully');
 
     // Add to subscriptions for proper cleanup
-    context.subscriptions.push(participant);
+    safePush(context, participant, {
+        intent: { kind: 'participant', id: 'flowbaby' }
+    });
+    setParticipantRegistered(true);
+    recordRegistrationGuardEvent('participant', {
+        reason: 'registered',
+        hostParticipantSnapshot
+    });
 }

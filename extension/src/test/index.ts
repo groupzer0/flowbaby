@@ -3,6 +3,9 @@ import Mocha = require('mocha');
 import { globSync } from 'glob';
 
 export function run(): Promise<void> {
+    process.env.FLOWBABY_SUPPRESS_PROMPTS = process.env.FLOWBABY_SUPPRESS_PROMPTS ?? 'true';
+    process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
+
 	// Create the mocha test
 	const mocha = new Mocha({
 		ui: 'tdd',

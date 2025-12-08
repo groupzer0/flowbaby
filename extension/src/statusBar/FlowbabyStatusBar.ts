@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { debugLog } from '../outputChannels';
+import { safePush } from '../lifecycle/registrationHelper';
 
 /**
  * Status bar states for Flowbaby extension
@@ -22,7 +23,7 @@ export class FlowbabyStatusBar {
     constructor(context: vscode.ExtensionContext) {
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this.statusBarItem.command = 'Flowbaby.showStatus';
-        context.subscriptions.push(this.statusBarItem);
+        safePush(context, this.statusBarItem, { intent: { kind: 'other', id: 'statusBarItem' } });
         
         // Plan 028 M4: Register command with error handling
         const statusCommand = vscode.commands.registerCommand('Flowbaby.showStatus', async () => {
@@ -35,7 +36,7 @@ export class FlowbabyStatusBar {
                 );
             }
         });
-        context.subscriptions.push(statusCommand);
+        safePush(context, statusCommand, { intent: { kind: 'command', id: 'Flowbaby.showStatus' } });
         
         debugLog('Status bar initialized');
 

@@ -11,6 +11,7 @@
 
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
+import { safePush } from '../lifecycle/registrationHelper';
 import {
     FlowbabyContextRequest,
     FlowbabyContextResponse,
@@ -154,5 +155,5 @@ export function registerRetrieveForAgentCommand(
         }
     );
     
-    context.subscriptions.push(command);
+    safePush(context, command);
 }
