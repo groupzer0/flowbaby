@@ -141,6 +141,17 @@ enum LogLevel {
 }
 
 /**
+ * Plan 055: Centralized retrieval timeout constant
+ * 
+ * This timeout applies to all retrieval operations (semantic search).
+ * Set to 30 seconds to accommodate large workspaces and cold-start environments.
+ * Note: This may be revisited once the Python bridge daemon (Plan 054) is implemented.
+ * 
+ * @see agent-output/planning/055-increase-retrieval-timeout.md
+ */
+const RETRIEVAL_TIMEOUT_MS = 30000;
+
+/**
  * FlowbabyClient - TypeScript client for spawning Python bridge scripts
  * 
  * Provides high-level API for Flowbaby operations (init, ingest, retrieve)
@@ -1223,10 +1234,18 @@ export class FlowbabyClient {
             // Always prefer JSON payloads; session ID added only when enabled
             const args = ['--json', JSON.stringify(payload)];
 
-            // Use 15-second timeout for retrieval (semantic search can be slow)
-            const result = await this.runPythonScript('retrieve.py', args, 15000);
+            // Plan 055: Use centralized retrieval timeout (30s) for semantic search operations
+            // Phase marker: bridge call start
+            this.log('DEBUG', 'Retrieval bridge call starting', {
+                timeout_ms: RETRIEVAL_TIMEOUT_MS,
+                query_preview: query.length > 100 ? query.substring(0, 100) + '...' : query
+            });
+            
+            const result = await this.runPythonScript('retrieve.py', args, RETRIEVAL_TIMEOUT_MS);
 
+            // Phase marker: bridge call finished
             const duration = Date.now() - startTime;
+            this.log('DEBUG', 'Retrieval bridge call finished', { duration_ms: duration });
 
             if (result.success) {
                 // Parse structured results per RETRIEVE_CONTRACT.md

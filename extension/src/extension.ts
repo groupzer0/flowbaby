@@ -990,15 +990,37 @@ function registerCaptureCommands(
                     console.log(`Pre-filling with editor selection (${initialValue.length} chars)`);
                 }
                 
+                // Plan 055: Status bar cue to improve capture input visibility
+                // This non-modal message draws attention to the input box at the top of the window
+                const statusMessage = vscode.window.setStatusBarMessage(
+                    '$(edit) Flowbaby capture: input box open at top — Enter to save, Esc to cancel',
+                    5000 // Auto-dismiss after 5 seconds
+                );
+                
+                // Plan 055: One-time onboarding toast for first-time users
+                // Defensive check for globalState availability (may be undefined in test contexts)
+                if (context?.globalState) {
+                    const captureHintShown = context.globalState.get<boolean>('flowbaby.captureHintShown', false);
+                    if (!captureHintShown) {
+                        vscode.window.showInformationMessage(
+                            'Flowbaby capture is waiting in the input box at the top. Type, then Enter to save, Esc to cancel.'
+                        );
+                        await context.globalState.update('flowbaby.captureHintShown', true);
+                    }
+                }
+                
                 // Step 2: Show input box with pre-filled selection (if any)
                 const options: vscode.InputBoxOptions = {
                     value: initialValue,
-                    prompt: 'Edit or enter text to capture (Escape to cancel)',
-                    placeHolder: initialValue ? undefined : 'Example: Discussed Redis caching with 15-minute TTL',
+                    prompt: 'Flowbaby capture: type in the top input box (Esc cancels)',
+                    placeHolder: initialValue ? undefined : 'e.g., Captured API design notes for checkout flow',
                     ignoreFocusOut: true
                 };
                 
                 const userInput = await vscode.window.showInputBox(options);
+                
+                // Dispose status bar message once input is closed
+                statusMessage.dispose();
                 
                 // Step 3: Handle cancellation (Escape pressed) - userInput is undefined
                 if (userInput === undefined) {

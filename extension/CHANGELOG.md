@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.21] - 2025-12-10
+
+### Changed
+
+- **Retrieval Timeout Increased**: Increased retrieval timeout from 15 seconds to 30 seconds to accommodate large workspaces and cold-start environments. Retrieval operations will now wait longer before timing out, reducing spurious failures in legitimate high-latency scenarios.
+- **Retrieval Diagnostics**: Added phase markers (bridge call start/finish) and duration logging to retrieval operations for improved performance diagnostics and future bridge-daemon compatibility (Plan 054).
+
+### Added
+
+- **Capture Input Visibility**: Added status bar message when capture input opens (`$(edit) Flowbaby capture: input box open at top — Enter to save, Esc to cancel`) to draw attention to the input UI.
+- **First-Time Capture Hint**: One-time onboarding toast message for new users explaining that the capture input appears at the top of the window, stored in globalState to avoid repeated notifications.
+- **Improved Capture Prompt**: Updated capture input prompt and placeholder text for better discoverability (`Flowbaby capture: type in the top input box (Esc cancels)`).
+
 ## [0.5.20] - 2025-12-10
 
 ### Fixed
