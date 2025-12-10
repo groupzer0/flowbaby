@@ -714,3 +714,96 @@ export function __resetRegistrationHelperStateForTests() {
     toolsRegistered = false;
     participantRegistered = false;
 }
+
+// --- Duplicate-Error Classification (Plan 056) ---
+// Architecture Invariant 4.2.6: Centralized helpers encapsulate recognized
+// host error codes/messages for "already registered and healthy" scenarios.
+// These are the ONLY place allowed to classify errors as known duplicates.
+
+/**
+ * Known duplicate-registration error patterns for language model tools.
+ * VS Code may throw these when a tool with the same name is already registered.
+ * Update this list (with tests) when VS Code host behavior evolves.
+ */
+const KNOWN_DUPLICATE_TOOL_ERROR_PATTERNS: Array<{ code?: string; messageIncludes?: string }> = [
+    { messageIncludes: 'already registered' },
+    { messageIncludes: 'Tool with name' },
+    { messageIncludes: 'duplicate tool' },
+    { code: 'tool_already_registered' }
+];
+
+/**
+ * Known duplicate-registration error patterns for chat participants.
+ * VS Code may throw these when a participant with the same ID is already registered.
+ */
+const KNOWN_DUPLICATE_PARTICIPANT_ERROR_PATTERNS: Array<{ code?: string; messageIncludes?: string }> = [
+    { messageIncludes: 'already has implementation' },
+    { messageIncludes: 'agent already' },
+    { messageIncludes: 'participant already registered' },
+    { code: 'participant_already_registered' }
+];
+
+/**
+ * Classify whether an error from vscode.lm.registerTool is a well-understood
+ * duplicate-registration error indicating "tool already registered and healthy".
+ * 
+ * Per Plan 056 / Invariant 4.2.2: Only return true for clearly recognized patterns.
+ * Unknown errors must return false so guards remain false and registration can retry.
+ */
+export function isKnownDuplicateToolError(error: unknown): boolean {
+    if (!error) {
+        return false;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    const code = (error as { code?: string }).code;
+
+    return KNOWN_DUPLICATE_TOOL_ERROR_PATTERNS.some(pattern => {
+        if (pattern.code && code === pattern.code) {
+            return true;
+        }
+        if (pattern.messageIncludes && message.toLowerCase().includes(pattern.messageIncludes.toLowerCase())) {
+            return true;
+        }
+        return false;
+    });
+}
+
+/**
+ * Classify whether an error from vscode.chat.createChatParticipant is a
+ * well-understood duplicate-registration error meaning "participant already registered and healthy".
+ */
+export function isKnownDuplicateParticipantError(error: unknown): boolean {
+    if (!error) {
+        return false;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    const code = (error as { code?: string }).code;
+
+    return KNOWN_DUPLICATE_PARTICIPANT_ERROR_PATTERNS.some(pattern => {
+        if (pattern.code && code === pattern.code) {
+            return true;
+        }
+        if (pattern.messageIncludes && message.toLowerCase().includes(pattern.messageIncludes.toLowerCase())) {
+            return true;
+        }
+        return false;
+    });
+}
+
+/**
+ * Create a compact, schema-stable snapshot of the host tool inventory
+ * for diagnostics and optional telemetry. Per Invariant 4.3.3, this data
+ * is observational only and must never be used for guard decisions.
+ */
+export function createHostToolSnapshot(tools: ReadonlyArray<{ name: string; description?: string }>): {
+    totalTools: number;
+    flowbabyTools: Array<{ id: string; name: string }>;
+} {
+    const flowbabyTools = tools
+        .filter(t => t.name.startsWith('flowbaby_'))
+        .map(t => ({ id: t.name, name: t.name }));
+    return {
+        totalTools: tools.length,
+        flowbabyTools
+    };
+}

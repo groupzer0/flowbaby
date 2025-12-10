@@ -1,8 +1,8 @@
 {
   "name": "flowbaby",
   "displayName": "Flowbaby",
-  "description": "The only memory system that isn’t wearing a memory costume. No drift. No drama",
-  "version": "0.5.19",
+  "description": "The only memory system that isn't wearing a memory costume. No drift. No drama",
+  "version": "0.5.20",
   "publisher": "Flowbaby",
   "icon": "media/flowbaby-icon-tightcrop.png",
   "engines": {

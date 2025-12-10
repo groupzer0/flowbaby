@@ -19,6 +19,12 @@ import sys
 from pathlib import Path
 from typing import List, Tuple
 
+from workspace_utils import generate_dataset_name
+
+
+# Global dataset name for this workspace, initialized in configure_workspace()
+DATASET_NAME: str | None = None
+
 
 def configure_workspace(workspace_path: Path) -> None:
     """
@@ -35,6 +41,11 @@ def configure_workspace(workspace_path: Path) -> None:
     print("Configuring workspace directories:")
     print(f"  System dir: {system_dir}")
     print(f"  Data dir: {data_dir}")
+
+    # Resolve deterministic dataset name for this workspace (matches init/ingest/retrieve)
+    global DATASET_NAME
+    DATASET_NAME, _ = generate_dataset_name(str(workspace_path))
+    print(f"  Dataset name: {DATASET_NAME}")
 
     # Create directories BEFORE setting env vars
     system_dir.mkdir(parents=True, exist_ok=True)
@@ -101,13 +112,17 @@ def get_current_counts(workspace_path: Path) -> Tuple[int, int]:
 async def add_file_content(content: str, filename: str) -> None:
     """Add a single file's content to cognee."""
     import cognee
-    await cognee.add(content, dataset_name='main_dataset')
+    dataset_name = DATASET_NAME or 'main_dataset'
+    await cognee.add(data=[content], dataset_name=dataset_name)
 
 
 async def batch_cognify() -> None:
     """Run cognify on all added data."""
     import cognee
-    await cognee.cognify()
+    if DATASET_NAME:
+        await cognee.cognify(datasets=[DATASET_NAME])
+    else:
+        await cognee.cognify()
 
 
 def main():

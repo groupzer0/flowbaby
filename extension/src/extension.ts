@@ -15,9 +15,12 @@ import { getAuditLogger } from './audit/AuditLogger';
 import { SessionManager } from './sessionManager';
 import {
     areToolsRegistered,
+    createHostToolSnapshot,
     disposeFallbackRegistrations,
     getActiveContextDiagnostics,
     isActive as isExtensionCurrentlyActive,
+    isKnownDuplicateToolError,
+    isKnownDuplicateParticipantError,
     markActiveContextDisposed,
     recordActivationCompletion,
     recordActivationMetadata,
@@ -675,64 +678,162 @@ export async function activate(_context: vscode.ExtensionContext) {
 
 /**
  * Register languageModelTools for Copilot agent integration (Plan 016.1 Milestone 1)
- * Tools register unconditionally at activation; VS Code's Configure Tools UI is the sole opt-in control
- * Both tools (storeMemory and retrieveMemory) register atomically
+ * 
+ * Plan 056 - Evidence-Only Guard Semantics:
+ * - Guard state (areToolsRegistered) is set ONLY on concrete evidence:
+ *   (a) All tools registered successfully, or
+ *   (b) Host throws well-understood duplicate-registration errors for all tools
+ * - vscode.lm.tools inventory is used for diagnostics only, never as guard input
+ * - All-or-nothing: setToolsRegistered(true) only if EVERY required tool succeeds or duplicates
+ * - Invariant 4.1.3: This function is invoked at most once per activation; no retries on failure
  */
 async function registerLanguageModelTool(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel) {
+    // Pre-condition: context provider must exist
     if (!flowbabyContextProvider) {
         recordRegistrationGuardEvent('tool', { reason: 'missing-context-provider' });
         return;
     }
 
-    let hostTools: { names?: string[]; hasFlowbabyTools?: boolean; error?: string } = {};
+    // Capture host inventory snapshot for diagnostics only (Invariant 4.3.1-4.3.3)
+    let hostToolSnapshot: ReturnType<typeof createHostToolSnapshot> | { error: string };
     try {
         const tools = await vscode.lm.tools;
-        const names = tools.map(tool => tool.name);
-        hostTools = {
-            names,
-            hasFlowbabyTools: names.some(name => name === 'flowbaby_storeMemory' || name === 'flowbaby_retrieveMemory')
-        };
+        hostToolSnapshot = createHostToolSnapshot(tools);
     } catch (error) {
-        hostTools = { error: error instanceof Error ? error.message : String(error) };
+        hostToolSnapshot = { error: error instanceof Error ? error.message : String(error) };
     }
 
+    // Guard check: If already registered in this activation, skip (Invariant 4.1.3)
     if (areToolsRegistered()) {
-        recordRegistrationGuardEvent('tool', { reason: 'already-registered', hostTools });
+        recordRegistrationGuardEvent('tool', {
+            reason: 'guard-skip',
+            hostToolSnapshot,
+            note: 'Tools already registered in this activation'
+        });
         return;
     }
 
-    if (hostTools.hasFlowbabyTools) {
-        recordRegistrationGuardEvent('tool', { reason: 'host-tools-present', hostTools });
-        setToolsRegistered(true);
-        return;
-    }
+    // Attempt registration of all required Flowbaby tools
+    // Track individual outcomes for all-or-nothing semantics
+    const toolResults: Array<{
+        id: string;
+        success: boolean;
+        duplicate: boolean;
+        error?: string;
+        disposable?: vscode.Disposable;
+    }> = [];
 
+    // Tool 1: flowbaby_storeMemory
     try {
         const storeTool = new StoreMemoryTool(outputChannel);
-        storeMemoryToolDisposable = vscode.lm.registerTool('flowbaby_storeMemory', storeTool);
+        const disposable = vscode.lm.registerTool('flowbaby_storeMemory', storeTool);
+        storeMemoryToolDisposable = disposable;
+        toolResults.push({ id: 'flowbaby_storeMemory', success: true, duplicate: false, disposable });
+    } catch (error) {
+        if (isKnownDuplicateToolError(error)) {
+            toolResults.push({
+                id: 'flowbaby_storeMemory',
+                success: true,
+                duplicate: true,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        } else {
+            toolResults.push({
+                id: 'flowbaby_storeMemory',
+                success: false,
+                duplicate: false,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+    }
 
+    // Tool 2: flowbaby_retrieveMemory
+    try {
         const retrieveTool = new RetrieveMemoryTool(flowbabyContextProvider, outputChannel);
-        retrieveMemoryToolDisposable = vscode.lm.registerTool('flowbaby_retrieveMemory', retrieveTool);
+        const disposable = vscode.lm.registerTool('flowbaby_retrieveMemory', retrieveTool);
+        retrieveMemoryToolDisposable = disposable;
+        toolResults.push({ id: 'flowbaby_retrieveMemory', success: true, duplicate: false, disposable });
+    } catch (error) {
+        if (isKnownDuplicateToolError(error)) {
+            toolResults.push({
+                id: 'flowbaby_retrieveMemory',
+                success: true,
+                duplicate: true,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        } else {
+            toolResults.push({
+                id: 'flowbaby_retrieveMemory',
+                success: false,
+                duplicate: false,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+    }
 
+    // Evaluate all-or-nothing outcome
+    const allSucceeded = toolResults.every(r => r.success);
+    const anyDuplicate = toolResults.some(r => r.duplicate);
+    const failures = toolResults.filter(r => !r.success);
+
+    if (allSucceeded) {
+        // Set guard to true only on concrete evidence (Invariant 4.2.2)
         setToolsRegistered(true);
 
-        if (storeMemoryToolDisposable) {
-            safePush(context, storeMemoryToolDisposable, { intent: { kind: 'tool', id: 'flowbaby_storeMemory' }, hostTools });
-        }
-        if (retrieveMemoryToolDisposable) {
-            safePush(context, retrieveMemoryToolDisposable, { intent: { kind: 'tool', id: 'flowbaby_retrieveMemory' }, hostTools });
+        // Register disposables via safePush for lifecycle management
+        for (const result of toolResults) {
+            if (result.disposable) {
+                safePush(context, result.disposable, {
+                    intent: { kind: 'tool', id: result.id },
+                    hostTools: 'error' in hostToolSnapshot ? { error: hostToolSnapshot.error } : {
+                        names: hostToolSnapshot.flowbabyTools.map(t => t.name),
+                        hasFlowbabyTools: hostToolSnapshot.flowbabyTools.length > 0
+                    }
+                });
+            }
         }
 
+        const reason = anyDuplicate ? 'duplicate-accepted' : 'registered';
+        recordRegistrationGuardEvent('tool', {
+            reason,
+            hostToolSnapshot,
+            toolResults: toolResults.map(r => ({ id: r.id, success: r.success, duplicate: r.duplicate }))
+        });
+
         outputChannel.appendLine('=== Plan 016.1: Language Model Tools Registered ===');
+        if (anyDuplicate) {
+            outputChannel.appendLine('ℹ️  Some tools were already registered in host (duplicate-accepted)');
+        }
         outputChannel.appendLine('✅ flowbaby_storeMemory registered - Copilot agents can store memories');
         outputChannel.appendLine('✅ flowbaby_retrieveMemory registered - Copilot agents can retrieve memories');
         outputChannel.appendLine('ℹ️  Enable/disable tools via Configure Tools UI in GitHub Copilot Chat');
-    } catch (error) {
+    } else {
+        // Registration failed for at least one tool - do NOT set guard to true
+        // Per Invariant 4.1.3: no retry within this activation
         recordRegistrationGuardEvent('tool', {
             reason: 'registration-failed',
-            hostTools,
-            error: error instanceof Error ? error.message : String(error)
+            hostToolSnapshot,
+            toolResults: toolResults.map(r => ({ id: r.id, success: r.success, duplicate: r.duplicate, error: r.error })),
+            failures: failures.map(f => ({ id: f.id, error: f.error }))
         });
+
+        // Clean up any disposables that were created before the failure
+        for (const result of toolResults) {
+            if (result.disposable) {
+                try {
+                    result.disposable.dispose();
+                } catch {
+                    // Ignore disposal errors
+                }
+            }
+        }
+        storeMemoryToolDisposable = undefined;
+        retrieveMemoryToolDisposable = undefined;
+
+        outputChannel.appendLine('=== Plan 016.1: Language Model Tools Registration FAILED ===');
+        for (const failure of failures) {
+            outputChannel.appendLine(`❌ ${failure.id}: ${failure.error}`);
+        }
     }
 }
 
@@ -1790,25 +1891,29 @@ function registerFlowbabyParticipant(
             }
         });
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        // Treat known host duplication signals as guards instead of hard failures.
-        if (/agent already has implementation/i.test(message) || /No agent with handle/i.test(message)) {
+        // Plan 056: Use centralized duplicate-error classifier (Invariant 4.2.6)
+        // Tool and participant guards are independent (Invariant 4.5.1)
+        if (isKnownDuplicateParticipantError(error)) {
             recordRegistrationGuardEvent('participant', {
-                reason: 'host-participant-present',
-                error: message,
+                reason: 'duplicate-accepted',
+                error: error instanceof Error ? error.message : String(error),
                 hostParticipantSnapshot
             });
             setParticipantRegistered(true);
             return;
         }
 
+        // Unknown error - do NOT set guard to true, allow future activation to retry
         recordRegistrationGuardEvent('participant', {
             reason: 'registration-failed',
-            error: message,
+            error: error instanceof Error ? error.message : String(error),
             hostParticipantSnapshot
         });
         return;
     }
+
+    // Registration succeeded - set guard on concrete evidence (Invariant 4.2.2)
+    setParticipantRegistered(true);
 
     // Set participant description (shows in UI)
     // Issue 2 (v0.5.7): Fixed icon path - icon.png doesn't exist, use flowbaby-icon-tightcrop.png
@@ -1820,7 +1925,6 @@ function registerFlowbabyParticipant(
     safePush(context, participant, {
         intent: { kind: 'participant', id: 'flowbaby' }
     });
-    setParticipantRegistered(true);
     recordRegistrationGuardEvent('participant', {
         reason: 'registered',
         hostParticipantSnapshot
