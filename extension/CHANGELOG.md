@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.22] - 2025-12-10
+
+### Fixed
+
+- **Data Integrity Check False Positives**: Fixed initialization data-integrity check that was incorrectly reporting "Data mismatch: X SQLite entries but only Y vector tables" warnings. The previous implementation counted LanceDB *directories* (a fixed ~6 tables in Cognee 0.4.x) instead of actual *row counts*, producing false positives once SQLite rows exceeded the table count. The fix now compares SQLite document counts against actual LanceDB embedding row counts from the `DocumentChunk_text` table.
+
+### Added
+
+- **Shared Data Integrity Utilities**: New `data_integrity_utils.py` module provides shared helper functions (`get_sqlite_document_count`, `get_lancedb_embedding_count`, `evaluate_data_health`) used by both `init.py` and `recover_data.py` for consistent data integrity checking.
+- **Improved Health Semantics**: Data integrity warnings now use smarter thresholds—small workspaces (≤5 documents) with minor discrepancies are treated as healthy to avoid noise, while significant mismatches in larger workspaces trigger appropriate warnings.
+
+### Changed
+
+- **LanceDB Row Counting**: The `lancedb_count` field in initialization JSON output now represents actual embedding row count rather than table directory count. This is a semantic change but maintains backward compatibility for consumers checking the `healthy` field.
+
 ## [0.5.21] - 2025-12-10
 
 ### Changed

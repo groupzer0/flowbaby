@@ -140,6 +140,19 @@ def get_data_integrity_status(system_dir: Path) -> dict:
     This helps detect data loss situations where SQLite has more entries
     than LanceDB (indicating vector embeddings were lost).
 
+    Plan 057 Fix: This function now counts actual LanceDB *rows* (embeddings) instead
+    of the number of table directories. In Cognee 0.4.x, LanceDB uses a fixed set of
+    ~6 tables (DocumentChunk_text, Entity_name, etc.) regardless of data volume.
+    The old heuristic of counting directories produced false positives like:
+    "Data mismatch: 8 SQLite entries but only 6 vector tables"
+
+    The new implementation:
+    - Counts SQLite rows from the `data` table
+    - Counts LanceDB rows from the `DocumentChunk_text` table (1:1 with document chunks)
+    - Uses shared helpers from data_integrity_utils.py for consistency with recover_data.py
+
+    Note: lancedb_count now represents *row* count, not table count.
+
     Args:
         system_dir: Path to .flowbaby/system directory
 
@@ -147,51 +160,13 @@ def get_data_integrity_status(system_dir: Path) -> dict:
         Dictionary with sqlite_count, lancedb_count, healthy boolean, and optional warning
     """
     try:
-        sqlite_count = 0
-        lancedb_count = 0
+        from data_integrity_utils import (
+            evaluate_data_health,
+            get_sqlite_and_lancedb_counts,
+        )
 
-        # Count SQLite entries
-        sqlite_db_path = system_dir / 'databases' / 'cognee_db'
-        if sqlite_db_path.exists():
-            try:
-                import sqlite3
-                conn = sqlite3.connect(str(sqlite_db_path))
-                cursor = conn.cursor()
-                # Try to count data entries - table name may vary
-                for table_name in ['data', 'data_entry', 'entries', 'documents']:
-                    try:
-                        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-                        sqlite_count = cursor.fetchone()[0]
-                        break
-                    except sqlite3.OperationalError:
-                        continue
-                conn.close()
-            except Exception:
-                sqlite_count = -1  # Could not query
-
-        # Count LanceDB entries
-        lancedb_path = system_dir / 'databases' / 'cognee.lancedb'
-        if lancedb_path.exists() and lancedb_path.is_dir():
-            try:
-                # Count .lance files or subdirectories as proxy for data
-                lance_items = list(lancedb_path.glob('*'))
-                lancedb_count = len([f for f in lance_items if f.is_dir() or f.suffix == '.lance'])
-            except Exception:
-                lancedb_count = -1  # Could not query
-
-        # Determine health - healthy if counts match or LanceDB >= 90% of SQLite
-        if sqlite_count <= 0 and lancedb_count <= 0:
-            healthy = True  # No data, no problem
-            warning = None
-        elif sqlite_count > 0 and lancedb_count <= 0:
-            healthy = False
-            warning = f'Data mismatch: {sqlite_count} SQLite entries but no vector embeddings detected'
-        elif lancedb_count >= sqlite_count * 0.9:
-            healthy = True
-            warning = None
-        else:
-            healthy = False
-            warning = f'Data mismatch: {sqlite_count} SQLite entries but only {lancedb_count} vector tables'
+        sqlite_count, lancedb_count = get_sqlite_and_lancedb_counts(system_dir)
+        healthy, warning = evaluate_data_health(sqlite_count, lancedb_count)
 
         return {
             'sqlite_count': sqlite_count,

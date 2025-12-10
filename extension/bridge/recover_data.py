@@ -73,40 +73,17 @@ def find_text_files(data_dir: Path) -> List[Path]:
 
 
 def get_current_counts(workspace_path: Path) -> Tuple[int, int]:
-    """Get current SQLite and LanceDB entry counts."""
-    import sqlite3
+    """
+    Get current SQLite and LanceDB entry counts.
 
-    import lancedb
+    Plan 057: Now uses shared helpers from data_integrity_utils.py for consistency
+    with init.py integrity checks. This ensures both tools use the same counting
+    logic and the correct LanceDB path (cognee.lancedb).
+    """
+    from data_integrity_utils import get_sqlite_and_lancedb_counts
 
-    db_path = workspace_path / '.flowbaby/system' / 'databases'
-
-    # SQLite count
-    sqlite_path = db_path / 'cognee_db'
-    sqlite_count = 0
-    if sqlite_path.exists():
-        try:
-            conn = sqlite3.connect(str(sqlite_path))
-            cursor = conn.execute("SELECT COUNT(*) FROM data")
-            sqlite_count = cursor.fetchone()[0]
-            conn.close()
-        except Exception as e:
-            print(f"  Warning: Could not read SQLite: {e}")
-
-    # LanceDB count
-    lance_path = db_path / 'lancedb'
-    lance_count = 0
-    if lance_path.exists():
-        try:
-            db = lancedb.connect(str(lance_path))
-            tables = db.table_names()
-            data_tables = [t for t in tables if t.startswith('data_point_')]
-            for table_name in data_tables:
-                table = db.open_table(table_name)
-                lance_count += len(table.to_pandas())
-        except Exception as e:
-            print(f"  Warning: Could not read LanceDB: {e}")
-
-    return sqlite_count, lance_count
+    system_dir = workspace_path / '.flowbaby/system'
+    return get_sqlite_and_lancedb_counts(system_dir)
 
 
 async def add_file_content(content: str, filename: str) -> None:

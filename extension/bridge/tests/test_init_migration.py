@@ -167,19 +167,56 @@ class TestGetDataIntegrityStatus:
 
         assert result['healthy'] is True
 
-    def test_detects_lancedb_tables(self, tmp_path):
-        """Should count LanceDB tables/directories."""
+    def test_detects_lancedb_embedding_rows(self, tmp_path):
+        """
+        Plan 057: Should count actual LanceDB embedding rows, not directories.
+
+        This test creates a real LanceDB database with a DocumentChunk_text table
+        containing sample data to verify the new row-counting logic.
+        """
+        import lancedb
+        import pyarrow as pa
+
         system_dir = tmp_path / '.flowbaby/system'
         lancedb_dir = system_dir / 'databases' / 'cognee.lancedb'
         lancedb_dir.mkdir(parents=True)
 
-        # Create some table directories
-        (lancedb_dir / 'table1').mkdir()
-        (lancedb_dir / 'table2').mkdir()
+        # Create a real LanceDB database with sample data
+        db = lancedb.connect(str(lancedb_dir))
+
+        # Create DocumentChunk_text table with 5 sample rows
+        # This mimics the Cognee 0.4.x schema
+        schema = pa.schema([
+            ('id', pa.string()),
+            ('text', pa.string()),
+            ('vector', pa.list_(pa.float32(), 8)),  # Simple 8-dim vector for testing
+        ])
+        data = [
+            {'id': f'chunk_{i}', 'text': f'Sample text {i}', 'vector': [0.1] * 8}
+            for i in range(5)
+        ]
+        db.create_table('DocumentChunk_text', data)
 
         result = get_data_integrity_status(system_dir)
 
-        assert result['lancedb_count'] == 2
+        # Should count actual rows (5), not directories
+        assert result['lancedb_count'] == 5
+
+    def test_lancedb_count_with_empty_tables(self, tmp_path):
+        """Plan 057: Empty LanceDB directory should return count of 0."""
+        system_dir = tmp_path / '.flowbaby/system'
+        lancedb_dir = system_dir / 'databases' / 'cognee.lancedb'
+        lancedb_dir.mkdir(parents=True)
+
+        # Create directories but no actual LanceDB tables
+        (lancedb_dir / 'some_dir').mkdir()
+        (lancedb_dir / 'another_dir').mkdir()
+
+        result = get_data_integrity_status(system_dir)
+
+        # New behavior: should return 0 (no actual embedding rows), not 2 (directory count)
+        assert result['lancedb_count'] == 0
+        assert result['healthy'] is True  # No data = no problem
 
     def test_handles_missing_sqlite_gracefully(self, tmp_path):
         """Should handle missing SQLite database gracefully."""
