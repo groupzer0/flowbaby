@@ -1,22 +1,78 @@
 # Python Bridge for Cognee Chat Memory Extension
 
-This directory contains Python scripts that bridge the TypeScript VS Code extension with the Cognee knowledge graph system. The bridge uses subprocess communication with JSON over stdout for clean, structured data exchange.
+This directory contains Python scripts that bridge the TypeScript VS Code extension with the Cognee knowledge graph system. The bridge supports two execution modes:
+
+1. **Daemon Mode (default, Plan 054)**: A long-lived Python process handles multiple requests over JSON-RPC, eliminating per-request startup overhead (~2-3s → ~300ms).
+2. **Spawn Mode (legacy)**: Each request spawns a new Python process.
+
+## Architecture
 
 ```text
 TypeScript Extension (src/)
-
-  ↓ spawns subprocess
-Python Bridge (bridge/)
-  ↓ imports & calls
-Cognee Library (installed via pip)
-
-  ↓ stores data in
+         │
+         ├──► Daemon Mode: PythonBridgeDaemonManager
+         │         │
+         │         v JSON-RPC over stdio
+         │    daemon.py (long-lived process)
+         │         │
+         │         v imports & calls
+         │    Cognee Library (warm, already imported)
+         │
+         └──► Spawn Mode: runPythonScript()
+                   │
+                   v spawns subprocess
+              ingest.py / retrieve.py / init.py
+                   │
+                   v imports & calls
+              Cognee Library (cold import each time)
+         │
+         v stores data in
 .flowbaby/ Directory (workspace root)
 ```
+
+## Daemon Mode (Plan 054)
+
+The daemon is a long-lived Python process that:
+
+- Starts once per workspace (on first request or explicit command)
+- Imports Cognee at startup (one-time cost)
+- Handles multiple requests over JSON-RPC 2.0 via stdio
+- Exits after idle timeout (configurable, default 5 minutes)
+- Automatically restarts on crash with exponential backoff
+
+### Configuration
+
+- `Flowbaby.bridgeMode`: `"daemon"` (default) or `"spawn"`
+- `Flowbaby.daemonIdleTimeoutMinutes`: Minutes before idle daemon exits (default: 5)
+
+### Daemon Script
+
+See `daemon.py` for the implementation.
+
+## Legacy Spawn Mode
 
 The extension spawns Python scripts as child processes, passing arguments via command line and receiving JSON-formatted responses via stdout.
 
 ## Scripts
+
+### `daemon.py`
+
+**Purpose**: Long-lived bridge daemon for fast request handling (Plan 054)
+
+**Usage**: Started automatically by the extension when daemon mode is enabled.
+
+**Environment Variables**:
+- `FLOWBABY_WORKSPACE_PATH`: Required. Workspace root path.
+- `LLM_API_KEY`: Required for ingest/retrieve operations.
+- `FLOWBABY_DEBUG_LOGGING`: Optional. Enable verbose logging.
+
+**JSON-RPC Commands**:
+- `health`: Check daemon status and Cognee version
+- `retrieve`: Search memories
+- `ingest`: Store memories
+- `shutdown`: Graceful exit
+
+---
 
 ### `ontology_provider.py`
 

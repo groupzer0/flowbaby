@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.5.23] - 2025-12-11
+
+### Added
+
+- **Per-Workspace Python Bridge Daemon (Plan 054)**: Introduced a long-lived Python bridge daemon that eliminates per-request Python startup overhead (~2-3 seconds) by keeping Cognee imported and warm. Retrieval and capture requests now respond in ~300ms instead of 2-3s.
+- **New Configuration Options**:
+  - `Flowbaby.bridgeMode`: Choose between `daemon` (default, faster) or `spawn` (legacy per-request mode) for bridge execution
+  - `Flowbaby.daemonIdleTimeoutMinutes`: Configure how long the daemon stays alive after inactivity (default: 5 minutes)
+- **Daemon Lifecycle Management**: The extension automatically starts, monitors, and restarts the daemon as needed. Graceful shutdown on workspace close.
+- **Automatic Fallback**: If daemon mode fails repeatedly, the extension automatically falls back to spawn-per-request mode for reliability.
+
+### Changed
+
+- **Bridge Architecture**: Retrieval and ingestion now route through the daemon manager when daemon mode is enabled, with transparent fallback to the existing spawn-per-request pattern.
+
+### Technical
+
+- Added `PythonBridgeDaemonManager` TypeScript class for daemon lifecycle management
+- Added `daemon.py` Python script as the long-lived bridge process entrypoint
+- Added JSON-RPC 2.0 communication protocol over stdio for daemon IPC
+- Added daemon health monitoring with automatic restart and exponential backoff
+
 ## [0.5.22] - 2025-12-10
 
 ### Fixed

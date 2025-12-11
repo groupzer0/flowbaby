@@ -5,6 +5,7 @@ import { spawn, ChildProcess, SpawnOptions, execFileSync, ExecFileSyncOptions } 
 import { getFlowbabyOutputChannel, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
 import { SessionManager } from './sessionManager';
+import { PythonBridgeDaemonManager, DaemonHealthStatus } from './bridge/PythonBridgeDaemonManager';
 
 /**
  * Interface for BackgroundOperationManager to avoid circular imports.
@@ -173,6 +174,8 @@ export class FlowbabyClient {
     private readonly sessionManager?: SessionManager; // Plan 001: Session Manager
     private readonly sessionManagementEnabled: boolean; // Plan 050: User toggle for sessions
     private readonly debugLoggingEnabled: boolean; // Plan 050: Propagate debug gate to bridge
+    private daemonManager?: PythonBridgeDaemonManager; // Plan 054: Bridge daemon manager
+    private readonly daemonModeEnabled: boolean; // Plan 054: Feature flag for daemon mode
 
     /**
      * Constructor - Load configuration and initialize output channel
@@ -205,6 +208,8 @@ export class FlowbabyClient {
             .get<boolean>('enabled', true);
         this.debugLoggingEnabled = config.get<boolean>('debugLogging', false);
 
+        // Plan 054: Read daemon mode configuration
+        this.daemonModeEnabled = config.get<string>('bridgeMode', 'daemon') === 'daemon';
         // Use singleton Output Channel for logging (Plan 028 M1)
         this.outputChannel = getFlowbabyOutputChannel();
 
@@ -233,8 +238,92 @@ export class FlowbabyClient {
             rankingHalfLifeDays: this.rankingHalfLifeDays,
             bridgePath: this.bridgePath,
             sessionManagementEnabled: this.sessionManagementEnabled,
-            debugLoggingEnabled: this.debugLoggingEnabled
+            debugLoggingEnabled: this.debugLoggingEnabled,
+            daemonModeEnabled: this.daemonModeEnabled
         });
+
+        // Plan 054: Initialize daemon manager if daemon mode is enabled
+        if (this.daemonModeEnabled) {
+            this.initializeDaemonManager();
+        }
+    }
+
+    /**
+     * Plan 054: Initialize the bridge daemon manager
+     * 
+     * Creates a daemon manager for this workspace to handle long-lived
+     * Python process communication.
+     */
+    private initializeDaemonManager(): void {
+        try {
+            this.daemonManager = new PythonBridgeDaemonManager(
+                this.workspacePath,
+                this.pythonPath,
+                this.bridgePath,
+                this.context,
+                this.outputChannel
+            );
+            this.log('DEBUG', 'Daemon manager initialized');
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.log('WARN', 'Failed to initialize daemon manager, falling back to spawn-per-request', {
+                error: errorMessage
+            });
+            this.daemonManager = undefined;
+        }
+    }
+
+    /**
+     * Plan 054: Check if daemon is available and healthy
+     */
+    public isDaemonAvailable(): boolean {
+        return this.daemonModeEnabled && this.daemonManager?.isHealthy() === true;
+    }
+
+    /**
+     * Plan 054: Get daemon health status
+     */
+    public async getDaemonHealth(): Promise<DaemonHealthStatus | null> {
+        if (!this.daemonManager) {
+            return null;
+        }
+        try {
+            const response = await this.daemonManager.sendRequest('health', {});
+            if ('result' in response) {
+                return response.result as unknown as DaemonHealthStatus;
+            }
+            return { status: 'error', error: response.error?.message || 'Unknown error' };
+        } catch (error) {
+            return { status: 'error', error: String(error) };
+        }
+    }
+
+    /**
+     * Plan 054: Start the bridge daemon
+     */
+    public async startDaemon(): Promise<void> {
+        if (!this.daemonManager) {
+            throw new Error('Daemon mode is not enabled');
+        }
+        await this.daemonManager.start();
+    }
+
+    /**
+     * Plan 054: Stop the bridge daemon
+     */
+    public async stopDaemon(): Promise<void> {
+        if (this.daemonManager) {
+            await this.daemonManager.stop();
+        }
+    }
+
+    /**
+     * Plan 054: Restart the bridge daemon
+     */
+    public async restartDaemon(): Promise<void> {
+        if (this.daemonManager) {
+            await this.daemonManager.restart();
+        }
     }
 
     /**
@@ -1238,10 +1327,17 @@ export class FlowbabyClient {
             // Phase marker: bridge call start
             this.log('DEBUG', 'Retrieval bridge call starting', {
                 timeout_ms: RETRIEVAL_TIMEOUT_MS,
-                query_preview: query.length > 100 ? query.substring(0, 100) + '...' : query
+                query_preview: query.length > 100 ? query.substring(0, 100) + '...' : query,
+                useDaemon: this.daemonManager?.isHealthy() ?? false
             });
             
-            const result = await this.runPythonScript('retrieve.py', args, RETRIEVAL_TIMEOUT_MS);
+            // Plan 054: Use daemon if available, fall back to spawn-per-request
+            let result: FlowbabyResult;
+            if (this.daemonManager?.isHealthy()) {
+                result = await this.retrieveViaDaemon(payload);
+            } else {
+                result = await this.runPythonScript('retrieve.py', args, RETRIEVAL_TIMEOUT_MS);
+            }
 
             // Phase marker: bridge call finished
             const duration = Date.now() - startTime;
@@ -1321,6 +1417,82 @@ export class FlowbabyClient {
                 error: errorMessage
             });
             return [];
+        }
+    }
+
+    /**
+     * Plan 054: Retrieve context via daemon
+     * 
+     * Sends a retrieve request to the long-lived Python daemon process
+     * for faster response times.
+     * 
+     * @param payload Retrieve payload with query and options
+     * @returns Promise<FlowbabyResult> - Result from daemon
+     */
+    private async retrieveViaDaemon(payload: RetrievePayload): Promise<FlowbabyResult> {
+        if (!this.daemonManager) {
+            throw new Error('Daemon manager not available');
+        }
+
+        const params: Record<string, unknown> = {
+            query: payload.query,
+            max_results: payload.max_results,
+            max_tokens: payload.max_tokens,
+            half_life_days: payload.half_life_days,
+            include_superseded: payload.include_superseded,
+            top_k: payload.search_top_k,
+            session_id: payload.__user_session_id
+        };
+
+        try {
+            const response = await this.daemonManager.sendRequest('retrieve', params, RETRIEVAL_TIMEOUT_MS);
+
+            if ('error' in response) {
+                return {
+                    success: false,
+                    error: response.error.message
+                };
+            }
+
+            // Response result should match the structure from retrieve.py
+            return response.result as FlowbabyResult;
+
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.log('WARN', 'Daemon retrieve failed, may fall back to spawn', { error: errorMessage });
+            throw error;
+        }
+    }
+
+    /**
+     * Plan 054: Ingest via daemon
+     * 
+     * Sends an ingest request to the long-lived Python daemon process.
+     * 
+     * @param params Ingest parameters
+     * @returns Promise<FlowbabyResult> - Result from daemon
+     */
+    private async ingestViaDaemon(params: Record<string, unknown>): Promise<FlowbabyResult> {
+        if (!this.daemonManager) {
+            throw new Error('Daemon manager not available');
+        }
+
+        try {
+            const response = await this.daemonManager.sendRequest('ingest', params, 30000);
+
+            if ('error' in response) {
+                return {
+                    success: false,
+                    error: response.error.message
+                };
+            }
+
+            return response.result as FlowbabyResult;
+
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.log('WARN', 'Daemon ingest failed, may fall back to spawn', { error: errorMessage });
+            throw error;
         }
     }
 
