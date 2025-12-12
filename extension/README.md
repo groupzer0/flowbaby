@@ -10,19 +10,19 @@ Flowbaby captures and summarizes key moments from your GitHub Copilot chats, the
 
 Flowbaby is configured to use chat conversation cues to search memory and add that memory context to the chat - keeping your Copilot agent from drifting and saving you from having to explain what happened all over again.
 
-![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/auto-search.png)
+![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/retrieval.gif)
 
 ### Context aware automatic memory storage
 
 Flowbaby knows when it's a good time to summarize and store memories based on the chat context.
 
-![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/auto-store.png)
+![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/memory-store.gif)
 
 ### @flowbaby chat participant
 
 A dedicated Copilot participant that recalls past conversations and surfaces relevant memories into new chats to reduce drift over long sessions.
 
-![Interactive Chat Participant](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/interactive-chat-participant.png)
+![Interactive Chat Participant](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/what-were-we-working-on.gif)
 
 ### Configurable memory behavior via stored prompts
 
