@@ -528,19 +528,18 @@ rm -rf .flowbaby/ .flowbaby/system/ .flowbaby/data/  # In workspace root
 
 ### Automatic Context Search
 
-![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/auto-search.png)
+![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/retrieval.gif)
 
 *Flowbaby automatically searches memory based on chat context*
 
 ### Automatic Memory Storage
 
-![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/auto-store.png)
-
+![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/memory-store.gif)
 *Flowbaby knows when to store memories based on conversation cues*
 
 ### Interactive Chat Participant
 
-![Interactive Chat](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/interactive-chat-participant.png)
+![Interactive Chat Participant](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/what-were-we-working-on.gif)
 
 *Use @flowbaby to query your workspace memory*
 
