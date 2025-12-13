@@ -10,19 +10,19 @@ Flowbaby captures and summarizes key moments from your GitHub Copilot chats, the
 
 Flowbaby is configured to use chat conversation cues to search memory and add that memory context to the chat - keeping your Copilot agent from drifting and saving you from having to explain what happened all over again.
 
-![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/retrieval.gif)
+![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/retrieval.gif)
 
 ### Context aware automatic memory storage
 
 Flowbaby knows when it's a good time to summarize and store memories based on the chat context.
 
-![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/memory-store.gif)
+![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/memory-store.gif)
 
 ### @flowbaby chat participant
 
 A dedicated Copilot participant that recalls past conversations and surfaces relevant memories into new chats to reduce drift over long sessions.
 
-![Interactive Chat Participant](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/what-were-we-working-on.gif)
+![Interactive Chat Participant](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/what-were-we-working-on.gif)
 
 ### Configurable memory behavior via stored prompts
 
@@ -40,7 +40,7 @@ Press Ctrl+Alt+F / Cmd+Alt+F to capture important snippets from chat or code wit
 
 Run "Flowbaby: Capture to Memory" if you prefer command-palette based capture.
 
-![Manual Store](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/manual-store-summary.png)
+![Manual Store](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/manual-store-summary.png)
 
 ### Workspace Isolation
 
@@ -528,42 +528,42 @@ rm -rf .flowbaby/ .flowbaby/system/ .flowbaby/data/  # In workspace root
 
 ### Automatic Context Search
 
-![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/auto-search.png)
+![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/auto-search.png)
 
 *Flowbaby automatically searches memory based on chat context*
 
 ### Automatic Memory Storage
 
-![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/auto-store.png)
+![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/auto-store.png)
 
 *Flowbaby knows when to store memories based on conversation cues*
 
 ### Interactive Chat Participant
 
-![Interactive Chat](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/interactive-chat-participant.png)
+![Interactive Chat](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/interactive-chat-participant.png)
 
 *Use @flowbaby to query your workspace memory*
 
 ### Manual Memory Storage
 
-![Manual Store](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/manual-store-summary.png)
+![Manual Store](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/manual-store-summary.png)
 
 *Capture important context with keyboard shortcuts*
 
 ## Contributing
 
-We welcome contributions! See [discussions](https://github.com/groupzer0/flowbaby-issues/discussions)
+We welcome contributions! See [discussions](https://github.com/groupzer0/flowbaby/discussions)
 
 ## License
 
-This extension is licensed under the PolyForm Strict License 1.0.0. See [LICENSE](LICENSE) for details.
+This extension is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 This extension uses [Cognee](https://github.com/topoteretes/cognee) under the Apache 2.0 license. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
 
 ## Support
 
-- **Report Bugs**: [GitHub Issues](https://github.com/groupzer0/flowbaby-issues/issues)
-- **Feature Requests**: [GitHub Discussions](https://github.com/groupzer0/flowbaby-issues/discussions)
+- **Report Bugs**: [GitHub Issues](https://github.com/groupzer0/flowbaby/issues)
+- **Feature Requests**: [GitHub Discussions](https://github.com/groupzer0/flowbaby/discussions)
 
 ## Changelog
 

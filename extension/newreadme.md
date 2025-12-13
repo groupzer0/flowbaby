@@ -14,7 +14,7 @@ Ask Copilot something. Flowbaby checks if you've hit this before and drops the c
 
 It's like having a coworker who actually remembers what you said in standup.
 
-![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/auto-search.png)
+![Automatic Search](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/auto-search.png)
 
 ### Auto-Store: Captures What Counts
 
@@ -22,7 +22,7 @@ Hit a decision? Debug something nasty? Flowbaby spots it and saves a clean summa
 
 No manual journaling. No "I should probably write this down." Flowbaby's got it.
 
-![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/auto-store.png)
+![Automatic Store](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/auto-store.png)
 
 ### @flowbaby: Your Personal Historian
 
@@ -30,7 +30,7 @@ Type `@flowbaby` in chat. Ask about past work. Get real answers from your own se
 
 It's your history. Not someone else's Medium post.
 
-![Interactive Chat Participant](https://raw.githubusercontent.com/groupzer0/flowbaby-issues/main/media/interactive-chat-participant.png)
+![Interactive Chat Participant](https://raw.githubusercontent.com/groupzer0/flowbaby/main/media/interactive-chat-participant.png)
 
 ### Everything Else
 
@@ -350,18 +350,18 @@ Maybe later.
 
 ## Contributing
 
-[Discussions](https://github.com/groupzer0/flowbaby-issues/discussions)
+[Discussions](https://github.com/groupzer0/flowbaby/discussions)
 
 ## License
 
-PolyForm Strict 1.0.0. See [LICENSE](LICENSE).
+MIT License. See [LICENSE](LICENSE).
 
 Uses [Cognee](https://github.com/topoteretes/cognee) (Apache 2.0). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Support
 
-- [Bugs](https://github.com/groupzer0/flowbaby-issues/issues)
-- [Requests](https://github.com/groupzer0/flowbaby-issues/discussions)
+- [Bugs](https://github.com/groupzer0/flowbaby/issues)
+- [Requests](https://github.com/groupzer0/flowbaby/discussions)
 
 ## Changelog
 

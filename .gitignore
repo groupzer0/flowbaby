@@ -5,6 +5,8 @@ __pycache__/
 .venv/
 venv/
 ENV/
+# Nested virtualenvs anywhere in repo
+**/.venv/
 
 # Environment
 .env
@@ -14,6 +16,8 @@ ENV/
 .flowbaby-backup-1
 cognee_db
 cognee_graph_kuzu
+/.github
+/tmp
 
 # Tutorial artifacts (timestamped outputs)
 tutorial/artifacts/*.html
@@ -48,6 +52,8 @@ extension/test-*.js
 # Logs
 *.log
 .envrc
+# Pytest cache
+**/.pytest_cache/
 
 # Generated agent artifacts
 agent-output/

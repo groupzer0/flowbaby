@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.6.1] - 2025-12-13
+
+### Changed
+
+- Switched the project and extension licensing from PolyForm Strict to MIT and prepared the repository for public open-source use, based on user feedback.
+
 ## [0.6.0] - 2025-12-11
 
 ### Changed

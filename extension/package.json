@@ -2,7 +2,7 @@
   "name": "flowbaby",
   "displayName": "Flowbaby",
   "description": "The only memory system that isn't wearing a memory costume. No drift. No drama",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "publisher": "Flowbaby",
   "icon": "media/flowbaby-icon-tightcrop.png",
   "engines": {
@@ -466,13 +466,13 @@
     "typescript": "^5.9.3"
   },
   "author": "Flowbaby Team",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/groupzer0/flowbaby-issues.git"
+    "url": "https://github.com/groupzer0/flowbaby.git"
   },
   "bugs": {
-    "url": "https://github.com/groupzer0/flowbaby-issues/issues"
+    "url": "https://github.com/groupzer0/flowbaby/issues"
   },
   "homepage": "https://flowbaby.ai",
   "dependencies": {
