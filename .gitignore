@@ -57,5 +57,4 @@ extension/test-*.js
 
 # Generated agent artifacts
 agent-output/
-agent-outputs/
 .cognee/

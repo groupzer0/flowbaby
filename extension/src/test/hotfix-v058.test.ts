@@ -41,6 +41,26 @@ suite('Hotfix v0.5.8 Tests', () => {
                 return;
             }
 
+            // Stub configuration to avoid real daemon/environment work
+            const flowConfig = {
+                get: (key: string, defaultValue?: any) => {
+                    if (key === 'pythonPath') {return '/usr/bin/python3';}
+                    if (key === 'debugLogging') {return false;}
+                    if (key === 'bridgeMode') {return 'spawn';}
+                    return defaultValue;
+                }
+            } as any;
+            const rankingConfig = { get: (_key: string, defaultValue?: any) => defaultValue } as any;
+            const sessionConfig = { get: () => true } as any;
+
+            sandbox.stub(vscode.workspace, 'getConfiguration').callsFake((section?: string) => {
+                if (section === 'Flowbaby.sessionManagement') {return sessionConfig;}
+                if (section === 'Flowbaby.ranking') {return rankingConfig;}
+                return flowConfig;
+            });
+
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
             const mockContext = {
                 secrets: {
                     get: sandbox.stub().resolves('test-api-key'),
@@ -86,6 +106,26 @@ suite('Hotfix v0.5.8 Tests', () => {
                 this.skip();
                 return;
             }
+
+            // Stub configuration to avoid real daemon/environment work
+            const flowConfig = {
+                get: (key: string, defaultValue?: any) => {
+                    if (key === 'pythonPath') {return '/usr/bin/python3';}
+                    if (key === 'debugLogging') {return false;}
+                    if (key === 'bridgeMode') {return 'spawn';}
+                    return defaultValue;
+                }
+            } as any;
+            const rankingConfig = { get: (_key: string, defaultValue?: any) => defaultValue } as any;
+            const sessionConfig = { get: () => true } as any;
+
+            sandbox.stub(vscode.workspace, 'getConfiguration').callsFake((section?: string) => {
+                if (section === 'Flowbaby.sessionManagement') {return sessionConfig;}
+                if (section === 'Flowbaby.ranking') {return rankingConfig;}
+                return flowConfig;
+            });
+
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
 
             const mockContext = {
                 secrets: {

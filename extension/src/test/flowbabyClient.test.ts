@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as sinon from 'sinon';
 import { EventEmitter } from 'events';
 import { FlowbabyClient } from '../flowbabyClient';
+import { PythonBridgeDaemonManager } from '../bridge/PythonBridgeDaemonManager';
 
 // Helper to create directory structure
 function createTestStructure(basePath: string, structure: any) {
@@ -386,7 +387,10 @@ suite('FlowbabyClient Test Suite', () => {
 
         function stubSharedDependencies() {
             sandbox.stub(vscode.workspace, 'getConfiguration').returns({
-                get: (_key: string, defaultValue?: any) => defaultValue
+                get: (key: string, defaultValue?: any) => {
+                    if (key === 'bridgeMode') {return 'spawn';}
+                    return defaultValue;
+                }
             } as vscode.WorkspaceConfiguration);
             sandbox.stub(vscode.window, 'createOutputChannel').returns({
                 name: 'Cognee Memory',
@@ -475,7 +479,10 @@ suite('FlowbabyClient Test Suite', () => {
 
         function stubSharedDependencies() {
             sandbox.stub(vscode.workspace, 'getConfiguration').returns({
-                get: (_key: string, defaultValue?: any) => defaultValue
+                get: (key: string, defaultValue?: any) => {
+                    if (key === 'bridgeMode') {return 'spawn';}
+                    return defaultValue;
+                }
             } as vscode.WorkspaceConfiguration);
             sandbox.stub(vscode.window, 'createOutputChannel').returns({
                 name: 'Cognee Memory',
@@ -891,9 +898,23 @@ suite('FlowbabyClient Test Suite', () => {
         let sandbox: sinon.SinonSandbox;
 
         function stubSharedDependencies() {
-            sandbox.stub(vscode.workspace, 'getConfiguration').returns({
-                get: (_key: string, defaultValue?: any) => defaultValue
-            } as vscode.WorkspaceConfiguration);
+            sandbox.stub(vscode.workspace, 'getConfiguration').callsFake((section?: string) => {
+                if (section === 'Flowbaby.sessionManagement') {
+                    return { get: () => true } as any;
+                }
+                if (section === 'Flowbaby.ranking') {
+                    return { get: (_key: string, defaultValue?: any) => defaultValue } as any;
+                }
+                return {
+                    get: (key: string, defaultValue?: any) => {
+                        if (key === 'pythonPath') {return '/usr/bin/python3';}
+                        if (key === 'debugLogging') {return false;}
+                        if (key === 'bridgeMode') {return 'spawn';}
+                        return defaultValue;
+                    }
+                } as any;
+            });
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
             sandbox.stub(vscode.window, 'createOutputChannel').returns({
                 name: 'Cognee Memory',
                 appendLine: () => void 0,
@@ -1125,6 +1146,357 @@ suite('FlowbabyClient Test Suite', () => {
             const anyClient = client as any;
 
             assert.strictEqual(anyClient.sessionManagementEnabled, true, 'Session management should default to enabled');
+        });
+    });
+
+    // Plan 054 Fix Tests: Daemon Integration
+    // These tests verify that the daemon is properly activated and used,
+    // with appropriate fallback to spawn-per-request on failure.
+    suite('Daemon Integration (Plan 054 Fix)', () => {
+        let sandbox: sinon.SinonSandbox;
+        let mockContext: vscode.ExtensionContext;
+        const workspacePath = '/test/workspace';
+
+        setup(() => {
+            sandbox = sinon.createSandbox();
+            
+            // Create mock extension context
+            mockContext = {
+                extensionPath: '/test/extension',
+                globalState: {
+                    get: sandbox.stub().returns(undefined),
+                    update: sandbox.stub().resolves(),
+                    keys: sandbox.stub().returns([]),
+                    setKeysForSync: sandbox.stub()
+                },
+                workspaceState: {
+                    get: sandbox.stub().returns(undefined),
+                    update: sandbox.stub().resolves(),
+                    keys: sandbox.stub().returns([])
+                },
+                subscriptions: [],
+                asAbsolutePath: (p: string) => path.join('/test/extension', p),
+                storageUri: vscode.Uri.file('/test/storage'),
+                globalStorageUri: vscode.Uri.file('/test/global-storage'),
+                logUri: vscode.Uri.file('/test/logs'),
+                extensionUri: vscode.Uri.file('/test/extension'),
+                extensionMode: vscode.ExtensionMode.Development,
+                environmentVariableCollection: {} as any,
+                secrets: {} as any,
+                extension: {} as any,
+                storagePath: '/test/storage',
+                globalStoragePath: '/test/global-storage',
+                logPath: '/test/logs',
+                languageModelAccessInformation: {} as any
+            } as any;
+        });
+
+        teardown(() => {
+            sandbox.restore();
+        });
+
+        /**
+         * Helper to stub VS Code configuration for daemon tests
+         */
+        function stubDaemonConfigs(bridgeMode: 'daemon' | 'spawn' = 'daemon') {
+            const configValues: Record<string, any> = {
+                'pythonInterpreter': '/usr/bin/python3',
+                'storageType': 'local',
+                'bridgeMode': bridgeMode,
+                'debugLogging': false,
+                'sessionManagement.enabled': true
+            };
+
+            sandbox.stub(vscode.workspace, 'getConfiguration').callsFake((section?: string) => {
+                return {
+                    get: <T>(key: string, defaultValue?: T): T => {
+                        const fullKey = section ? `${section}.${key}` : key;
+                        const value = configValues[key] ?? configValues[fullKey];
+                        return (value !== undefined ? value : defaultValue) as T;
+                    },
+                    has: () => true,
+                    inspect: () => undefined,
+                    update: sandbox.stub().resolves()
+                } as any;
+            });
+        }
+
+        test('should set daemonModeEnabled=true when bridgeMode is daemon', () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            // Act
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+
+            // Assert
+            assert.strictEqual(anyClient.daemonModeEnabled, true, 'Daemon mode should be enabled when bridgeMode=daemon');
+        });
+
+        test('should set daemonModeEnabled=false when bridgeMode is spawn', () => {
+            // Arrange
+            stubDaemonConfigs('spawn');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            // Act
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+
+            // Assert
+            assert.strictEqual(anyClient.daemonModeEnabled, false, 'Daemon mode should be disabled when bridgeMode=spawn');
+        });
+
+        test('should initialize daemon manager when daemon mode is enabled', () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            // Act
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+
+            // Assert
+            assert.ok(anyClient.daemonManager, 'DaemonManager should be initialized when daemon mode is enabled');
+            assert.ok(anyClient.daemonManager instanceof PythonBridgeDaemonManager, 'Should be instance of PythonBridgeDaemonManager');
+        });
+
+        test('should not initialize daemon manager when daemon mode is disabled', () => {
+            // Arrange
+            stubDaemonConfigs('spawn');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            // Act
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+
+            // Assert
+            assert.ok(!anyClient.daemonManager, 'DaemonManager should not be initialized when daemon mode is disabled');
+        });
+
+        test('retrieveViaDaemon should call daemon sendRequest with correct method', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            // Stub daemon manager sendRequest on prototype so all instances use it
+            const mockSendRequest = sandbox.stub(PythonBridgeDaemonManager.prototype as any, 'sendRequest').resolves({
+                success: true,
+                results: [{ topic: 'test', context: 'test context', score: 0.9 }]
+            });
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+
+            // Act
+            const payload = { query: 'test query', max_results: 3 };
+            await anyClient.retrieveViaDaemon(payload);
+
+            // Assert: find the retrieve call (there may be other calls, e.g. health checks)
+            assert.ok(mockSendRequest.called, 'sendRequest should be called');
+            const retrieveCall = mockSendRequest.getCalls().find((call) => call.args[0] === 'retrieve');
+            assert.ok(retrieveCall, 'sendRequest should be called with method "retrieve"');
+            const params = retrieveCall!.args[1] as any;
+            assert.strictEqual(params.query, payload.query, 'Query should match payload');
+            assert.strictEqual(params.max_results, payload.max_results, 'max_results should match payload');
+        });
+
+        test('ingestViaDaemon should call daemon sendRequest with correct method', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            // Stub daemon manager sendRequest on prototype so all instances use it
+            const mockSendRequest = sandbox.stub(PythonBridgeDaemonManager.prototype as any, 'sendRequest').resolves({
+                success: true,
+                memory_id: 'test-id-123'
+            });
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+
+            // Act
+            const payload = { topic: 'test topic', context: 'test context' };
+            await anyClient.ingestViaDaemon(payload);
+
+            // Assert: at least one call and method/payload correctness
+            assert.ok(mockSendRequest.called, 'sendRequest should be called');
+            assert.strictEqual(mockSendRequest.firstCall.args[0], 'ingest', 'Method should be "ingest"');
+            assert.deepStrictEqual(mockSendRequest.firstCall.args[1], payload, 'Payload should match');
+        });
+
+        test('retrieve should use daemon when daemon mode enabled and daemon available', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock retrieveViaDaemon to track calls
+            const mockRetrieveViaDaemon = sandbox.stub(anyClient, 'retrieveViaDaemon').resolves({
+                success: true,
+                results: [{ topic: 'test', context: 'test context', score: 0.9 }]
+            });
+
+            // Mock runPythonScript to track fallback calls
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                results: []
+            });
+
+            // Act
+            await client.retrieve('test query', { maxResults: 3 });
+
+            // Assert
+            assert.ok(mockRetrieveViaDaemon.calledOnce, 'Should use daemon for retrieval');
+            assert.ok(!mockRunPythonScript.called, 'Should NOT fall back to spawn-per-request');
+        });
+
+        test('retrieve should fall back to spawn when daemon fails', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock retrieveViaDaemon to throw an error
+            const mockRetrieveViaDaemon = sandbox.stub(anyClient, 'retrieveViaDaemon').rejects(new Error('Daemon connection failed'));
+
+            // Mock runPythonScript to return success
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                results: [{ summaryText: 'test context', topic: 'test', score: 0.9 }]
+            });
+
+            // Act
+            const result = await client.retrieve('test query', { maxResults: 3 });
+
+            // Assert
+            assert.ok(mockRetrieveViaDaemon.calledOnce, 'Should try daemon first');
+            assert.ok(mockRunPythonScript.calledOnce, 'Should fall back to spawn-per-request on daemon error');
+            assert.ok(Array.isArray(result), 'Should return array result from fallback');
+        });
+
+        test('retrieve should use spawn directly when daemon mode disabled', async () => {
+            // Arrange
+            stubDaemonConfigs('spawn');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock runPythonScript to track calls
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                results: [{ summaryText: 'test context', topic: 'test', score: 0.9 }]
+            });
+
+            // Act
+            await client.retrieve('test query', { maxResults: 3 });
+
+            // Assert
+            assert.ok(mockRunPythonScript.calledOnce, 'Should use spawn-per-request directly');
+        });
+
+        test('ingest should use daemon when daemon mode enabled and daemon available', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock ingestViaDaemon to track calls
+            const mockIngestViaDaemon = sandbox.stub(anyClient, 'ingestViaDaemon').resolves({
+                success: true,
+                memory_id: 'test-id-123'
+            });
+
+            // Mock runPythonScript to track fallback calls
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                memory_id: 'test-id-456'
+            });
+
+            // Act - ingest() takes userMessage, assistantMessage, importance
+            await client.ingest('user message', 'assistant response', 0.5);
+
+            // Assert
+            assert.ok(mockIngestViaDaemon.calledOnce, 'Should use daemon for ingestion');
+            assert.ok(!mockRunPythonScript.called, 'Should NOT fall back to spawn-per-request');
+        });
+
+        test('ingest should fall back to spawn when daemon fails', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock ingestViaDaemon to throw an error
+            const mockIngestViaDaemon = sandbox.stub(anyClient, 'ingestViaDaemon').rejects(new Error('Daemon connection failed'));
+
+            // Mock runPythonScript to return success
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                memory_id: 'test-id-456'
+            });
+
+            // Act - ingest() returns boolean
+            const result = await client.ingest('user message', 'assistant response', 0.5);
+
+            // Assert
+            assert.ok(mockIngestViaDaemon.calledOnce, 'Should try daemon first');
+            assert.ok(mockRunPythonScript.calledOnce, 'Should fall back to spawn-per-request on daemon error');
+            assert.strictEqual(result, true, 'Should return true on successful fallback');
+        });
+
+        test('initializeDaemonManager should warm-start daemon', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            // Stub daemon manager's start on prototype so constructor warm-start is observable
+            const mockStart = sandbox.stub(PythonBridgeDaemonManager.prototype as any, 'start').resolves();
+
+            // Act: constructing the client should warm-start the daemon
+            // via initializeDaemonManager() in the constructor
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const _client = new FlowbabyClient(workspacePath, mockContext);
+
+            // Assert
+            assert.ok(mockStart.calledOnce, 'Should warm-start daemon during initialization');
+        });
+
+        test('stopDaemon should stop daemon manager', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+
+            // Mock daemon manager's stop method
+            const mockStop = sandbox.stub(anyClient.daemonManager, 'stop').resolves();
+
+            // Act
+            await client.stopDaemon();
+
+            // Assert
+            assert.ok(mockStop.calledOnce, 'Should stop daemon manager on stopDaemon()');
         });
     });
 });

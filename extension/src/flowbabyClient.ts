@@ -264,6 +264,17 @@ export class FlowbabyClient {
                 this.outputChannel
             );
             this.log('DEBUG', 'Daemon manager initialized');
+
+            // Plan 054 Fix: Warm-start daemon in background to avoid first-call latency
+            // Don't await - let it start async while user continues working
+            this.daemonManager.start().then(() => {
+                this.log('INFO', 'Bridge daemon warm-started successfully');
+            }).catch((err) => {
+                const errorMsg = err instanceof Error ? err.message : String(err);
+                this.log('WARN', 'Daemon warm-start failed (will retry on first request)', {
+                    error: errorMsg
+                });
+            });
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.log('WARN', 'Failed to initialize daemon manager, falling back to spawn-per-request', {
@@ -1042,9 +1053,34 @@ export class FlowbabyClient {
                 throw new Error(`Payload too large (${userMessage.length + assistantMessage.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
             }
 
+            // Plan 054 Fix: Try daemon first (auto-starts via sendRequest), fall back on error
             // Use 120-second timeout for ingestion (Cognee setup + LLM processing can take time)
-            // Increased from 30s to reduce false-positive timeout errors when ingestion succeeds but takes >30s
-            const result = await this.runPythonScript('ingest.py', args, 120000);
+            let result: FlowbabyResult;
+            if (this.daemonManager && this.daemonModeEnabled) {
+                try {
+                    const daemonParams: Record<string, unknown> = {
+                        user_message: userMessage,
+                        assistant_message: assistantMessage,
+                        importance,
+                        workspace_path: this.workspacePath
+                    };
+                    if (this.sessionManager && this.sessionManagementEnabled) {
+                        const sessionId = threadId
+                            ? this.sessionManager.getSessionIdForChatThread(threadId)
+                            : this.sessionManager.getSessionIdForAgentRun();
+                        daemonParams.session_id = sessionId;
+                    }
+                    result = await this.ingestViaDaemon(daemonParams);
+                } catch (daemonError) {
+                    const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
+                    this.log('WARN', 'Daemon ingest failed, falling back to spawn-per-request', {
+                        error: errorMsg
+                    });
+                    result = await this.runPythonScript('ingest.py', args, 120000);
+                }
+            } else {
+                result = await this.runPythonScript('ingest.py', args, 120000);
+            }
 
             const duration = Date.now() - startTime;
 
@@ -1328,13 +1364,22 @@ export class FlowbabyClient {
             this.log('DEBUG', 'Retrieval bridge call starting', {
                 timeout_ms: RETRIEVAL_TIMEOUT_MS,
                 query_preview: query.length > 100 ? query.substring(0, 100) + '...' : query,
-                useDaemon: this.daemonManager?.isHealthy() ?? false
+                daemonEnabled: this.daemonModeEnabled,
+                daemonHealthy: this.daemonManager?.isHealthy() ?? false
             });
             
-            // Plan 054: Use daemon if available, fall back to spawn-per-request
+            // Plan 054 Fix: Try daemon first (auto-starts via sendRequest), fall back on error
             let result: FlowbabyResult;
-            if (this.daemonManager?.isHealthy()) {
-                result = await this.retrieveViaDaemon(payload);
+            if (this.daemonManager && this.daemonModeEnabled) {
+                try {
+                    result = await this.retrieveViaDaemon(payload);
+                } catch (daemonError) {
+                    const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
+                    this.log('WARN', 'Daemon retrieval failed, falling back to spawn-per-request', {
+                        error: errorMsg
+                    });
+                    result = await this.runPythonScript('retrieve.py', args, RETRIEVAL_TIMEOUT_MS);
+                }
             } else {
                 result = await this.runPythonScript('retrieve.py', args, RETRIEVAL_TIMEOUT_MS);
             }
@@ -1585,8 +1630,15 @@ export class FlowbabyClient {
         }
         
         const logLine = `[${timestamp}] [${level}] ${message}${dataStr}`;
-        
-        this.outputChannel.appendLine(logLine);
+
+        try {
+            this.outputChannel.appendLine(logLine);
+        } catch (error) {
+            // VS Code may dispose the output channel during test teardown; swallow channel-closed errors
+            debugLog('FlowbabyClient.log append failed', {
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
     }
 
     /**

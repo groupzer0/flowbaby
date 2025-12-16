@@ -40,10 +40,19 @@ export function getFlowbabyOutputChannel(): vscode.OutputChannel {
  * @returns The Flowbaby Debug output channel, or undefined if debug logging is disabled
  */
 export function getFlowbabyDebugChannel(): vscode.OutputChannel | undefined {
-    const config = vscode.workspace.getConfiguration('Flowbaby');
-    const debugLoggingEnabled = config.get<boolean>('debugLogging', false)
-        || process.env.FLOWBABY_DEBUG_LOGGING === 'true'
-        || process.env.NODE_ENV === 'test';
+    let debugLoggingEnabled = false;
+    try {
+        const config = vscode.workspace?.getConfiguration?.('Flowbaby');
+        const configFlag = config?.get<boolean>('debugLogging', false) ?? false;
+        debugLoggingEnabled = configFlag
+            || process.env.FLOWBABY_DEBUG_LOGGING === 'true'
+            || process.env.NODE_ENV === 'test';
+    } catch {
+        // In tests or early activation, workspace configuration may not be available.
+        // Fall back to environment-based flags only.
+        debugLoggingEnabled = process.env.FLOWBABY_DEBUG_LOGGING === 'true'
+            || process.env.NODE_ENV === 'test';
+    }
     
     if (!debugLoggingEnabled) {
         return undefined;

@@ -131,10 +131,10 @@ export async function activate(_context: vscode.ExtensionContext) {
     }
 
     console.log('Flowbaby extension activated');
-    
+
     // Plan 028 M2: Debug logging for activation lifecycle
     debugLog('Extension activation started', { timestamp: new Date().toISOString() });
-    
+
     // Plan 001: Initialize SessionManager
     sessionManager = new SessionManager(_context);
 
@@ -156,13 +156,13 @@ export async function activate(_context: vscode.ExtensionContext) {
     // Initialize Flowbaby client
     try {
         flowbabyClient = new FlowbabyClient(workspacePath, _context, sessionManager);
-        
+
         // Plan 015: Create output channel early
         const agentOutputChannel = vscode.window.createOutputChannel('Flowbaby Agent Activity');
-        
+
         // Plan 025 Milestone 6: Initialize Status Bar EARLY
         const statusBar = new FlowbabyStatusBar(_context);
-        
+
         // Plan 028 M2: Register Show Debug Logs command
         const showDebugLogsCommand = vscode.commands.registerCommand(
             'Flowbaby.showDebugLogs',
@@ -184,7 +184,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             }
         );
         _context.subscriptions.push(showDebugLogsCommand);
-        
+
         // Plan 028 M5: Register Set API Key command
         const setApiKeyCommand = vscode.commands.registerCommand(
             'Flowbaby.setApiKey',
@@ -201,7 +201,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                         return null;
                     }
                 });
-                
+
                 if (apiKey) {
                     try {
                         await _context.secrets.store('flowbaby.llmApiKey', apiKey.trim());
@@ -211,7 +211,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                         debugLog('API key stored via SecretStorage');
                         // Plan 039 M6: Audit log API key set
                         getAuditLogger().logApiKeySet(true, 'command');
-                        
+
                         // Issue 5 (v0.5.7): After setting API key, update status bar to Ready
                         // if we have a working environment
                         const activeWorkspace = getActiveWorkspacePath() || workspacePath;
@@ -228,7 +228,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             }
         );
         _context.subscriptions.push(setApiKeyCommand);
-        
+
         // Plan 045 Hotfix: Register Configure API Key command as alias
         // package.json defines Flowbaby.configureApiKey - make it work too
         const configureApiKeyCommand = vscode.commands.registerCommand(
@@ -239,7 +239,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             }
         );
         _context.subscriptions.push(configureApiKeyCommand);
-        
+
         // Plan 028 M5: Register Clear API Key command
         const clearApiKeyCommand = vscode.commands.registerCommand(
             'Flowbaby.clearApiKey',
@@ -249,7 +249,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                     { modal: true },
                     'Clear Key'
                 );
-                
+
                 if (confirm === 'Clear Key') {
                     try {
                         await _context.secrets.delete('flowbaby.llmApiKey');
@@ -269,7 +269,7 @@ export async function activate(_context: vscode.ExtensionContext) {
 
         // Plan 021 Milestone 4: Initialize Setup Service EARLY
         const setupService = new FlowbabySetupService(_context, workspacePath, agentOutputChannel, undefined, undefined, statusBar);
-        
+
         // Register setup environment command (Plan 021 Milestone 4)
         const setupEnvironmentCommand = vscode.commands.registerCommand(
             'Flowbaby.setupEnvironment',
@@ -289,21 +289,21 @@ export async function activate(_context: vscode.ExtensionContext) {
             async () => {
                 const outputChannel = getFlowbabyOutputChannel();
                 outputChannel.appendLine('[Plan 040] Starting workspace initialization...');
-                
+
                 // Delegate to setupService.createEnvironment() for unified behavior
                 const success = await setupService.createEnvironment();
-                
+
                 if (!success) {
                     outputChannel.appendLine('[Plan 040] ❌ Environment creation failed');
                     return;
                 }
-                
+
                 outputChannel.appendLine('[Plan 040] ✅ Environment created successfully');
-                
+
                 // Plan 040 M2: If environment creation succeeded, chain client initialization
                 if (success && flowbabyClient) {
                     outputChannel.appendLine('[Plan 040] Preparing to initialize Flowbaby client...');
-                    
+
                     // CRITICAL FIX: Recreate FlowbabyClient to pick up the new .flowbaby/venv Python path
                     // The client was created at activation time with system Python (python3) before
                     // the venv existed. Now that createEnvironment() has successfully created the venv
@@ -312,7 +312,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                     outputChannel.appendLine('[Plan 040] Recreating FlowbabyClient with new environment...');
                     debugLog('Recreating FlowbabyClient after environment setup');
                     flowbabyClient = new FlowbabyClient(workspacePath, _context);
-                    
+
                     try {
                         // Show progress during initialization
                         await vscode.window.withProgress({
@@ -321,10 +321,10 @@ export async function activate(_context: vscode.ExtensionContext) {
                             cancellable: false
                         }, async () => {
                             const initResult = await flowbabyClient!.initialize();
-                            
+
                             if (initResult.success) {
                                 setInitState(workspacePath, { initialized: true, initFailed: false });
-                                
+
                                 // Plan 045: Set status bar based on API key state
                                 if (initResult.apiKeyState.llmReady) {
                                     statusBar.setStatus(FlowbabyStatus.Ready);
@@ -340,62 +340,112 @@ export async function activate(_context: vscode.ExtensionContext) {
                                     const manager = BackgroundOperationManager.initialize(_context, agentOutputChannel);
                                     await manager.initializeForWorkspace(workspacePath);
                                     console.log('BackgroundOperationManager initialized after workspace setup');
-                                    
+
                                     // Register background status command if not already registered
                                     // (Safe to re-register as it overwrites the handler)
                                     registerBackgroundStatusCommand(_context);
                                 } catch (error) {
                                     console.error('Failed to initialize BackgroundOperationManager:', error);
                                 }
-                                
+
                                 // Initialize FlowbabyContextProvider if not already done
                                 if (!flowbabyContextProvider) {
                                     const { FlowbabyContextProvider } = await import('./flowbabyContextProvider');
                                     flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient!, agentOutputChannel, setupService, sessionManager);
                                     console.log('FlowbabyContextProvider initialized after workspace setup');
-                                    
+
                                     // Register agent commands
                                     registerIngestForAgentCommand(_context, flowbabyClient!, agentOutputChannel, setupService);
                                     registerRetrieveForAgentCommand(_context, flowbabyContextProvider, agentOutputChannel);
-                                    
+
                                     // Register language model tools
                                     await registerLanguageModelTool(_context, agentOutputChannel);
                                 }
-                                
+
                                 outputChannel.appendLine('[Plan 040] ✅ Flowbaby client initialized successfully');
-                                
+
                                 // Plan 045: Store init result for post-progress prompt
                                 // Don't show prompt inside withProgress - it blocks the progress indicator
                             } else {
                                 throw new Error(initResult.error || 'Client initialization failed');
                             }
                         });
-                        
+
                         // Plan 045 Fix: Show post-init prompt AFTER withProgress completes
                         // This ensures progress notification dismisses immediately
                         // Issue 4 (v0.5.7): Use modal warning that stays until dismissed
                         if (!flowbabyClient!.getApiKeyState()?.llmReady) {
                             // Modal prompt ensures user sees it - won't auto-dismiss
-                            vscode.window.showWarningMessage(
+                            const prompt = vscode.window.showWarningMessage(
                                 'Flowbaby initialized successfully! Configure your API key to enable memory operations.',
                                 { modal: true },
                                 'Set API Key',
                                 'Later'
-                            ).then(action => {
-                                if (action === 'Set API Key') {
-                                    vscode.commands.executeCommand('Flowbaby.setApiKey');
-                                }
-                            });
+                            );
+
+                            if (prompt && typeof (prompt as Thenable<string | undefined>).then === 'function') {
+                                prompt.then(action => {
+                                    if (action === 'Set API Key') {
+                                        vscode.commands.executeCommand('Flowbaby.setApiKey');
+                                    }
+                                }, error => {
+                                    // VS Code test harness refuses dialogs; swallow those errors
+                                    debugLog('Init API key prompt suppressed', {
+                                        error: error instanceof Error ? error.message : String(error)
+                                    });
+                                });
+                            }
                         } else {
-                            vscode.window.showInformationMessage('Flowbaby is ready!');
+                            // Plan 054: Offer walkthrough after successful initialization
+                            const hasGlobalState = !!_context.globalState;
+                            const canReadGlobalState = hasGlobalState && typeof _context.globalState.get === 'function';
+                            const canWriteGlobalState = hasGlobalState && typeof _context.globalState.update === 'function';
+
+                            const walkthroughPromptDismissed = canReadGlobalState
+                                ? _context.globalState.get<boolean>('flowbaby.walkthroughPromptDismissed', false)
+                                : false;
+
+                            if (!walkthroughPromptDismissed) {
+                                const info = vscode.window.showInformationMessage(
+                                    'Flowbaby is ready! View the Getting Started guide?',
+                                    'View Guide',
+                                    'Don\'t Show Again'
+                                );
+
+                                if (info && typeof (info as Thenable<string | undefined>).then === 'function') {
+                                    info.then(action => {
+                                        if (action === 'View Guide') {
+                                            vscode.commands.executeCommand('workbench.action.openWalkthrough', 'Flowbaby.flowbabySetup');
+                                        } else if (action === 'Don\'t Show Again' && canWriteGlobalState) {
+                                            _context.globalState.update('flowbaby.walkthroughPromptDismissed', true);
+                                        }
+                                    }, error => {
+                                        debugLog('Walkthrough prompt suppressed', {
+                                            error: error instanceof Error ? error.message : String(error)
+                                        });
+                                    });
+                                }
+                            } else {
+                                const info = vscode.window.showInformationMessage('Flowbaby is ready!');
+                                if (info && typeof (info as Thenable<string | undefined>).then === 'function') {
+                                    info.then(
+                                        undefined,
+                                        error => {
+                                            debugLog('Ready notification suppressed', {
+                                                error: error instanceof Error ? error.message : String(error)
+                                            });
+                                        }
+                                    );
+                                }
+                            }
                         }
                     } catch (error) {
                         // Plan 040 M2: Handle initialization failures gracefully
                         setInitState(workspacePath, { initialized: false, initFailed: true });
                         statusBar.setStatus(FlowbabyStatus.Error);
-                        
+
                         const errorMessage = error instanceof Error ? error.message : String(error);
-                        
+
                         // Structured error logging per system-architecture.md §10.2
                         outputChannel.appendLine('[Plan 040] ❌ Flowbaby client initialization failed');
                         outputChannel.appendLine(JSON.stringify({
@@ -405,7 +455,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                             timestamp: new Date().toISOString()
                         }, null, 2));
                         outputChannel.show();
-                        
+
                         // User-facing notification per Plan 040 acceptance criteria
                         vscode.window.showErrorMessage(
                             'Flowbaby initialization failed. Check Output for details.',
@@ -443,14 +493,14 @@ export async function activate(_context: vscode.ExtensionContext) {
         // This provides targeted UX guidance based on actual workspace state
         const healthStatus = await setupService.checkWorkspaceHealth();
         debugLog('Workspace health check result', { healthStatus });
-        
+
         if (healthStatus === 'FRESH') {
             // No .flowbaby directory or missing bridge-env.json - user needs to initialize
             // Plan 040 M3: Unified messaging for fresh workspaces
             console.log('Flowbaby workspace not initialized');
             statusBar.setStatus(FlowbabyStatus.SetupRequired);
             setInitState(workspacePath, { initialized: false, initFailed: true });
-            
+
             // Non-blocking prompt for initialization
             vscode.window.showInformationMessage(
                 'Flowbaby needs to be set up. Initialize now?',
@@ -461,7 +511,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                     vscode.commands.executeCommand('Flowbaby.initializeWorkspace');
                 }
             });
-            
+
             // Skip client initialization attempt - environment not ready
             recordActivationCompletion({
                 healthStatus,
@@ -470,19 +520,19 @@ export async function activate(_context: vscode.ExtensionContext) {
             setExtensionActive(false);
             return;
         }
-        
+
         if (healthStatus === 'BROKEN') {
             // .flowbaby exists with bridge-env.json but environment is corrupt - user needs to repair
             // Plan 040 M3: Distinguished messaging for broken workspaces (not just "needs setup")
             console.warn('Flowbaby workspace environment needs repair');
             statusBar.setStatus(FlowbabyStatus.Error);
             setInitState(workspacePath, { initialized: false, initFailed: true });
-            
+
             const outputChannel = getFlowbabyOutputChannel();
             outputChannel.appendLine('Flowbaby workspace environment needs repair.');
             outputChannel.appendLine('The Python environment may be missing or corrupted.');
             outputChannel.appendLine('Use "Flowbaby: Initialize Workspace" to repair.');
-            
+
             // Non-blocking prompt for repair with warning styling
             vscode.window.showWarningMessage(
                 'Flowbaby environment needs repair.',
@@ -493,7 +543,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                     vscode.commands.executeCommand('Flowbaby.initializeWorkspace');
                 }
             });
-            
+
             // Skip client initialization attempt - environment broken
             recordActivationCompletion({
                 healthStatus,
@@ -502,7 +552,7 @@ export async function activate(_context: vscode.ExtensionContext) {
             setExtensionActive(false);
             return;
         }
-        
+
         // healthStatus === 'VALID' - proceed with client initialization
 
         // Plan 050: Early dependency hash check to surface mismatches before initialization
@@ -532,7 +582,7 @@ export async function activate(_context: vscode.ExtensionContext) {
         // Plan 040 M4: Increase timeout from 15s to 60s to handle first-run database creation
         // (creating SQLite, Kuzu, and LanceDB databases can exceed 15s on slower machines)
         const initPromise = flowbabyClient.initialize();
-        
+
         // Plan 045: Timeout now returns a failed InitializeResult instead of false
         const timeoutPromise = new Promise<InitializeResult>((resolve) => {
             setTimeout(() => {
@@ -556,20 +606,20 @@ export async function activate(_context: vscode.ExtensionContext) {
             const initDuration = Date.now() - activationStart;
             console.log('Flowbaby client initialized successfully');
             debugLog('Client initialization successful', { duration_ms: initDuration });
-            
+
             // Plan 045: Set status bar based on API key state
             if (initResult.apiKeyState.llmReady) {
                 statusBar.setStatus(FlowbabyStatus.Ready);
             } else {
                 statusBar.setStatus(FlowbabyStatus.NeedsApiKey);
             }
-            
+
             // Plan 032 M1: Mark client as initialized for graceful degradation
             setInitState(workspacePath, { initialized: true, initFailed: false });
-            
+
             // Register commands for Milestone 1: Context Menu Capture
             registerCaptureCommands(_context, flowbabyClient);
-            
+
             // Plan 015: Register agent ingestion command
             registerIngestForAgentCommand(_context, flowbabyClient, agentOutputChannel, setupService);
 
@@ -583,21 +633,21 @@ export async function activate(_context: vscode.ExtensionContext) {
                 console.error('Failed to initialize BackgroundOperationManager:', error);
                 // Continue activation - sync mode will still work
             }
-            
+
             // Plan 017: Register backgroundStatus command
             registerBackgroundStatusCommand(_context);
 
             // Plan 021 Milestone 3: Register validation and listing commands
             registerValidationCommands(_context, flowbabyClient);
-            
+
             // Plan 016 Milestone 1: Initialize FlowbabyContextProvider (now that client is ready)
             const { FlowbabyContextProvider } = await import('./flowbabyContextProvider');
             flowbabyContextProvider = new FlowbabyContextProvider(flowbabyClient, agentOutputChannel, setupService, sessionManager);
             console.log('FlowbabyContextProvider initialized successfully');
-            
+
             // Plan 016 Milestone 2: Register agent retrieval command
             registerRetrieveForAgentCommand(_context, flowbabyContextProvider, agentOutputChannel);
-            
+
             // Plan 016.1: Register languageModelTools unconditionally (Configure Tools is sole opt-in)
             await registerLanguageModelTool(_context, agentOutputChannel);
             recordActivationCompletion({
@@ -607,30 +657,69 @@ export async function activate(_context: vscode.ExtensionContext) {
                 toolsRegistered: areToolsRegistered(),
                 participantRegistered: isParticipantRegistered()
             });
-            
+
             // Plan 045: Show post-init API key prompt if needed
             // Issue 4 (v0.5.7): Use modal warning that stays until dismissed
             if (!initResult.apiKeyState.llmReady) {
                 // Modal prompt ensures user sees it - won't auto-dismiss
-                vscode.window.showWarningMessage(
+                const prompt = vscode.window.showWarningMessage(
                     'Flowbaby initialized successfully! Configure your API key to enable memory operations.',
                     { modal: true },
                     'Set API Key',
                     'Later'
-                ).then(action => {
-                    if (action === 'Set API Key') {
-                        vscode.commands.executeCommand('Flowbaby.setApiKey');
+                );
+
+                if (prompt && typeof (prompt as Thenable<string | undefined>).then === 'function') {
+                    prompt.then(action => {
+                        if (action === 'Set API Key') {
+                            vscode.commands.executeCommand('Flowbaby.setApiKey');
+                        }
+                    }, error => {
+                        debugLog('Init API key prompt suppressed', {
+                            error: error instanceof Error ? error.message : String(error)
+                        });
+                    });
+                }
+            } else {
+                // Plan 054: Offer walkthrough for users who are fully set up
+                const hasGlobalState = !!_context.globalState;
+                const canReadGlobalState = hasGlobalState && typeof _context.globalState.get === 'function';
+                const canWriteGlobalState = hasGlobalState && typeof _context.globalState.update === 'function';
+
+                const walkthroughPromptDismissed = canReadGlobalState
+                    ? _context.globalState.get<boolean>('flowbaby.walkthroughPromptDismissed', false)
+                    : false;
+
+                if (!walkthroughPromptDismissed) {
+                    const info = vscode.window.showInformationMessage(
+                        'Flowbaby is ready! View the Getting Started guide?',
+                        'View Guide',
+                        'Don\'t Show Again'
+                    );
+
+                    if (info && typeof (info as Thenable<string | undefined>).then === 'function') {
+                        info.then(action => {
+                            if (action === 'View Guide') {
+                                vscode.commands.executeCommand('workbench.action.openWalkthrough', 'Flowbaby.flowbabySetup');
+                            } else if (action === 'Don\'t Show Again' && canWriteGlobalState) {
+                                _context.globalState.update('flowbaby.walkthroughPromptDismissed', true);
+                            }
+                        }, error => {
+                            debugLog('Walkthrough prompt suppressed', {
+                                error: error instanceof Error ? error.message : String(error)
+                            });
+                        });
                     }
-                });
+                }
             }
         } else {
             const initDuration = Date.now() - activationStart;
             console.warn('Flowbaby client initialization failed (see Output Channel)');
             debugLog('Client initialization failed', { duration_ms: initDuration });
             statusBar.setStatus(FlowbabyStatus.SetupRequired);
-            
+
             setInitState(workspacePath, { initialized: false, initFailed: true });
-            
+
             // Check if it's an API key issue and provide helpful guidance
             // Use singleton output channel (Plan 028 M1)
             const outputChannel = getFlowbabyOutputChannel();
@@ -650,7 +739,7 @@ export async function activate(_context: vscode.ExtensionContext) {
                 initResult: { success: false, error: initResult.error }
             });
             setExtensionActive(false);
-            
+
             // Plan 039 M1: Non-blocking warning message to prevent activation hang
             // Use .then() instead of await to allow activate() to return immediately
             vscode.window.showWarningMessage(
@@ -848,15 +937,15 @@ function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
                 const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
                 const manager = BackgroundOperationManager.getInstance();
                 const result = manager.getStatus();
-                
+
                 // getStatus() returns OperationEntry[] when no operationId provided
                 const operations = Array.isArray(result) ? result : [result];
-                
+
                 if (operations.length === 0) {
                     vscode.window.showInformationMessage('No background operations');
                     return;
                 }
-                
+
                 // Status icons per operation status
                 const statusIcons: Record<string, string> = {
                     'pending': '⏸️',
@@ -866,21 +955,21 @@ function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
                     'terminated': '⏹️',
                     'unknown': '❓'
                 };
-                
+
                 // Create quick pick items
                 interface QuickPickItemWithOperation extends vscode.QuickPickItem {
                     operation: import('./background/BackgroundOperationManager').OperationEntry;
                 }
-                
+
                 const items: QuickPickItemWithOperation[] = operations.map(op => {
                     const icon = statusIcons[op.status] || '•';
                     const elapsed = op.elapsedMs ? `${(op.elapsedMs / 1000).toFixed(1)}s` : 'N/A';
                     const workspace = op.datasetPath.split('/').pop() || 'unknown';
                     const digest = op.summaryDigest || 'N/A';
-                    
+
                     // Format start time (e.g., "14:32:21")
                     const startTime = new Date(op.startTime).toLocaleTimeString();
-                    
+
                     return {
                         label: `${icon} ${op.status.toUpperCase()} - ${workspace}`,
                         description: `${startTime} - ${elapsed} - ${digest.substring(0, 40)}`,
@@ -888,11 +977,11 @@ function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
                         operation: op
                     };
                 });
-                
+
                 const selected = await vscode.window.showQuickPick(items, {
                     placeHolder: 'Select operation for details'
                 });
-                
+
                 if (selected) {
                     const op = selected.operation;
                     const details = [
@@ -906,7 +995,7 @@ function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
                         op.errorCode ? `Error Code: ${op.errorCode}` : null,
                         op.errorMessage ? `Error: ${op.errorMessage}` : null
                     ].filter(Boolean).join('\n');
-                    
+
                     vscode.window.showInformationMessage(details, { modal: true });
                 }
             } catch (error) {
@@ -916,7 +1005,7 @@ function registerBackgroundStatusCommand(context: vscode.ExtensionContext) {
             }
         }
     );
-    
+
     context.subscriptions.push(command);
     console.log('✅ Flowbaby.backgroundStatus command registered');
 }
@@ -929,7 +1018,7 @@ export async function deactivate() {
     console.log('Flowbaby extension deactivated');
     markActiveContextDisposed();
     setExtensionActive(false);
-    
+
     // Plan 017: Shutdown BackgroundOperationManager (sends SIGTERM to running processes)
     try {
         const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
@@ -939,7 +1028,7 @@ export async function deactivate() {
     } catch (error) {
         console.error('Failed to shutdown BackgroundOperationManager:', error);
     }
-    
+
     if (storeMemoryToolDisposable) {
         storeMemoryToolDisposable.dispose();
         storeMemoryToolDisposable = undefined;
@@ -948,12 +1037,12 @@ export async function deactivate() {
         retrieveMemoryToolDisposable.dispose();
         retrieveMemoryToolDisposable = undefined;
     }
-    
+
     // Plan 028 M1: Dispose singleton output channels
     disposeOutputChannels();
     disposeFallbackRegistrations();
     resetRegistrationGuards();
-    
+
     flowbabyClient = undefined;
     flowbabyContextProvider = undefined;
 }
@@ -980,7 +1069,7 @@ function registerCaptureCommands(
         'Flowbaby.captureMessage',
         async () => {
             console.log('=== Flowbaby Capture Command ===');
-            
+
             try {
                 // Step 1: Check for editor selection to pre-fill the input box
                 let initialValue = '';
@@ -989,14 +1078,14 @@ function registerCaptureCommands(
                     initialValue = editor.document.getText(editor.selection);
                     console.log(`Pre-filling with editor selection (${initialValue.length} chars)`);
                 }
-                
+
                 // Plan 055: Status bar cue to improve capture input visibility
                 // This non-modal message draws attention to the input box at the top of the window
                 const statusMessage = vscode.window.setStatusBarMessage(
                     '$(edit) Flowbaby capture: input box open at top — Enter to save, Esc to cancel',
                     5000 // Auto-dismiss after 5 seconds
                 );
-                
+
                 // Plan 055: One-time onboarding toast for first-time users
                 // Defensive check for globalState availability (may be undefined in test contexts)
                 if (context?.globalState) {
@@ -1008,7 +1097,7 @@ function registerCaptureCommands(
                         await context.globalState.update('flowbaby.captureHintShown', true);
                     }
                 }
-                
+
                 // Step 2: Show input box with pre-filled selection (if any)
                 const options: vscode.InputBoxOptions = {
                     value: initialValue,
@@ -1016,23 +1105,23 @@ function registerCaptureCommands(
                     placeHolder: initialValue ? undefined : 'e.g., Captured API design notes for checkout flow',
                     ignoreFocusOut: true
                 };
-                
+
                 const userInput = await vscode.window.showInputBox(options);
-                
+
                 // Dispose status bar message once input is closed
                 statusMessage.dispose();
-                
+
                 // Step 3: Handle cancellation (Escape pressed) - userInput is undefined
                 if (userInput === undefined) {
                     vscode.window.showInformationMessage('Capture cancelled');
                     console.log('Capture cancelled by user (Escape pressed)');
                     return;
                 }
-                
+
                 // Step 4: Determine content and source
                 let content: string;
                 let contentSource: string;
-                
+
                 if (userInput.trim().length > 0) {
                     // User provided/edited text
                     content = userInput;
@@ -1055,25 +1144,25 @@ function registerCaptureCommands(
                     }
                     contentSource = 'Clipboard';
                 }
-                
+
                 // Step 5: Log content source to Output channel
                 const outputChannel = vscode.window.createOutputChannel('Flowbaby');
                 outputChannel.appendLine(`Capturing from ${contentSource} (${content.length} chars)`);
                 console.log(`Capturing from ${contentSource} (${content.length} chars)`);
-                
+
                 // Step 6: Ingest the content
                 try {
                     // For manual capture, treat as user note
                     const userMsg = 'Manual note: ' + content;
                     const assistantMsg = 'Captured via Ctrl+Alt+C (Cmd+Alt+C on Mac) shortcut';
-                    
+
                     // Get BackgroundOperationManager instance
                     const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
                     const manager = BackgroundOperationManager.getInstance();
-                    
+
                     // Use async ingestion
                     const result = await client.ingestAsync(userMsg, assistantMsg, manager);
-                    
+
                     if (result.success && result.staged) {
                         // Plan 043: Check if success notifications are enabled
                         const showSuccessNotifications = vscode.workspace.getConfiguration('flowbaby.notifications').get<boolean>('showIngestionSuccess', true);
@@ -1096,7 +1185,7 @@ function registerCaptureCommands(
                     );
                     outputChannel.appendLine(`Ingestion error: ${error instanceof Error ? error.message : String(error)}`);
                 }
-                
+
             } catch (error) {
                 console.error('Capture error:', error);
                 vscode.window.showErrorMessage(
@@ -1105,7 +1194,7 @@ function registerCaptureCommands(
             }
         }
     );
-    
+
     // Toggle memory command (Milestone 4)
     const toggleCommand = vscode.commands.registerCommand(
         'Flowbaby.toggleMemory',
@@ -1118,7 +1207,7 @@ function registerCaptureCommands(
             );
         }
     );
-    
+
     // Clear memory command (Milestone 4)
     const clearCommand = vscode.commands.registerCommand(
         'Flowbaby.clearMemory',
@@ -1128,7 +1217,7 @@ function registerCaptureCommands(
                 { modal: true },
                 'Delete'
             );
-            
+
             if (confirm === 'Delete') {
                 try {
                     await client.clearMemory();
@@ -1141,7 +1230,7 @@ function registerCaptureCommands(
             }
         }
     );
-    
+
     // Open Documentation command
     const openDocsCommand = vscode.commands.registerCommand(
         'Flowbaby.openDocs',
@@ -1149,7 +1238,7 @@ function registerCaptureCommands(
             vscode.env.openExternal(vscode.Uri.parse('https://docs.flowbaby.ai'));
         }
     );
-    
+
     context.subscriptions.push(captureCommand, toggleCommand, clearCommand, openDocsCommand);
 }
 
@@ -1166,13 +1255,13 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Fl
         }, async (_progress) => {
             try {
                 const result = await client.validateMemories();
-                
+
                 const outputChannel = vscode.window.createOutputChannel('Flowbaby Validation');
                 outputChannel.clear();
                 outputChannel.appendLine('=== Flowbaby Validation ===');
                 outputChannel.appendLine(`Status: ${result.status.toUpperCase()}`);
                 outputChannel.appendLine('');
-                
+
                 const checks = result.checks || {};
                 outputChannel.appendLine('Checks:');
                 outputChannel.appendLine(`- Environment (.env): ${checks.env_file ? '✅ PASS' : '❌ FAIL'}`);
@@ -1181,7 +1270,7 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Fl
                 outputChannel.appendLine(`- Graph Connection: ${checks.graph_connection ? '✅ PASS' : '❌ FAIL'}`);
                 outputChannel.appendLine(`- Retrieval Smoke Test: ${checks.retrieval_smoke_test ? '✅ PASS' : '❌ FAIL'}`);
                 outputChannel.appendLine(`- Memory Structure: ${checks.memory_structure}`);
-                
+
                 if (!result.success) {
                     outputChannel.appendLine('');
                     outputChannel.appendLine(`Error: ${result.error}`);
@@ -1189,7 +1278,7 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Fl
                 } else {
                     vscode.window.showInformationMessage(`Validation Passed: System is ${result.status}`);
                 }
-                
+
                 outputChannel.show();
             } catch (error) {
                 vscode.window.showErrorMessage(`Validation failed to run: ${error}`);
@@ -1206,19 +1295,19 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Fl
         }, async () => {
             try {
                 const result = await client.listMemories(20); // Limit 20
-                
+
                 if (!result.success) {
                     vscode.window.showErrorMessage(`Failed to list memories: ${result.error}`);
                     return;
                 }
-                
+
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const memories = result.memories || [];
                 if (memories.length === 0) {
                     vscode.window.showInformationMessage("No memories found.");
                     return;
                 }
-                
+
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const items = memories.map((m: any) => ({
                     label: `$(book) ${m.topic}`,
@@ -1226,11 +1315,11 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Fl
                     detail: m.preview,
                     memory: m
                 }));
-                
+
                 const selected = await vscode.window.showQuickPick(items, {
                     placeHolder: "Select a memory to view details"
                 });
-                
+
                 if (selected) {
                     const m = selected.memory;
                     const outputChannel = vscode.window.createOutputChannel('Flowbaby Details');
@@ -1243,7 +1332,7 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Fl
                     outputChannel.appendLine(m.preview); // In a real app we'd fetch full content
                     outputChannel.show();
                 }
-                
+
             } catch (error) {
                 vscode.window.showErrorMessage(`Failed to list memories: ${error}`);
             }
@@ -1260,7 +1349,7 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Fl
             try {
                 const validation = await client.validateMemories();
                 const config = await client.validateConfiguration();
-                
+
                 const docContent = [
                     '# Flowbaby Diagnostics Report',
                     `Date: ${new Date().toISOString()}`,
@@ -1292,7 +1381,7 @@ function registerValidationCommands(context: vscode.ExtensionContext, client: Fl
                     language: 'markdown'
                 });
                 await vscode.window.showTextDocument(doc);
-                
+
             } catch (error) {
                 vscode.window.showErrorMessage(`Diagnostics failed: ${error}`);
             }
@@ -1315,11 +1404,11 @@ async function handleSummaryGeneration(
     threadId?: string // Plan 001: Pass session context
 ): Promise<vscode.ChatResult> {
     console.log('=== PLAN 014: Handling summary generation request ===');
-    
+
     // Default turn count per plan
     const DEFAULT_TURN_COUNT = 15;
     let turnCount = DEFAULT_TURN_COUNT;
-    
+
     // Extract requested turn count from prompt (e.g., "summarize last 30 turns")
     const turnCountMatch = request.prompt.match(/(?:last\s+)?(\d+)\s+turns?/i);
     if (turnCountMatch) {
@@ -1328,33 +1417,33 @@ async function handleSummaryGeneration(
             turnCount = requestedCount;
         }
     }
-    
+
     // Extract chat history
     const history = chatContext.history || [];
     const availableTurns = history.filter(h => h instanceof vscode.ChatRequestTurn || h instanceof vscode.ChatResponseTurn);
     const actualTurnCount = Math.min(turnCount, availableTurns.length);
-    
+
     if (availableTurns.length === 0) {
         stream.markdown('⚠️ **No conversation history available to summarize**\n\n');
         stream.markdown('Chat with me first, then ask me to summarize the conversation.');
         return { metadata: { error: 'no_history' } };
     }
-    
+
     // Calculate time range (use current time as fallback since turn timestamps aren't directly accessible)
     const oldestTime = new Date(Date.now() - (actualTurnCount * 60000)); // Estimate 1 min per turn
     const timeAgo = getTimeAgoString(oldestTime);
-    
+
     // Show scope preview with adjustment option
     stream.markdown(`📝 **Summary Scope**\n\n`);
     stream.markdown(`I'll summarize the last **${actualTurnCount} turns** (from ${timeAgo}).\n\n`);
-    
+
     if (availableTurns.length > actualTurnCount) {
         stream.markdown(`💡 *Tip: You can adjust this by saying "summarize last 30 turns" or any number up to ${availableTurns.length}.*\n\n`);
     }
-    
+
     stream.markdown('Generating summary...\n\n');
     stream.markdown('---\n\n');
-    
+
     // Build conversation context for LLM
     const recentTurns = availableTurns.slice(-actualTurnCount);
     const conversationText = recentTurns.map((turn, index) => {
@@ -1373,7 +1462,7 @@ async function handleSummaryGeneration(
         }
         return '';
     }).filter(Boolean).join('\n\n');
-    
+
     // Generate summary using LLM with Plan 014 schema
     const summaryPrompt = `You are a helpful assistant that creates structured summaries of conversations.
 
@@ -1411,11 +1500,11 @@ ${conversationText}
 ---
 
 Create the summary now, following the format exactly. Use markdown formatting.`;
-    
+
     try {
         const messages = [vscode.LanguageModelChatMessage.User(summaryPrompt)];
         const chatResponse = await request.model.sendRequest(messages, {}, token);
-        
+
         let generatedSummary = '';
         for await (const fragment of chatResponse.text) {
             if (token.isCancellationRequested) {
@@ -1424,26 +1513,26 @@ Create the summary now, following the format exactly. Use markdown formatting.`;
             stream.markdown(fragment);
             generatedSummary += fragment;
         }
-        
+
         stream.markdown('\n\n---\n\n');
-        
+
         // Try to parse the generated summary
         const parsedSummary = parseSummaryFromText(generatedSummary);
-        
+
         if (!parsedSummary) {
             stream.markdown('⚠️ **Failed to parse generated summary**\n\n');
             stream.markdown('The summary was generated but could not be parsed into the structured format. ');
             stream.markdown('You can still read it above, but it won\'t be stored in memory.\n\n');
             return { metadata: { error: 'parse_failed' } };
         }
-        
+
         // Enrich metadata fields for storage
         parsedSummary.sessionId = threadId || null; // Plan 001: Use threadId as sessionId
         parsedSummary.planId = extractPlanIdFromConversation(conversationText);
         parsedSummary.status = 'Active';
         parsedSummary.createdAt = new Date();
         parsedSummary.updatedAt = new Date();
-        
+
         // Store pending summary for confirmation in next message
         const summaryKey = `summary-${Date.now()}`;
         pendingSummaries.set(summaryKey, {
@@ -1451,7 +1540,7 @@ Create the summary now, following the format exactly. Use markdown formatting.`;
             timestamp: Date.now(),
             threadId // Plan 001
         });
-        
+
         // Clean up old pending summaries (>5 minutes)
         const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
         for (const [key, pending] of pendingSummaries.entries()) {
@@ -1459,14 +1548,14 @@ Create the summary now, following the format exactly. Use markdown formatting.`;
                 pendingSummaries.delete(key);
             }
         }
-        
+
         // Ask user for confirmation
         stream.markdown('✅ **Summary generated successfully!**\n\n');
         stream.markdown('Should I store this summary in Flowbaby memory? Reply with:\n');
         stream.markdown('- `yes` or `store it` to save\n');
         stream.markdown('- `no` or `cancel` to discard\n\n');
         stream.markdown('💡 *Stored summaries can be retrieved later when you ask related questions.*');
-        
+
         return {
             metadata: {
                 summaryGenerated: true,
@@ -1476,7 +1565,7 @@ Create the summary now, following the format exactly. Use markdown formatting.`;
                 pendingSummaryKey: summaryKey
             }
         };
-        
+
     } catch (error) {
         console.error('Summary generation failed:', error);
         stream.markdown(`\n\n❌ **Summary generation failed:** ${error instanceof Error ? error.message : String(error)}\n\n`);
@@ -1491,13 +1580,13 @@ function getTimeAgoString(date: Date): string {
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 1) {return 'just now';}
-    if (diffMins < 60) {return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;}
-    
+
+    if (diffMins < 1) { return 'just now'; }
+    if (diffMins < 60) { return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`; }
+
     const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) {return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;}
-    
+    if (diffHours < 24) { return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`; }
+
     const diffDays = Math.floor(diffHours / 24);
     return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
 }
@@ -1544,374 +1633,374 @@ function registerFlowbabyParticipant(
                 stream: vscode.ChatResponseStream,
                 token: vscode.CancellationToken
             ): Promise<vscode.ChatResult> => {
-            console.log('=== @flowbaby participant invoked ===');
-            console.log('User query:', request.prompt);
+                console.log('=== @flowbaby participant invoked ===');
+                console.log('User query:', request.prompt);
 
-            try {
-                // Plan 032 M1: Graceful degradation if client not yet initialized
-                const activeWorkspace = getActiveWorkspacePath();
-                const initState = activeWorkspace ? getInitState(activeWorkspace) : { initialized: false, initFailed: false };
+                try {
+                    // Plan 032 M1: Graceful degradation if client not yet initialized
+                    const activeWorkspace = getActiveWorkspacePath();
+                    const initState = activeWorkspace ? getInitState(activeWorkspace) : { initialized: false, initFailed: false };
 
-                if (!initState.initialized || !flowbabyClient || !flowbabyContextProvider) {
-                    if (initState.initFailed) {
-                        stream.markdown('❌ **Flowbaby initialization failed**\n\n');
-                        stream.markdown('Please check the Output channel for details and try reloading the window.\n\n');
-                        return { metadata: { error: 'initialization_failed' } };
+                    if (!initState.initialized || !flowbabyClient || !flowbabyContextProvider) {
+                        if (initState.initFailed) {
+                            stream.markdown('❌ **Flowbaby initialization failed**\n\n');
+                            stream.markdown('Please check the Output channel for details and try reloading the window.\n\n');
+                            return { metadata: { error: 'initialization_failed' } };
+                        }
+
+                        stream.markdown('⏳ **Flowbaby is still initializing...**\n\n');
+                        stream.markdown('The memory system is starting up. Please wait a moment and try again.\n\n');
+                        stream.markdown('💡 *This usually takes just a few seconds on first use.*');
+                        return { metadata: { initializing: true } };
                     }
 
-                    stream.markdown('⏳ **Flowbaby is still initializing...**\n\n');
-                    stream.markdown('The memory system is starting up. Please wait a moment and try again.\n\n');
-                    stream.markdown('💡 *This usually takes just a few seconds on first use.*');
-                    return { metadata: { initializing: true } };
-                }
-                
-                // Check if memory is enabled
-                const config = vscode.workspace.getConfiguration('Flowbaby');
-                const memoryEnabled = config.get<boolean>('enabled', true);
+                    // Check if memory is enabled
+                    const config = vscode.workspace.getConfiguration('Flowbaby');
+                    const memoryEnabled = config.get<boolean>('enabled', true);
 
-                if (!memoryEnabled) {
-                    stream.markdown('⚠️ **Flowbaby is disabled**\n\nEnable it in settings: `Flowbaby.enabled`');
-                    return { metadata: { disabled: true } };
-                }
+                    if (!memoryEnabled) {
+                        stream.markdown('⚠️ **Flowbaby is disabled**\n\nEnable it in settings: `Flowbaby.enabled`');
+                        return { metadata: { disabled: true } };
+                    }
 
-                // Issue 3 (v0.5.7): Check API key status before proceeding
-                // If no API key configured, show helpful error instead of hanging on "working..."
-                const hasApiKey = await flowbabyClient.hasApiKey();
-                if (!hasApiKey) {
-                    stream.markdown('🔑 **LLM API Key Required**\n\n');
-                    stream.markdown('Flowbaby needs an LLM API key (OpenAI by default) to process memory operations.\n\n');
-                    stream.markdown('**Quick Fix:**\n');
-                    stream.markdown('1. Run command: `Flowbaby: Set API Key`\n');
-                    stream.markdown('2. Enter your OpenAI API key (or Anthropic, Azure, Ollama if configured)\n\n');
-                    stream.markdown('[Set API Key Now](command:Flowbaby.setApiKey)');
-                    return { metadata: { error: 'api_key_required' } };
-                }
+                    // Issue 3 (v0.5.7): Check API key status before proceeding
+                    // If no API key configured, show helpful error instead of hanging on "working..."
+                    const hasApiKey = await flowbabyClient.hasApiKey();
+                    if (!hasApiKey) {
+                        stream.markdown('🔑 **LLM API Key Required**\n\n');
+                        stream.markdown('Flowbaby needs an LLM API key (OpenAI by default) to process memory operations.\n\n');
+                        stream.markdown('**Quick Fix:**\n');
+                        stream.markdown('1. Run command: `Flowbaby: Set API Key`\n');
+                        stream.markdown('2. Enter your OpenAI API key (or Anthropic, Azure, Ollama if configured)\n\n');
+                        stream.markdown('[Set API Key Now](command:Flowbaby.setApiKey)');
+                        return { metadata: { error: 'api_key_required' } };
+                    }
 
-                // PLAN 014 MILESTONE 5: Show help text for empty queries or explicit help requests
-                const trimmedPrompt = request.prompt.trim().toLowerCase();
-                const isHelpRequest = trimmedPrompt === '' || 
-                                     trimmedPrompt === 'help' || 
-                                     trimmedPrompt === '?' ||
-                                     trimmedPrompt.includes('how to use') ||
-                                     trimmedPrompt.includes('what can you do');
+                    // PLAN 014 MILESTONE 5: Show help text for empty queries or explicit help requests
+                    const trimmedPrompt = request.prompt.trim().toLowerCase();
+                    const isHelpRequest = trimmedPrompt === '' ||
+                        trimmedPrompt === 'help' ||
+                        trimmedPrompt === '?' ||
+                        trimmedPrompt.includes('how to use') ||
+                        trimmedPrompt.includes('what can you do');
 
-                if (isHelpRequest) {
-                    stream.markdown('# 📚 Flowbaby Help\n\n');
-                    stream.markdown('## Query for Context\n\n');
-                    stream.markdown('Ask a question to retrieve relevant memories from your workspace:\n\n');
-                    stream.markdown('- `@flowbaby How did I implement caching?`\n');
-                    stream.markdown('- `@flowbaby What did we decide about Plan 013?`\n');
-                    stream.markdown('- `@flowbaby What are the next steps for authentication?`\n\n');
-                    stream.markdown('## Create Summaries\n\n');
-                    stream.markdown('Capture structured summaries of your conversations:\n\n');
-                    stream.markdown('- `@flowbaby summarize this conversation` - Create a summary of recent chat history\n');
-                    stream.markdown('- `@flowbaby remember this session` - Same as above\n\n');
-                    stream.markdown('Summaries include: Topic, Context, Decisions, Rationale, Open Questions, Next Steps, References\n\n');
-                    stream.markdown('## Tips\n\n');
-                    stream.markdown('- **Summaries are optional** - Create them after important discussions or decisions\n');
-                    stream.markdown('- **Adjust scope** - When creating summaries, you can adjust the number of turns to include\n');
-                    stream.markdown('- **Review before storing** - Summaries require explicit confirmation before saving\n\n');
-                    stream.markdown('📖 For more details, see the [extension README](command:markdown.showPreview?%5B%22extension%2FREADME.md%22%5D)\n');
-                    
-                    return { metadata: { help: true } };
-                }
+                    if (isHelpRequest) {
+                        stream.markdown('# 📚 Flowbaby Help\n\n');
+                        stream.markdown('## Query for Context\n\n');
+                        stream.markdown('Ask a question to retrieve relevant memories from your workspace:\n\n');
+                        stream.markdown('- `@flowbaby How did I implement caching?`\n');
+                        stream.markdown('- `@flowbaby What did we decide about Plan 013?`\n');
+                        stream.markdown('- `@flowbaby What are the next steps for authentication?`\n\n');
+                        stream.markdown('## Create Summaries\n\n');
+                        stream.markdown('Capture structured summaries of your conversations:\n\n');
+                        stream.markdown('- `@flowbaby summarize this conversation` - Create a summary of recent chat history\n');
+                        stream.markdown('- `@flowbaby remember this session` - Same as above\n\n');
+                        stream.markdown('Summaries include: Topic, Context, Decisions, Rationale, Open Questions, Next Steps, References\n\n');
+                        stream.markdown('## Tips\n\n');
+                        stream.markdown('- **Summaries are optional** - Create them after important discussions or decisions\n');
+                        stream.markdown('- **Adjust scope** - When creating summaries, you can adjust the number of turns to include\n');
+                        stream.markdown('- **Review before storing** - Summaries require explicit confirmation before saving\n\n');
+                        stream.markdown('📖 For more details, see the [extension README](command:markdown.showPreview?%5B%22extension%2FREADME.md%22%5D)\n');
 
-                // PLAN 014: Check for pending summary confirmation first
-                const promptLower = request.prompt.toLowerCase().trim();
-                const isConfirmation = ['yes', 'y', 'store it', 'save', 'save it', 'confirm'].includes(promptLower);
-                const isDeclination = ['no', 'n', 'cancel', 'discard', 'don\'t save', 'dont save'].includes(promptLower);
-                
-                if ((isConfirmation || isDeclination) && pendingSummaries.size > 0) {
-                    // Get most recent pending summary
-                    const entries = Array.from(pendingSummaries.entries());
-                    const mostRecent = entries.sort((a, b) => b[1].timestamp - a[1].timestamp)[0];
-                    
-                    if (mostRecent) {
-                        const [key, pending] = mostRecent;
-                        
-                        if (isConfirmation) {
-                            stream.markdown('📝 **Storing summary...**\n\n');
-                            
-                            try {
-                                const success = await flowbabyClient.ingestSummary(pending.summary, pending.threadId);
-                                
-                                if (success) {
-                                    stream.markdown(`✅ **Summary stored successfully!**\n\n`);
-                                    stream.markdown(`Topic: **${pending.summary.topic}**\n\n`);
-                                    stream.markdown('You can retrieve this summary later by asking questions related to this topic.');
-                                    pendingSummaries.delete(key);
-                                    
-                                    return {
-                                        metadata: {
-                                            summaryStored: true,
-                                            topic: pending.summary.topic
-                                        }
-                                    };
-                                } else {
-                                    stream.markdown('⚠️ **Failed to store summary**\n\n');
-                                    stream.markdown('There was an error storing the summary. Check the Output channel (Flowbaby) for details.\n\n');
+                        return { metadata: { help: true } };
+                    }
+
+                    // PLAN 014: Check for pending summary confirmation first
+                    const promptLower = request.prompt.toLowerCase().trim();
+                    const isConfirmation = ['yes', 'y', 'store it', 'save', 'save it', 'confirm'].includes(promptLower);
+                    const isDeclination = ['no', 'n', 'cancel', 'discard', 'don\'t save', 'dont save'].includes(promptLower);
+
+                    if ((isConfirmation || isDeclination) && pendingSummaries.size > 0) {
+                        // Get most recent pending summary
+                        const entries = Array.from(pendingSummaries.entries());
+                        const mostRecent = entries.sort((a, b) => b[1].timestamp - a[1].timestamp)[0];
+
+                        if (mostRecent) {
+                            const [key, pending] = mostRecent;
+
+                            if (isConfirmation) {
+                                stream.markdown('📝 **Storing summary...**\n\n');
+
+                                try {
+                                    const success = await flowbabyClient.ingestSummary(pending.summary, pending.threadId);
+
+                                    if (success) {
+                                        stream.markdown(`✅ **Summary stored successfully!**\n\n`);
+                                        stream.markdown(`Topic: **${pending.summary.topic}**\n\n`);
+                                        stream.markdown('You can retrieve this summary later by asking questions related to this topic.');
+                                        pendingSummaries.delete(key);
+
+                                        return {
+                                            metadata: {
+                                                summaryStored: true,
+                                                topic: pending.summary.topic
+                                            }
+                                        };
+                                    } else {
+                                        stream.markdown('⚠️ **Failed to store summary**\n\n');
+                                        stream.markdown('There was an error storing the summary. Check the Output channel (Flowbaby) for details.\n\n');
+                                        stream.markdown('You can try again by saying "yes" or "store it".');
+
+                                        return {
+                                            metadata: {
+                                                error: 'storage_failed'
+                                            }
+                                        };
+                                    }
+                                } catch (error) {
+                                    stream.markdown('❌ **Error storing summary**\n\n');
+                                    stream.markdown(`${error instanceof Error ? error.message : String(error)}\n\n`);
                                     stream.markdown('You can try again by saying "yes" or "store it".');
-                                    
+
                                     return {
                                         metadata: {
-                                            error: 'storage_failed'
+                                            error: error instanceof Error ? error.message : String(error)
                                         }
                                     };
                                 }
-                            } catch (error) {
-                                stream.markdown('❌ **Error storing summary**\n\n');
-                                stream.markdown(`${error instanceof Error ? error.message : String(error)}\n\n`);
-                                stream.markdown('You can try again by saying "yes" or "store it".');
-                                
+                            } else {
+                                // User declined
+                                stream.markdown('ℹ️ **Summary discarded**\n\n');
+                                stream.markdown('The summary was not stored. You can generate a new summary anytime by asking me to "summarize this conversation".');
+                                pendingSummaries.delete(key);
+
                                 return {
                                     metadata: {
-                                        error: error instanceof Error ? error.message : String(error)
+                                        summaryDiscarded: true
                                     }
                                 };
                             }
-                        } else {
-                            // User declined
-                            stream.markdown('ℹ️ **Summary discarded**\n\n');
-                            stream.markdown('The summary was not stored. You can generate a new summary anytime by asking me to "summarize this conversation".');
-                            pendingSummaries.delete(key);
-                            
-                            return {
-                                metadata: {
-                                    summaryDiscarded: true
-                                }
-                            };
                         }
                     }
-                }
-                
-                // PLAN 014: Detect summary generation requests
-                const summaryTriggers = [
-                    'summarize this conversation',
-                    'summarize the conversation',
-                    'remember this session',
-                    'create summary',
-                    'create a summary',
-                    'summarize our discussion'
-                ];
-                
-                const isSummaryRequest = summaryTriggers.some(trigger => 
-                    request.prompt.toLowerCase().includes(trigger)
-                );
 
-                // Plan 001: Extract thread ID (session context)
-                // Use request.sessionId if available (future API), or fallback to workspace-scoped session
-                const threadId = (() => {
-                    const possibleSessionId = (request as { sessionId?: unknown }).sessionId;
-                    if (typeof possibleSessionId === 'string' && possibleSessionId.trim()) {
-                        return possibleSessionId;
-                    }
-                    return 'workspace-session';
-                })();
-
-                if (isSummaryRequest) {
-                    // PLAN 014 MILESTONE 2: Summary Generation Flow
-                    return await handleSummaryGeneration(request, _chatContext, stream, token, flowbabyClient, threadId);
-                }
-
-                // Check cancellation before expensive operations
-                if (token.isCancellationRequested) {
-                    return { metadata: { cancelled: true } };
-                }
-
-                // STEP 1-2: Retrieve relevant context from Flowbaby using FlowbabyContextProvider (Plan 016 Milestone 6)
-                const retrievalStart = Date.now();
-                let retrievedMemories: RetrievalResult[] = [];
-                let retrievalFailed = false;
-
-                try {
-                    // Use shared FlowbabyContextProvider for concurrency/rate limiting
-                    const contextResponse = await flowbabyContextProvider.retrieveContext({
-                        query: request.prompt,
-                        maxResults: config.get<number>('maxContextResults', 3),
-                        maxTokens: config.get<number>('maxContextTokens', 2000),
-                        threadId // Plan 001: Pass threadId
-                    });
-                    
-                    // Check if response is an error
-                    if ('error' in contextResponse) {
-                        throw new Error(contextResponse.message);
-                    }
-                    
-                    // Convert FlowbabyContextEntry[] to RetrievalResult[] format for backward compatibility
-                    retrievedMemories = contextResponse.entries.map(entry => ({
-                        text: entry.summaryText,
-                        summaryText: entry.summaryText,
-                        topic: entry.topic,
-                        topicId: entry.topicId || undefined,
-                        planId: entry.planId || undefined,
-                        sessionId: entry.sessionId || undefined,
-                        status: entry.status || undefined,
-                        createdAt: entry.createdAt ? new Date(entry.createdAt) : undefined,
-                        sourceCreatedAt: entry.sourceCreatedAt
-                            ? new Date(entry.sourceCreatedAt)
-                            : (entry.createdAt ? new Date(entry.createdAt) : undefined),
-                        updatedAt: entry.updatedAt ? new Date(entry.updatedAt) : undefined,
-                        score: entry.score,
-                        decisions: entry.decisions,
-                        rationale: entry.rationale,
-                        openQuestions: entry.openQuestions,
-                        nextSteps: entry.nextSteps,
-                        references: entry.references,
-                        tokens: entry.tokens ?? Math.ceil(entry.summaryText.length / 4)
-                    } as RetrievalResult));
-                    
-                    const retrievalDuration = Date.now() - retrievalStart;
-                    console.log(`Retrieved ${retrievedMemories.length} memories in ${retrievalDuration}ms (via FlowbabyContextProvider)`);
-                } catch (error) {
-                    retrievalFailed = true;
-                    console.error('Retrieval failed:', error);
-                    stream.markdown('⚠️ **Memory retrieval unavailable** - continuing without context\n\n');
-                }
-
-                // Check cancellation after retrieval
-                if (token.isCancellationRequested) {
-                    return { metadata: { cancelled: true } };
-                }
-
-                // STEP 3: Format and display retrieved context with structured metadata per §4.4.1
-                let augmentedPrompt = request.prompt;
-                if (!retrievalFailed && retrievedMemories.length > 0) {
-                    stream.markdown(`📚 **Retrieved ${retrievedMemories.length} ${retrievedMemories.length === 1 ? 'memory' : 'memories'}**\n\n`);
-                    
-                    // Show preview of retrieved memories with metadata badges when available (up to 2000 chars for transparency)
-                    retrievedMemories.forEach((result, index) => {
-                        const memory = result.summaryText || result.text || '';
-                        const maxPreviewLength = 2000;
-                        const preview = memory.length > maxPreviewLength
-                            ? memory.substring(0, maxPreviewLength) + `... (showing ${maxPreviewLength} of ${memory.length} chars)` 
-                            : memory;
-                        const lengthIndicator = memory.length > 100 ? ` (${memory.length} chars)` : '';
-                        
-                        // Display structured metadata if available (enriched summaries per §4.4.1)
-                        if (result.topicId) {
-                            stream.markdown(`**Memory ${index + 1}${lengthIndicator}:**\n`);
-                            
-                            // Metadata badges
-                            const badges: string[] = [];
-                            if (result.status) {
-                                badges.push(`📋 Status: ${result.status}`);
-                            }
-                            if (result.createdAt) {
-                                const timeAgo = getTimeAgoString(result.createdAt);
-                                badges.push(`📅 Created: ${timeAgo}`);
-                            }
-                            if (result.sourceCreatedAt) {
-                                const sourceAgo = getTimeAgoString(result.sourceCreatedAt);
-                                badges.push(`🕰️ Source: ${sourceAgo}`);
-                            }
-                            if (result.updatedAt) {
-                                const updatedAgo = getTimeAgoString(result.updatedAt);
-                                badges.push(`♻️ Updated: ${updatedAgo}`);
-                            }
-                            if (result.planId) {
-                                badges.push(`🏷️ Plan: ${result.planId}`);
-                            }
-                            if (badges.length > 0) {
-                                stream.markdown(`*${badges.join(' | ')}*\n\n`);
-                            }
-                            
-                            // Display structured content sections
-                            if (result.topic) {
-                                stream.markdown(`**Topic:** ${result.topic}\n\n`);
-                            }
-                            if (result.decisions && result.decisions.length > 0) {
-                                stream.markdown(`**Key Decisions:**\n${result.decisions.map(d => `- ${d}`).join('\n')}\n\n`);
-                            }
-                            if (result.openQuestions && result.openQuestions.length > 0) {
-                                stream.markdown(`**Open Questions:**\n${result.openQuestions.map(q => `- ${q}`).join('\n')}\n\n`);
-                            }
-                            if (result.nextSteps && result.nextSteps.length > 0) {
-                                stream.markdown(`**Next Steps:**\n${result.nextSteps.map(s => `- ${s}`).join('\n')}\n\n`);
-                            }
-                            
-                            stream.markdown(`> ${preview}\n\n`);
-                        } else {
-                            // Legacy raw-text memory (no metadata per §4.4.1)
-                            stream.markdown(`**Memory ${index + 1}${lengthIndicator}:**\n> ${preview}\n\n`);
-                        }
-                    });
-
-                    stream.markdown('---\n\n');
-
-                    // STEP 4: Augment prompt with retrieved context
-                    const contextSection = retrievedMemories
-                        .map((result, i) => `### Memory ${i + 1}\n${result.summaryText || result.text || ''}`)
-                        .join('\n\n');
-
-                    augmentedPrompt = `## Relevant Past Conversations\n\n${contextSection}\n\n## Current Question\n\n${request.prompt}`;
-                    
-                    console.log('Augmented prompt length:', augmentedPrompt.length);
-                } else if (!retrievalFailed) {
-                    stream.markdown('ℹ️ *No relevant memories found for this query*\n\n---\n\n');
-                }
-
-                // Check cancellation before generating response
-                if (token.isCancellationRequested) {
-                    return { metadata: { cancelled: true } };
-                }
-
-                // STEP 5: Generate response using language model with augmented prompt
-                let fullResponse = '';
-                
-                try {
-                    const messages = [
-                        vscode.LanguageModelChatMessage.User(augmentedPrompt)
+                    // PLAN 014: Detect summary generation requests
+                    const summaryTriggers = [
+                        'summarize this conversation',
+                        'summarize the conversation',
+                        'remember this session',
+                        'create summary',
+                        'create a summary',
+                        'summarize our discussion'
                     ];
 
-                    // Use the model from the request (user's selected model)
-                    const chatResponse = await request.model.sendRequest(messages, {}, token);
+                    const isSummaryRequest = summaryTriggers.some(trigger =>
+                        request.prompt.toLowerCase().includes(trigger)
+                    );
 
-                    // Stream response incrementally (better UX)
-                    for await (const fragment of chatResponse.text) {
-                        if (token.isCancellationRequested) {
-                            return { metadata: { cancelled: true } };
+                    // Plan 001: Extract thread ID (session context)
+                    // Use request.sessionId if available (future API), or fallback to workspace-scoped session
+                    const threadId = (() => {
+                        const possibleSessionId = (request as { sessionId?: unknown }).sessionId;
+                        if (typeof possibleSessionId === 'string' && possibleSessionId.trim()) {
+                            return possibleSessionId;
                         }
-                        stream.markdown(fragment);
-                        fullResponse += fragment;
+                        return 'workspace-session';
+                    })();
+
+                    if (isSummaryRequest) {
+                        // PLAN 014 MILESTONE 2: Summary Generation Flow
+                        return await handleSummaryGeneration(request, _chatContext, stream, token, flowbabyClient, threadId);
                     }
 
-                    console.log('Generated response length:', fullResponse.length);
+                    // Check cancellation before expensive operations
+                    if (token.isCancellationRequested) {
+                        return { metadata: { cancelled: true } };
+                    }
+
+                    // STEP 1-2: Retrieve relevant context from Flowbaby using FlowbabyContextProvider (Plan 016 Milestone 6)
+                    const retrievalStart = Date.now();
+                    let retrievedMemories: RetrievalResult[] = [];
+                    let retrievalFailed = false;
+
+                    try {
+                        // Use shared FlowbabyContextProvider for concurrency/rate limiting
+                        const contextResponse = await flowbabyContextProvider.retrieveContext({
+                            query: request.prompt,
+                            maxResults: config.get<number>('maxContextResults', 3),
+                            maxTokens: config.get<number>('maxContextTokens', 2000),
+                            threadId // Plan 001: Pass threadId
+                        });
+
+                        // Check if response is an error
+                        if ('error' in contextResponse) {
+                            throw new Error(contextResponse.message);
+                        }
+
+                        // Convert FlowbabyContextEntry[] to RetrievalResult[] format for backward compatibility
+                        retrievedMemories = contextResponse.entries.map(entry => ({
+                            text: entry.summaryText,
+                            summaryText: entry.summaryText,
+                            topic: entry.topic,
+                            topicId: entry.topicId || undefined,
+                            planId: entry.planId || undefined,
+                            sessionId: entry.sessionId || undefined,
+                            status: entry.status || undefined,
+                            createdAt: entry.createdAt ? new Date(entry.createdAt) : undefined,
+                            sourceCreatedAt: entry.sourceCreatedAt
+                                ? new Date(entry.sourceCreatedAt)
+                                : (entry.createdAt ? new Date(entry.createdAt) : undefined),
+                            updatedAt: entry.updatedAt ? new Date(entry.updatedAt) : undefined,
+                            score: entry.score,
+                            decisions: entry.decisions,
+                            rationale: entry.rationale,
+                            openQuestions: entry.openQuestions,
+                            nextSteps: entry.nextSteps,
+                            references: entry.references,
+                            tokens: entry.tokens ?? Math.ceil(entry.summaryText.length / 4)
+                        } as RetrievalResult));
+
+                        const retrievalDuration = Date.now() - retrievalStart;
+                        console.log(`Retrieved ${retrievedMemories.length} memories in ${retrievalDuration}ms (via FlowbabyContextProvider)`);
+                    } catch (error) {
+                        retrievalFailed = true;
+                        console.error('Retrieval failed:', error);
+                        stream.markdown('⚠️ **Memory retrieval unavailable** - continuing without context\n\n');
+                    }
+
+                    // Check cancellation after retrieval
+                    if (token.isCancellationRequested) {
+                        return { metadata: { cancelled: true } };
+                    }
+
+                    // STEP 3: Format and display retrieved context with structured metadata per §4.4.1
+                    let augmentedPrompt = request.prompt;
+                    if (!retrievalFailed && retrievedMemories.length > 0) {
+                        stream.markdown(`📚 **Retrieved ${retrievedMemories.length} ${retrievedMemories.length === 1 ? 'memory' : 'memories'}**\n\n`);
+
+                        // Show preview of retrieved memories with metadata badges when available (up to 2000 chars for transparency)
+                        retrievedMemories.forEach((result, index) => {
+                            const memory = result.summaryText || result.text || '';
+                            const maxPreviewLength = 2000;
+                            const preview = memory.length > maxPreviewLength
+                                ? memory.substring(0, maxPreviewLength) + `... (showing ${maxPreviewLength} of ${memory.length} chars)`
+                                : memory;
+                            const lengthIndicator = memory.length > 100 ? ` (${memory.length} chars)` : '';
+
+                            // Display structured metadata if available (enriched summaries per §4.4.1)
+                            if (result.topicId) {
+                                stream.markdown(`**Memory ${index + 1}${lengthIndicator}:**\n`);
+
+                                // Metadata badges
+                                const badges: string[] = [];
+                                if (result.status) {
+                                    badges.push(`📋 Status: ${result.status}`);
+                                }
+                                if (result.createdAt) {
+                                    const timeAgo = getTimeAgoString(result.createdAt);
+                                    badges.push(`📅 Created: ${timeAgo}`);
+                                }
+                                if (result.sourceCreatedAt) {
+                                    const sourceAgo = getTimeAgoString(result.sourceCreatedAt);
+                                    badges.push(`🕰️ Source: ${sourceAgo}`);
+                                }
+                                if (result.updatedAt) {
+                                    const updatedAgo = getTimeAgoString(result.updatedAt);
+                                    badges.push(`♻️ Updated: ${updatedAgo}`);
+                                }
+                                if (result.planId) {
+                                    badges.push(`🏷️ Plan: ${result.planId}`);
+                                }
+                                if (badges.length > 0) {
+                                    stream.markdown(`*${badges.join(' | ')}*\n\n`);
+                                }
+
+                                // Display structured content sections
+                                if (result.topic) {
+                                    stream.markdown(`**Topic:** ${result.topic}\n\n`);
+                                }
+                                if (result.decisions && result.decisions.length > 0) {
+                                    stream.markdown(`**Key Decisions:**\n${result.decisions.map(d => `- ${d}`).join('\n')}\n\n`);
+                                }
+                                if (result.openQuestions && result.openQuestions.length > 0) {
+                                    stream.markdown(`**Open Questions:**\n${result.openQuestions.map(q => `- ${q}`).join('\n')}\n\n`);
+                                }
+                                if (result.nextSteps && result.nextSteps.length > 0) {
+                                    stream.markdown(`**Next Steps:**\n${result.nextSteps.map(s => `- ${s}`).join('\n')}\n\n`);
+                                }
+
+                                stream.markdown(`> ${preview}\n\n`);
+                            } else {
+                                // Legacy raw-text memory (no metadata per §4.4.1)
+                                stream.markdown(`**Memory ${index + 1}${lengthIndicator}:**\n> ${preview}\n\n`);
+                            }
+                        });
+
+                        stream.markdown('---\n\n');
+
+                        // STEP 4: Augment prompt with retrieved context
+                        const contextSection = retrievedMemories
+                            .map((result, i) => `### Memory ${i + 1}\n${result.summaryText || result.text || ''}`)
+                            .join('\n\n');
+
+                        augmentedPrompt = `## Relevant Past Conversations\n\n${contextSection}\n\n## Current Question\n\n${request.prompt}`;
+
+                        console.log('Augmented prompt length:', augmentedPrompt.length);
+                    } else if (!retrievalFailed) {
+                        stream.markdown('ℹ️ *No relevant memories found for this query*\n\n---\n\n');
+                    }
+
+                    // Check cancellation before generating response
+                    if (token.isCancellationRequested) {
+                        return { metadata: { cancelled: true } };
+                    }
+
+                    // STEP 5: Generate response using language model with augmented prompt
+                    let fullResponse = '';
+
+                    try {
+                        const messages = [
+                            vscode.LanguageModelChatMessage.User(augmentedPrompt)
+                        ];
+
+                        // Use the model from the request (user's selected model)
+                        const chatResponse = await request.model.sendRequest(messages, {}, token);
+
+                        // Stream response incrementally (better UX)
+                        for await (const fragment of chatResponse.text) {
+                            if (token.isCancellationRequested) {
+                                return { metadata: { cancelled: true } };
+                            }
+                            stream.markdown(fragment);
+                            fullResponse += fragment;
+                        }
+
+                        console.log('Generated response length:', fullResponse.length);
+
+                    } catch (error) {
+                        console.error('Response generation failed:', error);
+
+                        // Check for LanguageModelError for better error messages
+                        if (error instanceof vscode.LanguageModelError) {
+                            stream.markdown(`\n\n⚠️ **Language Model Error:** ${error.message} (Code: ${error.code})`);
+                        } else {
+                            stream.markdown('\n\n⚠️ **Failed to generate response** - Please try again');
+                        }
+
+                        return {
+                            metadata: {
+                                error: error instanceof Error ? error.message : String(error)
+                            }
+                        };
+                    }
+
+                    // Success - return metadata for telemetry
+                    return {
+                        metadata: {
+                            memoriesRetrieved: retrievedMemories.length,
+                            responseLength: fullResponse.length
+                        }
+                    };
 
                 } catch (error) {
-                    console.error('Response generation failed:', error);
-                    
-                    // Check for LanguageModelError for better error messages
-                    if (error instanceof vscode.LanguageModelError) {
-                        stream.markdown(`\n\n⚠️ **Language Model Error:** ${error.message} (Code: ${error.code})`);
-                    } else {
-                        stream.markdown('\n\n⚠️ **Failed to generate response** - Please try again');
-                    }
-                    
-                    return { 
-                        metadata: { 
+                    console.error('Chat participant error:', error);
+                    stream.markdown(`\n\n❌ **Error:** ${error instanceof Error ? error.message : String(error)}`);
+                    return {
+                        metadata: {
                             error: error instanceof Error ? error.message : String(error)
-                        } 
+                        }
                     };
                 }
-
-                // Success - return metadata for telemetry
-                return {
-                    metadata: {
-                        memoriesRetrieved: retrievedMemories.length,
-                        responseLength: fullResponse.length
-                    }
-                };
-
-            } catch (error) {
-                console.error('Chat participant error:', error);
-                stream.markdown(`\n\n❌ **Error:** ${error instanceof Error ? error.message : String(error)}`);
-                return { 
-                    metadata: { 
-                        error: error instanceof Error ? error.message : String(error)
-                    } 
-                };
-            }
-        });
+            });
     } catch (error) {
         // Plan 056: Use centralized duplicate-error classifier (Invariant 4.2.6)
         // Tool and participant guards are independent (Invariant 4.5.1)

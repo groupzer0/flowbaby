@@ -57,6 +57,26 @@ suite('Session Integration Test Suite', () => {
 
     test('FlowbabyClient injects session ID into ingest payload', async () => {
         const manager = new SessionManager(mockContext);
+        // Stub configuration to avoid hitting real daemon or environment
+        const flowConfig = {
+            get: (key: string, defaultValue?: any) => {
+                if (key === 'pythonPath') {return '/usr/bin/python3';}
+                if (key === 'debugLogging') {return false;}
+                if (key === 'bridgeMode') {return 'spawn';}
+                return defaultValue;
+            }
+        } as any;
+        const rankingConfig = { get: (_key: string, defaultValue?: any) => defaultValue } as any;
+        const sessionConfig = { get: () => true } as any;
+
+        sandbox.stub(vscode.workspace, 'getConfiguration').callsFake((section?: string) => {
+            if (section === 'Flowbaby.sessionManagement') {return sessionConfig;}
+            if (section === 'Flowbaby.ranking') {return rankingConfig;}
+            return flowConfig;
+        });
+
+        sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
         const client = new FlowbabyClient(testWorkspacePath, mockContext, manager);
         
         // Mock runPythonScript to capture arguments
@@ -83,6 +103,26 @@ suite('Session Integration Test Suite', () => {
 
     test('FlowbabyClient injects session ID into retrieve payload', async () => {
         const manager = new SessionManager(mockContext);
+        // Stub configuration to avoid hitting real daemon or environment
+        const flowConfig = {
+            get: (key: string, defaultValue?: any) => {
+                if (key === 'pythonPath') {return '/usr/bin/python3';}
+                if (key === 'debugLogging') {return false;}
+                if (key === 'bridgeMode') {return 'spawn';}
+                return defaultValue;
+            }
+        } as any;
+        const rankingConfig = { get: (_key: string, defaultValue?: any) => defaultValue } as any;
+        const sessionConfig = { get: () => true } as any;
+
+        sandbox.stub(vscode.workspace, 'getConfiguration').callsFake((section?: string) => {
+            if (section === 'Flowbaby.sessionManagement') {return sessionConfig;}
+            if (section === 'Flowbaby.ranking') {return rankingConfig;}
+            return flowConfig;
+        });
+
+        sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
         const client = new FlowbabyClient(testWorkspacePath, mockContext, manager);
         
         // Mock runPythonScript
@@ -115,6 +155,7 @@ suite('Session Integration Test Suite', () => {
             get: (key: string, defaultValue?: any) => {
                 if (key === 'pythonPath') {return '/usr/bin/python3';}
                 if (key === 'debugLogging') {return false;}
+                if (key === 'bridgeMode') {return 'spawn';}
                 return defaultValue;
             }
         } as any;
@@ -144,6 +185,26 @@ suite('Session Integration Test Suite', () => {
 
     test('FlowbabyClient falls back to legacy mode without SessionManager', async () => {
         // Create client WITHOUT session manager
+        // Stub configuration to avoid hitting real daemon or environment
+        const flowConfig = {
+            get: (key: string, defaultValue?: any) => {
+                if (key === 'pythonPath') {return '/usr/bin/python3';}
+                if (key === 'debugLogging') {return false;}
+                if (key === 'bridgeMode') {return 'spawn';}
+                return defaultValue;
+            }
+        } as any;
+        const rankingConfig = { get: (_key: string, defaultValue?: any) => defaultValue } as any;
+        const sessionConfig = { get: () => true } as any;
+
+        sandbox.stub(vscode.workspace, 'getConfiguration').callsFake((section?: string) => {
+            if (section === 'Flowbaby.sessionManagement') {return sessionConfig;}
+            if (section === 'Flowbaby.ranking') {return rankingConfig;}
+            return flowConfig;
+        });
+
+        sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
         const client = new FlowbabyClient(testWorkspacePath, mockContext, undefined);
         
         const runScriptStub = sandbox.stub(client as any, 'runPythonScript').resolves({ success: true, staged: true });

@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "test": "npm run test:extension && npm run test:python-bridge",
+    "test:extension": "npm --prefix extension test",
+    "test:python-bridge": "cd extension/bridge && .venv/bin/python -m pytest"
+  },
   "devDependencies": {
     "markdownlint-cli": "^0.46.0"
   }

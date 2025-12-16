@@ -283,14 +283,24 @@
           },
           {
             "id": "configureApiKey",
-            "title": "Configure API Key",
-            "description": "Create a `.env` file in your workspace root with your LLM API key.\n[Configure API Key](command:Flowbaby.configureApiKey)",
+            "title": "Set Your API Key",
+            "description": "Set your LLM provider API key (OpenAI, Anthropic, etc.). Stored securely via VS Code SecretStorage.\n\n💰 **Typical cost**: $0.02–$0.06/day with defaults (gpt-4o-mini)\n\n[Set API Key](command:Flowbaby.setApiKey)",
             "media": {
-              "markdown": "media/flowbaby-icon-tightcrop.png"
+              "image": "media/flowbaby-icon-tightcrop.png",
+              "altText": "API Key Setup"
             },
             "completionEvents": [
-              "onCommand:Flowbaby.configureApiKey"
+              "onCommand:Flowbaby.setApiKey"
             ]
+          },
+          {
+            "id": "copilotInstructions",
+            "title": "Add Memory Instructions (Recommended)",
+            "description": "For best results, add memory instructions to your workspace. This encourages Copilot to proactively store and retrieve memories.\n\n[View Memory Contract Example](https://github.com/groupzer0/vs-code-agents/blob/main/vs-code-agents/reference/memory-contract-example.md)",
+            "media": {
+              "image": "media/flowbaby-icon-tightcrop.png",
+              "altText": "Memory Instructions"
+            }
           },
           {
             "id": "tryCapture",

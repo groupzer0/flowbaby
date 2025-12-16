@@ -685,8 +685,12 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         const timestamp = new Date().toISOString();
         const dataStr = data ? ` ${JSON.stringify(data)}` : '';
         const logLine = `[${timestamp}] [${level}] [DaemonManager] ${message}${dataStr}`;
-        
-        this.outputChannel.appendLine(logLine);
+        try {
+            this.outputChannel.appendLine(logLine);
+        } catch {
+            // In tests or during VS Code shutdown the underlying channel may be closed.
+            // Swallow logging errors to avoid breaking workflows on teardown.
+        }
         
         if (level === 'DEBUG') {
             debugLog(message, data);
