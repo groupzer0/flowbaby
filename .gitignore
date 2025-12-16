@@ -40,7 +40,10 @@ node_modules/
 
 # Test/debug files
 extension/test-*.js
+extension/test-*.txt
 *.backup
+tmp/
+**/.coverage
 
 # VS Code workspace settings
 .vscode/
