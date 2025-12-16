@@ -1,1 +1,0 @@
-Hi, I'm an AI/Backend engineer. I build FastAPI services with Pydantic, heavy asyncio/aiohttp pipelines, and production testing via pytest-asyncio. I've shipped low-latency APIs on AWS, Azure, and GoogleCloud.
