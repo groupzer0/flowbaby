@@ -289,12 +289,23 @@ async def retrieve_context(
         os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
         os.environ['DATA_ROOT_DIRECTORY'] = data_root
         os.environ['CACHE_ROOT_DIRECTORY'] = cache_root
-        os.environ['CACHING'] = 'true'
+
+        # Plan 059: Configure caching with filesystem backend
+        # Respect explicit user configuration (precedence rule 1)
+        if os.environ.get('CACHING') is None:
+            os.environ['CACHING'] = 'true'
+        if os.environ.get('CACHE_BACKEND') is None:
+            os.environ['CACHE_BACKEND'] = 'fs'
 
         # Ensure directories exist
         Path(system_root).mkdir(parents=True, exist_ok=True)
         Path(data_root).mkdir(parents=True, exist_ok=True)
         Path(cache_root).mkdir(parents=True, exist_ok=True)
+
+        # Plan 059: Log cache configuration for observability
+        effective_caching = os.environ.get('CACHING', 'false')
+        effective_backend = os.environ.get('CACHE_BACKEND', 'none')
+        logger.debug(f"Cache configuration: CACHING={effective_caching}, CACHE_BACKEND={effective_backend}")
 
         # Import cognee AFTER setting environment variables
         logger.debug("Importing cognee SDK")

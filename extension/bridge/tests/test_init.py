@@ -3,6 +3,7 @@ Unit tests for init.py bridge script.
 
 Tests LLM_API_KEY validation, workspace storage configuration, and ontology loading.
 """
+import os
 import json
 import sys
 from pathlib import Path
@@ -61,9 +62,16 @@ async def test_initialize_workspace_storage_directories(temp_workspace, mock_env
         # Verify config methods were called with workspace paths
         expected_system_dir = str(temp_workspace / '.flowbaby/system')
         expected_data_dir = str(temp_workspace / '.flowbaby/data')
+        expected_cache_dir = str(temp_workspace / '.flowbaby/cache')
 
         mock_cognee_module.config.system_root_directory.assert_called_once_with(expected_system_dir)
         mock_cognee_module.config.data_root_directory.assert_called_once_with(expected_data_dir)
+
+        # Plan 059: cache root + defaults
+        assert os.environ.get('CACHE_ROOT_DIRECTORY') == expected_cache_dir
+        assert os.environ.get('CACHING') == 'true'
+        assert os.environ.get('CACHE_BACKEND') == 'fs'
+        assert (temp_workspace / '.flowbaby/cache').exists()
 
 
 @pytest.mark.asyncio

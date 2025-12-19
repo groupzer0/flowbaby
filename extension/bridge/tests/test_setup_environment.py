@@ -76,6 +76,48 @@ class TestSetupEnvironment:
         expected_path = str(temp_workspace / '.flowbaby/data')
         assert os.environ['DATA_ROOT_DIRECTORY'] == expected_path
 
+    def test_sets_cache_root_directory_env_var(self, temp_workspace):
+        """Verify CACHE_ROOT_DIRECTORY is set to workspace-local path (Plan 059)"""
+        from ingest import setup_environment
+
+        # Clear any existing env vars
+        os.environ.pop('SYSTEM_ROOT_DIRECTORY', None)
+        os.environ.pop('DATA_ROOT_DIRECTORY', None)
+        os.environ.pop('CACHE_ROOT_DIRECTORY', None)
+        os.environ.pop('CACHING', None)
+        os.environ.pop('CACHE_BACKEND', None)
+
+        setup_environment(str(temp_workspace))
+
+        assert 'CACHE_ROOT_DIRECTORY' in os.environ
+        expected_path = str(temp_workspace / '.flowbaby/cache')
+        assert os.environ['CACHE_ROOT_DIRECTORY'] == expected_path
+        assert (temp_workspace / '.flowbaby/cache').exists()
+
+    def test_sets_default_cache_backend_and_caching(self, temp_workspace):
+        """Verify Plan 059 defaults are applied when unset."""
+        from ingest import setup_environment
+
+        os.environ.pop('CACHING', None)
+        os.environ.pop('CACHE_BACKEND', None)
+
+        setup_environment(str(temp_workspace))
+
+        assert os.environ.get('CACHING') == 'true'
+        assert os.environ.get('CACHE_BACKEND') == 'fs'
+
+    def test_respects_existing_cache_env_vars(self, temp_workspace, monkeypatch):
+        """Verify explicit env vars are not overridden (Plan 059 precedence rule 1)."""
+        from ingest import setup_environment
+
+        monkeypatch.setenv('CACHING', 'false')
+        monkeypatch.setenv('CACHE_BACKEND', 'redis')
+
+        setup_environment(str(temp_workspace))
+
+        assert os.environ.get('CACHING') == 'false'
+        assert os.environ.get('CACHE_BACKEND') == 'redis'
+
     def test_creates_system_directory(self, temp_workspace):
         """Verify .flowbaby/system directory is created"""
         from ingest import setup_environment

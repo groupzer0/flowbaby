@@ -2,6 +2,7 @@
 Unit tests for retrieve.py system prompt injection.
 """
 import sys
+import types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,13 +15,33 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 async def test_retrieve_passes_strict_system_prompt(temp_workspace, mock_env):
     """Test that retrieval passes the strict system prompt to cognee.search."""
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
-        # Mock cognee module
-        mock_cognee = MagicMock()
-        mock_cognee.config = MagicMock()
-        mock_cognee.search = AsyncMock(return_value=[])
-        mock_cognee.prune.prune_data = AsyncMock()
+      # Mock cognee package + required submodules
+      mock_cognee = types.ModuleType('cognee')
+      mock_cognee.__path__ = []
+      mock_cognee.config = MagicMock()
+      mock_cognee.search = AsyncMock(return_value=[])
+      mock_cognee.prune = MagicMock()
+      mock_cognee.prune.prune_data = AsyncMock()
 
-        with patch.dict('sys.modules', {'cognee': mock_cognee, 'cognee.modules.search.types': MagicMock()}):
+      mock_context_globals = types.ModuleType('cognee.context_global_variables')
+      mock_context_globals.set_session_user_context_variable = AsyncMock(return_value=None)
+
+      mock_search_types = types.ModuleType('cognee.modules.search.types')
+      mock_search_types.SearchType = MagicMock()
+      mock_search_types.SearchType.GRAPH_COMPLETION = 'GRAPH_COMPLETION'
+
+      mock_users_methods = types.ModuleType('cognee.modules.users.methods')
+      mock_users_methods.get_default_user = AsyncMock(return_value=MagicMock(id='test-user'))
+
+      with patch.dict('sys.modules', {
+         'cognee': mock_cognee,
+         'cognee.context_global_variables': mock_context_globals,
+         'cognee.modules': types.ModuleType('cognee.modules'),
+         'cognee.modules.search': types.ModuleType('cognee.modules.search'),
+         'cognee.modules.search.types': mock_search_types,
+         'cognee.modules.users': types.ModuleType('cognee.modules.users'),
+         'cognee.modules.users.methods': mock_users_methods,
+      }):
             from retrieve import retrieve_context
 
             await retrieve_context(str(temp_workspace), "test query")

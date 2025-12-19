@@ -4,6 +4,7 @@ Unit tests for retrieve.py filtering logic.
 Tests sentinel filtering, score filtering, and status filtering.
 """
 import sys
+import types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,11 +23,33 @@ def mock_cognee_module(monkeypatch):
     # Plan 039: Set API key so retrieve_context reaches filtering logic
     monkeypatch.setenv('LLM_API_KEY', 'sk-test-filtering-key')
 
-    with patch.dict('sys.modules', {'cognee': MagicMock()}):
-        import cognee
-        cognee.search = AsyncMock()
-        cognee.config = MagicMock()
-        yield cognee
+    mock_cognee = types.ModuleType('cognee')
+    mock_cognee.__path__ = []
+    mock_cognee.search = AsyncMock()
+    mock_cognee.config = MagicMock()
+    mock_cognee.prune = MagicMock()
+    mock_cognee.prune.prune_data = AsyncMock()
+
+    mock_context_globals = types.ModuleType('cognee.context_global_variables')
+    mock_context_globals.set_session_user_context_variable = AsyncMock(return_value=None)
+
+    mock_search_types = types.ModuleType('cognee.modules.search.types')
+    mock_search_types.SearchType = MagicMock()
+    mock_search_types.SearchType.GRAPH_COMPLETION = 'GRAPH_COMPLETION'
+
+    mock_users_methods = types.ModuleType('cognee.modules.users.methods')
+    mock_users_methods.get_default_user = AsyncMock(return_value=MagicMock(id='test-user'))
+
+    with patch.dict('sys.modules', {
+        'cognee': mock_cognee,
+        'cognee.context_global_variables': mock_context_globals,
+        'cognee.modules': types.ModuleType('cognee.modules'),
+        'cognee.modules.search': types.ModuleType('cognee.modules.search'),
+        'cognee.modules.search.types': mock_search_types,
+        'cognee.modules.users': types.ModuleType('cognee.modules.users'),
+        'cognee.modules.users.methods': mock_users_methods,
+    }):
+        yield mock_cognee
 
 @pytest.mark.asyncio
 async def test_retrieve_sentinel_filtering(temp_workspace, mock_cognee_module):

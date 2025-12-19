@@ -136,6 +136,13 @@ This key is stored securely and applies to all workspaces automatically.
 2. If you see **"Flowbaby: Setup Required"** (yellow warning), click it to run setup
 3. Optional: Open the Output panel (**View → Output**) and select **"Flowbaby"** to see logs
 
+### 4. (Optional) Bridge Performance Settings
+
+Flowbaby talks to its Python backend through a "bridge" process. You can tune its behavior in VS Code settings:
+
+- `Flowbaby.bridgeMode` – Bridge execution mode. `daemon` (default) keeps a long‑lived Python process running for much faster requests (~300ms vs ~2–3s cold start). `spawn` uses the legacy per‑request process spawn and is useful for troubleshooting if daemon mode causes issues in your environment.
+- `Flowbaby.daemonIdleTimeoutMinutes` – Minutes of inactivity before the daemon exits. Lower values save memory and background resources; higher values keep the daemon warm so the next request stays fast, at the cost of a longer‑lived process.
+
 ## Memory-Aware Copilot Instructions (Strong Defaults)
 
 > ⚠️ **Important**: Without explicit instructions, Copilot may not use memory tools in the way you desire. Adding a memory contract to your workspace ensures Copilot proactively stores and retrieves memories.

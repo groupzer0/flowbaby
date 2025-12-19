@@ -4,7 +4,9 @@ Unit tests for retrieve.py bridge script.
 Tests LLM_API_KEY validation, workspace path validation, and structured error messages.
 """
 import json
+import os
 import sys
+import types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -49,13 +51,33 @@ async def test_retrieve_missing_llm_api_key(temp_workspace, monkeypatch):
 async def test_retrieve_success_with_llm_api_key(temp_workspace, mock_env):
     """Test successful retrieval with valid LLM_API_KEY and workspace-local storage."""
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
-        # Mock cognee module
-        mock_cognee = MagicMock()
+        # Mock cognee package + required submodules
+        mock_cognee = types.ModuleType('cognee')
+        mock_cognee.__path__ = []
         mock_cognee.config = MagicMock()
         mock_cognee.search = AsyncMock(return_value=[])
+        mock_cognee.prune = MagicMock()
         mock_cognee.prune.prune_data = AsyncMock()
 
-        with patch.dict('sys.modules', {'cognee': mock_cognee, 'cognee.modules.search.types': MagicMock()}):
+        mock_context_globals = types.ModuleType('cognee.context_global_variables')
+        mock_context_globals.set_session_user_context_variable = AsyncMock(return_value=None)
+
+        mock_search_types = types.ModuleType('cognee.modules.search.types')
+        mock_search_types.SearchType = MagicMock()
+        mock_search_types.SearchType.GRAPH_COMPLETION = 'GRAPH_COMPLETION'
+
+        mock_users_methods = types.ModuleType('cognee.modules.users.methods')
+        mock_users_methods.get_default_user = AsyncMock(return_value=MagicMock(id='test-user'))
+
+        with patch.dict('sys.modules', {
+            'cognee': mock_cognee,
+            'cognee.context_global_variables': mock_context_globals,
+            'cognee.modules': types.ModuleType('cognee.modules'),
+            'cognee.modules.search': types.ModuleType('cognee.modules.search'),
+            'cognee.modules.search.types': mock_search_types,
+            'cognee.modules.users': types.ModuleType('cognee.modules.users'),
+            'cognee.modules.users.methods': mock_users_methods,
+        }):
             from retrieve import retrieve_context
 
             result = await retrieve_context(str(temp_workspace), "test query")
@@ -75,22 +97,49 @@ async def test_retrieve_success_with_llm_api_key(temp_workspace, mock_env):
             mock_cognee.config.system_root_directory.assert_called_once_with(expected_system_dir)
             mock_cognee.config.data_root_directory.assert_called_once_with(expected_data_dir)
 
+            # Plan 059: cache env defaults + root directory
+            expected_cache_dir = str(temp_workspace / '.flowbaby/cache')
+            assert os.environ.get('CACHE_ROOT_DIRECTORY') == expected_cache_dir
+            assert os.environ.get('CACHING') == 'true'
+            assert os.environ.get('CACHE_BACKEND') == 'fs'
+            assert (temp_workspace / '.flowbaby/cache').exists()
+
 
 @pytest.mark.asyncio
 async def test_retrieve_with_search_results(temp_workspace, mock_env):
     """Test retrieval with mock search results including scoring."""
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
-        # Mock cognee module with sample search results
-        mock_cognee = MagicMock()
+        # Mock cognee package + required submodules
+        mock_cognee = types.ModuleType('cognee')
+        mock_cognee.__path__ = []
         mock_cognee.config = MagicMock()
         mock_search_result = (
             "[Timestamp: 2025-11-15T10:00:00Z] [Importance: 0.8] This is a test result about Python.",
             {"metadata": "test", "score": 0.8}
         )
         mock_cognee.search = AsyncMock(return_value=[mock_search_result])
+        mock_cognee.prune = MagicMock()
         mock_cognee.prune.prune_data = AsyncMock()
 
-        with patch.dict('sys.modules', {'cognee': mock_cognee, 'cognee.modules.search.types': MagicMock()}):
+        mock_context_globals = types.ModuleType('cognee.context_global_variables')
+        mock_context_globals.set_session_user_context_variable = AsyncMock(return_value=None)
+
+        mock_search_types = types.ModuleType('cognee.modules.search.types')
+        mock_search_types.SearchType = MagicMock()
+        mock_search_types.SearchType.GRAPH_COMPLETION = 'GRAPH_COMPLETION'
+
+        mock_users_methods = types.ModuleType('cognee.modules.users.methods')
+        mock_users_methods.get_default_user = AsyncMock(return_value=MagicMock(id='test-user'))
+
+        with patch.dict('sys.modules', {
+            'cognee': mock_cognee,
+            'cognee.context_global_variables': mock_context_globals,
+            'cognee.modules': types.ModuleType('cognee.modules'),
+            'cognee.modules.search': types.ModuleType('cognee.modules.search'),
+            'cognee.modules.search.types': mock_search_types,
+            'cognee.modules.users': types.ModuleType('cognee.modules.users'),
+            'cognee.modules.users.methods': mock_users_methods,
+        }):
             from retrieve import retrieve_context
 
             result = await retrieve_context(str(temp_workspace), "Python", max_results=5)
@@ -120,8 +169,9 @@ async def test_retrieve_with_search_results(temp_workspace, mock_env):
 async def test_retrieve_default_score(temp_workspace, mock_env):
     """Test that retrieval defaults score to 0.0 when missing from search results."""
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
-        # Mock cognee module with search results lacking score
-        mock_cognee = MagicMock()
+        # Mock cognee package + required submodules
+        mock_cognee = types.ModuleType('cognee')
+        mock_cognee.__path__ = []
         mock_cognee.config = MagicMock()
         # Result tuple: (text, metadata) - no score in metadata or text prefix
         mock_search_result = (
@@ -129,9 +179,28 @@ async def test_retrieve_default_score(temp_workspace, mock_env):
             {"metadata": "test"}
         )
         mock_cognee.search = AsyncMock(return_value=[mock_search_result])
+        mock_cognee.prune = MagicMock()
         mock_cognee.prune.prune_data = AsyncMock()
 
-        with patch.dict('sys.modules', {'cognee': mock_cognee, 'cognee.modules.search.types': MagicMock()}):
+        mock_context_globals = types.ModuleType('cognee.context_global_variables')
+        mock_context_globals.set_session_user_context_variable = AsyncMock(return_value=None)
+
+        mock_search_types = types.ModuleType('cognee.modules.search.types')
+        mock_search_types.SearchType = MagicMock()
+        mock_search_types.SearchType.GRAPH_COMPLETION = 'GRAPH_COMPLETION'
+
+        mock_users_methods = types.ModuleType('cognee.modules.users.methods')
+        mock_users_methods.get_default_user = AsyncMock(return_value=MagicMock(id='test-user'))
+
+        with patch.dict('sys.modules', {
+            'cognee': mock_cognee,
+            'cognee.context_global_variables': mock_context_globals,
+            'cognee.modules': types.ModuleType('cognee.modules'),
+            'cognee.modules.search': types.ModuleType('cognee.modules.search'),
+            'cognee.modules.search.types': mock_search_types,
+            'cognee.modules.users': types.ModuleType('cognee.modules.users'),
+            'cognee.modules.users.methods': mock_users_methods,
+        }):
             from retrieve import retrieve_context
 
             result = await retrieve_context(str(temp_workspace), "test")
@@ -148,8 +217,9 @@ async def test_retrieve_default_score(temp_workspace, mock_env):
 async def test_retrieve_token_limit_enforcement(temp_workspace, mock_env):
     """Test that retrieval respects max_tokens limit."""
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
-        # Mock cognee module with multiple results
-        mock_cognee = MagicMock()
+        # Mock cognee package + required submodules
+        mock_cognee = types.ModuleType('cognee')
+        mock_cognee.__path__ = []
         mock_cognee.config = MagicMock()
 
         # Create results that would exceed token limit
@@ -160,9 +230,28 @@ async def test_retrieve_token_limit_enforcement(temp_workspace, mock_env):
             (f"[Timestamp: 2025-11-15T08:00:00Z] [Importance: 0.6] {large_text}", {"score": 0.6})
         ]
         mock_cognee.search = AsyncMock(return_value=mock_results)
+        mock_cognee.prune = MagicMock()
         mock_cognee.prune.prune_data = AsyncMock()
 
-        with patch.dict('sys.modules', {'cognee': mock_cognee, 'cognee.modules.search.types': MagicMock()}):
+        mock_context_globals = types.ModuleType('cognee.context_global_variables')
+        mock_context_globals.set_session_user_context_variable = AsyncMock(return_value=None)
+
+        mock_search_types = types.ModuleType('cognee.modules.search.types')
+        mock_search_types.SearchType = MagicMock()
+        mock_search_types.SearchType.GRAPH_COMPLETION = 'GRAPH_COMPLETION'
+
+        mock_users_methods = types.ModuleType('cognee.modules.users.methods')
+        mock_users_methods.get_default_user = AsyncMock(return_value=MagicMock(id='test-user'))
+
+        with patch.dict('sys.modules', {
+            'cognee': mock_cognee,
+            'cognee.context_global_variables': mock_context_globals,
+            'cognee.modules': types.ModuleType('cognee.modules'),
+            'cognee.modules.search': types.ModuleType('cognee.modules.search'),
+            'cognee.modules.search.types': mock_search_types,
+            'cognee.modules.users': types.ModuleType('cognee.modules.users'),
+            'cognee.modules.users.methods': mock_users_methods,
+        }):
             from retrieve import retrieve_context
 
             # Set low token limit

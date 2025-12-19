@@ -45,6 +45,10 @@ def setup_environment(workspace_path: str):
     Plan 039 M5: Workspace .env loading removed per Plan 037 F2 security finding.
     API key is now resolved by TypeScript and passed via LLM_API_KEY environment variable.
 
+    Plan 059: Added filesystem cache backend configuration (CACHE_BACKEND=fs).
+    Cognee 0.5.1+ supports filesystem session caching via diskcache, removing
+    the implicit Redis dependency that caused connection failures in managed environments.
+
     Returns:
         tuple: (dataset_name, api_key, cognee_config_dict) or raises exception
     """
@@ -65,7 +69,13 @@ def setup_environment(workspace_path: str):
     os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
     os.environ['DATA_ROOT_DIRECTORY'] = data_root
     os.environ['CACHE_ROOT_DIRECTORY'] = cache_root
-    os.environ['CACHING'] = 'true'
+
+    # Plan 059: Configure caching with filesystem backend
+    # Respect explicit user configuration (precedence rule 1)
+    if os.environ.get('CACHING') is None:
+        os.environ['CACHING'] = 'true'
+    if os.environ.get('CACHE_BACKEND') is None:
+        os.environ['CACHE_BACKEND'] = 'fs'
 
     # Also ensure the directories exist
     Path(system_root).mkdir(parents=True, exist_ok=True)
@@ -79,8 +89,12 @@ def setup_environment(workspace_path: str):
     return dataset_name, api_key, {
         'system_root': system_root,
         'data_root': data_root,
+        'cache_root': cache_root,
+        'caching': os.environ.get('CACHING'),
+        'cache_backend': os.environ.get('CACHE_BACKEND'),
         'workspace_dir': workspace_dir
     }
+
 
 
 def write_status_stub(operation_id: str, workspace_dir: Path, success: bool,

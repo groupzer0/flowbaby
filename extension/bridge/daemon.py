@@ -79,6 +79,14 @@ def setup_cognee_environment(workspace_path: str, logger: logging.Logger) -> tup
     """
     Configure Cognee environment variables before importing the SDK.
 
+    Plan 059: Added filesystem cache backend configuration (CACHE_BACKEND=fs).
+    Cognee 0.5.1+ supports filesystem session caching via diskcache, removing
+    the implicit Redis dependency that caused connection failures in managed environments.
+
+    Environment variable precedence (Plan 059 Milestone 2):
+    1. Explicit env var already set in process (e.g., shell) - respected, not overwritten
+    2. Flowbaby-managed defaults - applied only when value not already set
+
     Returns:
         tuple: (dataset_name, api_key)
     """
@@ -97,13 +105,33 @@ def setup_cognee_environment(workspace_path: str, logger: logging.Logger) -> tup
     os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
     os.environ['DATA_ROOT_DIRECTORY'] = data_root
     os.environ['CACHE_ROOT_DIRECTORY'] = cache_root
-    os.environ['CACHING'] = 'true'
+
+    # Plan 059: Configure caching with filesystem backend
+    # Respect explicit user configuration (precedence rule 1)
+    existing_caching = os.environ.get('CACHING')
+    existing_cache_backend = os.environ.get('CACHE_BACKEND')
+
+    if existing_caching is None:
+        os.environ['CACHING'] = 'true'
+        logger.debug("Set CACHING=true (managed default)")
+    else:
+        logger.debug(f"Respecting existing CACHING={existing_caching}")
+
+    if existing_cache_backend is None:
+        os.environ['CACHE_BACKEND'] = 'fs'
+        logger.debug("Set CACHE_BACKEND=fs (managed default - filesystem session cache)")
+    else:
+        logger.debug(f"Respecting existing CACHE_BACKEND={existing_cache_backend}")
 
     # Ensure directories exist
     Path(system_root).mkdir(parents=True, exist_ok=True)
     Path(data_root).mkdir(parents=True, exist_ok=True)
     Path(cache_root).mkdir(parents=True, exist_ok=True)
 
+    # Plan 059: Log cache configuration for observability
+    effective_caching = os.environ.get('CACHING', 'false')
+    effective_backend = os.environ.get('CACHE_BACKEND', 'none')
+    logger.info(f"Cache configuration: CACHING={effective_caching}, CACHE_BACKEND={effective_backend}, CACHE_ROOT={cache_root}")
     logger.debug(f"Configured Cognee directories: system={system_root}, data={data_root}")
 
     # Generate dataset name

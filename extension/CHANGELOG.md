@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.6.2] - 2025-12-20
+
+### Changed
+
+- **Cognee Upgrade to 0.5.1 (Plan 059)**: Upgraded from Cognee 0.4.1 to 0.5.1 to enable filesystem-backed session caching. Cognee 0.5.0+ introduces `CACHE_BACKEND=fs` via diskcache (bundled), removing the implicit Redis dependency that caused connection failures in managed environments without Redis installed.
+- **Filesystem Cache Backend Default**: Managed environments now default to `CACHING=true` and `CACHE_BACKEND=fs` (filesystem session cache) instead of falling back to Redis. This eliminates Redis-related timeout errors and improves retrieval reliability out-of-the-box.
+- **Environment Variable Precedence**: Cache configuration now respects explicit user-provided environment variables (`CACHING`, `CACHE_BACKEND`). Flowbaby-managed defaults are only applied when values are not already set.
+
+### Added
+
+- **Cache Configuration Logging**: All bridge entry points (daemon, init, ingest, retrieve) now log cache configuration at startup for improved observability and troubleshooting.
+
 ## [0.6.1] - 2025-12-13
 
 ### Changed

@@ -2,7 +2,7 @@
   "name": "flowbaby",
   "displayName": "Flowbaby",
   "description": "The only memory system that isn't wearing a memory costume. No drift. No drama",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "publisher": "Flowbaby",
   "icon": "media/flowbaby-icon-tightcrop.png",
   "engines": {
