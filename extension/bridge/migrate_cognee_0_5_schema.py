@@ -57,6 +57,20 @@ class SchemaMigrationError:
 # Maintenance Contract: Update this when Cognee pin changes
 COGNEE_VERSION_RANGE = ">=0.5.1,<0.6.0"
 
+# Tables that MUST exist for Cognee 0.5.x multi-tenant operations
+# These are join/association tables that may not exist in pre-0.5.x databases
+REQUIRED_TABLES = {
+    "user_tenants": """
+        CREATE TABLE IF NOT EXISTS user_tenants (
+            user_id UUID NOT NULL,
+            tenant_id UUID NOT NULL,
+            PRIMARY KEY (user_id, tenant_id),
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+        )
+    """,
+}
+
 REQUIRED_SCHEMA = {
     "datasets": {
         "required_columns": ["tenant_id"],
@@ -103,6 +117,7 @@ def generate_migration_receipt(
     success: bool,
     checks_performed: list[str],
     columns_added: list[str],
+    tables_created: list[str] = None,
     error_code: Optional[str] = None,
     error_message: Optional[str] = None,
 ) -> dict:
@@ -115,6 +130,7 @@ def generate_migration_receipt(
     - db_path: Path to the database file
     - checks_performed: List of schema checks performed
     - columns_added: List of columns added during migration
+    - tables_created: List of tables created during migration
     - success: Whether migration completed successfully
     - error_code: Plan 060 error code if failed
     - error_message: Human-readable error description if failed
@@ -125,6 +141,7 @@ def generate_migration_receipt(
         "db_path": str(db_path),
         "checks_performed": checks_performed,
         "columns_added": columns_added,
+        "tables_created": tables_created or [],
         "success": success,
         "error_code": error_code,
         "error_message": error_message,
@@ -182,7 +199,19 @@ def check_schema_readiness(db_path: Path) -> dict:
         cursor = conn.cursor()
         
         missing_columns = []
+        missing_tables = []
         checks_performed = []
+        
+        # Check for required tables (new in 0.5.x multi-tenant)
+        for table_name in REQUIRED_TABLES.keys():
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table_name,)
+            )
+            table_exists = cursor.fetchone() is not None
+            checks_performed.append(f"table_{table_name}_exists")
+            if not table_exists:
+                missing_tables.append(table_name)
         
         for table_name, table_spec in REQUIRED_SCHEMA.items():
             # Check if table exists
@@ -204,6 +233,7 @@ def check_schema_readiness(db_path: Path) -> dict:
                         "ready": False,
                         "error_code": SchemaMigrationError.SCHEMA_UNSUPPORTED_STATE,
                         "missing_columns": [],
+                        "missing_tables": missing_tables,
                         "message": f"Required table '{table_name}' does not exist"
                     }
             
@@ -216,19 +246,26 @@ def check_schema_readiness(db_path: Path) -> dict:
         
         conn.close()
         
-        if missing_columns:
+        if missing_tables or missing_columns:
+            missing_items = []
+            if missing_tables:
+                missing_items.append(f"tables: {', '.join(missing_tables)}")
+            if missing_columns:
+                missing_items.append(f"columns: {', '.join(missing_columns)}")
             return {
                 "ready": False,
                 "error_code": SchemaMigrationError.SCHEMA_MISMATCH_DETECTED,
                 "missing_columns": missing_columns,
+                "missing_tables": missing_tables,
                 "checks_performed": checks_performed,
-                "message": f"Missing columns: {', '.join(missing_columns)}"
+                "message": f"Missing {'; '.join(missing_items)}"
             }
         
         return {
             "ready": True,
             "error_code": None,
             "missing_columns": [],
+            "missing_tables": [],
             "checks_performed": checks_performed,
             "message": "Schema is compatible with Cognee 0.5.x"
         }
@@ -238,6 +275,7 @@ def check_schema_readiness(db_path: Path) -> dict:
             "ready": False,
             "error_code": SchemaMigrationError.SCHEMA_UNSUPPORTED_STATE,
             "missing_columns": [],
+            "missing_tables": [],
             "message": f"Error checking schema: {str(e)}"
         }
 
@@ -257,6 +295,18 @@ def add_column_if_missing(cursor, table_name: str, col_name: str, col_type: str)
     return False
 
 
+def create_table_if_missing(cursor, table_name: str, create_sql: str) -> bool:
+    """Create table if it doesn't exist. Returns True if created."""
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table_name,)
+    )
+    if cursor.fetchone() is None:
+        cursor.execute(create_sql)
+        return True
+    return False
+
+
 def migrate_database(db_path: Path) -> dict:
     """
     Migrate a Cognee database to 0.5.x schema.
@@ -266,10 +316,12 @@ def migrate_database(db_path: Path) -> dict:
     - error_code: Optional Plan 060 error code
     - checks_performed: List of schema checks performed
     - columns_added: List of columns added during migration
+    - tables_created: List of tables created during migration
     - message: Human-readable status
     """
     checks_performed = []
     columns_added = []
+    tables_created = []
     
     if not db_path.exists():
         return {
@@ -277,6 +329,7 @@ def migrate_database(db_path: Path) -> dict:
             'error_code': SchemaMigrationError.SCHEMA_UNSUPPORTED_STATE,
             'checks_performed': checks_performed,
             'columns_added': columns_added,
+            'tables_created': tables_created,
             'message': f'Database not found: {db_path}'
         }
     
@@ -294,8 +347,16 @@ def migrate_database(db_path: Path) -> dict:
                 'error_code': SchemaMigrationError.SCHEMA_UNSUPPORTED_STATE,
                 'checks_performed': checks_performed,
                 'columns_added': columns_added,
+                'tables_created': tables_created,
                 'message': 'datasets table not found - not a Cognee database'
             }
+        
+        # Migration 0: Create missing required tables (new in 0.5.x multi-tenant)
+        for table_name, create_sql in REQUIRED_TABLES.items():
+            checks_performed.append(f"table_{table_name}_exists")
+            if create_table_if_missing(cursor, table_name, create_sql):
+                tables_created.append(table_name)
+                conn.commit()
         
         # Migration 1: Add tenant_id to datasets table (from REQUIRED_SCHEMA)
         for col_name, col_type in REQUIRED_SCHEMA["datasets"]["column_definitions"].items():
@@ -316,12 +377,19 @@ def migrate_database(db_path: Path) -> dict:
         
         conn.close()
         
+        changes = []
+        if tables_created:
+            changes.append(f'{len(tables_created)} table(s) created')
+        if columns_added:
+            changes.append(f'{len(columns_added)} column(s) added')
+        
         return {
             'success': True,
             'error_code': None,
             'checks_performed': checks_performed,
             'columns_added': columns_added,
-            'message': f'Applied {len(columns_added)} column additions' if columns_added else 'No migrations needed'
+            'tables_created': tables_created,
+            'message': f"Applied: {', '.join(changes)}" if changes else 'No migrations needed'
         }
         
     except Exception as e:
@@ -331,6 +399,7 @@ def migrate_database(db_path: Path) -> dict:
             'error_code': SchemaMigrationError.SCHEMA_MIGRATION_FAILED,
             'checks_performed': checks_performed,
             'columns_added': columns_added,
+            'tables_created': tables_created,
             'message': str(e)
         }
 

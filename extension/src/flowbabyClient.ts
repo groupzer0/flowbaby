@@ -1452,6 +1452,12 @@ export class FlowbabyClient {
                     duration,
                     error: result.error
                 });
+                
+                // Throw actionable errors so callers can show meaningful messages
+                if (result.error?.includes('API_KEY')) {
+                    throw new Error('LLM API key not configured. Use "Flowbaby: Set API Key" command.');
+                }
+                
                 return [];
             }
         } catch (error) {
@@ -1461,6 +1467,12 @@ export class FlowbabyClient {
                 duration,
                 error: errorMessage
             });
+            
+            // Re-throw API key errors so they surface as actionable messages
+            if (errorMessage.includes('API_KEY') || errorMessage.includes('API key')) {
+                throw error;
+            }
+            
             return [];
         }
     }

@@ -1853,8 +1853,15 @@ function registerFlowbabyParticipant(
                         console.log(`Retrieved ${retrievedMemories.length} memories in ${retrievalDuration}ms (via FlowbabyContextProvider)`);
                     } catch (error) {
                         retrievalFailed = true;
+                        const errorMessage = error instanceof Error ? error.message : String(error);
                         console.error('Retrieval failed:', error);
-                        stream.markdown('⚠️ **Memory retrieval unavailable** - continuing without context\n\n');
+                        
+                        // Show specific message for API key errors
+                        if (errorMessage.includes('API key') || errorMessage.includes('API_KEY')) {
+                            stream.markdown('⚠️ **LLM API key not configured** - Use "Flowbaby: Set API Key" command to enable memory retrieval\n\n');
+                        } else {
+                            stream.markdown('⚠️ **Memory retrieval unavailable** - continuing without context\n\n');
+                        }
                     }
 
                     // Check cancellation after retrieval

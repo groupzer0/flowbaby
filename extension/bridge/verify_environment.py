@@ -12,7 +12,10 @@ Returns JSON to stdout:
     Success: {"status": "ok", "details": {...}}
     Failure: {"status": "error", "details": {...}, "missing": [...]}
     
-Plan 060: Now includes schema readiness check for Cognee 0.5.x compatibility.
+Plan 060: Includes schema readiness check for Cognee 0.5.x compatibility.
+Plan 060 M4: Now auto-migrates schema during verification when mismatch is
+detected. This ensures dependency refresh doesn't fail due to schema issues
+when migration can automatically resolve them.
 """
 
 import importlib.util
@@ -28,15 +31,27 @@ def check_import(module_name):
         return False
 
 
-def check_schema_status(workspace_path):
+def check_and_migrate_schema(workspace_path):
     """
-    Check schema readiness for Cognee 0.5.x (Plan 060).
+    Check schema readiness and auto-migrate if needed (Plan 060 Milestone 4).
     
-    Returns dict with schema status information.
+    This function is called during dependency refresh verification to ensure
+    schema migration happens BEFORE returning verification status. This prevents
+    the scenario where verification fails due to schema mismatch but migration
+    never gets a chance to run (since init.py won't be called if verification fails).
+    
+    Returns dict with schema status information after any migration attempt.
     """
     try:
         # Import from the same directory
-        from migrate_cognee_0_5_schema import check_schema_readiness, COGNEE_VERSION_RANGE
+        from migrate_cognee_0_5_schema import (
+            check_schema_readiness,
+            migrate_database,
+            generate_migration_receipt,
+            save_migration_receipt,
+            COGNEE_VERSION_RANGE,
+            SchemaMigrationError,
+        )
         
         workspace = Path(workspace_path)
         db_path = workspace / '.flowbaby' / 'system' / 'databases' / 'cognee_db'
@@ -48,14 +63,85 @@ def check_schema_status(workspace_path):
                 "cognee_version_range": COGNEE_VERSION_RANGE,
             }
         
+        # First check readiness
         readiness = check_schema_readiness(db_path)
+        
+        if readiness["ready"]:
+            return {
+                "schema_ready": True,
+                "schema_message": readiness["message"],
+                "cognee_version_range": COGNEE_VERSION_RANGE,
+            }
+        
+        # Schema not ready - attempt migration if it's a mismatch (Plan 060 M4)
+        error_code = readiness.get("error_code")
+        
+        if error_code == SchemaMigrationError.SCHEMA_MISMATCH_DETECTED:
+            # Missing columns/tables - attempt automatic migration
+            migration_result = migrate_database(db_path)
+            
+            if migration_result["success"]:
+                # Migration succeeded - save receipt and return success
+                columns_added = migration_result.get("columns_added", [])
+                tables_created = migration_result.get("tables_created", [])
+                
+                receipt = generate_migration_receipt(
+                    db_path=db_path,
+                    success=True,
+                    checks_performed=migration_result.get("checks_performed", []),
+                    columns_added=columns_added,
+                    tables_created=tables_created,
+                )
+                save_migration_receipt(workspace, receipt)
+                
+                # Build descriptive message
+                changes = []
+                if tables_created:
+                    changes.append(f"{len(tables_created)} table(s)")
+                if columns_added:
+                    changes.append(f"{len(columns_added)} column(s)")
+                change_desc = " and ".join(changes) if changes else "schema"
+                
+                return {
+                    "schema_ready": True,
+                    "schema_message": f"Auto-migrated schema: added {change_desc}",
+                    "schema_migrated": True,
+                    "schema_columns_added": columns_added,
+                    "schema_tables_created": tables_created,
+                    "cognee_version_range": COGNEE_VERSION_RANGE,
+                }
+            else:
+                # Migration failed - save failure receipt and return error
+                receipt = generate_migration_receipt(
+                    db_path=db_path,
+                    success=False,
+                    checks_performed=migration_result.get("checks_performed", []),
+                    columns_added=migration_result.get("columns_added", []),
+                    tables_created=migration_result.get("tables_created", []),
+                    error_code=migration_result.get("error_code"),
+                    error_message=migration_result.get("message"),
+                )
+                save_migration_receipt(workspace, receipt)
+                
+                return {
+                    "schema_ready": False,
+                    "schema_message": f"Migration failed: {migration_result.get('message')}",
+                    "schema_error_code": migration_result.get("error_code", "SCHEMA_MIGRATION_FAILED"),
+                    "schema_missing_columns": readiness.get("missing_columns", []),
+                    "schema_missing_tables": readiness.get("missing_tables", []),
+                    "cognee_version_range": COGNEE_VERSION_RANGE,
+                }
+        
+        # Unsupported state or other error - cannot auto-migrate
         return {
-            "schema_ready": readiness["ready"],
+            "schema_ready": False,
             "schema_message": readiness["message"],
             "schema_error_code": readiness.get("error_code"),
             "schema_missing_columns": readiness.get("missing_columns", []),
+            "schema_missing_tables": readiness.get("missing_tables", []),
             "cognee_version_range": COGNEE_VERSION_RANGE,
         }
+        
     except ImportError as e:
         return {
             "schema_ready": None,
@@ -98,13 +184,20 @@ def verify_environment(workspace_path):
     if not ontology_exists:
         missing.append("ontology.ttl")
 
-    # 3. Check Schema Readiness (Plan 060)
-    schema_status = check_schema_status(workspace_path)
+    # 3. Check Schema Readiness and Auto-Migrate if Needed (Plan 060 M4)
+    # This runs migration during verification so that dependency refresh
+    # doesn't fail due to schema mismatch without attempting migration.
+    schema_status = check_and_migrate_schema(workspace_path)
     details["schema_ready"] = schema_status.get("schema_ready")
     details["schema_message"] = schema_status.get("schema_message")
     
+    # Include migration info if migration was performed
+    if schema_status.get("schema_migrated"):
+        details["schema_migrated"] = True
+        details["schema_columns_added"] = schema_status.get("schema_columns_added", [])
+    
     if schema_status.get("schema_ready") is False:
-        # Schema incompatible - add to missing
+        # Schema incompatible even after migration attempt
         missing.append(f"schema_migration:{schema_status.get('schema_error_code', 'UNKNOWN')}")
         details["schema_error_code"] = schema_status.get("schema_error_code")
         details["schema_missing_columns"] = schema_status.get("schema_missing_columns", [])

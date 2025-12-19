@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 import { activate, deactivate } from '../extension';
+import { __resetRegistrationHelperStateForTests, isActive } from '../lifecycle/registrationHelper';
 import { FlowbabyStatusBar, FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
 import { FlowbabySetupService } from '../setup/FlowbabySetupService';
 
@@ -12,6 +13,7 @@ suite('Plan 050: Workspace initialization isolation', () => {
 
     setup(() => {
         sandbox = sinon.createSandbox();
+        __resetRegistrationHelperStateForTests();
 
         mockContext = {
             subscriptions: [],
@@ -49,6 +51,16 @@ suite('Plan 050: Workspace initialization isolation', () => {
             return { dispose: () => void 0 } as vscode.Disposable;
         });
 
+        // IMPORTANT: These tests call activate()/deactivate() manually with a mocked
+        // ExtensionContext, so VS Code will NOT automatically dispose real chat
+        // participants registered via vscode.chat.createChatParticipant.
+        // That leaks participants across tests/activations and can trigger VS Code
+        // renderer errors (e.g., "No agent with handle" and TypeError reading 'add').
+        // The workspace-init tests are not validating chat behavior, so stub it.
+        sandbox.stub(vscode.chat, 'createChatParticipant').callsFake(() => {
+            return { iconPath: undefined, dispose: () => void 0 } as any;
+        });
+
         // Stub FlowbabyStatusBar so we do not touch real UI
         sandbox.stub(FlowbabyStatusBar.prototype, 'setStatus');
 
@@ -59,7 +71,10 @@ suite('Plan 050: Workspace initialization isolation', () => {
 
     teardown(async () => {
         sandbox.restore();
-        await deactivate();
+        if (isActive()) {
+            await deactivate();
+        }
+        __resetRegistrationHelperStateForTests();
     });
 
     test('activation marks workspace as initialized on successful init', async () => {

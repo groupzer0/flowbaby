@@ -483,8 +483,9 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             }
         }
 
-        // Wait for startup if in progress
-        if (this.startupPromise) {
+        // Wait for startup if in progress (but NOT if we're in 'starting' state,
+        // which means we're being called from the startup flow itself e.g. health check)
+        if (this.startupPromise && this.state !== 'starting') {
             await this.startupPromise;
         }
 
@@ -630,7 +631,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
 
         // Get API key from SecretStorage
         try {
-            const apiKey = await this.context.secrets.get('flowbaby.apiKey');
+            const apiKey = await this.context.secrets.get('flowbaby.llmApiKey');
             if (apiKey) {
                 env['LLM_API_KEY'] = apiKey;
             }

@@ -88,14 +88,16 @@ def setup_cognee_environment(workspace_path: str, logger: logging.Logger) -> tup
     2. Flowbaby-managed defaults - applied only when value not already set
 
     Returns:
-        tuple: (dataset_name, api_key)
+        tuple: (dataset_name, api_key_present: bool)
     """
     workspace_dir = Path(workspace_path)
 
-    # Check for API key
+    # Check for API key but don't fail - it may arrive later via request env
     api_key = os.getenv('LLM_API_KEY')
-    if not api_key:
-        raise ValueError('LLM_API_KEY not found in environment')
+    api_key_present = api_key is not None
+    
+    if not api_key_present:
+        logger.warning('LLM_API_KEY not found in startup environment - will check per-request')
 
     # Set Cognee environment variables BEFORE SDK import
     system_root = str(workspace_dir / '.flowbaby/system')
@@ -138,13 +140,15 @@ def setup_cognee_environment(workspace_path: str, logger: logging.Logger) -> tup
     from workspace_utils import generate_dataset_name
     dataset_name, _ = generate_dataset_name(workspace_path)
 
-    return dataset_name, api_key
+    return dataset_name, api_key_present
 
 
-def initialize_cognee(api_key: str, workspace_path: str, logger: logging.Logger) -> None:
+def initialize_cognee(workspace_path: str, logger: logging.Logger) -> None:
     """
     Import and configure Cognee SDK.
     This is called once at daemon startup to amortize import cost.
+    
+    Note: API key is NOT required at import time - it will be validated per-request.
     """
     global cognee, cognee_initialized
 
@@ -170,8 +174,14 @@ def initialize_cognee(api_key: str, workspace_path: str, logger: logging.Logger)
 
     cognee.config.system_root_directory(system_root)
     cognee.config.data_root_directory(data_root)
-    cognee.config.set_llm_api_key(api_key)
-    cognee.config.set_llm_provider('openai')
+    
+    # Set API key if available (will be validated per-request in handlers)
+    api_key = os.getenv('LLM_API_KEY')
+    if api_key:
+        cognee.config.set_llm_api_key(api_key)
+        cognee.config.set_llm_provider('openai')
+    else:
+        logger.debug("LLM_API_KEY not set during initialization - will check per-request")
 
     cognee_initialized = True
     elapsed = time.time() - start_time
@@ -252,6 +262,10 @@ async def handle_retrieve(params: dict, workspace_path: str, dataset_name: str, 
     if not cognee_initialized:
         raise JsonRpcError(COGNEE_NOT_INITIALIZED, 'Cognee SDK not initialized')
 
+    # Validate API key is present before processing request
+    if not os.getenv('LLM_API_KEY'):
+        raise JsonRpcError(INVALID_PARAMS, 'LLM_API_KEY not found in environment - required for retrieval operations')
+
     query = params.get('query')
     if not query:
         raise JsonRpcError(INVALID_PARAMS, 'Missing required parameter: query')
@@ -290,6 +304,10 @@ async def handle_ingest(params: dict, workspace_path: str, dataset_name: str, lo
     """
     if not cognee_initialized:
         raise JsonRpcError(COGNEE_NOT_INITIALIZED, 'Cognee SDK not initialized')
+
+    # Validate API key is present before processing request
+    if not os.getenv('LLM_API_KEY'):
+        raise JsonRpcError(INVALID_PARAMS, 'LLM_API_KEY not found in environment - required for ingest operations')
 
     mode = params.get('mode', 'add-only')
     summary_json = params.get('summary_json')
@@ -452,10 +470,10 @@ def main() -> int:
 
     try:
         # Setup Cognee environment
-        dataset_name, api_key = setup_cognee_environment(workspace_path, logger)
+        dataset_name, api_key_present = setup_cognee_environment(workspace_path, logger)
 
         # Initialize Cognee (one-time import cost)
-        initialize_cognee(api_key, workspace_path, logger)
+        initialize_cognee(workspace_path, logger)
 
         # Run main loop
         asyncio.run(main_loop(workspace_path, dataset_name, logger))
