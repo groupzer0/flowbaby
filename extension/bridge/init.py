@@ -35,6 +35,13 @@ from pathlib import Path
 # Add bridge directory to path to import bridge_logger
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import bridge_logger
+from migrate_cognee_0_5_schema import (
+    SchemaMigrationError,
+    check_schema_readiness,
+    migrate_database,
+    save_migration_receipt,
+    generate_migration_receipt,
+)
 from ontology_provider import OntologyLoadError, load_ontology
 from workspace_utils import canonicalize_workspace_path, generate_dataset_name
 
@@ -341,7 +348,93 @@ async def initialize_cognee(workspace_path: str) -> dict:
                 data_dir_size_after = marker_data.get('data_dir_size_after', 0)
             except Exception as e:
                 logger.warning(f"Failed to read marker metadata: {e}")
+
+        # ==========================================================================
+        # PLAN 060: Schema Migration Check (Cognee 0.5.x Multi-Tenant Support)
+        # ==========================================================================
+        # This must happen BEFORE any Cognee operations that touch the database.
+        # If an existing database lacks required columns, migration is attempted.
+        # Fail-closed: If migration fails, init fails.
+        # ==========================================================================
+        db_path = global_data_dir / 'databases' / 'cognee_db'
+        schema_migration_result = None
+        
+        if db_path.exists():
+            logger.info("Plan 060: Checking schema readiness for Cognee 0.5.x...")
+            readiness = check_schema_readiness(db_path)
+            
+            if not readiness["ready"]:
+                error_code = readiness.get("error_code", "UNKNOWN")
+                
+                if error_code == SchemaMigrationError.SCHEMA_MISMATCH_DETECTED:
+                    # Missing columns - attempt migration
+                    logger.info(f"Schema mismatch detected: {readiness['message']}")
+                    logger.info("Attempting automatic schema migration...")
+                    
+                    schema_migration_result = migrate_database(db_path)
+                    
+                    if schema_migration_result["success"]:
+                        logger.info(f"Schema migration successful: {schema_migration_result['message']}")
+                        if schema_migration_result.get("columns_added"):
+                            logger.info(f"Columns added: {', '.join(schema_migration_result['columns_added'])}")
+                        
+                        # Save receipt
+                        receipt = generate_migration_receipt(
+                            db_path=db_path,
+                            success=True,
+                            checks_performed=schema_migration_result.get("checks_performed", []),
+                            columns_added=schema_migration_result.get("columns_added", []),
+                        )
+                        receipt_path = save_migration_receipt(workspace_dir, receipt)
+                        logger.info(f"Migration receipt saved: {receipt_path}")
+                    else:
+                        # Migration failed - fail-closed (Plan 060 contract)
+                        error_msg = (
+                            f"Schema migration failed ({schema_migration_result.get('error_code', 'UNKNOWN')}): "
+                            f"{schema_migration_result.get('message', 'Unknown error')}"
+                        )
+                        logger.error(error_msg)
+                        logger.error("Fail-closed: Cannot proceed with incompatible schema")
+                        
+                        # Save failure receipt
+                        receipt = generate_migration_receipt(
+                            db_path=db_path,
+                            success=False,
+                            checks_performed=schema_migration_result.get("checks_performed", []),
+                            columns_added=schema_migration_result.get("columns_added", []),
+                            error_code=schema_migration_result.get("error_code"),
+                            error_message=schema_migration_result.get("message"),
+                        )
+                        save_migration_receipt(workspace_dir, receipt)
+                        
+                        return {
+                            'success': False,
+                            'error': error_msg,
+                            'error_code': schema_migration_result.get('error_code'),
+                        }
+                
+                elif error_code == SchemaMigrationError.SCHEMA_UNSUPPORTED_STATE:
+                    # Unexpected schema state - cannot safely migrate
+                    error_msg = f"Unsupported schema state: {readiness['message']}"
+                    logger.error(error_msg)
+                    logger.error("Manual intervention may be required")
+                    
+                    return {
+                        'success': False,
+                        'error': error_msg,
+                        'error_code': SchemaMigrationError.SCHEMA_UNSUPPORTED_STATE,
+                    }
+            else:
+                logger.debug(f"Schema ready: {readiness['message']}")
         else:
+            logger.debug("No existing database - schema will be created correctly by Cognee")
+
+        # ==========================================================================
+        # End Plan 060 Schema Migration
+        # ==========================================================================
+
+        # Check if workspace migration marker does NOT exist - need data migration logic
+        if not global_marker_path.exists():
             logger.info("Workspace migration marker not found, checking safety conditions")
 
             # PLAN 027 SAFETY CHECK: Never prune if existing data is detected

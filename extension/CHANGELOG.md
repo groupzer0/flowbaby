@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Cache Configuration Logging**: All bridge entry points (daemon, init, ingest, retrieve) now log cache configuration at startup for improved observability and troubleshooting.
+- **Automatic Schema Migration (Plan 060)**: Databases created with Cognee 0.4.x are automatically migrated to 0.5.x schema on initialization. The migration adds required columns for multi-tenant support (`datasets.tenant_id` and 10 `dataset_database` columns) using additive-only `ALTER TABLE` operations. No data loss occurs.
+  - **Fail-Closed Safety**: If schema migration fails, initialization fails cleanly rather than proceeding with an incompatible database.
+  - **Receipt Generation**: Migration attempts are logged to `.flowbaby/system/schema_migration_receipt.json` for auditability.
+  - **External Repair**: Users with external Python environments can run `python bridge/migrate_cognee_0_5_schema.py <workspace> --dry-run` to check schema status and apply migrations manually.
 
 ## [0.6.1] - 2025-12-13
 

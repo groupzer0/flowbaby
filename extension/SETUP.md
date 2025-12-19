@@ -308,6 +308,33 @@ Check Output > Cognee Memory for errors. Common causes:
 
 **Solution**: Follow steps 1-3 of Setup Instructions for your workspace.
 
+### Schema Migration Errors (v0.6.2+)
+
+If you upgraded from an earlier version and see schema errors, Flowbaby will attempt automatic migration. If automatic migration fails:
+
+**Error Codes:**
+- `SCHEMA_MISMATCH_DETECTED`: Missing required columns - migration may help
+- `SCHEMA_MIGRATION_FAILED`: Migration attempted but failed
+- `SCHEMA_UNSUPPORTED_STATE`: Database structure is unexpected
+
+**Manual Repair:**
+```bash
+# Check what needs migration (dry run)
+python extension/bridge/migrate_cognee_0_5_schema.py /path/to/workspace --dry-run
+
+# Apply migration
+python extension/bridge/migrate_cognee_0_5_schema.py /path/to/workspace
+
+# Check migration receipt
+cat /path/to/workspace/.flowbaby/system/schema_migration_receipt.json
+```
+
+**If Migration Fails:**
+1. Check `.flowbaby/system/schema_migration_receipt.json` for details
+2. Back up your `.flowbaby/system/databases/` directory
+3. Consider removing the database to start fresh: `rm -rf .flowbaby/system/databases/cognee_db`
+4. Re-run "Flowbaby: Initialize Workspace"
+
 ### Capture Command Not Found
 
 1. Check the extension activated successfully (Output > Cognee Memory)
