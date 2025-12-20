@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Activation registration parity baseline for Plan 062. Used by integration check to verify all registrations are present after refactor.",
+  "version": "0.6.2",
+  "createdDate": "2025-12-20",
+  "commands": {
+    "registered": [
+      "Flowbaby.showDebugLogs",
+      "Flowbaby.setApiKey",
+      "Flowbaby.configureApiKey",
+      "Flowbaby.clearApiKey",
+      "Flowbaby.setupEnvironment",
+      "Flowbaby.initializeWorkspace",
+      "Flowbaby.refreshDependencies",
+      "Flowbaby.backgroundStatus",
+      "Flowbaby.captureMessage",
+      "Flowbaby.toggleMemory",
+      "Flowbaby.clearMemory",
+      "Flowbaby.openDocs",
+      "Flowbaby.validateMemories",
+      "Flowbaby.listMemories"
+    ],
+    "internal": [
+      "Flowbaby.showDiagnostics"
+    ],
+    "declaredButNotRegistered": [
+      "Flowbaby.ingestForAgent",
+      "Flowbaby.retrieveForAgent",
+      "Flowbaby.showStatus"
+    ]
+  },
+  "languageModelTools": [
+    "flowbaby_storeMemory",
+    "flowbaby_retrieveMemory"
+  ],
+  "chatParticipants": [
+    "flowbaby"
+  ],
+  "invariants": {
+    "activationEvents": ["onStartupFinished"],
+    "activationTimeout": "non-blocking (fire-and-forget health check)",
+    "singletonServices": ["BackgroundOperationManager", "CogneeContextProvider"],
+    "guardInvariants": [
+      "LM tools must not register if Python bridge is broken (Plan 051/056)",
+      "Chat participant must degrade gracefully if not initialized (Plan 032)"
+    ]
+  },
+  "notes": [
+    "Commands must match package.json contributes.commands IDs exactly",
+    "LM tool names must match package.json contributes.languageModelTools name field exactly",
+    "Chat participant ID must match package.json contributes.chatParticipants id exactly",
+    "declaredButNotRegistered commands are defined in package.json but not yet implemented in source"
+  ]
+}

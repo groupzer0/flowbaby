@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.2] - 2025-12-20
 
+### Changed
+
+- **Extension Activation Refactor (Plan 062)**: Decomposed the 2066 LOC `extension.ts` monolith into three cohesive modules: `extension.ts` (267 LOC orchestrator), `activation/registrations.ts` (1175 LOC for commands, LM tools, chat participant), and `activation/init.ts` (797 LOC for initialization, health checks, setup commands). No user-facing changes; architecture maintainability improvement only.
+
 ### Fixed
 
 - **Daemon Idle-Timeout KuzuDB Locks (Plan 061)**: Fixed aggressive SIGKILL escalation during idle-timeout shutdown that left KuzuDB `.pkl` file locks orphaned. The daemon manager now uses a 3-phase graceful shutdown (5s graceful → 3s SIGTERM → SIGKILL as last resort), allowing Cognee/KuzuDB time to release locks cleanly. Added operational fallback: after 3 consecutive forced kills, daemon mode automatically suspends and falls back to spawn-per-request until manually re-enabled.
