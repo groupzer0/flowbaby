@@ -759,7 +759,7 @@ export function registerFlowbabyParticipant(deps: ParticipantRegistrationDeps): 
     }
 
     setParticipantRegistered(true);
-    participant.iconPath = vscode.Uri.file(path.join(__dirname, '..', '..', 'media', 'flowbaby-icon-tightcrop.png'));
+    participant.iconPath = vscode.Uri.file(path.join(context.extensionPath, 'media', 'flowbaby-icon-tightcrop.png'));
     console.log('✅ @flowbaby participant registered successfully');
 
     safePush(context, participant, { intent: { kind: 'participant', id: 'flowbaby' } });
