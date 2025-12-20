@@ -772,12 +772,34 @@ export class FlowbabyClient {
                 throw new Error(`Payload too large (${summaryJson.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
             }
             
-            // Use 120-second timeout for summary ingestion (same as conversation)
-            const result = await this.runPythonScript('ingest.py', [
-                '--summary',
-                '--summary-json',
-                summaryJson
-            ], 120000);
+            // Plan 062: Route through daemon to avoid KuzuDB lock conflicts
+            let result: FlowbabyResult;
+            if (this.daemonManager && this.daemonModeEnabled) {
+                try {
+                    const daemonParams: Record<string, unknown> = {
+                        mode: 'sync',
+                        summary_json: summaryJson,
+                        workspace_path: this.workspacePath
+                    };
+                    result = await this.ingestViaDaemon(daemonParams);
+                } catch (daemonError) {
+                    const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
+                    this.log('WARN', 'Daemon ingest failed, falling back to spawn-per-request', {
+                        error: errorMsg
+                    });
+                    result = await this.runPythonScript('ingest.py', [
+                        '--summary',
+                        '--summary-json',
+                        summaryJson
+                    ], 120000);
+                }
+            } else {
+                result = await this.runPythonScript('ingest.py', [
+                    '--summary',
+                    '--summary-json',
+                    summaryJson
+                ], 120000);
+            }
 
             const duration = Date.now() - startTime;
 
@@ -917,13 +939,39 @@ export class FlowbabyClient {
                 throw new Error(`Payload too large (${summaryJson.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
             }
             
-            // Run add-only mode (fast, <10s)
-            const result = await this.runPythonScript('ingest.py', [
-                '--mode', 'add-only',
-                '--summary',
-                '--summary-json',
-                summaryJson
-            ], 30000); // 30s timeout for add-only
+            // Plan 062: Route add-only through daemon to avoid KuzuDB lock conflicts
+            // The daemon holds the single connection to KuzuDB, so all DB operations must go through it
+            let result: FlowbabyResult;
+            if (this.daemonManager && this.daemonModeEnabled) {
+                try {
+                    const daemonParams: Record<string, unknown> = {
+                        mode: 'add-only',
+                        summary_json: summaryJson,
+                        workspace_path: this.workspacePath
+                    };
+                    result = await this.ingestViaDaemon(daemonParams);
+                } catch (daemonError) {
+                    const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
+                    this.log('WARN', 'Daemon add-only failed, falling back to spawn-per-request', {
+                        error: errorMsg
+                    });
+                    // Fall back to subprocess (will likely fail with lock error if daemon is running)
+                    result = await this.runPythonScript('ingest.py', [
+                        '--mode', 'add-only',
+                        '--summary',
+                        '--summary-json',
+                        summaryJson
+                    ], 30000);
+                }
+            } else {
+                // No daemon - use subprocess directly
+                result = await this.runPythonScript('ingest.py', [
+                    '--mode', 'add-only',
+                    '--summary',
+                    '--summary-json',
+                    summaryJson
+                ], 30000);
+            }
 
             const duration = Date.now() - startTime;
 

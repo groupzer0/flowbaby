@@ -1498,5 +1498,263 @@ suite('FlowbabyClient Test Suite', () => {
             // Assert
             assert.ok(mockStop.calledOnce, 'Should stop daemon manager on stopDaemon()');
         });
+
+        // Plan 062: Tests for daemon-based summary ingestion
+        test('ingestSummary should use daemon when daemon mode enabled', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock ingestViaDaemon to track calls
+            const mockIngestViaDaemon = sandbox.stub(anyClient, 'ingestViaDaemon').resolves({
+                success: true,
+                ingested_chars: 500,
+                timestamp: '2025-12-20T10:00:00.000Z'
+            });
+
+            // Mock runPythonScript to ensure it's NOT called
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true
+            });
+
+            const summary = {
+                topic: 'Test Topic',
+                context: 'Test context',
+                decisions: [],
+                rationale: [],
+                openQuestions: [],
+                nextSteps: [],
+                references: [],
+                timeScope: '2025-12-20',
+                topicId: null,
+                sessionId: null,
+                planId: null,
+                status: null,
+                sourceCreatedAt: null,
+                createdAt: null,
+                updatedAt: null
+            };
+
+            // Act
+            const result = await client.ingestSummary(summary);
+
+            // Assert
+            assert.strictEqual(result, true, 'Should return true on success');
+            assert.ok(mockIngestViaDaemon.calledOnce, 'Should use daemon for summary ingestion');
+            assert.ok(!mockRunPythonScript.called, 'Should NOT fall back to spawn-per-request');
+            
+            // Verify daemon params include mode: 'sync' and summary_json
+            const daemonParams = mockIngestViaDaemon.firstCall.args[0];
+            assert.strictEqual(daemonParams.mode, 'sync', 'Should use sync mode for ingestSummary');
+            assert.ok(daemonParams.summary_json, 'Should include summary_json');
+        });
+
+        test('ingestSummary should fall back to spawn when daemon fails', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock ingestViaDaemon to throw an error
+            const mockIngestViaDaemon = sandbox.stub(anyClient, 'ingestViaDaemon').rejects(new Error('Daemon connection failed'));
+
+            // Mock runPythonScript to return success
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                ingested_chars: 500,
+                timestamp: '2025-12-20T10:00:00.000Z'
+            });
+
+            const summary = {
+                topic: 'Test Topic',
+                context: 'Test context',
+                decisions: [],
+                rationale: [],
+                openQuestions: [],
+                nextSteps: [],
+                references: [],
+                timeScope: '2025-12-20',
+                topicId: null,
+                sessionId: null,
+                planId: null,
+                status: null,
+                sourceCreatedAt: null,
+                createdAt: null,
+                updatedAt: null
+            };
+
+            // Act
+            const result = await client.ingestSummary(summary);
+
+            // Assert
+            assert.strictEqual(result, true, 'Should return true after successful fallback');
+            assert.ok(mockIngestViaDaemon.calledOnce, 'Should try daemon first');
+            assert.ok(mockRunPythonScript.calledOnce, 'Should fall back to spawn-per-request on daemon error');
+        });
+
+        test('ingestSummary should use spawn directly when daemon mode disabled', async () => {
+            // Arrange
+            stubDaemonConfigs('spawn');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock runPythonScript to track calls
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                ingested_chars: 500,
+                timestamp: '2025-12-20T10:00:00.000Z'
+            });
+
+            const summary = {
+                topic: 'Test Topic',
+                context: 'Test context',
+                decisions: [],
+                rationale: [],
+                openQuestions: [],
+                nextSteps: [],
+                references: [],
+                timeScope: '2025-12-20',
+                topicId: null,
+                sessionId: null,
+                planId: null,
+                status: null,
+                sourceCreatedAt: null,
+                createdAt: null,
+                updatedAt: null
+            };
+
+            // Act
+            await client.ingestSummary(summary);
+
+            // Assert
+            assert.ok(mockRunPythonScript.calledOnce, 'Should use spawn-per-request directly when daemon disabled');
+        });
+
+        test('ingestSummaryAsync should use daemon for add-only when daemon mode enabled', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            const mockIngestViaDaemon = sandbox.stub(anyClient, 'ingestViaDaemon').resolves({
+                success: true,
+                staged: true,
+                ingested_chars: 123,
+                timestamp: '2025-12-20T10:00:00.000Z'
+            });
+
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                staged: true
+            });
+
+            const startOperationStub = sandbox.stub().resolves('op-123');
+            const manager = {
+                startOperation: startOperationStub
+            } as any;
+
+            const summary = {
+                topic: 'Test Topic',
+                context: 'Test context',
+                decisions: [],
+                rationale: [],
+                openQuestions: [],
+                nextSteps: [],
+                references: [],
+                timeScope: '2025-12-20',
+                topicId: null,
+                sessionId: null,
+                planId: null,
+                status: null,
+                sourceCreatedAt: null,
+                createdAt: null,
+                updatedAt: null
+            };
+
+            // Act
+            const result = await client.ingestSummaryAsync(summary as any, manager);
+
+            // Assert
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.staged, true);
+            assert.strictEqual(result.operationId, 'op-123');
+            assert.ok(mockIngestViaDaemon.calledOnce, 'Should use daemon for add-only staging');
+            assert.ok(!mockRunPythonScript.called, 'Should NOT fall back to spawn-per-request');
+            assert.ok(startOperationStub.calledOnce, 'Should enqueue background cognify op');
+
+            const daemonParams = mockIngestViaDaemon.firstCall.args[0];
+            assert.strictEqual(daemonParams.mode, 'add-only');
+            assert.ok(daemonParams.summary_json, 'Should include summary_json');
+        });
+
+        test('ingestSummaryAsync should fall back to spawn when daemon add-only fails', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            const mockIngestViaDaemon = sandbox.stub(anyClient, 'ingestViaDaemon').rejects(new Error('Daemon connection failed'));
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                staged: true,
+                ingested_chars: 123,
+                timestamp: '2025-12-20T10:00:00.000Z'
+            });
+
+            const startOperationStub = sandbox.stub().resolves('op-456');
+            const manager = {
+                startOperation: startOperationStub
+            } as any;
+
+            const summary = {
+                topic: 'Test Topic',
+                context: 'Test context',
+                decisions: [],
+                rationale: [],
+                openQuestions: [],
+                nextSteps: [],
+                references: [],
+                timeScope: '2025-12-20',
+                topicId: null,
+                sessionId: null,
+                planId: null,
+                status: null,
+                sourceCreatedAt: null,
+                createdAt: null,
+                updatedAt: null
+            };
+
+            // Act
+            const result = await client.ingestSummaryAsync(summary as any, manager);
+
+            // Assert
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.staged, true);
+            assert.strictEqual(result.operationId, 'op-456');
+            assert.ok(mockIngestViaDaemon.calledOnce, 'Should try daemon first');
+            assert.ok(mockRunPythonScript.calledOnce, 'Should fall back to spawn-per-request');
+            assert.ok(startOperationStub.calledOnce, 'Should enqueue background cognify op after fallback');
+        });
     });
 });

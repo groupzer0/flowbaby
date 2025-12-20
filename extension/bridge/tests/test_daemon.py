@@ -469,6 +469,73 @@ class TestHandleIngest:
         assert result == mock_result
         mock_sync.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_parses_summary_json_string(self, workspace, logger, monkeypatch, reset_daemon_state):
+        """Plan 062: Test JSON string parsing for summary_json from TypeScript."""
+        import daemon
+        daemon.cognee_initialized = True
+        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        
+        # TypeScript sends summary_json as a JSON string (via JSON.stringify)
+        summary_payload = {'topic': 'Test', 'context': 'Test context', 'workspace_path': str(workspace)}
+        summary_json_string = json.dumps(summary_payload)
+        
+        mock_result = {'success': True, 'staged': True}
+        with patch('ingest.run_add_only', new_callable=AsyncMock, return_value=mock_result) as mock_add:
+            result = await daemon.handle_ingest(
+                {'mode': 'add-only', 'summary_json': summary_json_string},
+                str(workspace),
+                'dataset',
+                logger
+            )
+        
+        assert result == mock_result
+        # Verify the parsed dict was passed, not the string
+        call_kwargs = mock_add.call_args.kwargs
+        assert isinstance(call_kwargs['summary_json'], dict)
+        assert call_kwargs['summary_json']['topic'] == 'Test'
+
+    @pytest.mark.asyncio
+    async def test_accepts_summary_json_dict_directly(self, workspace, logger, monkeypatch, reset_daemon_state):
+        """Plan 062: Test dict is passed through directly without parsing."""
+        import daemon
+        daemon.cognee_initialized = True
+        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        
+        # If params already contain a dict (e.g., direct JSON-RPC), pass through
+        summary_payload = {'topic': 'Test', 'context': 'Test context', 'workspace_path': str(workspace)}
+        
+        mock_result = {'success': True, 'staged': True}
+        with patch('ingest.run_add_only', new_callable=AsyncMock, return_value=mock_result) as mock_add:
+            result = await daemon.handle_ingest(
+                {'mode': 'add-only', 'summary_json': summary_payload},
+                str(workspace),
+                'dataset',
+                logger
+            )
+        
+        assert result == mock_result
+        call_kwargs = mock_add.call_args.kwargs
+        assert call_kwargs['summary_json'] == summary_payload
+
+    @pytest.mark.asyncio
+    async def test_raises_on_invalid_summary_json_string(self, workspace, logger, monkeypatch, reset_daemon_state):
+        """Plan 062: Test error on malformed JSON string."""
+        import daemon
+        daemon.cognee_initialized = True
+        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        
+        with pytest.raises(daemon.JsonRpcError) as exc_info:
+            await daemon.handle_ingest(
+                {'mode': 'add-only', 'summary_json': 'not valid json'},
+                str(workspace),
+                'dataset',
+                logger
+            )
+        
+        assert exc_info.value.code == daemon.INVALID_PARAMS
+        assert 'Invalid summary_json' in exc_info.value.message
+
 
 # ============================================================================
 # process_request tests

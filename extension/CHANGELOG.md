@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Daemon Idle-Timeout KuzuDB Locks (Plan 061)**: Fixed aggressive SIGKILL escalation during idle-timeout shutdown that left KuzuDB `.pkl` file locks orphaned. The daemon manager now uses a 3-phase graceful shutdown (5s graceful → 3s SIGTERM → SIGKILL as last resort), allowing Cognee/KuzuDB time to release locks cleanly. Added operational fallback: after 3 consecutive forced kills, daemon mode automatically suspends and falls back to spawn-per-request until manually re-enabled.
+- **Memory Ingestion KuzuDB Lock Conflicts (Plan 062)**: Fixed `flowbaby_storeMemory` tool failures with "Could not set lock on file" errors. Memory ingestion now routes through the daemon process (which holds the single KuzuDB connection) instead of spawning a separate subprocess that would conflict with the daemon's lock. Both `ingestSummary()` and `ingestSummaryAsync()` now use daemon-based ingestion when daemon mode is enabled, with fallback to subprocess when daemon is unavailable.
 
 ### Changed
 

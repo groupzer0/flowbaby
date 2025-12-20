@@ -319,6 +319,13 @@ async def handle_ingest(params: dict, workspace_path: str, dataset_name: str, lo
     importance = params.get('importance', 0.0)
     session_id = params.get('session_id')
 
+    # Plan 062: Parse summary_json if it's a string (from TypeScript JSON.stringify)
+    if isinstance(summary_json, str):
+        try:
+            summary_json = json.loads(summary_json)
+        except json.JSONDecodeError as e:
+            raise JsonRpcError(INVALID_PARAMS, f'Invalid summary_json: {e}')
+
     logger.info(f"Ingest: mode={mode}")
 
     # Import ingest functions from existing module
