@@ -432,6 +432,27 @@ async def retrieve_context(
                 text_value = str(result_obj[0]) if result_obj else ''
                 if len(result_obj) > 1 and isinstance(result_obj[1], dict):
                     metadata = result_obj[1]
+            elif isinstance(result_obj, dict):
+                # Handle Cognee graph_completion results which return {'search_result': [...], ...}
+                if 'search_result' in result_obj:
+                    search_result = result_obj['search_result']
+                    if isinstance(search_result, list) and search_result:
+                        text_value = str(search_result[0])
+                    elif search_result:
+                        text_value = str(search_result)
+                elif 'text' in result_obj:
+                    text_value = str(result_obj['text'])
+                else:
+                    # Fallback: stringify the whole dict (but this shouldn't happen)
+                    text_value = str(result_obj)
+                # Extract metadata from the dict if present
+                metadata = result_obj.get('metadata')
+                # Also check for score in the dict itself
+                if 'score' in result_obj:
+                    try:
+                        semantic_score = float(result_obj['score'])
+                    except (TypeError, ValueError):
+                        pass
             else:
                 text_value = str(getattr(result_obj, 'text', result_obj))
                 metadata = getattr(result_obj, 'metadata', None)

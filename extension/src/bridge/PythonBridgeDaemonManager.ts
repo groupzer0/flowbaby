@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import { spawn, ChildProcess, SpawnOptions } from 'child_process';
 import { debugLog } from '../outputChannels';
 import { v4 as uuidv4 } from 'uuid';
+import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 
 /**
  * JSON-RPC 2.0 request structure
@@ -79,11 +80,23 @@ interface PendingRequest {
 /**
  * Default configuration values
  */
-const DEFAULT_IDLE_TIMEOUT_MINUTES = 5;
+const DEFAULT_IDLE_TIMEOUT_MINUTES = 30; // Plan 061: Increased from 5 to 30 minutes
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 const MAX_RESTART_ATTEMPTS = 3;
 const RESTART_BACKOFF_BASE_MS = 1000;
 const RESTART_BACKOFF_MAX_MS = 30000;
+
+/**
+ * Shutdown escalation timeouts (Plan 061)
+ * 
+ * These define the graceful-first shutdown contract:
+ * 1. Send shutdown RPC and wait for graceful exit
+ * 2. If no exit after GRACEFUL_SHUTDOWN_TIMEOUT_MS, send SIGTERM
+ * 3. If still no exit after SIGTERM_TIMEOUT_MS, send SIGKILL (last resort)
+ */
+const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 5000;  // Wait for graceful exit after shutdown RPC
+const SIGTERM_TIMEOUT_MS = 3000;            // Wait after SIGTERM before SIGKILL
+const CONSECUTIVE_FORCED_KILLS_THRESHOLD = 3; // Fallback to spawn-per-request after this many forced kills
 
 /**
  * PythonBridgeDaemonManager
@@ -105,6 +118,11 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     private idleTimer: NodeJS.Timeout | null = null;
     private stdoutBuffer: string = '';
     private startupPromise: Promise<void> | null = null;
+    private stopPromise: Promise<void> | null = null; // Plan 061: Prevent concurrent stops
+
+    // Plan 061: Track consecutive forced kills for operational fallback
+    private consecutiveForcedKills: number = 0;
+    private daemonModeSuspended: boolean = false; // Fallback to spawn-per-request
 
     // Configuration (initialized in loadConfiguration, called from constructor)
     private idleTimeoutMinutes: number = DEFAULT_IDLE_TIMEOUT_MINUTES;
@@ -163,10 +181,33 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     }
 
     /**
-     * Check if daemon mode is enabled
+     * Check if daemon mode is enabled and not suspended (Plan 061)
+     * 
+     * Returns false if:
+     * - User has disabled daemon mode in settings
+     * - Daemon mode is temporarily suspended due to repeated forced terminations
      */
     public isDaemonEnabled(): boolean {
-        return this.daemonEnabled;
+        return this.daemonEnabled && !this.daemonModeSuspended;
+    }
+
+    /**
+     * Check if daemon mode is suspended (Plan 061: Operational fallback)
+     */
+    public isDaemonSuspended(): boolean {
+        return this.daemonModeSuspended;
+    }
+
+    /**
+     * Resume daemon mode after suspension (Plan 061)
+     * Called when a health check succeeds after suspension.
+     */
+    public resumeDaemonMode(): void {
+        if (this.daemonModeSuspended) {
+            this.log('INFO', 'Resuming daemon mode after successful health check');
+            this.daemonModeSuspended = false;
+            this.consecutiveForcedKills = 0;
+        }
     }
 
     /**
@@ -211,13 +252,16 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     }
 
     /**
-     * Internal daemon start logic
+     * Internal daemon start logic (Plan 061: Includes startup hygiene)
      */
     private async doStart(): Promise<void> {
         this.state = 'starting';
         const startTime = Date.now();
 
         try {
+            // Plan 061: Startup hygiene - check for orphan/stale daemons
+            await this.cleanupStaleDaemon();
+
             const daemonScript = path.join(this.bridgePath, 'daemon.py');
             
             // Verify daemon script exists
@@ -542,50 +586,209 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     }
 
     /**
-     * Stop the daemon gracefully
+     * Stop the daemon gracefully (Plan 061: Graceful-first with conditional escalation)
+     * 
+     * Shutdown contract:
+     * 1. Send shutdown RPC and wait for process exit (graceful)
+     * 2. If no exit after GRACEFUL_SHUTDOWN_TIMEOUT_MS, send SIGTERM (escalated)
+     * 3. If no exit after SIGTERM_TIMEOUT_MS, send SIGKILL (forced - last resort)
+     * 
+     * Each phase is logged for observability. Consecutive forced kills trigger
+     * operational fallback to spawn-per-request mode.
      */
-    public async stop(): Promise<void> {
-        if (this.state === 'stopped' || this.state === 'stopping') {
+    public async stop(reason: string = 'requested'): Promise<void> {
+        // Idempotent: if already stopped or stopping, wait for existing stop
+        if (this.state === 'stopped') {
             return;
         }
 
+        if (this.state === 'stopping' && this.stopPromise) {
+            this.log('DEBUG', 'Stop already in progress, waiting...');
+            return this.stopPromise;
+        }
+
+        this.stopPromise = this.doStop(reason);
+        try {
+            await this.stopPromise;
+        } finally {
+            this.stopPromise = null;
+        }
+    }
+
+    /**
+     * Internal stop implementation with graceful-first shutdown contract
+     */
+    private async doStop(reason: string): Promise<void> {
         this.state = 'stopping';
         this.clearIdleTimer();
 
+        const pid = this.daemonProcess?.pid;
+        let shutdownOutcome: 'graceful' | 'escalated' | 'forced' = 'graceful';
+
+        this.log('INFO', 'Shutdown requested', { reason, pid });
+
         try {
-            if (this.daemonProcess) {
-                // Try graceful shutdown first
-                try {
-                    await Promise.race([
-                        this.sendRequest('shutdown', {}),
-                        new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('Shutdown timeout')), 5000)
+            if (!this.daemonProcess) {
+                this.log('DEBUG', 'No daemon process to stop');
+                return;
+            }
+
+            // Create a promise that resolves when the process exits
+            const processExitPromise = new Promise<void>((resolve) => {
+                if (!this.daemonProcess) {
+                    resolve();
+                    return;
+                }
+                const onExit = () => {
+                    this.daemonProcess?.removeListener('close', onExit);
+                    this.daemonProcess?.removeListener('exit', onExit);
+                    resolve();
+                };
+                this.daemonProcess.once('close', onExit);
+                this.daemonProcess.once('exit', onExit);
+            });
+
+            // Phase 1: Send shutdown RPC and wait for graceful exit
+            this.log('DEBUG', 'Phase 1: Sending shutdown RPC, waiting for graceful exit', {
+                timeout_ms: GRACEFUL_SHUTDOWN_TIMEOUT_MS
+            });
+
+            try {
+                // Send shutdown request (don't await the response, just the write)
+                const shutdownSent = this.sendShutdownRequest();
+                
+                // Wait for either: process exit OR graceful timeout
+                const gracefulResult = await Promise.race([
+                    processExitPromise.then(() => 'exited' as const),
+                    shutdownSent.then(() => 
+                        new Promise<'timeout'>((resolve) => 
+                            setTimeout(() => resolve('timeout'), GRACEFUL_SHUTDOWN_TIMEOUT_MS)
                         )
-                    ]);
-                } catch {
-                    // Graceful shutdown failed, force kill
-                    this.log('WARN', 'Graceful shutdown failed, forcing termination');
+                    )
+                ]);
+
+                if (gracefulResult === 'exited') {
+                    this.log('INFO', 'Graceful shutdown succeeded', { pid, phase: 1 });
+                    shutdownOutcome = 'graceful';
+                    this.consecutiveForcedKills = 0; // Reset on graceful exit
+                    return;
+                }
+            } catch (error) {
+                this.log('DEBUG', 'Shutdown RPC failed, proceeding to SIGTERM', { 
+                    error: String(error) 
+                });
+            }
+
+            // Phase 2: SIGTERM (if process still alive)
+            if (this.daemonProcess && !this.daemonProcess.killed) {
+                shutdownOutcome = 'escalated';
+                this.log('WARN', 'Phase 2: Graceful shutdown timeout, sending SIGTERM', {
+                    pid,
+                    timeout_ms: SIGTERM_TIMEOUT_MS
+                });
+
+                // Platform-aware: SIGTERM on POSIX, taskkill on Windows
+                if (process.platform === 'win32') {
+                    // On Windows, use taskkill for cleaner termination
+                    try {
+                        const { execSync } = require('child_process');
+                        execSync(`taskkill /PID ${pid} /T`, { timeout: 1000 });
+                    } catch {
+                        // taskkill may fail if already exited, continue to check
+                    }
+                } else {
+                    this.daemonProcess.kill('SIGTERM');
                 }
 
-                // Ensure process is terminated
-                if (this.daemonProcess) {
-                    this.daemonProcess.kill('SIGTERM');
-                    
-                    // Wait briefly for clean exit
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    
-                    if (this.daemonProcess) {
-                        this.daemonProcess.kill('SIGKILL');
-                    }
+                // Wait for exit after SIGTERM
+                const sigtermResult = await Promise.race([
+                    processExitPromise.then(() => 'exited' as const),
+                    new Promise<'timeout'>((resolve) => 
+                        setTimeout(() => resolve('timeout'), SIGTERM_TIMEOUT_MS)
+                    )
+                ]);
+
+                if (sigtermResult === 'exited') {
+                    this.log('INFO', 'Process exited after SIGTERM', { pid, phase: 2 });
+                    this.consecutiveForcedKills = 0; // SIGTERM is still relatively clean
+                    return;
                 }
             }
+
+            // Phase 3: SIGKILL (last resort)
+            if (this.daemonProcess && !this.daemonProcess.killed) {
+                shutdownOutcome = 'forced';
+                this.consecutiveForcedKills++;
+                
+                this.log('ERROR', 'Phase 3: SIGTERM timeout, sending SIGKILL (forced termination)', {
+                    pid,
+                    consecutiveForcedKills: this.consecutiveForcedKills,
+                    threshold: CONSECUTIVE_FORCED_KILLS_THRESHOLD
+                });
+
+                if (process.platform === 'win32') {
+                    try {
+                        const { execSync } = require('child_process');
+                        execSync(`taskkill /PID ${pid} /F /T`, { timeout: 1000 });
+                    } catch {
+                        // Ignore errors - process may have exited
+                    }
+                } else {
+                    this.daemonProcess.kill('SIGKILL');
+                }
+
+                // Brief wait for OS to clean up
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                // Check if we need to fall back to spawn-per-request
+                if (this.consecutiveForcedKills >= CONSECUTIVE_FORCED_KILLS_THRESHOLD) {
+                    this.daemonModeSuspended = true;
+                    this.log('WARN', 'Daemon mode suspended: too many forced terminations', {
+                        consecutiveForcedKills: this.consecutiveForcedKills,
+                        action: 'Falling back to spawn-per-request mode. Daemon mode will resume on next successful health check.'
+                    });
+                }
+            }
+
         } finally {
             this.state = 'stopped';
             this.daemonProcess = null;
             this.deletePidFile();
+            
+            this.log('INFO', 'Daemon stopped', { 
+                reason, 
+                outcome: shutdownOutcome,
+                pid 
+            });
+        }
+    }
+
+    /**
+     * Send shutdown request without waiting for response
+     * (The daemon may exit before sending a response)
+     */
+    private async sendShutdownRequest(): Promise<void> {
+        if (!this.daemonProcess?.stdin) {
+            throw new Error('No stdin available');
         }
 
-        this.log('INFO', 'Daemon stopped');
+        const request = {
+            jsonrpc: '2.0',
+            id: uuidv4(),
+            method: 'shutdown',
+            params: {}
+        };
+
+        return new Promise((resolve, reject) => {
+            const requestLine = JSON.stringify(request) + '\n';
+            this.daemonProcess!.stdin!.write(requestLine, (err) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve();
+                }
+            });
+        });
     }
 
     /**
@@ -593,20 +796,64 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
      */
     public async restart(): Promise<void> {
         this.log('INFO', 'Restarting daemon');
-        await this.stop();
+        await this.stop('restart');
         await this.start();
     }
 
     /**
-     * Reset idle timer
+     * Reset idle timer (Plan 061: Manager-owned idle semantics)
+     * 
+     * The TypeScript daemon manager is the single authoritative owner of idle-timeout
+     * shutdown decisions. "Idle" is defined as:
+     * - No in-flight daemon requests
+     * - No active background operations (running or pending) that depend on the workspace DB
+     * - No shutdown sequence in progress
+     * 
+     * The daemon must not unilaterally self-terminate on idle.
      */
     private resetIdleTimer(): void {
         this.clearIdleTimer();
         
-        if (this.idleTimeoutMinutes > 0) {
+        if (this.idleTimeoutMinutes > 0 && this.state === 'running') {
             this.idleTimer = setTimeout(() => {
-                this.log('INFO', 'Idle timeout reached, stopping daemon');
-                this.stop().catch(err => {
+                // Plan 061: Check for in-flight requests before triggering idle shutdown
+                if (this.pendingRequests.size > 0) {
+                    this.log('DEBUG', 'Idle timeout deferred: requests still in flight', {
+                        pendingCount: this.pendingRequests.size
+                    });
+                    // Reset timer to check again later
+                    this.resetIdleTimer();
+                    return;
+                }
+
+                // Plan 061 M5/RC3: Check for active background operations
+                try {
+                    const bgManager = BackgroundOperationManager.getInstance();
+                    if (bgManager.hasActiveOperations()) {
+                        const counts = bgManager.getActiveOperationsCount();
+                        this.log('DEBUG', 'Idle timeout deferred: background operations active', {
+                            running: counts.running,
+                            pending: counts.pending
+                        });
+                        // Reset timer to check again later
+                        this.resetIdleTimer();
+                        return;
+                    }
+                } catch {
+                    // BackgroundOperationManager not initialized - proceed with shutdown check
+                    // This is expected during early startup or in test scenarios
+                }
+
+                // Check for stopping state (avoid double-stop)
+                if (this.state === 'stopping') {
+                    this.log('DEBUG', 'Idle timeout skipped: already stopping');
+                    return;
+                }
+
+                this.log('INFO', 'Idle timeout reached, stopping daemon', {
+                    idleTimeoutMinutes: this.idleTimeoutMinutes
+                });
+                this.stop('idle-timeout').catch(err => {
                     this.log('ERROR', 'Error stopping daemon on idle timeout', { error: String(err) });
                 });
             }, this.idleTimeoutMinutes * 60 * 1000);
@@ -653,15 +900,137 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     }
 
     /**
+     * Get the primary PID file path (Plan 061: standardized under .flowbaby/)
+     * Note: Architecture prefers .cognee/ but existing implementation uses .flowbaby/
+     * Migration path: check both locations, write to primary, clean up legacy
+     */
+    private getPidFilePath(): string {
+        return path.join(this.workspacePath, '.flowbaby', 'daemon.pid');
+    }
+
+    /**
+     * Get legacy PID file paths that should be checked and migrated
+     */
+    private getLegacyPidFilePaths(): string[] {
+        return [
+            path.join(this.workspacePath, '.cognee', 'daemon.pid'),
+            // Add other legacy locations here if needed
+        ];
+    }
+
+    /**
+     * Check if a process with given PID is still alive
+     */
+    private isProcessAlive(pid: number): boolean {
+        try {
+            // Sending signal 0 checks if process exists without killing it
+            process.kill(pid, 0);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Plan 061: Startup hygiene - cleanup stale daemon and prevent double-start
+     * 
+     * 1. Check for existing PID file
+     * 2. If PID exists and process is alive, reuse or stop it
+     * 3. If PID exists but process is dead (stale), clean up
+     * 4. Check and migrate legacy PID locations
+     */
+    private async cleanupStaleDaemon(): Promise<void> {
+        const primaryPidPath = this.getPidFilePath();
+        const legacyPaths = this.getLegacyPidFilePaths();
+
+        // Check primary location first
+        await this.checkAndCleanPidFile(primaryPidPath, 'primary');
+
+        // Check and clean legacy locations
+        for (const legacyPath of legacyPaths) {
+            await this.checkAndCleanPidFile(legacyPath, 'legacy');
+        }
+    }
+
+    /**
+     * Check a PID file and handle stale/orphan cases
+     */
+    private async checkAndCleanPidFile(pidPath: string, location: string): Promise<void> {
+        try {
+            const pidContent = await fs.promises.readFile(pidPath, 'utf8');
+            const pid = parseInt(pidContent.trim(), 10);
+
+            if (isNaN(pid)) {
+                this.log('WARN', `Invalid PID file content at ${location}`, { pidPath });
+                await this.removePidFile(pidPath);
+                return;
+            }
+
+            if (this.isProcessAlive(pid)) {
+                // Process is still running - this could be:
+                // 1. A legitimate daemon from this workspace (should reuse)
+                // 2. An orphaned daemon that didn't clean up
+                // 3. PID reuse (different process using same PID)
+                this.log('WARN', `Found running process from ${location} PID file`, { 
+                    pid, 
+                    pidPath,
+                    action: 'Attempting to stop before starting new daemon'
+                });
+
+                // Try to stop the existing process gracefully
+                try {
+                    if (process.platform === 'win32') {
+                        const { execSync } = require('child_process');
+                        execSync(`taskkill /PID ${pid} /T`, { timeout: 2000 });
+                    } else {
+                        process.kill(pid, 'SIGTERM');
+                    }
+                    // Wait for process to exit
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch {
+                    // Process may have already exited, continue
+                }
+
+                // Clean up the PID file
+                await this.removePidFile(pidPath);
+            } else {
+                // Stale PID file - process no longer exists
+                this.log('INFO', `Cleaning up stale ${location} PID file`, { pid, pidPath });
+                await this.removePidFile(pidPath);
+            }
+        } catch (error) {
+            // PID file doesn't exist or can't be read - that's fine
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+                this.log('DEBUG', `Error checking ${location} PID file`, { 
+                    pidPath, 
+                    error: String(error) 
+                });
+            }
+        }
+    }
+
+    /**
+     * Remove a PID file safely
+     */
+    private async removePidFile(pidPath: string): Promise<void> {
+        try {
+            await fs.promises.unlink(pidPath);
+        } catch {
+            // Ignore errors - file may not exist
+        }
+    }
+
+    /**
      * Write PID file for daemon tracking
      */
     private async writePidFile(): Promise<void> {
         if (!this.daemonProcess?.pid) return;
 
-        const pidPath = path.join(this.workspacePath, '.flowbaby', 'daemon.pid');
+        const pidPath = this.getPidFilePath();
         try {
             await fs.promises.mkdir(path.dirname(pidPath), { recursive: true });
             await fs.promises.writeFile(pidPath, String(this.daemonProcess.pid), 'utf8');
+            this.log('DEBUG', 'PID file written', { pid: this.daemonProcess.pid, pidPath });
         } catch (error) {
             this.log('WARN', 'Failed to write PID file', { error: String(error) });
         }
@@ -671,11 +1040,20 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
      * Delete PID file
      */
     private deletePidFile(): void {
-        const pidPath = path.join(this.workspacePath, '.flowbaby', 'daemon.pid');
+        const pidPath = this.getPidFilePath();
         try {
             fs.unlinkSync(pidPath);
         } catch {
             // Ignore errors (file may not exist)
+        }
+
+        // Also clean up any legacy locations
+        for (const legacyPath of this.getLegacyPidFilePaths()) {
+            try {
+                fs.unlinkSync(legacyPath);
+            } catch {
+                // Ignore errors
+            }
         }
     }
 
@@ -699,10 +1077,10 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     }
 
     /**
-     * Dispose resources
+     * Dispose resources (Plan 061: Graceful cleanup on deactivate)
      */
     public dispose(): void {
-        this.stop().catch(err => {
+        this.stop('extension-deactivate').catch(err => {
             this.log('ERROR', 'Error during dispose', { error: String(err) });
         });
     }

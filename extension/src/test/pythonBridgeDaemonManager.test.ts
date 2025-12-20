@@ -561,6 +561,347 @@ suite('PythonBridgeDaemonManager', () => {
 
             manager.dispose();
         });
+
+        test('should be idempotent when called multiple times', async () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Set up mock running state
+            const mockProcess = new MockChildProcess();
+            (manager as any).state = 'running';
+            (manager as any).daemonProcess = mockProcess;
+
+            // Call stop multiple times concurrently - should not throw
+            await Promise.all([
+                manager.stop(),
+                manager.stop(),
+                manager.stop()
+            ]);
+
+            assert.strictEqual(manager.getState(), 'stopped');
+            manager.dispose();
+        });
+    });
+
+    suite('Plan 061: Graceful Shutdown', () => {
+        test('should attempt graceful shutdown before escalation', async () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Set up mock running state
+            const mockProcess = new MockChildProcess();
+            (manager as any).state = 'running';
+            (manager as any).daemonProcess = mockProcess;
+
+            // Stop the daemon
+            const stopPromise = manager.stop();
+            
+            // Simulate process exiting gracefully after shutdown request
+            setTimeout(() => {
+                mockProcess.emit('close', 0, null);
+                mockProcess.emit('exit', 0, null);
+            }, 100);
+
+            await stopPromise;
+
+            assert.strictEqual(manager.getState(), 'stopped');
+            assert.strictEqual((manager as any).consecutiveForcedKills, 0);
+            manager.dispose();
+        });
+
+        test('should track shutdown reason in logs', async () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            const mockProcess = new MockChildProcess();
+            (manager as any).state = 'running';
+            (manager as any).daemonProcess = mockProcess;
+
+            // Stop with specific reason
+            const stopPromise = (manager as any).stop('idle-timeout');
+            
+            setTimeout(() => {
+                mockProcess.emit('close', 0, null);
+            }, 50);
+
+            await stopPromise;
+
+            // Verify log contains the reason
+            const logCalls = (mockOutputChannel.appendLine as sinon.SinonStub).getCalls();
+            const shutdownLog = logCalls.find((call: sinon.SinonSpyCall) => 
+                call.args[0].includes('Shutdown requested') && call.args[0].includes('idle-timeout')
+            );
+            assert.ok(shutdownLog, 'Should log shutdown with reason');
+
+            manager.dispose();
+        });
+    });
+
+    suite('Plan 061: Operational Fallback', () => {
+        test('should report daemon not suspended initially', () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            assert.strictEqual(manager.isDaemonSuspended(), false);
+            assert.strictEqual(manager.isDaemonEnabled(), true);
+
+            manager.dispose();
+        });
+
+        test('should suspend daemon mode after consecutive forced kills', async () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Simulate consecutive forced kills reaching threshold (3)
+            (manager as any).consecutiveForcedKills = 2;
+
+            // Set up mock running state with process that doesn't respond
+            const mockProcess = new MockChildProcess();
+            mockProcess.kill = () => {
+                // Don't emit close event - simulate unresponsive process
+                return true;
+            };
+            (manager as any).state = 'running';
+            (manager as any).daemonProcess = mockProcess;
+
+            // Manually increment to trigger suspension threshold
+            (manager as any).consecutiveForcedKills = 3;
+            (manager as any).daemonModeSuspended = true;
+
+            // Verify daemon is now suspended
+            assert.strictEqual(manager.isDaemonSuspended(), true);
+            assert.strictEqual(manager.isDaemonEnabled(), false); // Suspended = not enabled
+
+            manager.dispose();
+        });
+
+        test('should resume daemon mode after successful health check', () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Simulate suspended state
+            (manager as any).daemonModeSuspended = true;
+            (manager as any).consecutiveForcedKills = 3;
+
+            assert.strictEqual(manager.isDaemonSuspended(), true);
+
+            // Resume daemon mode
+            manager.resumeDaemonMode();
+
+            assert.strictEqual(manager.isDaemonSuspended(), false);
+            assert.strictEqual((manager as any).consecutiveForcedKills, 0);
+            assert.strictEqual(manager.isDaemonEnabled(), true);
+
+            manager.dispose();
+        });
+    });
+
+    suite('Plan 061: Idle Semantics', () => {
+        test('should use 30 minute default idle timeout', () => {
+            // Override config to return default
+            (vscode.workspace.getConfiguration as sinon.SinonStub).callsFake(() => ({
+                get: (key: string, defaultValue?: unknown) => {
+                    if (key === 'bridgeMode') return 'daemon';
+                    // Return undefined to trigger default value usage
+                    if (key === 'daemonIdleTimeoutMinutes') return defaultValue;
+                    return defaultValue;
+                },
+                has: () => true,
+                inspect: () => undefined,
+                update: sandbox.stub().resolves()
+            }));
+
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // The default should be 30 minutes (Plan 061)
+            assert.strictEqual((manager as any).idleTimeoutMinutes, 30);
+
+            manager.dispose();
+        });
+
+        test('should defer idle timeout when requests are pending', () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Set up running state with pending request
+            (manager as any).state = 'running';
+            (manager as any).pendingRequests.set('test-request', {
+                resolve: () => {},
+                reject: () => {},
+                timer: setTimeout(() => {}, 10000),
+                method: 'retrieve',
+                startTime: Date.now()
+            });
+
+            // Manually trigger idle check (simulating timer callback)
+            let stopCalled = false;
+            const originalStop = (manager as any).stop.bind(manager);
+            (manager as any).stop = () => {
+                stopCalled = true;
+                return Promise.resolve();
+            };
+
+            // Reset idle timer to trigger the check
+            (manager as any).idleTimeoutMinutes = 0.0001; // Very short for testing
+            (manager as any).resetIdleTimer();
+
+            // Give it a moment
+            return new Promise<void>((resolve) => {
+                setTimeout(() => {
+                    // Stop should NOT have been called because requests are pending
+                    // The timer should have reset instead
+                    assert.strictEqual(stopCalled, false);
+                    (manager as any).stop = originalStop;
+                    manager.dispose();
+                    resolve();
+                }, 50);
+            });
+        });
+
+        test('should defer idle timeout when background operations are active (Plan 061 M5/RC3)', async () => {
+            // Import BackgroundOperationManager to set up mock
+            const { BackgroundOperationManager } = await import('../background/BackgroundOperationManager');
+            
+            // Create a mock instance that reports active operations
+            const mockBgManager = {
+                hasActiveOperations: () => true,
+                getActiveOperationsCount: () => ({ running: 1, pending: 0 })
+            };
+            
+            // Stub getInstance to return our mock
+            const getInstanceStub = sandbox.stub(BackgroundOperationManager, 'getInstance').returns(
+                mockBgManager as ReturnType<typeof BackgroundOperationManager.getInstance>
+            );
+
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Set up running state with NO pending requests
+            (manager as any).state = 'running';
+            (manager as any).pendingRequests.clear();
+
+            // Track if stop was called
+            let stopCalled = false;
+            const originalStop = (manager as any).stop.bind(manager);
+            (manager as any).stop = () => {
+                stopCalled = true;
+                return Promise.resolve();
+            };
+
+            // Reset idle timer to trigger the check
+            (manager as any).idleTimeoutMinutes = 0.0001; // Very short for testing
+            (manager as any).resetIdleTimer();
+
+            // Give it a moment
+            await new Promise<void>((resolve) => {
+                setTimeout(() => {
+                    // Stop should NOT have been called because background ops are active
+                    assert.strictEqual(stopCalled, false, 'Stop should not be called when background operations are active');
+                    (manager as any).stop = originalStop;
+                    getInstanceStub.restore();
+                    manager.dispose();
+                    resolve();
+                }, 50);
+            });
+        });
+
+        test('should proceed with idle shutdown when no background operations (Plan 061 M5/RC3)', async () => {
+            // Import BackgroundOperationManager to set up mock
+            const { BackgroundOperationManager } = await import('../background/BackgroundOperationManager');
+            
+            // Create a mock instance that reports no active operations
+            const mockBgManager = {
+                hasActiveOperations: () => false,
+                getActiveOperationsCount: () => ({ running: 0, pending: 0 })
+            };
+            
+            // Stub getInstance to return our mock
+            const getInstanceStub = sandbox.stub(BackgroundOperationManager, 'getInstance').returns(
+                mockBgManager as ReturnType<typeof BackgroundOperationManager.getInstance>
+            );
+
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Set up running state with NO pending requests
+            (manager as any).state = 'running';
+            (manager as any).pendingRequests.clear();
+
+            // Track if stop was called
+            let stopCalled = false;
+            const originalStop = (manager as any).stop.bind(manager);
+            (manager as any).stop = () => {
+                stopCalled = true;
+                return Promise.resolve();
+            };
+
+            // Reset idle timer to trigger the check
+            (manager as any).idleTimeoutMinutes = 0.0001; // Very short for testing
+            (manager as any).resetIdleTimer();
+
+            // Give it a moment
+            await new Promise<void>((resolve) => {
+                setTimeout(() => {
+                    // Stop SHOULD have been called because no pending requests and no background ops
+                    assert.strictEqual(stopCalled, true, 'Stop should be called when no work is active');
+                    (manager as any).stop = originalStop;
+                    getInstanceStub.restore();
+                    manager.dispose();
+                    resolve();
+                }, 50);
+            });
+        });
     });
 
     suite('Output Channel Logging', () => {

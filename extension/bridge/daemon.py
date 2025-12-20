@@ -41,6 +41,9 @@ DAEMON_START_TIME = time.time()
 cognee = None
 cognee_initialized = False
 
+# Plan 061: Graceful shutdown flag (set by shutdown handler or signal)
+shutdown_requested = False
+
 
 def setup_daemon_logging(workspace_path: str) -> logging.Logger:
     """Configure daemon logging to both file and stderr."""
@@ -346,8 +349,15 @@ async def handle_ingest(params: dict, workspace_path: str, dataset_name: str, lo
 
 
 async def handle_shutdown(params: dict, logger: logging.Logger) -> dict:
-    """Handle shutdown request."""
-    logger.info("Shutdown requested")
+    """
+    Handle shutdown request (Plan 061: Cleanup-friendly shutdown).
+    
+    Sets a flag to gracefully terminate the main loop instead of using os._exit().
+    The response is flushed before the loop terminates, allowing cleanup.
+    """
+    global shutdown_requested
+    logger.info("Shutdown requested - setting graceful termination flag")
+    shutdown_requested = True
     return {'status': 'shutting_down'}
 
 
@@ -374,8 +384,7 @@ async def process_request(request: dict, workspace_path: str, dataset_name: str,
             result = await handle_ingest(params, workspace_path, dataset_name, logger)
         elif method == 'shutdown':
             result = await handle_shutdown(params, logger)
-            # Schedule shutdown after response is sent
-            asyncio.get_event_loop().call_later(0.1, lambda: os._exit(0))
+            # Plan 061: Don't use os._exit(0) here - return result and let main loop exit gracefully
         else:
             return create_error_response(request_id, METHOD_NOT_FOUND, f'Unknown method: {method}')
 
@@ -420,7 +429,12 @@ def write_response(response: dict) -> None:
 
 
 async def main_loop(workspace_path: str, dataset_name: str, logger: logging.Logger) -> None:
-    """Main request processing loop."""
+    """
+    Main request processing loop (Plan 061: Graceful shutdown support).
+    
+    Checks shutdown_requested flag after each request to allow cleanup.
+    """
+    global shutdown_requested
     logger.info("Daemon ready, waiting for requests...")
 
     async for line in read_stdin_lines():
@@ -436,8 +450,13 @@ async def main_loop(workspace_path: str, dataset_name: str, logger: logging.Logg
 
         response = await process_request(request, workspace_path, dataset_name, logger)
         write_response(response)
+        
+        # Plan 061: Check for graceful shutdown after sending response
+        if shutdown_requested:
+            logger.info("Shutdown flag set - exiting main loop gracefully")
+            break
 
-    logger.info("Stdin closed, daemon exiting")
+    logger.info("Main loop exited - daemon shutting down")
 
 
 def main() -> int:
@@ -460,10 +479,13 @@ def main() -> int:
     logger = setup_daemon_logging(workspace_path)
     logger.info(f"Daemon starting for workspace: {workspace_path}")
 
-    # Handle signals gracefully
+    # Plan 061: Handle signals gracefully by setting shutdown flag
     def signal_handler(signum, frame):
-        logger.info(f"Received signal {signum}, shutting down")
-        sys.exit(0)
+        global shutdown_requested
+        sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
+        logger.info(f"Received signal {sig_name}, requesting graceful shutdown")
+        shutdown_requested = True
+        # Don't call sys.exit() here - let the main loop exit cleanly
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)

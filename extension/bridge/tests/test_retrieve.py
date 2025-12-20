@@ -214,6 +214,61 @@ async def test_retrieve_default_score(temp_workspace, mock_env):
 
 
 @pytest.mark.asyncio
+async def test_retrieve_graph_completion_dict_format(temp_workspace, mock_env):
+    """Test that retrieval correctly extracts text from Cognee graph_completion dict format.
+    
+    Cognee's GRAPH_COMPLETION can return results as {'search_result': ['text...'], 'dataset_id': ...}
+    rather than tuples. This test verifies we correctly extract the text content.
+    """
+    with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
+        mock_cognee = types.ModuleType('cognee')
+        mock_cognee.__path__ = []
+        mock_cognee.config = MagicMock()
+        
+        # Mock result in dict format with 'search_result' key (as seen in production logs)
+        mock_search_result = {
+            'search_result': ["For Plan 060, the following actions were taken: implemented schema migration."],
+            'dataset_id': 'test-uuid',
+            'dataset_name': 'ws_test123'
+        }
+        mock_cognee.search = AsyncMock(return_value=[mock_search_result])
+        mock_cognee.prune = MagicMock()
+        mock_cognee.prune.prune_data = AsyncMock()
+
+        mock_context_globals = types.ModuleType('cognee.context_global_variables')
+        mock_context_globals.set_session_user_context_variable = AsyncMock(return_value=None)
+
+        mock_search_types = types.ModuleType('cognee.modules.search.types')
+        mock_search_types.SearchType = MagicMock()
+        mock_search_types.SearchType.GRAPH_COMPLETION = 'GRAPH_COMPLETION'
+
+        mock_users_methods = types.ModuleType('cognee.modules.users.methods')
+        mock_users_methods.get_default_user = AsyncMock(return_value=MagicMock(id='test-user'))
+
+        with patch.dict('sys.modules', {
+            'cognee': mock_cognee,
+            'cognee.context_global_variables': mock_context_globals,
+            'cognee.modules': types.ModuleType('cognee.modules'),
+            'cognee.modules.search': types.ModuleType('cognee.modules.search'),
+            'cognee.modules.search.types': mock_search_types,
+            'cognee.modules.users': types.ModuleType('cognee.modules.users'),
+            'cognee.modules.users.methods': mock_users_methods,
+        }):
+            from retrieve import retrieve_context
+
+            result = await retrieve_context(str(temp_workspace), "plan 060")
+
+            assert result['success'] is True
+            assert len(result['results']) == 1
+            
+            # Verify the text was correctly extracted from the dict, not stringified
+            first_result = result['results'][0]
+            assert 'For Plan 060' in first_result['text']
+            assert 'search_result' not in first_result['text']  # Should not contain raw dict keys
+            assert 'dataset_id' not in first_result['text']
+
+
+@pytest.mark.asyncio
 async def test_retrieve_token_limit_enforcement(temp_workspace, mock_env):
     """Test that retrieval respects max_tokens limit."""
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):

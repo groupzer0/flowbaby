@@ -999,6 +999,25 @@ export class BackgroundOperationManager {
     private getQueuedCount(): number {
         return Array.from(this.operations.values()).filter(op => op.status === 'pending').length;
     }
+
+    /**
+     * Plan 061 M5/RC3: Check if any background operations are active (running or pending)
+     * Used by PythonBridgeDaemonManager to defer idle shutdown when background work is in progress.
+     */
+    public hasActiveOperations(): boolean {
+        return this.getRunningCount() > 0 || this.getQueuedCount() > 0;
+    }
+
+    /**
+     * Plan 061 M5/RC3: Get count of active operations (running + pending)
+     * Useful for logging/diagnostics.
+     */
+    public getActiveOperationsCount(): { running: number; pending: number } {
+        return {
+            running: this.getRunningCount(),
+            pending: this.getQueuedCount()
+        };
+    }
     
     /**
      * Load ledger from disk

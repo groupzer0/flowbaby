@@ -9,11 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.2] - 2025-12-20
 
+### Fixed
+
+- **Daemon Idle-Timeout KuzuDB Locks (Plan 061)**: Fixed aggressive SIGKILL escalation during idle-timeout shutdown that left KuzuDB `.pkl` file locks orphaned. The daemon manager now uses a 3-phase graceful shutdown (5s graceful → 3s SIGTERM → SIGKILL as last resort), allowing Cognee/KuzuDB time to release locks cleanly. Added operational fallback: after 3 consecutive forced kills, daemon mode automatically suspends and falls back to spawn-per-request until manually re-enabled.
+
 ### Changed
 
 - **Cognee Upgrade to 0.5.1 (Plan 059)**: Upgraded from Cognee 0.4.1 to 0.5.1 to enable filesystem-backed session caching. Cognee 0.5.0+ introduces `CACHE_BACKEND=fs` via diskcache (bundled), removing the implicit Redis dependency that caused connection failures in managed environments without Redis installed.
 - **Filesystem Cache Backend Default**: Managed environments now default to `CACHING=true` and `CACHE_BACKEND=fs` (filesystem session cache) instead of falling back to Redis. This eliminates Redis-related timeout errors and improves retrieval reliability out-of-the-box.
 - **Environment Variable Precedence**: Cache configuration now respects explicit user-provided environment variables (`CACHING`, `CACHE_BACKEND`). Flowbaby-managed defaults are only applied when values are not already set.
+- **Daemon Default Idle Timeout**: Increased default idle timeout from 5 minutes to 30 minutes to reduce daemon restart frequency during normal development sessions.
 
 ### Added
 
@@ -22,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Fail-Closed Safety**: If schema migration fails, initialization fails cleanly rather than proceeding with an incompatible database.
   - **Receipt Generation**: Migration attempts are logged to `.flowbaby/system/schema_migration_receipt.json` for auditability.
   - **External Repair**: Users with external Python environments can run `python bridge/migrate_cognee_0_5_schema.py <workspace> --dry-run` to check schema status and apply migrations manually.
+- **Daemon Startup Hygiene (Plan 061)**: Added stale PID file cleanup and orphan process detection on daemon startup to prevent ghost daemon accumulation and ensure clean daemon lifecycle management.
 
 ## [0.6.1] - 2025-12-13
 
