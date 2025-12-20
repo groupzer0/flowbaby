@@ -23,7 +23,7 @@ import { BackgroundOperationManager } from '../background/BackgroundOperationMan
 interface DaemonRequest {
     jsonrpc: '2.0';
     id: string;
-    method: 'health' | 'ingest' | 'retrieve' | 'shutdown';
+    method: 'health' | 'ingest' | 'retrieve' | 'shutdown' | 'cognify';
     params: Record<string, unknown>;
 }
 

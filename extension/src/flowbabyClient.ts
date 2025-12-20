@@ -292,6 +292,14 @@ export class FlowbabyClient {
     }
 
     /**
+     * Plan 061 Hotfix: Get daemon manager for BackgroundOperationManager integration
+     * Returns the daemon manager instance if daemon mode is enabled, or null otherwise.
+     */
+    public getDaemonManager(): PythonBridgeDaemonManager | undefined {
+        return this.daemonManager;
+    }
+
+    /**
      * Plan 054: Get daemon health status
      */
     public async getDaemonHealth(): Promise<DaemonHealthStatus | null> {

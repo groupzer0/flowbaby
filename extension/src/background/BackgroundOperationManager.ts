@@ -3,6 +3,9 @@
  * 
  * Manages async cognify() operations, tracks state, enforces concurrency limits,
  * and triggers notifications on completion/failure.
+ * 
+ * Plan 061 Hotfix: Routes cognify through the daemon when available to avoid
+ * KuzuDB lock contention between daemon and background subprocesses.
  */
 
 import * as vscode from 'vscode';
@@ -10,6 +13,21 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 // Plan 039 M5: Removed dotenv import - .env API key support removed for security
+
+/**
+ * Interface for daemon manager to avoid circular imports
+ * Plan 061 Hotfix: Used to route cognify through daemon
+ */
+export interface IDaemonManager {
+    isDaemonEnabled(): boolean;
+    isHealthy(): boolean;
+    sendRequest(method: string, params: Record<string, unknown>, timeoutMs?: number): Promise<{
+        jsonrpc: string;
+        id: string;
+        result?: Record<string, unknown>;
+        error?: { code: number; message: string; data?: Record<string, unknown> };
+    }>;
+}
 
 export interface OperationRetryPayload {
     type: 'summary' | 'conversation';
@@ -80,6 +98,9 @@ export class BackgroundOperationManager {
     private defaultPythonPath: string | null = null;
     private defaultBridgeScriptPath: string | null = null;
     
+    // Plan 061 Hotfix: Reference to daemon manager for routing cognify through daemon
+    private daemonManager: IDaemonManager | null = null;
+    
     private _isPaused: boolean = false;
 
     public get isPaused(): boolean {
@@ -124,6 +145,19 @@ export class BackgroundOperationManager {
             throw new Error('BackgroundOperationManager not initialized');
         }
         return BackgroundOperationManager.instance;
+    }
+    
+    /**
+     * Set daemon manager reference for routing cognify through daemon
+     * Plan 061 Hotfix: Avoids KuzuDB lock contention by serializing all DB writes through daemon
+     */
+    public setDaemonManager(daemonManager: IDaemonManager | null): void {
+        this.daemonManager = daemonManager;
+        if (daemonManager) {
+            this.outputChannel.appendLine('[BACKGROUND] Daemon manager set - cognify will route through daemon');
+        } else {
+            this.outputChannel.appendLine('[BACKGROUND] Daemon manager cleared - cognify will use subprocess');
+        }
     }
     
     /**
@@ -299,7 +333,13 @@ export class BackgroundOperationManager {
     }
     
     /**
-     * Spawn cognify-only subprocess
+     * Spawn cognify-only subprocess OR route through daemon
+     * 
+     * Plan 061 Hotfix: Routes through daemon when available to avoid KuzuDB lock
+     * contention. The daemon holds the single connection to KuzuDB, so all DB
+     * writes must go through it.
+     * 
+     * Falls back to subprocess if daemon is not available or unhealthy.
      * 
      * Plan 032 M3: Removed logFd file descriptor passing to prevent TypeScript from
      * holding the log file open. Python bridge_logger.py handles its own log rotation
@@ -324,6 +364,56 @@ export class BackgroundOperationManager {
         }
         entry.datasetPath = workspacePath;
         entry.bridgeScriptPath = bridgeScriptPath;
+        entry.pythonPath = pythonExecutable;
+
+        // Plan 061 Hotfix: Try routing through daemon first to avoid KuzuDB lock contention
+        if (this.daemonManager && this.daemonManager.isDaemonEnabled() && this.daemonManager.isHealthy()) {
+            try {
+                this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Routing cognify through daemon (operationId=${operationId})`);
+                
+                entry.status = 'running';
+                entry.queueIndex = undefined;
+                entry.lastUpdate = new Date().toISOString();
+                await this.saveLedger();
+                
+                // Call daemon's cognify method with extended timeout (cognify can take 30-90s)
+                const response = await this.daemonManager.sendRequest('cognify', {
+                    operation_id: operationId
+                }, 120000); // 120s timeout for cognify
+                
+                if (response.error) {
+                    throw new Error(response.error.message);
+                }
+                
+                const result = response.result as { success: boolean; elapsed_ms?: number; entity_count?: number; error?: string };
+                
+                if (result.success) {
+                    await this.completeOperation(operationId, {
+                        elapsedMs: result.elapsed_ms || 0,
+                        entityCount: result.entity_count
+                    });
+                } else {
+                    await this.failOperation(operationId, {
+                        code: 'COGNEE_SDK_ERROR',
+                        message: result.error || 'Unknown error during cognify',
+                        remediation: 'Check logs for details. Try running Flowbaby: Refresh Environment.'
+                    });
+                }
+                
+                // Dequeue next after completion
+                await this.dequeueNext();
+                return;
+                
+            } catch (daemonError) {
+                const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
+                this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Daemon cognify failed, falling back to subprocess: ${errorMsg}`);
+                // Fall through to subprocess fallback
+            }
+        }
+        
+        // Fallback: spawn subprocess (original behavior)
+        // Note: This will likely fail with lock error if daemon is running
+        this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Using subprocess for cognify (operationId=${operationId})`);
         
         const args = [
             bridgeScriptPath,

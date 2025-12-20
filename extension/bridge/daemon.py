@@ -355,6 +355,64 @@ async def handle_ingest(params: dict, workspace_path: str, dataset_name: str, lo
     return result
 
 
+async def handle_cognify(params: dict, workspace_path: str, dataset_name: str, logger: logging.Logger) -> dict:
+    """
+    Handle cognify request (Plan 061 hotfix: Route cognify through daemon).
+    
+    This runs cognify() on previously staged data, avoiding KuzuDB lock contention
+    by keeping all graph writes serialized through the daemon process.
+    
+    Args:
+        params: Request parameters containing:
+            - operation_id: UUID identifying this background operation (required)
+        workspace_path: Absolute path to VS Code workspace root
+        dataset_name: Cognee dataset name for this workspace
+        logger: Logger instance
+    
+    Returns:
+        Dictionary with success status, elapsed_ms, entity_count or error
+    """
+    if not cognee_initialized:
+        raise JsonRpcError(COGNEE_NOT_INITIALIZED, 'Cognee SDK not initialized')
+    
+    # Validate API key is present
+    if not os.getenv('LLM_API_KEY'):
+        raise JsonRpcError(INVALID_PARAMS, 'LLM_API_KEY not found in environment - required for cognify operations')
+    
+    operation_id = params.get('operation_id')
+    if not operation_id:
+        raise JsonRpcError(INVALID_PARAMS, 'Missing required parameter: operation_id')
+    
+    logger.info(f"Cognify: operation_id={operation_id}, dataset={dataset_name}")
+    
+    try:
+        import cognee
+        from time import perf_counter
+        
+        start_time = perf_counter()
+        
+        # Run cognify on the dataset - this processes any staged data
+        await cognee.cognify(datasets=[dataset_name])
+        
+        elapsed_ms = int((perf_counter() - start_time) * 1000)
+        
+        logger.info(f"Cognify completed in {elapsed_ms}ms")
+        
+        return {
+            'success': True,
+            'operation_id': operation_id,
+            'elapsed_ms': elapsed_ms,
+            'entity_count': None  # Cognee SDK doesn't provide this reliably
+        }
+    
+    except Exception as e:
+        logger.exception(f"Cognify failed: {e}")
+        raise JsonRpcError(INTERNAL_ERROR, f'Cognify failed: {str(e)}', {
+            'type': type(e).__name__,
+            'operation_id': operation_id
+        })
+
+
 async def handle_shutdown(params: dict, logger: logging.Logger) -> dict:
     """
     Handle shutdown request (Plan 061: Cleanup-friendly shutdown).
@@ -389,6 +447,8 @@ async def process_request(request: dict, workspace_path: str, dataset_name: str,
             result = await handle_retrieve(params, workspace_path, dataset_name, logger)
         elif method == 'ingest':
             result = await handle_ingest(params, workspace_path, dataset_name, logger)
+        elif method == 'cognify':
+            result = await handle_cognify(params, workspace_path, dataset_name, logger)
         elif method == 'shutdown':
             result = await handle_shutdown(params, logger)
             # Plan 061: Don't use os._exit(0) here - return result and let main loop exit gracefully

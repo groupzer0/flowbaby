@@ -397,10 +397,10 @@
         },
         "Flowbaby.daemonIdleTimeoutMinutes": {
           "type": "number",
-          "default": 5,
+          "default": 30,
           "minimum": 1,
           "maximum": 60,
-          "markdownDescription": "Minutes of inactivity before the bridge daemon exits. Next request will restart it with a small warm-up delay. Lower values save memory; higher values keep the daemon ready."
+          "markdownDescription": "Minutes of inactivity before the bridge daemon exits. Next request will restart it with a small warm-up delay. Lower values save memory; higher values keep the daemon ready. (Plan 061: default increased from 5 to 30 minutes)"
         },
         "Flowbaby.sessionManagement.enabled": {
           "type": "boolean",

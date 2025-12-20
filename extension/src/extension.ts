@@ -339,6 +339,13 @@ export async function activate(_context: vscode.ExtensionContext) {
                                     const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
                                     const manager = BackgroundOperationManager.initialize(_context, agentOutputChannel);
                                     await manager.initializeForWorkspace(workspacePath);
+                                    
+                                    // Plan 061 Hotfix: Wire up daemon manager to BackgroundOperationManager
+                                    const daemonManager = flowbabyClient!.getDaemonManager();
+                                    if (daemonManager) {
+                                        manager.setDaemonManager(daemonManager);
+                                    }
+                                    
                                     console.log('BackgroundOperationManager initialized after workspace setup');
 
                                     // Register background status command if not already registered
@@ -628,6 +635,14 @@ export async function activate(_context: vscode.ExtensionContext) {
                 const { BackgroundOperationManager } = await import('./background/BackgroundOperationManager');
                 const manager = BackgroundOperationManager.initialize(_context, agentOutputChannel);
                 await manager.initializeForWorkspace(workspacePath);
+                
+                // Plan 061 Hotfix: Wire up daemon manager to BackgroundOperationManager
+                // This allows cognify to route through daemon, avoiding KuzuDB lock contention
+                const daemonManager = flowbabyClient.getDaemonManager();
+                if (daemonManager) {
+                    manager.setDaemonManager(daemonManager);
+                }
+                
                 console.log('BackgroundOperationManager initialized successfully');
             } catch (error) {
                 console.error('Failed to initialize BackgroundOperationManager:', error);
