@@ -15,6 +15,7 @@ import { parseSummaryFromText } from '../summaryParser';
 import { StoreMemoryTool } from '../tools/storeMemoryTool';
 import { RetrieveMemoryTool } from '../tools/retrieveMemoryTool';
 import { FlowbabyContextProvider } from '../flowbabyContextProvider';
+import { MEMORY_CONTEXT_INSTRUCTIONS } from '../shared/promptFragments';
 import {
     areToolsRegistered,
     createHostToolSnapshot,
@@ -1069,7 +1070,9 @@ async function handleRetrievalFlow(
             .map((result, i) => `### Memory ${i + 1}\n${result.summaryText || result.text || ''}`)
             .join('\n\n');
 
-        augmentedPrompt = `## Relevant Past Conversations\n\n${contextSection}\n\n## Current Question\n\n${request.prompt}`;
+        // Plan 063: Prepend MEMORY_CONTEXT_INSTRUCTIONS to frame retrieved memories
+        // as supplementary and subordinate to current code/docs
+        augmentedPrompt = `${MEMORY_CONTEXT_INSTRUCTIONS}## Relevant Past Conversations\n\n${contextSection}\n\n## Current Question\n\n${request.prompt}`;
     } else if (!retrievalFailed) {
         stream.markdown('ℹ️ *No relevant memories found for this query*\n\n---\n\n');
     }

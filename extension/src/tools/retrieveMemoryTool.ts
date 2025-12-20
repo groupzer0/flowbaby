@@ -18,6 +18,7 @@
 import * as vscode from 'vscode';
 import { FlowbabyContextProvider } from '../flowbabyContextProvider';
 import { FlowbabyContextRequest, FlowbabyContextResponse, AgentErrorResponse } from '../types/agentIntegration';
+import { MEMORY_CONTEXT_INSTRUCTIONS } from '../shared/promptFragments';
 
 export interface RetrieveMemoryToolInput {
     query: string;
@@ -88,7 +89,10 @@ export class RetrieveMemoryTool implements vscode.LanguageModelTool<RetrieveMemo
             );
 
             // Build narrative markdown summary
-            let narrative = `# Retrieved Memories (${successResponse.entries.length} results)\n\n`;
+            // Plan 063: Prepend MEMORY_CONTEXT_INSTRUCTIONS to frame retrieved memories
+            // as supplementary and subordinate to current code/docs
+            let narrative = MEMORY_CONTEXT_INSTRUCTIONS;
+            narrative += `# Retrieved Memories (${successResponse.entries.length} results)\n\n`;
             
             if (successResponse.entries.length === 0) {
                 narrative += 'No memories found matching your query. Try different search terms or check if memories have been stored.\n\n';

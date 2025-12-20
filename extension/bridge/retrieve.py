@@ -65,9 +65,16 @@ WHEN ANSWERING
    - Do not explain, apologize, or add any extra words.
 
 STYLE
-- Answer clearly and directly.
-- Prefer short, factual sentences.
-- Do NOT speculate."""
+- Provide comprehensive, nuance-preserving answers that fully address the question.
+- When multiple pieces of context are relevant, synthesize them into a coherent response.
+- Preserve important details, decisions, rationale, and constraints from the context.
+- If context is thin or tangential, be concise rather than padding with filler.
+- Do NOT speculate or invent details not present in the context.
+
+SESSION AWARENESS
+- If the query appears to be a follow-up to prior context (e.g., "what about...", "and the...", "why did we..."), explicitly connect your answer to related information from retrieved memories.
+- Acknowledge conversational continuity where the context supports it.
+- Do NOT imply hidden memory or state beyond: (a) the retrieved memories returned in this call, and (b) any explicit chat context provided by the caller."""
 
 
 def calculate_recency_multiplier(timestamp_str: str | None, half_life_days: float) -> float:
@@ -354,18 +361,34 @@ async def retrieve_context(
                     logger.warning(f"Failed to initialize session context: {session_error}", extra={'data': {'session_id': session_id}})
 
             # Verified: cognee.search (v0.4.1) supports session_id.
+            # Plan 063: Added wide_search_top_k and triplet_distance_penalty to broaden graph context.
+            # These parameters are applied only if supported by Cognee; unsupported params fail loudly.
             search_kwargs = {
                 'query_type': SearchType.GRAPH_COMPLETION,
                 'query_text': query,
                 'datasets': [dataset_name],  # Filter to this workspace only
                 'top_k': final_top_k,
-                'system_prompt': SYSTEM_PROMPT
+                'system_prompt': SYSTEM_PROMPT,
+                'wide_search_top_k': 150,  # Plan 063: Widen graph search for richer context
+                'triplet_distance_penalty': 3.0  # Plan 063: Tune triplet distance for better recall
             }
 
             if session_id:
                 search_kwargs['session_id'] = session_id
 
-            search_results = await cognee.search(**search_kwargs)
+            # Plan 063: Validate kwargs are supported; fail closed with actionable message if not
+            try:
+                search_results = await cognee.search(**search_kwargs)
+            except TypeError as kwarg_error:
+                # If Cognee doesn't support the new kwargs, fail loudly with remediation guidance
+                if 'unexpected keyword argument' in str(kwarg_error):
+                    unsupported_param = str(kwarg_error).split("'")[1] if "'" in str(kwarg_error) else 'unknown'
+                    raise RuntimeError(
+                        f"Cognee search does not support parameter '{unsupported_param}'. "
+                        f"This may indicate a version mismatch. Expected Cognee >= 0.4.1 with graph search extensions. "
+                        f"Please upgrade Cognee or contact support. Original error: {kwarg_error}"
+                    ) from kwarg_error
+                raise
 
             logger.info("Search completed", extra={'data': {
                 'result_count': len(search_results) if search_results else 0

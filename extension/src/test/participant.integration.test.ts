@@ -179,6 +179,7 @@ suite('@cognee-memory Participant Integration (captured via API stubs)', () => {
         const messages = sendRequestSpy.firstCall.args[0];
         const userPayload = messages[0].content ?? messages[0].parts ?? messages[0];
         const serialized = typeof userPayload === 'string' ? userPayload : JSON.stringify(userPayload);
+        assert.ok(/## Memory Context Guidance/.test(serialized), 'augmented prompt should include memory context guidance prefix');
         assert.ok(/## Relevant Past Conversations/.test(serialized), 'augmented prompt should include context header');
 
     assert.ok(result, 'handler should return ChatResult');

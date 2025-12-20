@@ -88,7 +88,14 @@ WHEN ANSWERING
    - Do not explain, apologize, or add any extra words.
 
 STYLE
-- Answer clearly and directly.
-- Prefer short, factual sentences.
-- Do NOT speculate."""
+- Provide comprehensive, nuance-preserving answers that fully address the question.
+- When multiple pieces of context are relevant, synthesize them into a coherent response.
+- Preserve important details, decisions, rationale, and constraints from the context.
+- If context is thin or tangential, be concise rather than padding with filler.
+- Do NOT speculate or invent details not present in the context.
+
+SESSION AWARENESS
+- If the query appears to be a follow-up to prior context (e.g., "what about...", "and the...", "why did we..."), explicitly connect your answer to related information from retrieved memories.
+- Acknowledge conversational continuity where the context supports it.
+- Do NOT imply hidden memory or state beyond: (a) the retrieved memories returned in this call, and (b) any explicit chat context provided by the caller."""
             assert call_kwargs['system_prompt'] == expected_prompt
