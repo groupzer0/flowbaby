@@ -234,7 +234,9 @@ async def retrieve_context(
     half_life_days: float = 7.0,
     include_superseded: bool = False,
     top_k: int | None = None,
-    session_id: str | None = None
+    session_id: str | None = None,
+    wide_search_top_k: int = 150,  # Plan 063: Advanced graph search setting
+    triplet_distance_penalty: float = 3.0  # Plan 063: Advanced graph search setting
 ) -> dict:
     """Retrieve relevant context with recency-aware, status-aware scoring."""
 
@@ -361,7 +363,7 @@ async def retrieve_context(
                     logger.warning(f"Failed to initialize session context: {session_error}", extra={'data': {'session_id': session_id}})
 
             # Verified: cognee.search (v0.4.1) supports session_id.
-            # Plan 063: Added wide_search_top_k and triplet_distance_penalty to broaden graph context.
+            # Plan 063: wide_search_top_k and triplet_distance_penalty now configurable via settings.
             # These parameters are applied only if supported by Cognee; unsupported params fail loudly.
             search_kwargs = {
                 'query_type': SearchType.GRAPH_COMPLETION,
@@ -369,9 +371,14 @@ async def retrieve_context(
                 'datasets': [dataset_name],  # Filter to this workspace only
                 'top_k': final_top_k,
                 'system_prompt': SYSTEM_PROMPT,
-                'wide_search_top_k': 150,  # Plan 063: Widen graph search for richer context
-                'triplet_distance_penalty': 3.0  # Plan 063: Tune triplet distance for better recall
+                'wide_search_top_k': wide_search_top_k,  # Plan 063: Configurable via extension settings
+                'triplet_distance_penalty': triplet_distance_penalty  # Plan 063: Configurable via extension settings
             }
+
+            logger.debug("Search kwargs configured", extra={'data': {
+                'wide_search_top_k': wide_search_top_k,
+                'triplet_distance_penalty': triplet_distance_penalty
+            }})
 
             if session_id:
                 search_kwargs['session_id'] = session_id
@@ -723,6 +730,9 @@ def main():
             include_superseded = bool(payload.get('include_superseded', False))
             top_k = int(payload.get('search_top_k')) if payload.get('search_top_k') else None
             session_id = payload.get('__user_session_id')
+            # Plan 063: Read advanced search settings from payload
+            wide_search_top_k = int(payload.get('wide_search_top_k', 150))
+            triplet_distance_penalty = float(payload.get('triplet_distance_penalty', 3.0))
 
             # Validate workspace path
             if not Path(workspace_path).is_dir():
@@ -742,7 +752,9 @@ def main():
                 half_life_days,
                 include_superseded,
                 top_k,
-                session_id
+                session_id,
+                wide_search_top_k,
+                triplet_distance_penalty
             ))
 
             # Output JSON result

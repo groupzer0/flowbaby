@@ -128,6 +128,8 @@ type RetrievePayload = {
     half_life_days: number;
     include_superseded: boolean;
     search_top_k: number;
+    wide_search_top_k: number;  // Plan 063: Advanced graph search setting
+    triplet_distance_penalty: number;  // Plan 063: Advanced graph search setting
     __user_session_id?: string;
 };
 
@@ -166,6 +168,8 @@ export class FlowbabyClient {
     private readonly maxContextTokens: number;
     private readonly searchTopK: number;
     private readonly rankingHalfLifeDays: number;
+    private readonly wideSearchTopK: number; // Plan 063: Advanced graph search setting
+    private readonly tripletDistancePenalty: number; // Plan 063: Advanced graph search setting
     private readonly logLevel: LogLevel;
     private readonly outputChannel: vscode.OutputChannel;
     private readonly MAX_PAYLOAD_CHARS = 100000;
@@ -197,6 +201,11 @@ export class FlowbabyClient {
         const rankingConfig = vscode.workspace.getConfiguration('Flowbaby.ranking');
         const halfLifeSetting = rankingConfig.get<number>('halfLifeDays', 7);
         this.rankingHalfLifeDays = this.clampHalfLifeDays(halfLifeSetting);
+
+        // Plan 063: Read advanced search settings
+        const advancedSearchConfig = vscode.workspace.getConfiguration('Flowbaby.advancedSearch');
+        this.wideSearchTopK = advancedSearchConfig.get<number>('wideSearchTopK', 150);
+        this.tripletDistancePenalty = advancedSearchConfig.get<number>('tripletDistancePenalty', 3.0);
 
         // Map log level string to enum
         const logLevelStr = config.get<string>('logLevel', 'info');
@@ -1381,6 +1390,9 @@ export class FlowbabyClient {
         const includeSuperseded = options?.includeSuperseded ?? false;
         const threadId = options?.threadId;
         const searchTopK = this.searchTopK;
+        // Plan 063: Read advanced search settings from instance
+        const wideSearchTopK = this.wideSearchTopK;
+        const tripletDistancePenalty = this.tripletDistancePenalty;
 
         this.log('DEBUG', 'Retrieving context', {
             query_length: query.length,
@@ -1388,6 +1400,8 @@ export class FlowbabyClient {
             max_results: maxResults,
             max_tokens: maxTokens,
             search_top_k: searchTopK,
+            wide_search_top_k: wideSearchTopK,
+            triplet_distance_penalty: tripletDistancePenalty,
             half_life_days: halfLifeDays,
             include_superseded: includeSuperseded,
             threadId
@@ -1402,7 +1416,9 @@ export class FlowbabyClient {
                 max_tokens: maxTokens,
                 half_life_days: halfLifeDays,
                 include_superseded: includeSuperseded,
-                search_top_k: searchTopK
+                search_top_k: searchTopK,
+                wide_search_top_k: wideSearchTopK,
+                triplet_distance_penalty: tripletDistancePenalty
             };
 
             if (this.sessionManager && this.sessionManagementEnabled) {

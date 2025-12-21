@@ -365,6 +365,20 @@
           "maximum": 90,
           "markdownDescription": "Half-life (in days) used for recency-aware ranking. Memories older than this value will have their relevance score halved. Leave between 0.5 and 90 days to balance freshness vs. semantic similarity."
         },
+        "Flowbaby.advancedSearch.wideSearchTopK": {
+          "type": "number",
+          "default": 150,
+          "minimum": 10,
+          "maximum": 500,
+          "markdownDescription": "(Advanced) Maximum number of graph triplets to retrieve during wide graph search. Higher values may improve recall but increase latency. Plan 063: Widen graph search for richer context."
+        },
+        "Flowbaby.advancedSearch.tripletDistancePenalty": {
+          "type": "number",
+          "default": 3.0,
+          "minimum": 0.1,
+          "maximum": 10.0,
+          "markdownDescription": "(Advanced) Penalty applied to triplet distance during graph search ranking. Lower values favor closer triplets; higher values relax distance requirements. Plan 063: Tune for better recall."
+        },
         "Flowbaby.pythonPath": {
           "type": "string",
           "default": "",
