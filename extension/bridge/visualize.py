@@ -101,6 +101,51 @@ def validate_no_external_scripts(html_content: str) -> list[str]:
     return matches
 
 
+# Cognee logo SVG pattern (fixed position bottom-right)
+COGNEE_LOGO_PATTERN = re.compile(
+    r'<svg[^>]*style="[^"]*position:\s*fixed[^"]*bottom[^"]*right[^"]*"[^>]*viewBox="0 0 158 44"[^>]*>.*?</svg>',
+    re.IGNORECASE | re.DOTALL
+)
+
+# Flowbaby branded replacement (simple text-based logo, no external dependencies)
+FLOWBABY_LOGO_SVG = '''<svg style="position: fixed; bottom: 10px; right: 10px; width: 120px; height: auto; z-index: 9999;" viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="flowbabyGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#8B5CF6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#EC4899;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+    <text x="10" y="35" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="28" font-weight="600" fill="url(#flowbabyGradient)">flowbaby</text>
+</svg>'''
+
+
+def replace_cognee_branding(html_content: str) -> str:
+    """Replace Cognee logo with Flowbaby branding.
+    
+    This ensures the visualization is properly branded for Flowbaby users.
+    The replacement uses an inline SVG with no external dependencies.
+    
+    Args:
+        html_content: The HTML content with potential Cognee branding.
+    
+    Returns:
+        HTML with Flowbaby branding instead of Cognee logo.
+    """
+    # Try the specific pattern first
+    result = COGNEE_LOGO_PATTERN.sub(FLOWBABY_LOGO_SVG, html_content)
+    
+    # If that didn't match, try a more general pattern for the Cognee SVG
+    if result == html_content:
+        # Match any SVG with the Cognee logo viewBox dimensions
+        general_pattern = re.compile(
+            r'<svg[^>]*viewBox="0 0 158 44"[^>]*>.*?</svg>',
+            re.IGNORECASE | re.DOTALL
+        )
+        result = general_pattern.sub(FLOWBABY_LOGO_SVG, result)
+    
+    return result
+
+
 async def visualize_graph(
     workspace_path: str,
     output_path: str
@@ -225,6 +270,10 @@ async def visualize_graph(
         if d3_assets:
             html_content = inline_vendored_assets(html_content, d3_assets)
             logger.debug(f"Inlined D3 assets: {original_size} -> {len(html_content)} bytes")
+        
+        # Post-process: replace Cognee branding with Flowbaby branding
+        html_content = replace_cognee_branding(html_content)
+        logger.debug("Replaced Cognee branding with Flowbaby branding")
         
         # Validate: no external scripts remain (FAIL-CLOSED requirement)
         external_scripts = validate_no_external_scripts(html_content)
