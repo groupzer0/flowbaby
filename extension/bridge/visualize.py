@@ -119,10 +119,10 @@ def load_flowbaby_logo_html() -> str:
     """
     if FLOWBABY_ICON_PATH.exists():
         icon_b64 = FLOWBABY_ICON_PATH.read_text(encoding='utf-8').strip()
-        return f'''<img src="data:image/png;base64,{icon_b64}" alt="Flowbaby" style="position: fixed; bottom: 10px; right: 10px; width: 60px; height: auto; z-index: 9999; opacity: 0.9;" />'''
+        return f'''<a href="https://flowbaby.ai" target="_blank" rel="noopener noreferrer" style="position: fixed; bottom: 10px; right: 10px; z-index: 9999;"><img src="data:image/png;base64,{icon_b64}" alt="Flowbaby" style="width: 60px; height: auto; opacity: 0.9;" /></a>'''
     else:
         # Fallback to text-based SVG if icon file is missing
-        return '''<svg style="position: fixed; bottom: 10px; right: 10px; width: 120px; height: auto; z-index: 9999;" viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
+        return '''<a href="https://flowbaby.ai" target="_blank" rel="noopener noreferrer" style="position: fixed; bottom: 10px; right: 10px; z-index: 9999; text-decoration: none;"><svg style="width: 120px; height: auto;" viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
     <defs>
         <linearGradient id="flowbabyGradient" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" style="stop-color:#8B5CF6;stop-opacity:1" />
@@ -130,7 +130,7 @@ def load_flowbaby_logo_html() -> str:
         </linearGradient>
     </defs>
     <text x="10" y="35" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="28" font-weight="600" fill="url(#flowbabyGradient)">flowbaby</text>
-</svg>'''
+</svg></a>'''
 
 
 def replace_cognee_branding(html_content: str) -> str:
