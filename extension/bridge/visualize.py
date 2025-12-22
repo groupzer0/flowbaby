@@ -190,7 +190,7 @@ async def visualize_graph(
         # Call Cognee's visualize_graph function
         # This generates HTML with D3-based graph visualization
         try:
-            await cognee.visualize_graph(output_path=str(output_file))
+            await cognee.visualize_graph(destination_file_path=str(output_file))
         except Exception as viz_error:
             error_msg = str(viz_error)
             
