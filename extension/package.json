@@ -140,6 +140,11 @@
         "command": "Flowbaby.showDebugLogs",
         "title": "Flowbaby: Show Debug Logs",
         "category": "Flowbaby"
+      },
+      {
+        "command": "Flowbaby.visualizeGraph",
+        "title": "Flowbaby: Visualize Memory Graph",
+        "category": "Flowbaby"
       }
     ],
     "keybindings": [
@@ -425,6 +430,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show toast notifications when memory ingestion completes successfully. Error notifications are always shown regardless of this setting."
+        },
+        "cogneeMemory.showRetrievalNotifications": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show a notification when Flowbaby retrieves relevant memories (user-facing retrieval only). Disable to suppress retrieval toasts. Plan 067."
         },
         "Flowbaby.llm.provider": {
           "type": "string",

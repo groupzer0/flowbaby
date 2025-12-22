@@ -22,6 +22,7 @@ import {
 } from '../lifecycle/registrationHelper';
 import { registerIngestForAgentCommand } from '../commands/ingestForAgent';
 import { registerRetrieveForAgentCommand } from '../commands/retrieveForAgent';
+import { registerVisualizeGraphCommand } from '../commands/graphVisualization';
 import {
     registerLanguageModelTools,
     registerBackgroundStatusCommand,
@@ -303,6 +304,9 @@ export async function handleInitSuccess(
 
     // Register validation commands
     registerValidationCommands(context, client);
+
+    // Register graph visualization command (Plan 067)
+    registerVisualizeGraphCommand(context, () => client, agentOutputChannel);
 
     // Initialize FlowbabyContextProvider
     const { FlowbabyContextProvider } = await import('../flowbabyContextProvider');

@@ -92,6 +92,20 @@ export interface RetrievalResult {
     tokens?: number;
 }
 
+/**
+ * Result from graph visualization generation (Plan 067)
+ */
+export interface VisualizeResult {
+    success: boolean;
+    output_path?: string;
+    file_size_bytes?: number;
+    node_count?: number;
+    offline_safe?: boolean;
+    error?: string;
+    error_code?: string;
+    user_message?: string;
+}
+
 type SummaryPayload = {
     topic: string;
     context: string;
@@ -1654,6 +1668,66 @@ export class FlowbabyClient {
         const result = await this.runPythonScript('list_memories.py', [this.workspacePath, limit.toString()]);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return result as any;
+    }
+
+    /**
+     * Generate graph visualization HTML (Plan 067)
+     * 
+     * Calls visualize.py to generate a standalone HTML visualization of the
+     * knowledge graph. The output is offline-first with all D3 dependencies
+     * bundled inline.
+     * 
+     * This method is lock-safe - it uses the same concurrency controls as
+     * other bridge operations to avoid Kuzu lock contention.
+     * 
+     * @param outputPath Path where the HTML file should be written
+     * @returns Promise<VisualizeResult> - Result with output path and metadata
+     */
+    async visualize(outputPath: string): Promise<VisualizeResult> {
+        const startTime = Date.now();
+        this.log('INFO', 'Generating graph visualization', { 
+            workspace: this.workspacePath,
+            outputPath 
+        });
+
+        try {
+            // Use 60 second timeout - visualization can take time for large graphs
+            const result = await this.runPythonScript('visualize.py', [
+                this.workspacePath,
+                outputPath
+            ], 60000);
+
+            const duration = Date.now() - startTime;
+
+            if (result.success) {
+                this.log('INFO', 'Graph visualization generated', {
+                    output_path: result.output_path,
+                    file_size_bytes: result.file_size_bytes,
+                    node_count: result.node_count,
+                    offline_safe: result.offline_safe,
+                    duration_ms: duration
+                });
+            } else {
+                this.log('WARN', 'Graph visualization failed', {
+                    error: result.error,
+                    error_code: result.error_code,
+                    duration_ms: duration
+                });
+            }
+
+            return result as VisualizeResult;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.log('ERROR', 'Graph visualization error', { 
+                error: errorMessage,
+                duration_ms: Date.now() - startTime
+            });
+            return {
+                success: false,
+                error: errorMessage,
+                error_code: 'UNEXPECTED_ERROR'
+            };
+        }
     }
 
     /**

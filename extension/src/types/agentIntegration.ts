@@ -331,6 +331,14 @@ export interface FlowbabyContextRequest {
 
     /** Optional chat thread ID for session context (Plan 001) */
     threadId?: string;
+
+    /**
+     * Whether this is an interactive retrieval (user-facing).
+     * When true and cogneeMemory.showRetrievalNotifications is enabled,
+     * a toast notification will be shown with the retrieval results.
+     * (Plan 067)
+     */
+    isInteractive?: boolean;
 }
 
 /**

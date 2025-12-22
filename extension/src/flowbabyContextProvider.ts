@@ -86,6 +86,12 @@ export class FlowbabyContextProvider {
     
     /** Next request ID counter */
     private nextRequestId = 0;
+    
+    /** Timestamp of last toast shown for dedupe guard (Plan 067) */
+    private lastToastTime = 0;
+    
+    /** Dedupe window in milliseconds - suppress duplicate toasts within this window (Plan 067) */
+    private readonly TOAST_DEDUPE_MS = 5000;
     /**
      * Constructor - Initialize provider with FlowbabyClient and configuration
      * 
@@ -369,6 +375,39 @@ export class FlowbabyContextProvider {
                 `[FlowbabyContextProvider] Request ${id} completed ` +
                 `(duration: ${duration}ms, results: ${entries.length}, tokens: ${tokensUsed})`
             );
+
+            // Plan 067: Show toast notification for interactive retrieval when enabled
+            if (request.isInteractive && entries.length > 0) {
+                const showNotifications = vscode.workspace.getConfiguration('cogneeMemory')
+                    .get<boolean>('showRetrievalNotifications', true);
+                
+                if (showNotifications) {
+                    // Dedupe guard: suppress rapid successive toasts (Plan 067)
+                    const now = Date.now();
+                    if (now - this.lastToastTime >= this.TOAST_DEDUPE_MS) {
+                        this.lastToastTime = now;
+                        
+                        // 2-second delay to avoid interrupting user mid-thought (Plan 067)
+                        setTimeout(() => {
+                            vscode.window.showInformationMessage(
+                                `✨ Flowbaby found ${entries.length} relevant ${entries.length === 1 ? 'memory' : 'memories'}`,
+                                'View Graph',
+                                'Turn Off'
+                            ).then(action => {
+                                if (action === 'View Graph') {
+                                    vscode.commands.executeCommand('Flowbaby.visualizeGraph');
+                                } else if (action === 'Turn Off') {
+                                    // Open settings with the notification setting focused
+                                    vscode.commands.executeCommand(
+                                        'workbench.action.openSettings',
+                                        'cogneeMemory.showRetrievalNotifications'
+                                    );
+                                }
+                            });
+                        }, 2000);
+                    }
+                }
+            }
             
             return {
                 entries,
