@@ -107,8 +107,22 @@ COGNEE_LOGO_PATTERN = re.compile(
     re.IGNORECASE | re.DOTALL
 )
 
-# Flowbaby branded replacement (simple text-based logo, no external dependencies)
-FLOWBABY_LOGO_SVG = '''<svg style="position: fixed; bottom: 10px; right: 10px; width: 120px; height: auto; z-index: 9999;" viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
+# Path to Flowbaby icon asset (base64-encoded PNG)
+FLOWBABY_ICON_PATH = Path(__file__).parent / 'assets' / 'flowbaby-icon.b64'
+
+
+def load_flowbaby_logo_html() -> str:
+    """Load the Flowbaby logo as an inline HTML img tag with data URI.
+    
+    Returns:
+        HTML img tag with embedded base64 PNG, or fallback text logo if asset missing.
+    """
+    if FLOWBABY_ICON_PATH.exists():
+        icon_b64 = FLOWBABY_ICON_PATH.read_text(encoding='utf-8').strip()
+        return f'''<img src="data:image/png;base64,{icon_b64}" alt="Flowbaby" style="position: fixed; bottom: 10px; right: 10px; width: 60px; height: auto; z-index: 9999; opacity: 0.9;" />'''
+    else:
+        # Fallback to text-based SVG if icon file is missing
+        return '''<svg style="position: fixed; bottom: 10px; right: 10px; width: 120px; height: auto; z-index: 9999;" viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
     <defs>
         <linearGradient id="flowbabyGradient" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" style="stop-color:#8B5CF6;stop-opacity:1" />
@@ -123,7 +137,7 @@ def replace_cognee_branding(html_content: str) -> str:
     """Replace Cognee logo with Flowbaby branding.
     
     This ensures the visualization is properly branded for Flowbaby users.
-    The replacement uses an inline SVG with no external dependencies.
+    The replacement uses an inline image with base64 data URI (no external dependencies).
     
     Args:
         html_content: The HTML content with potential Cognee branding.
@@ -131,8 +145,10 @@ def replace_cognee_branding(html_content: str) -> str:
     Returns:
         HTML with Flowbaby branding instead of Cognee logo.
     """
+    flowbaby_logo = load_flowbaby_logo_html()
+    
     # Try the specific pattern first
-    result = COGNEE_LOGO_PATTERN.sub(FLOWBABY_LOGO_SVG, html_content)
+    result = COGNEE_LOGO_PATTERN.sub(flowbaby_logo, html_content)
     
     # If that didn't match, try a more general pattern for the Cognee SVG
     if result == html_content:
@@ -141,7 +157,7 @@ def replace_cognee_branding(html_content: str) -> str:
             r'<svg[^>]*viewBox="0 0 158 44"[^>]*>.*?</svg>',
             re.IGNORECASE | re.DOTALL
         )
-        result = general_pattern.sub(FLOWBABY_LOGO_SVG, result)
+        result = general_pattern.sub(flowbaby_logo, result)
     
     return result
 
