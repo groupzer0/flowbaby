@@ -334,7 +334,7 @@ export interface FlowbabyContextRequest {
 
     /**
      * Whether this is an interactive retrieval (user-facing).
-     * When true and cogneeMemory.showRetrievalNotifications is enabled,
+     * When true and flowbaby.showRetrievalNotifications is enabled,
      * a toast notification will be shown with the retrieval results.
      * (Plan 067)
      */

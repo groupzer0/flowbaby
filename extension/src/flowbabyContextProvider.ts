@@ -377,8 +377,8 @@ export class FlowbabyContextProvider {
             );
 
             // Plan 067: Show toast notification for interactive retrieval when enabled
-            if (request.isInteractive && entries.length > 0) {
-                const showNotifications = vscode.workspace.getConfiguration('cogneeMemory')
+            if (entries.length > 0) {
+                const showNotifications = vscode.workspace.getConfiguration('flowbaby')
                     .get<boolean>('showRetrievalNotifications', true);
                 
                 if (showNotifications) {
@@ -400,7 +400,7 @@ export class FlowbabyContextProvider {
                                     // Open settings with the notification setting focused
                                     vscode.commands.executeCommand(
                                         'workbench.action.openSettings',
-                                        'cogneeMemory.showRetrievalNotifications'
+                                        'flowbaby.showRetrievalNotifications'
                                     );
                                 }
                             });

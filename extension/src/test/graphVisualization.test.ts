@@ -270,16 +270,16 @@ suite('Graph Visualization Test Suite (Plan 067)', () => {
             
             assert.ok(settings, 'Should have configuration properties');
             assert.ok(
-                settings['cogneeMemory.showRetrievalNotifications'],
+                settings['flowbaby.showRetrievalNotifications'],
                 'Should have showRetrievalNotifications setting'
             );
             assert.strictEqual(
-                settings['cogneeMemory.showRetrievalNotifications'].type,
+                settings['flowbaby.showRetrievalNotifications'].type,
                 'boolean',
                 'Setting should be boolean type'
             );
             assert.strictEqual(
-                settings['cogneeMemory.showRetrievalNotifications'].default,
+                settings['flowbaby.showRetrievalNotifications'].default,
                 true,
                 'Setting should default to true'
             );
