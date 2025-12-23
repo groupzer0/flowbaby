@@ -13,7 +13,6 @@ ENV/
 
 # Flowbaby/Cognee data (workspace-local)
 .flowbaby/
-.flowbaby-backup-1
 cognee_db
 cognee_graph_kuzu
 /.github
@@ -60,4 +59,3 @@ tmp/
 
 # Generated agent artifacts
 agent-output/
-.cognee/

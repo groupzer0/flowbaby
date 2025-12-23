@@ -367,48 +367,60 @@ export class BackgroundOperationManager {
         entry.pythonPath = pythonExecutable;
 
         // Plan 061 Hotfix: Try routing through daemon first to avoid KuzuDB lock contention
+        // Plan 069 Hotfix: Fire-and-forget pattern - don't block on cognify completion
+        // This was causing agents to hang waiting for tool response while cognify ran (30-90s)
         if (this.daemonManager && this.daemonManager.isDaemonEnabled() && this.daemonManager.isHealthy()) {
-            try {
-                this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Routing cognify through daemon (operationId=${operationId})`);
-                
-                entry.status = 'running';
-                entry.queueIndex = undefined;
-                entry.lastUpdate = new Date().toISOString();
-                await this.saveLedger();
-                
-                // Call daemon's cognify method with extended timeout (cognify can take 30-90s)
-                const response = await this.daemonManager.sendRequest('cognify', {
-                    operation_id: operationId
-                }, 120000); // 120s timeout for cognify
-                
-                if (response.error) {
-                    throw new Error(response.error.message);
-                }
-                
-                const result = response.result as { success: boolean; elapsed_ms?: number; entity_count?: number; error?: string };
-                
-                if (result.success) {
-                    await this.completeOperation(operationId, {
-                        elapsedMs: result.elapsed_ms || 0,
-                        entityCount: result.entity_count
-                    });
-                } else {
+            this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Routing cognify through daemon (operationId=${operationId})`);
+            
+            entry.status = 'running';
+            entry.queueIndex = undefined;
+            entry.lastUpdate = new Date().toISOString();
+            await this.saveLedger();
+            
+            // Fire-and-forget: Start daemon cognify but don't block on it
+            // Completion/failure handled asynchronously via .then()/.catch()
+            this.daemonManager.sendRequest('cognify', {
+                operation_id: operationId
+            }, 120000) // 120s timeout for cognify
+                .then(async (response) => {
+                    if (response.error) {
+                        await this.failOperation(operationId, {
+                            code: 'COGNEE_SDK_ERROR',
+                            message: response.error.message || 'Unknown error during cognify',
+                            remediation: 'Check logs for details. Try running Flowbaby: Refresh Environment.'
+                        });
+                    } else {
+                        const result = response.result as { success: boolean; elapsed_ms?: number; entity_count?: number; error?: string };
+                        
+                        if (result.success) {
+                            await this.completeOperation(operationId, {
+                                elapsedMs: result.elapsed_ms || 0,
+                                entityCount: result.entity_count
+                            });
+                        } else {
+                            await this.failOperation(operationId, {
+                                code: 'COGNEE_SDK_ERROR',
+                                message: result.error || 'Unknown error during cognify',
+                                remediation: 'Check logs for details. Try running Flowbaby: Refresh Environment.'
+                            });
+                        }
+                    }
+                    // Dequeue next after completion
+                    await this.dequeueNext();
+                })
+                .catch(async (daemonError) => {
+                    const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
+                    this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Daemon cognify failed: ${errorMsg}`);
                     await this.failOperation(operationId, {
-                        code: 'COGNEE_SDK_ERROR',
-                        message: result.error || 'Unknown error during cognify',
-                        remediation: 'Check logs for details. Try running Flowbaby: Refresh Environment.'
+                        code: 'DAEMON_ERROR',
+                        message: errorMsg,
+                        remediation: 'Check daemon logs. Try running Flowbaby: Refresh Environment.'
                     });
-                }
-                
-                // Dequeue next after completion
-                await this.dequeueNext();
-                return;
-                
-            } catch (daemonError) {
-                const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
-                this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Daemon cognify failed, falling back to subprocess: ${errorMsg}`);
-                // Fall through to subprocess fallback
-            }
+                    await this.dequeueNext();
+                });
+            
+            // Return immediately - cognify runs in background
+            return;
         }
         
         // Fallback: spawn subprocess (original behavior)
