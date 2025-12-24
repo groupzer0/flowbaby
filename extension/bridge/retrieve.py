@@ -26,8 +26,13 @@ from datetime import datetime, timezone
 from math import exp, log
 from pathlib import Path
 
-# Add bridge directory to path to import bridge_logger
+# Add bridge directory to path to import bridge_logger and bridge_env
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# CRITICAL: Import bridge_env BEFORE any cognee import (Plan 074)
+# This must happen at module level to ensure env vars are available
+# when cognee is imported later in the async functions
+from bridge_env import apply_workspace_env, OntologyConfigError
 import bridge_logger
 from workspace_utils import canonicalize_workspace_path, generate_dataset_name
 
@@ -288,33 +293,15 @@ async def retrieve_context(
             logger.error("Missing API key", extra={'data': error_payload})
             return error_payload
 
-        # Plan 032 M2 (hotfix): Set Cognee environment variables BEFORE SDK import
-        # CRITICAL: Use DATA_ROOT_DIRECTORY and SYSTEM_ROOT_DIRECTORY (no COGNEE_ prefix!)
-        # The Cognee SDK's BaseConfig uses pydantic-settings which reads these env vars
-        system_root = str(workspace_dir / '.flowbaby/system')
-        data_root = str(workspace_dir / '.flowbaby/data')
-        cache_root = str(workspace_dir / '.flowbaby/cache')
+        # Plan 074: Use shared bridge_env module for all environment wiring
+        # This sets storage directories, caching config, AND ontology activation
+        # CRITICAL: This must happen BEFORE importing cognee (pydantic-settings reads env vars at import)
+        env_config = apply_workspace_env(workspace_path, logger=logger, fail_on_missing_ontology=True)
+        system_root = env_config.system_root
+        data_root = env_config.data_root
 
-        os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
-        os.environ['DATA_ROOT_DIRECTORY'] = data_root
-        os.environ['CACHE_ROOT_DIRECTORY'] = cache_root
-
-        # Plan 059: Configure caching with filesystem backend
-        # Respect explicit user configuration (precedence rule 1)
-        if os.environ.get('CACHING') is None:
-            os.environ['CACHING'] = 'true'
-        if os.environ.get('CACHE_BACKEND') is None:
-            os.environ['CACHE_BACKEND'] = 'fs'
-
-        # Ensure directories exist
-        Path(system_root).mkdir(parents=True, exist_ok=True)
-        Path(data_root).mkdir(parents=True, exist_ok=True)
-        Path(cache_root).mkdir(parents=True, exist_ok=True)
-
-        # Plan 059: Log cache configuration for observability
-        effective_caching = os.environ.get('CACHING', 'false')
-        effective_backend = os.environ.get('CACHE_BACKEND', 'none')
-        logger.debug(f"Cache configuration: CACHING={effective_caching}, CACHE_BACKEND={effective_backend}")
+        # Plan 074: Log ontology configuration for observability
+        logger.debug(f"Ontology config: path={env_config.ontology_file_path}, resolver={env_config.ontology_resolver}, strategy={env_config.matching_strategy}")
 
         # Import cognee AFTER setting environment variables
         logger.debug("Importing cognee SDK")

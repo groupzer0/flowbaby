@@ -62,8 +62,8 @@ suite('Commands Integration (no production changes)', () => {
         // UI stubs
         inputBoxStub = sandbox.stub(vscode.window, 'showInputBox');
         // Do not stub clipboard.readText (non-writable); use writeText to set deterministic content when needed
-        infoMsgStub = sandbox.stub(vscode.window, 'showInformationMessage');
-        warnMsgStub = sandbox.stub(vscode.window, 'showWarningMessage');
+        infoMsgStub = sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
+        warnMsgStub = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
 
         // FlowbabyClient behavior stubs
         // Avoid real Python calls during activation and ingestion/clear

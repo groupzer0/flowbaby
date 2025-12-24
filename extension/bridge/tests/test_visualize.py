@@ -141,9 +141,9 @@ class TestOfflineFirstFailClosed:
 
         output_path = temp_workspace / 'graph.html'
 
-        async def fake_visualize_graph(*, output_path: str):
+        async def fake_visualize_graph(*, destination_file_path: str):
             # Simulate Cognee output that includes an unknown external CDN dependency.
-            Path(output_path).write_text(
+            Path(destination_file_path).write_text(
                 """<html><head>
 <script src=\"https://unknown-cdn.example.com/library.js\"></script>
 </head><body>Graph</body></html>""",
@@ -230,10 +230,10 @@ class TestVisualizeGraph:
 
         output_path = temp_workspace / 'graph.html'
 
-        async def fake_visualize_graph(*, output_path: str):
+        async def fake_visualize_graph(*, destination_file_path: str):
             # Simulate Cognee output using known D3 CDN script tag.
             # visualize.py should inline vendored assets and pass offline validation.
-            Path(output_path).write_text(
+            Path(destination_file_path).write_text(
                 """<html><head>
 <script src=\"https://d3js.org/d3.v5.min.js\"></script>
 </head><body>{\"id\":\"node1\"}</body></html>""",

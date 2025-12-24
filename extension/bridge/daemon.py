@@ -34,12 +34,20 @@ from typing import Any
 # Add bridge directory to path for local imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# CRITICAL (Plan 074): Import bridge_env BEFORE any cognee import
+# Daemon mode must apply env wiring at process bootstrap, not per-request
+# This ensures daemon-mode equivalence with spawn-mode
+from bridge_env import apply_workspace_env, OntologyConfigError, BridgeEnvConfig
+
 # Track startup time for uptime reporting
 DAEMON_START_TIME = time.time()
 
 # Cognee module reference (imported lazily)
 cognee = None
 cognee_initialized = False
+
+# Plan 074: Store env config snapshot for daemon lifetime
+_daemon_env_config: BridgeEnvConfig | None = None
 
 # Plan 061: Graceful shutdown flag (set by shutdown handler or signal)
 shutdown_requested = False
@@ -78,10 +86,13 @@ def setup_daemon_logging(workspace_path: str) -> logging.Logger:
     return logger
 
 
-def setup_cognee_environment(workspace_path: str, logger: logging.Logger) -> tuple[str, str]:
+def setup_cognee_environment(workspace_path: str, logger: logging.Logger) -> tuple[str, bool]:
     """
     Configure Cognee environment variables before importing the SDK.
 
+    Plan 074: Now uses bridge_env.apply_workspace_env() as the single source
+    of truth for environment configuration including ontology activation.
+    
     Plan 059: Added filesystem cache backend configuration (CACHE_BACKEND=fs).
     Cognee 0.5.1+ supports filesystem session caching via diskcache, removing
     the implicit Redis dependency that caused connection failures in managed environments.
@@ -93,8 +104,8 @@ def setup_cognee_environment(workspace_path: str, logger: logging.Logger) -> tup
     Returns:
         tuple: (dataset_name, api_key_present: bool)
     """
-    workspace_dir = Path(workspace_path)
-
+    global _daemon_env_config
+    
     # Check for API key but don't fail - it may arrive later via request env
     api_key = os.getenv('LLM_API_KEY')
     api_key_present = api_key is not None
@@ -102,42 +113,20 @@ def setup_cognee_environment(workspace_path: str, logger: logging.Logger) -> tup
     if not api_key_present:
         logger.warning('LLM_API_KEY not found in startup environment - will check per-request')
 
-    # Set Cognee environment variables BEFORE SDK import
-    system_root = str(workspace_dir / '.flowbaby/system')
-    data_root = str(workspace_dir / '.flowbaby/data')
-    cache_root = str(workspace_dir / '.flowbaby/cache')
+    # Plan 074: Use shared bridge_env module for all environment wiring
+    # This sets storage directories, caching config, AND ontology activation
+    # CRITICAL: This is called at daemon bootstrap, not per-request (daemon-mode equivalence)
+    _daemon_env_config = apply_workspace_env(workspace_path, logger=logger, fail_on_missing_ontology=True)
 
-    os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
-    os.environ['DATA_ROOT_DIRECTORY'] = data_root
-    os.environ['CACHE_ROOT_DIRECTORY'] = cache_root
-
-    # Plan 059: Configure caching with filesystem backend
-    # Respect explicit user configuration (precedence rule 1)
-    existing_caching = os.environ.get('CACHING')
-    existing_cache_backend = os.environ.get('CACHE_BACKEND')
-
-    if existing_caching is None:
-        os.environ['CACHING'] = 'true'
-        logger.debug("Set CACHING=true (managed default)")
-    else:
-        logger.debug(f"Respecting existing CACHING={existing_caching}")
-
-    if existing_cache_backend is None:
-        os.environ['CACHE_BACKEND'] = 'fs'
-        logger.debug("Set CACHE_BACKEND=fs (managed default - filesystem session cache)")
-    else:
-        logger.debug(f"Respecting existing CACHE_BACKEND={existing_cache_backend}")
-
-    # Ensure directories exist
-    Path(system_root).mkdir(parents=True, exist_ok=True)
-    Path(data_root).mkdir(parents=True, exist_ok=True)
-    Path(cache_root).mkdir(parents=True, exist_ok=True)
-
-    # Plan 059: Log cache configuration for observability
-    effective_caching = os.environ.get('CACHING', 'false')
-    effective_backend = os.environ.get('CACHE_BACKEND', 'none')
-    logger.info(f"Cache configuration: CACHING={effective_caching}, CACHE_BACKEND={effective_backend}, CACHE_ROOT={cache_root}")
-    logger.debug(f"Configured Cognee directories: system={system_root}, data={data_root}")
+    # Plan 074: Log ontology configuration for observability (daemon startup snapshot)
+    logger.info(f"Ontology configuration: path={_daemon_env_config.ontology_file_path}, "
+                f"resolver={_daemon_env_config.ontology_resolver}, "
+                f"strategy={_daemon_env_config.matching_strategy}, "
+                f"exists={_daemon_env_config.ontology_file_exists}")
+    logger.info(f"Cache configuration: CACHING={_daemon_env_config.caching}, "
+                f"CACHE_BACKEND={_daemon_env_config.cache_backend}")
+    logger.debug(f"Configured Cognee directories: system={_daemon_env_config.system_root}, "
+                 f"data={_daemon_env_config.data_root}")
 
     # Generate dataset name
     from workspace_utils import generate_dataset_name
@@ -150,6 +139,9 @@ def initialize_cognee(workspace_path: str, logger: logging.Logger) -> None:
     """
     Import and configure Cognee SDK.
     This is called once at daemon startup to amortize import cost.
+    
+    Plan 074: Uses _daemon_env_config (set by setup_cognee_environment) for
+    consistent directory configuration.
     
     Note: API key is NOT required at import time - it will be validated per-request.
     """
@@ -171,9 +163,16 @@ def initialize_cognee(workspace_path: str, logger: logging.Logger) -> None:
     finally:
         sys.stdout = old_stdout
 
-    workspace_dir = Path(workspace_path)
-    system_root = str(workspace_dir / '.flowbaby/system')
-    data_root = str(workspace_dir / '.flowbaby/data')
+    # Plan 074: Use stored env config for consistent directory paths
+    if _daemon_env_config:
+        system_root = _daemon_env_config.system_root
+        data_root = _daemon_env_config.data_root
+    else:
+        # Fallback if config not set (shouldn't happen in normal flow)
+        workspace_dir = Path(workspace_path)
+        system_root = str(workspace_dir / '.flowbaby/system')
+        data_root = str(workspace_dir / '.flowbaby/data')
+        logger.warning("Using fallback directory paths - _daemon_env_config not set")
 
     cognee.config.system_root_directory(system_root)
     cognee.config.data_root_directory(data_root)

@@ -32,8 +32,13 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-# Add bridge directory to path to import bridge_logger
+# Add bridge directory to path to import bridge_logger and bridge_env
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# CRITICAL (Plan 074): Import bridge_env BEFORE any cognee import
+# This must happen at module level to ensure env vars are available
+# when cognee is imported later in the async functions
+from bridge_env import apply_workspace_env, OntologyConfigError
 import bridge_logger
 from migrate_cognee_0_5_schema import (
     SchemaMigrationError,
@@ -222,44 +227,25 @@ async def initialize_cognee(workspace_path: str) -> dict:
             logger.info('User will be prompted to set API key after initialization completes')
 
         # ============================================================================
-        # PLAN 033 FIX: Set environment variables BEFORE importing cognee SDK
+        # PLAN 074: Use shared bridge_env module for all environment wiring
+        # This is the single source of truth for storage directories, caching config,
+        # AND ontology activation (ONTOLOGY_FILE_PATH, ONTOLOGY_RESOLVER, MATCHING_STRATEGY)
         # ============================================================================
-        # CRITICAL: The Cognee SDK uses pydantic-settings with @lru_cache, which reads
-        # environment variables at import time and caches them permanently. Setting
-        # cognee.config.system_root_directory() after import is ineffective.
-        #
-        # This is the same pattern used in ingest.py and retrieve.py (Plan 032).
+        # CRITICAL: This must be called BEFORE importing cognee. The Cognee SDK uses 
+        # pydantic-settings with @lru_cache, which reads environment variables at import 
+        # time and caches them permanently.
         # ============================================================================
-
-        # Calculate workspace-local storage paths
-        system_root = str(workspace_dir / '.flowbaby/system')
-        data_root = str(workspace_dir / '.flowbaby/data')
-        cache_root = str(workspace_dir / '.flowbaby/cache')
-
-        # Create directories BEFORE setting env vars (ensures paths exist)
-        Path(system_root).mkdir(parents=True, exist_ok=True)
-        Path(data_root).mkdir(parents=True, exist_ok=True)
-        Path(cache_root).mkdir(parents=True, exist_ok=True)
-        logger.debug(f"Created storage directories: system={system_root}, data={data_root}, cache={cache_root}")
-
-        # Set environment variables BEFORE importing cognee
-        # CRITICAL: Use DATA_ROOT_DIRECTORY and SYSTEM_ROOT_DIRECTORY (no COGNEE_ prefix!)
-        os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
-        os.environ['DATA_ROOT_DIRECTORY'] = data_root
-        os.environ['CACHE_ROOT_DIRECTORY'] = cache_root
-
-        # Plan 059: Configure caching with filesystem backend
-        # Respect explicit user configuration (precedence rule 1)
-        if os.environ.get('CACHING') is None:
-            os.environ['CACHING'] = 'true'
-        if os.environ.get('CACHE_BACKEND') is None:
-            os.environ['CACHE_BACKEND'] = 'fs'
-
-        # Plan 059: Log cache configuration for observability
-        effective_caching = os.environ.get('CACHING', 'false')
-        effective_backend = os.environ.get('CACHE_BACKEND', 'none')
-        logger.info(f"Cache configuration: CACHING={effective_caching}, CACHE_BACKEND={effective_backend}, CACHE_ROOT={cache_root}")
-        logger.debug(f"Set environment variables: SYSTEM_ROOT_DIRECTORY={system_root}, DATA_ROOT_DIRECTORY={data_root}")
+        
+        env_config = apply_workspace_env(workspace_path, logger=logger, fail_on_missing_ontology=True)
+        system_root = env_config.system_root
+        data_root = env_config.data_root
+        cache_root = env_config.cache_root
+        
+        # Plan 074: Log ontology configuration for observability
+        logger.info(f"Ontology configuration: path={env_config.ontology_file_path}, "
+                    f"resolver={env_config.ontology_resolver}, "
+                    f"strategy={env_config.matching_strategy}, "
+                    f"exists={env_config.ontology_file_exists}")
 
         # NOW import cognee - it will read the env vars we just set
         # Plan 040 M1: Wrap import in stdout suppression as SDK may print during module init
@@ -308,7 +294,7 @@ async def initialize_cognee(workspace_path: str) -> dict:
             logger.debug(f"Custom LLM endpoint configured: {llm_endpoint}")
 
         # Belt-and-suspenders: Also call config methods (redundant but safe)
-        # Plan 033: Env vars are set before import, so these are now confirmatory
+        # Plan 074: Env vars are set via bridge_env before import, so these are now confirmatory
         cognee.config.system_root_directory(system_root)
         cognee.config.data_root_directory(data_root)
         logger.debug(f"Confirmed workspace-local storage via config API: {system_root}")

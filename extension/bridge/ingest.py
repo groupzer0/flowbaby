@@ -24,8 +24,13 @@ from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 
-# Add bridge directory to path to import bridge_logger
+# Add bridge directory to path to import bridge_logger and bridge_env
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# CRITICAL: Import bridge_env BEFORE any cognee import (Plan 074)
+# This must happen at module level to ensure env vars are available
+# when cognee is imported later in the async functions
+from bridge_env import apply_workspace_env, OntologyConfigError
 import bridge_logger
 from workspace_utils import canonicalize_workspace_path, generate_dataset_name
 
@@ -33,6 +38,9 @@ from workspace_utils import canonicalize_workspace_path, generate_dataset_name
 def setup_environment(workspace_path: str):
     """
     Shared environment setup for all ingestion modes.
+
+    Plan 074: Now uses bridge_env.apply_workspace_env() as the single source
+    of truth for environment configuration including ontology activation.
 
     Plan 032 M2 (hotfix): Sets SYSTEM_ROOT_DIRECTORY and DATA_ROOT_DIRECTORY
     environment variables BEFORE any import of cognee SDK, to ensure the SDK
@@ -59,40 +67,25 @@ def setup_environment(workspace_path: str):
     if not api_key:
         raise ValueError('LLM_API_KEY not found in environment. Use "Flowbaby: Set API Key" for secure storage.')
 
-    # Plan 032 M2 (hotfix): Set Cognee environment variables BEFORE SDK import
-    # CRITICAL: Use DATA_ROOT_DIRECTORY and SYSTEM_ROOT_DIRECTORY (no COGNEE_ prefix!)
-    # The Cognee SDK's BaseConfig uses pydantic-settings which reads these env vars
-    system_root = str(workspace_dir / '.flowbaby/system')
-    data_root = str(workspace_dir / '.flowbaby/data')
-    cache_root = str(workspace_dir / '.flowbaby/cache')
-
-    os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
-    os.environ['DATA_ROOT_DIRECTORY'] = data_root
-    os.environ['CACHE_ROOT_DIRECTORY'] = cache_root
-
-    # Plan 059: Configure caching with filesystem backend
-    # Respect explicit user configuration (precedence rule 1)
-    if os.environ.get('CACHING') is None:
-        os.environ['CACHING'] = 'true'
-    if os.environ.get('CACHE_BACKEND') is None:
-        os.environ['CACHE_BACKEND'] = 'fs'
-
-    # Also ensure the directories exist
-    Path(system_root).mkdir(parents=True, exist_ok=True)
-    Path(data_root).mkdir(parents=True, exist_ok=True)
-    Path(cache_root).mkdir(parents=True, exist_ok=True)
+    # Plan 074: Use shared bridge_env module for all environment wiring
+    # This sets storage directories, caching config, AND ontology activation
+    env_config = apply_workspace_env(workspace_path, fail_on_missing_ontology=True)
 
     # Generate dataset name
     dataset_name, _ = generate_dataset_name(workspace_path)
 
-    # Return config
+    # Return config (maintaining backward-compatible interface)
     return dataset_name, api_key, {
-        'system_root': system_root,
-        'data_root': data_root,
-        'cache_root': cache_root,
-        'caching': os.environ.get('CACHING'),
-        'cache_backend': os.environ.get('CACHE_BACKEND'),
-        'workspace_dir': workspace_dir
+        'system_root': env_config.system_root,
+        'data_root': env_config.data_root,
+        'cache_root': env_config.cache_root,
+        'caching': env_config.caching,
+        'cache_backend': env_config.cache_backend,
+        'workspace_dir': workspace_dir,
+        # Plan 074: Include ontology config in returned dict for observability
+        'ontology_file_path': env_config.ontology_file_path,
+        'ontology_resolver': env_config.ontology_resolver,
+        'matching_strategy': env_config.matching_strategy,
     }
 
 
@@ -372,6 +365,14 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
         # Step 1: Setup environment
         logger.debug("Setting up environment")
         dataset_name, api_key, cognee_config = setup_environment(workspace_path)
+        
+        # Plan 074 M4: Log ontology config snapshot for observability
+        logger.info("Ontology config snapshot", extra={'data': {
+            'ontology_file_path': cognee_config.get('ontology_file_path'),
+            'ontology_resolver': cognee_config.get('ontology_resolver'),
+            'matching_strategy': cognee_config.get('matching_strategy'),
+            'ontology_active': bool(cognee_config.get('ontology_file_path')),
+        }})
 
         # Step 2: Import and configure cognee
         logger.debug("Importing cognee SDK")
@@ -395,7 +396,17 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
 
         elapsed_ms = int((perf_counter() - start_time) * 1000)
 
-        logger.info(f"Cognify completed in {elapsed_ms}ms")
+        # Plan 074 M4: Log cognify completion metrics
+        # Note: Entity type distribution requires graph query not available in public API
+        # For now, log completion with ontology config to confirm it was active during run
+        logger.info(f"Cognify completed in {elapsed_ms}ms", extra={'data': {
+            'elapsed_ms': elapsed_ms,
+            'ontology_active': bool(cognee_config.get('ontology_file_path')),
+            'ontology_resolver': cognee_config.get('ontology_resolver'),
+            'matching_strategy': cognee_config.get('matching_strategy'),
+            'dataset': dataset_name,
+            # TODO: Add entity type distribution when Cognee exposes graph query API
+        }})
 
         # Write success stub
         write_status_stub(
@@ -584,15 +595,32 @@ Metadata: timestamp={timestamp}, importance={importance}"""
         metrics['add_sec'] = perf_counter() - step_start
 
         # Step 5: Cognify
-        if logger: logger.info("Running cognify (this may take 30-90s)")
+        if logger: 
+            logger.info("Running cognify (this may take 30-90s)")
+            # Plan 074 M4: Log ontology config snapshot for observability
+            logger.info("Ontology config snapshot (sync mode)", extra={'data': {
+                'ontology_file_path': cognee_config.get('ontology_file_path'),
+                'ontology_resolver': cognee_config.get('ontology_resolver'),
+                'matching_strategy': cognee_config.get('matching_strategy'),
+                'ontology_active': bool(cognee_config.get('ontology_file_path')),
+            }})
         step_start = perf_counter()
 
         await cognee.cognify(datasets=[dataset_name])
 
+        cognify_elapsed_ms = int((perf_counter() - step_start) * 1000)
         metrics['cognify_sec'] = perf_counter() - step_start
         metrics['total_sync_sec'] = perf_counter() - overall_start
 
         if logger:
+            # Plan 074 M4: Log cognify completion metrics
+            logger.info(f"Cognify completed in {cognify_elapsed_ms}ms", extra={'data': {
+                'elapsed_ms': cognify_elapsed_ms,
+                'ontology_active': bool(cognee_config.get('ontology_file_path')),
+                'ontology_resolver': cognee_config.get('ontology_resolver'),
+                'matching_strategy': cognee_config.get('matching_strategy'),
+                'dataset': dataset_name,
+            }})
             logger.info(f"Sync ingestion duration: {metrics['total_sync_sec']:.3f} seconds")
             logger.debug(f"Sync ingestion metrics: {json.dumps(metrics)}")
 

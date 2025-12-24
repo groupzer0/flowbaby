@@ -8,7 +8,7 @@
     rdfs:label "Chat Entity" ;
     rdfs:comment "Base class for all entities extracted from chat conversations" .
 
-# Entity Classes (8 total)
+# Entity Classes (8 total - original chat ontology)
 :User a owl:Class ;
     rdfs:subClassOf :ChatEntity ;
     rdfs:label "User" ;
@@ -49,7 +49,34 @@
     rdfs:label "Decision" ;
     rdfs:comment "Decision made during conversation" .
 
-# Object Properties (12 total) - Relationships between entities
+# Plan 074: Flowbaby Domain Classes (5 new classes)
+# These provide "landing zones" for Flowbaby-specific artifacts
+:Plan a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "Plan" ;
+    rdfs:comment "Implementation plan document (e.g., Plan 074)" .
+
+:Analysis a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "Analysis" ;
+    rdfs:comment "Analysis document or investigation (e.g., Analysis 074)" .
+
+:File a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "File" ;
+    rdfs:comment "Source code file or document path" .
+
+:Configuration a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "Configuration" ;
+    rdfs:comment "Configuration setting or option" .
+
+:Version a owl:Class ;
+    rdfs:subClassOf :ChatEntity ;
+    rdfs:label "Version" ;
+    rdfs:comment "Software version identifier (semver)" .
+
+# Object Properties (12 total - original relationships)
 :ASKS a owl:ObjectProperty ;
     rdfs:domain :User ;
     rdfs:range :Question ;
@@ -121,3 +148,28 @@
     rdfs:range :Concept ;
     rdfs:label "PREREQUISITE_FOR" ;
     rdfs:comment "Concept builds on another concept" .
+
+# Plan 074: Flowbaby Domain Relationships (4 new properties)
+:PRODUCES a owl:ObjectProperty ;
+    rdfs:domain :Plan ;
+    rdfs:range :Solution ;
+    rdfs:label "PRODUCES" ;
+    rdfs:comment "Plan produces a solution or deliverable" .
+
+:REFERENCES a owl:ObjectProperty ;
+    rdfs:domain :ChatEntity ;
+    rdfs:range :ChatEntity ;
+    rdfs:label "REFERENCES" ;
+    rdfs:comment "Entity references another entity (generic cross-reference)" .
+
+:AFFECTS a owl:ObjectProperty ;
+    rdfs:domain :Decision ;
+    rdfs:range :File ;
+    rdfs:label "AFFECTS" ;
+    rdfs:comment "Decision affects a file or artifact" .
+
+:SUPERSEDES a owl:ObjectProperty ;
+    rdfs:domain :Version ;
+    rdfs:range :Version ;
+    rdfs:label "SUPERSEDES" ;
+    rdfs:comment "Version supersedes a previous version" .

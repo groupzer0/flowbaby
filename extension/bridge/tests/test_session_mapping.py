@@ -23,6 +23,13 @@ from retrieve import retrieve_context
 def mock_env(monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "test-key")
 
+
+@pytest.fixture
+def temp_workspace(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    return workspace
+
 @pytest.fixture
 def mock_cognee_session():
     """Mock cognee module with session support."""
@@ -58,14 +65,14 @@ def mock_cognee_session():
         yield mock_cognee, mock_cognee, mock_users.methods.get_default_user, mock_context_vars.set_session_user_context_variable
 
 @pytest.mark.asyncio
-async def test_ingest_does_not_pass_session_id(mock_cognee_session, mock_env):
+async def test_ingest_does_not_pass_session_id(mock_cognee_session, mock_env, temp_workspace):
     """Test that ingest does NOT pass session_id to cognee.add (as it is not supported in 0.4.1)."""
     mock_ingest, _, _, _ = mock_cognee_session
 
     session_id = "test-session-123"
 
     await run_add_only(
-        workspace_path="test_dataset",
+        workspace_path=str(temp_workspace),
         user_message="User message",
         assistant_message="Assistant message",
         session_id=session_id
@@ -77,7 +84,7 @@ async def test_ingest_does_not_pass_session_id(mock_cognee_session, mock_env):
     assert 'session_id' not in call_kwargs
 
 @pytest.mark.asyncio
-async def test_retrieve_passes_session_id(mock_cognee_session, mock_env):
+async def test_retrieve_passes_session_id(mock_cognee_session, mock_env, temp_workspace):
     """Test that retrieve passes session_id to cognee.search."""
     _, mock_retrieve, mock_get_default_user, mock_set_session_user = mock_cognee_session
 
@@ -93,7 +100,7 @@ async def test_retrieve_passes_session_id(mock_cognee_session, mock_env):
     mock_get_default_user.return_value = MagicMock(id="user-123")
 
     await retrieve_context(
-        "test_workspace",
+        str(temp_workspace),
         "test query",
         session_id=session_id
     )
