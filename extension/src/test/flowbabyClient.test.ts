@@ -950,7 +950,7 @@ suite('FlowbabyClient Test Suite', () => {
 
             const retrievePromise = client.retrieve('test query');
 
-            // Simulate bridge output
+            // Simulate bridge output (legacy path without contractVersion 2.x)
             const result = {
                 success: true,
                 results: [],
@@ -967,9 +967,11 @@ suite('FlowbabyClient Test Suite', () => {
 
             await retrievePromise;
 
-            // Verify log call contains filtered_count
-            const successCall = logStub.getCalls().find((call) => call.args[1] === 'Context retrieved');
-            assert.ok(successCall, 'Should log "Context retrieved"');
+            // Verify log call contains filtered_count (Plan 073: legacy path logs with suffix)
+            const successCall = logStub.getCalls().find((call) => 
+                call.args[1] && call.args[1].startsWith('Context retrieved')
+            );
+            assert.ok(successCall, 'Should log "Context retrieved..."');
             assert.strictEqual(successCall!.args[2].filtered_count, 5, 'Log should include filtered_count: 5');
         });
 

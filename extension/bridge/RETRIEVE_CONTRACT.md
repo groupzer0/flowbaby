@@ -1,4 +1,4 @@
-# Retrieval Contract for Flowbaby Chat Memory (Plan 014)
+# Retrieval Contract for Flowbaby Chat Memory (Plan 014, Plan 073)
 
 This document describes the **structured JSON contract** returned by `extension/bridge/retrieve.py` for use by the VS Code extension and agents.
 
@@ -8,16 +8,42 @@ This document describes the **structured JSON contract** returned by `extension/
 - Enable transparent display of metadata (topic, status, timestamps) in the UI
 - Support future ranking algorithms (Plan 015) without breaking consumers
 - Maintain backward compatibility with legacy raw-text memories
+- **Plan 073**: Support context-only retrieval with TypeScript-side synthesis
 
 ## Contract Version
 
-**Version**: 1.1.0  
-**Effective Date**: 2025-11-21  
-**Cognee SDK**: 0.3.4  
+**Current Version**: 2.0.0  
+**Effective Date**: 2025-12-24  
+**Cognee SDK**: 0.5.1+
+
+### Version History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 2.0.0 | 2025-12-24 | Plan 073: Added `contractVersion`, `graphContext`, `graphContextCharCount` fields. Uses `only_context=True` to skip LLM bottleneck. TypeScript performs synthesis via Copilot. |
+| 1.1.0 | 2025-11-21 | Plan 014: Initial structured contract with metadata fields |
 
 ## Top-Level Response Shape
 
 `retrieve.py` MUST write a single JSON object to stdout with the following shape:
+
+### Contract v2.0.0+ (Plan 073)
+
+```json
+{
+  "success": true,
+  "contractVersion": "2.0.0",
+  "graphContext": "Nodes:\nNode: ... [raw graph triplets]",
+  "graphContextCharCount": 11497,
+  "results": [
+    ...RetrievalResult objects (may be empty in v2.0.0)...
+  ],
+  "total_results": 0,
+  "total_tokens": 0
+}
+```
+
+### Contract v1.x (Legacy)
 
 ```json
 {
@@ -33,12 +59,21 @@ This document describes the **structured JSON contract** returned by `extension/
 ### Fields
 
 - **`success`** (boolean, required): `true` if retrieval completed, `false` if an error occurred
-- **`results`** (array, required): Ordered list of retrieval hits (highest score first)
+- **`contractVersion`** (string, v2.0.0+): Semantic version of the contract (e.g., "2.0.0")
+- **`graphContext`** (string | null, v2.0.0+): Raw graph context from Cognee for TypeScript synthesis. Null if no context available.
+- **`graphContextCharCount`** (integer, v2.0.0+): Character count of graphContext before any truncation
+- **`results`** (array, required): Ordered list of retrieval hits (highest score first). In v2.0.0+, may be empty as synthesis happens in TypeScript.
 - **`result_count`** (integer, optional): Number of results returned in this response. Maintained for backward compatibility with Plan 014 consumers.
 - **`total_results`** (integer, required): Count of all hits considered (may exceed `results.length` if token budgets trimmed the list)
 - **`total_tokens`** (integer, required): Approximate token count of all returned results (for budget tracking)
 - **`half_life_days`** (number, optional): Half-life (in days) used for recency decay in this response.
 - **`include_superseded`** (boolean, optional): Whether the query allowed Superseded summaries in this response.
+
+### Error Codes (v2.0.0+)
+
+- **`LOCK_CONTENTION`**: Database is locked by another operation
+- **`COGNEE_SDK_ERROR`**: General Cognee SDK error
+- **`PYTHON_ENV_ERROR`**: Python environment/import error
 
 ### Query Parameters
 

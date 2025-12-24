@@ -68,3 +68,6 @@ bridge/.pytest_cache/**
 # OS-specific files
 Thumbs.db
 .coverage
+# Exclude POC artifacts for VSCE packaging
+bridge/poc/**
+bridge/poc_results/**

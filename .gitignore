@@ -59,3 +59,7 @@ tmp/
 
 # Generated agent artifacts
 agent-output/
+
+# Local POC artifacts
+extension/bridge/poc/
+extension/bridge/poc_results/

@@ -6,6 +6,8 @@ import { getFlowbabyOutputChannel, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
 import { SessionManager } from './sessionManager';
 import { PythonBridgeDaemonManager, DaemonHealthStatus } from './bridge/PythonBridgeDaemonManager';
+// Plan 073: Import synthesis module for Copilot-based answer generation
+import { synthesizeWithCopilot, isNoRelevantContext, SynthesisResult } from './synthesis';
 
 /**
  * Interface for BackgroundOperationManager to avoid circular imports.
@@ -1471,10 +1473,92 @@ export class FlowbabyClient {
             }
 
             // Phase marker: bridge call finished
-            const duration = Date.now() - startTime;
-            this.log('DEBUG', 'Retrieval bridge call finished', { duration_ms: duration });
+            const bridgeDuration = Date.now() - startTime;
+            this.log('DEBUG', 'Retrieval bridge call finished', { 
+                duration_ms: bridgeDuration,
+                contractVersion: result.contractVersion,
+                hasGraphContext: !!result.graphContext
+            });
 
             if (result.success) {
+                // Plan 073: Check for v2.0.0+ contract with graphContext for synthesis
+                const contractVersion = result.contractVersion as string | undefined;
+                const graphContext = result.graphContext as string | null | undefined;
+                const graphContextCharCount = result.graphContextCharCount as number | undefined;
+                
+                // If we have graphContext (v2.0.0+), synthesize using Copilot
+                if (contractVersion?.startsWith('2.') && graphContext) {
+                    this.log('DEBUG', 'Using Plan 073 synthesis path', {
+                        contractVersion,
+                        contextCharCount: graphContextCharCount
+                    });
+                    
+                    const synthesisStart = Date.now();
+                    const synthesisResult = await synthesizeWithCopilot(query, graphContext);
+                    const synthesisDuration = Date.now() - synthesisStart;
+                    
+                    this.log('DEBUG', 'Synthesis completed', {
+                        success: synthesisResult.success,
+                        latencyMs: synthesisDuration,
+                        modelUsed: synthesisResult.modelUsed,
+                        contextTruncated: synthesisResult.contextTruncated
+                    });
+                    
+                    if (!synthesisResult.success) {
+                        // Handle synthesis failure
+                        const errorCode = synthesisResult.errorCode;
+                        
+                        if (errorCode === 'NO_COPILOT') {
+                            // Per product decision: fail gracefully with toast + log
+                            vscode.window.showWarningMessage(
+                                'Flowbaby: Copilot is not available for memory synthesis. ' +
+                                'Please ensure GitHub Copilot is installed and authenticated.'
+                            );
+                            this.log('WARN', 'Copilot unavailable for synthesis', {
+                                error: synthesisResult.error
+                            });
+                        } else {
+                            this.log('ERROR', 'Synthesis failed', {
+                                errorCode,
+                                error: synthesisResult.error
+                            });
+                        }
+                        
+                        // Return empty results on synthesis failure
+                        return [];
+                    }
+                    
+                    // Check for "no relevant context" sentinel
+                    if (isNoRelevantContext(synthesisResult)) {
+                        this.log('INFO', 'No relevant context found in memory', {
+                            query_preview: query.length > 100 ? query.substring(0, 100) + '...' : query
+                        });
+                        return [];
+                    }
+                    
+                    // Build single synthesized result
+                    const totalDuration = Date.now() - startTime;
+                    const synthesizedResult: RetrievalResult = {
+                        summaryText: synthesisResult.answer || '',
+                        score: 1.0,  // Synthesized answers get high confidence
+                        finalScore: 1.0,
+                        confidenceLabel: 'synthesized_high',
+                        tokens: Math.ceil((synthesisResult.answer?.length || 0) / 4)  // Rough estimate
+                    };
+                    
+                    this.log('INFO', 'Context retrieved (Plan 073 synthesis)', {
+                        bridge_duration_ms: bridgeDuration,
+                        synthesis_duration_ms: synthesisDuration,
+                        total_duration_ms: totalDuration,
+                        model_used: synthesisResult.modelUsed,
+                        context_truncated: synthesisResult.contextTruncated,
+                        answer_length: synthesisResult.answer?.length || 0
+                    });
+                    
+                    return [synthesizedResult];
+                }
+                
+                // Legacy path: results already contain LLM-synthesized content
                 // Parse structured results per RETRIEVE_CONTRACT.md
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const results: RetrievalResult[] = (result.results || []).map((r: any) => {
@@ -1508,36 +1592,47 @@ export class FlowbabyClient {
                 
                 const enrichedCount = results.filter(r => r.topicId).length;
                 const legacyCount = results.length - enrichedCount;
+                const totalDuration = Date.now() - startTime;
                 
-                this.log('INFO', 'Context retrieved', {
+                this.log('INFO', 'Context retrieved (legacy path)', {
                     result_count: result.result_count || 0,
                     filtered_count: result.filtered_count || 0,
                     enriched_count: enrichedCount,
                     legacy_count: legacyCount,
                     total_tokens: result.total_tokens || 0,
-                    duration
+                    duration: totalDuration
                 });
 
                 // Log warnings for latency
-                if (duration > 1000) {
+                if (totalDuration > 1000) {
                     this.log('WARN', 'Retrieval latency exceeded target', {
-                        duration,
+                        duration: totalDuration,
                         target: 1000,
                         query_preview: query.length > 200 ? query.substring(0, 200) + `... (${query.length} chars total)` : query
                     });
-                } else if (duration > 500) {
+                } else if (totalDuration > 500) {
                     this.log('INFO', 'Retrieval latency above stretch goal', {
-                        duration,
+                        duration: totalDuration,
                         stretch_goal: 500
                     });
                 }
 
                 return results;
             } else {
+                const errorDuration = Date.now() - startTime;
                 this.log('ERROR', 'Retrieval failed', {
-                    duration,
-                    error: result.error
+                    duration: errorDuration,
+                    error: result.error,
+                    errorCode: result.error_code
                 });
+                
+                // Plan 073: Handle lock contention explicitly
+                if (result.error_code === 'LOCK_CONTENTION') {
+                    vscode.window.showWarningMessage(
+                        'Flowbaby: Database is locked. Another operation may be in progress. Please try again.'
+                    );
+                    return [];
+                }
                 
                 // Throw actionable errors so callers can show meaningful messages
                 if (result.error?.includes('API_KEY')) {
@@ -1547,10 +1642,10 @@ export class FlowbabyClient {
                 return [];
             }
         } catch (error) {
-            const duration = Date.now() - startTime;
+            const errorDuration = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.log('ERROR', 'Retrieval exception', {
-                duration,
+                duration: errorDuration,
                 error: errorMessage
             });
             

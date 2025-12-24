@@ -7,12 +7,17 @@ Usage: python retrieve.py <workspace_path> <query> [max_results] [max_tokens] [h
 Retrieves relevant context from Cognee using hybrid graph-vector search with workspace isolation:
 1. Loads API key from workspace .env
 2. Generates unique dataset name for workspace
-3. Executes GRAPH_COMPLETION search filtered to workspace dataset
-4. Calculates recency-aware, status-aware scores using exponential decay
-5. Returns top results respecting max_results AND max_tokens limits
+3. Executes GRAPH_COMPLETION search with only_context=True (Plan 073: eliminates LLM bottleneck)
+4. Returns raw graph context for TypeScript-side synthesis via Copilot LM API
+5. Calculates recency-aware, status-aware scores using exponential decay
+
+Plan 073: Architecture Overhaul
+- Uses only_context=True to skip Cognee's internal LLM call (~17-32s savings)
+- Returns contractVersion for additive contract evolution
+- TypeScript layer performs synthesis via VS Code Copilot LM API
 
 Returns JSON to stdout:
-    Success: {"success": true, "results": [...], "result_count": 2, "total_tokens": 487}
+    Success: {"success": true, "contractVersion": "2.0.0", "graphContext": "...", "results": [...]}
     Failure: {"success": false, "error": "error message"}
 """
 
@@ -35,6 +40,10 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from bridge_env import apply_workspace_env, OntologyConfigError
 import bridge_logger
 from workspace_utils import canonicalize_workspace_path, generate_dataset_name
+
+# Plan 073: Contract version for retrieval response evolution
+# v2.0.0: Switch to only_context=True, adds graphContext field for TS synthesis
+RETRIEVE_CONTRACT_VERSION = "2.0.0"
 
 SYSTEM_PROMPT = """You are a MEMORY RETRIEVAL ASSISTANT for an autonomous coding agent.
 
@@ -349,7 +358,9 @@ async def retrieve_context(
                 except Exception as session_error:
                     logger.warning(f"Failed to initialize session context: {session_error}", extra={'data': {'session_id': session_id}})
 
-            # Verified: cognee.search (v0.4.1) supports session_id.
+            # Plan 073: Use only_context=True to skip LLM completion call (17-32s savings)
+            # This returns raw graph context for TypeScript-side synthesis via Copilot
+            # Verified: cognee.search (v0.4.1+) supports session_id.
             # Plan 063: wide_search_top_k and triplet_distance_penalty now configurable via settings.
             # These parameters are applied only if supported by Cognee; unsupported params fail loudly.
             search_kwargs = {
@@ -357,12 +368,14 @@ async def retrieve_context(
                 'query_text': query,
                 'datasets': [dataset_name],  # Filter to this workspace only
                 'top_k': final_top_k,
-                'system_prompt': SYSTEM_PROMPT,
+                'only_context': True,  # Plan 073: Skip LLM call, return raw graph context
                 'wide_search_top_k': wide_search_top_k,  # Plan 063: Configurable via extension settings
                 'triplet_distance_penalty': triplet_distance_penalty  # Plan 063: Configurable via extension settings
             }
+            # Note: system_prompt removed - not needed when only_context=True (no LLM call)
 
             logger.debug("Search kwargs configured", extra={'data': {
+                'only_context': True,
                 'wide_search_top_k': wide_search_top_k,
                 'triplet_distance_penalty': triplet_distance_penalty
             }})
@@ -371,6 +384,7 @@ async def retrieve_context(
                 search_kwargs['session_id'] = session_id
 
             # Plan 063: Validate kwargs are supported; fail closed with actionable message if not
+            search_start = datetime.now(timezone.utc)
             try:
                 search_results = await cognee.search(**search_kwargs)
             except TypeError as kwarg_error:
@@ -379,13 +393,16 @@ async def retrieve_context(
                     unsupported_param = str(kwarg_error).split("'")[1] if "'" in str(kwarg_error) else 'unknown'
                     raise RuntimeError(
                         f"Cognee search does not support parameter '{unsupported_param}'. "
-                        f"This may indicate a version mismatch. Expected Cognee >= 0.4.1 with graph search extensions. "
+                        f"This may indicate a version mismatch. Expected Cognee >= 0.5.1 with only_context support. "
                         f"Please upgrade Cognee or contact support. Original error: {kwarg_error}"
                     ) from kwarg_error
                 raise
+            search_duration_ms = int((datetime.now(timezone.utc) - search_start).total_seconds() * 1000)
 
             logger.info("Search completed", extra={'data': {
-                'result_count': len(search_results) if search_results else 0
+                'result_count': len(search_results) if search_results else 0,
+                'duration_ms': search_duration_ms,
+                'only_context': True
             }})
         except Exception as search_error:
             # If database/dataset doesn't exist yet (no data ingested), return empty results gracefully
@@ -393,21 +410,40 @@ async def retrieve_context(
             error_type = type(search_error).__name__
             logger.warning(f"Search error: {error_msg}")
 
+            # Plan 073: Improve error classification - lock contention should not appear as "fresh workspace"
+            # Check for lock contention first (more specific)
+            if 'Could not set lock' in error_msg or 'lock' in error_msg.lower():
+                logger.error("Database lock contention - daemon may be holding lock", extra={'data': {
+                    'error_type': error_type,
+                    'error_msg': error_msg
+                }})
+                return {
+                    'success': False,
+                    'contractVersion': RETRIEVE_CONTRACT_VERSION,
+                    'error_code': 'LOCK_CONTENTION',
+                    'error': 'Database is locked. Another operation may be in progress. Please try again.',
+                    'results': [],
+                    'graphContext': None
+                }
+
             # v0.5.8: Handle DatasetNotFoundError (fresh workspace with no data)
             # This is a normal condition when the user has initialized but not yet stored any memories
             if ('DatabaseNotCreatedError' in error_msg or
                 'DatasetNotFoundError' in error_type or
-                'No datasets found' in error_msg or
-                'database' in error_msg.lower()):
+                'No datasets found' in error_msg):
                 logger.info("Fresh workspace detected - no data ingested yet")
                 return {
                     'success': True,
+                    'contractVersion': RETRIEVE_CONTRACT_VERSION,
                     'results': [],
+                    'graphContext': None,
                     'result_count': 0,
                     'message': 'No data has been ingested yet. Start chatting to build memory.'
                 }
             # Re-raise other errors with structured payload
             error_payload = {
+                'success': False,
+                'contractVersion': RETRIEVE_CONTRACT_VERSION,
                 'error_code': 'COGNEE_SDK_ERROR',
                 'error_type': error_type,
                 'message': str(search_error),
@@ -416,6 +452,50 @@ async def retrieve_context(
             logger.error("Search exception", extra={'data': error_payload})
             raise
 
+        # Plan 073: Extract graph context from only_context=True return format
+        # Expected format: [{
+        #   "search_result": [{"ws_xxx": "Nodes:\nNode: ... [triplets as text]"}],
+        #   "dataset_id": "...",
+        #   "dataset_name": "ws_xxx"
+        # }]
+        graph_context = None
+        context_char_count = 0
+        
+        def extract_graph_context(search_results) -> str | None:
+            """Extract graph context string from only_context=True return format."""
+            if not search_results:
+                return None
+            
+            try:
+                # search_results is list[dict]
+                if isinstance(search_results, list) and len(search_results) > 0:
+                    first_result = search_results[0]
+                    if isinstance(first_result, dict) and 'search_result' in first_result:
+                        search_result_inner = first_result['search_result']
+                        # search_result is [{dataset_name: "context_string"}]
+                        if isinstance(search_result_inner, list) and len(search_result_inner) > 0:
+                            first_inner = search_result_inner[0]
+                            if isinstance(first_inner, dict):
+                                # Get the first value (the context string)
+                                for key, value in first_inner.items():
+                                    if isinstance(value, str):
+                                        return value
+                            elif isinstance(first_inner, str):
+                                return first_inner
+            except Exception as e:
+                logger.warning(f"Failed to extract graph context: {e}")
+            return None
+        
+        graph_context = extract_graph_context(search_results)
+        if graph_context:
+            context_char_count = len(graph_context)
+            logger.info(f"Extracted graph context", extra={'data': {
+                'char_count': context_char_count,
+                'preview': graph_context[:200] + '...' if len(graph_context) > 200 else graph_context
+            }})
+        else:
+            logger.warning("Could not extract graph context from search results")
+        
         # DEBUG: Log search results structure to understand what Cognee returns
         logger.debug(f"Search results type: {type(search_results)}")
         if search_results:
@@ -424,12 +504,14 @@ async def retrieve_context(
             first_res = str(search_results[0])
             logger.debug(f"First result preview: {first_res[:200]}...")
 
-        # If no results, return empty
-        if not search_results:
-            logger.info("No results found, returning empty")
+        # If no results or no context, return empty
+        if not search_results or not graph_context:
+            logger.info("No results/context found, returning empty")
             return {
                 'success': True,
+                'contractVersion': RETRIEVE_CONTRACT_VERSION,
                 'results': [],
+                'graphContext': None,
                 'result_count': 0,
                 'total_results': 0,
                 'total_tokens': 0,
@@ -606,6 +688,9 @@ async def retrieve_context(
         if not scored_results:
             return {
                 'success': True,
+                'contractVersion': RETRIEVE_CONTRACT_VERSION,
+                'graphContext': graph_context,
+                'graphContextCharCount': context_char_count,
                 'results': [],
                 'result_count': 0,
                 'total_results': 0,
@@ -641,6 +726,9 @@ async def retrieve_context(
 
         return {
             'success': True,
+            'contractVersion': RETRIEVE_CONTRACT_VERSION,
+            'graphContext': graph_context,
+            'graphContextCharCount': context_char_count,
             'results': selected_results,
             'result_count': len(selected_results),
             'total_results': len(scored_results),
@@ -653,6 +741,7 @@ async def retrieve_context(
     except ImportError as e:
         error_payload = {
             'success': False,
+            'contractVersion': RETRIEVE_CONTRACT_VERSION,
             'error_code': 'PYTHON_ENV_ERROR',
             'error_type': 'ImportError',
             'message': f'Failed to import required module: {str(e)}',
@@ -669,6 +758,7 @@ async def retrieve_context(
         import traceback
         error_payload = {
             'success': False,
+            'contractVersion': RETRIEVE_CONTRACT_VERSION,
             'error_code': 'COGNEE_SDK_ERROR',
             'error_type': type(e).__name__,
             'message': str(e),

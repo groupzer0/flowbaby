@@ -107,17 +107,65 @@ async def test_retrieve_success_with_llm_api_key(temp_workspace, mock_env):
 
 @pytest.mark.asyncio
 async def test_retrieve_with_search_results(temp_workspace, mock_env):
-    """Test retrieval with mock search results including scoring."""
+    """Test retrieval with mock search results including scoring.
+    
+    Plan 073: Tests now use the only_context=True return format (list[dict]).
+    """
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
         # Mock cognee package + required submodules
         mock_cognee = types.ModuleType('cognee')
         mock_cognee.__path__ = []
         mock_cognee.config = MagicMock()
-        mock_search_result = (
-            "[Timestamp: 2025-11-15T10:00:00Z] [Importance: 0.8] This is a test result about Python.",
-            {"metadata": "test", "score": 0.8}
-        )
-        mock_cognee.search = AsyncMock(return_value=[mock_search_result])
+        
+        # Plan 073: Mock the only_context=True return format
+        # This is list[dict] with search_result containing the graph context
+        dataset_name = 'ws_test_dataset'
+        graph_context = """Nodes:
+Node: [Timestamp: 2025-11-15T10:00:00Z] This is a test result about Python.
+__node_content_start__
+<!-- Template: v1.1 -->
+# Conversation Summary: Test Memory
+
+**Metadata:**
+- Topic ID: abc123
+- Session ID: N/A
+- Plan ID: N/A
+- Status: Active
+- Created: 2025-11-15T10:00:00Z
+- Source Created: 2025-11-15T10:00:00Z
+- Updated: 2025-11-15T10:00:00Z
+
+## Context
+This is a test result about Python development.
+
+## Key Decisions
+- Test decision 1
+
+## Rationale
+- Test rationale
+
+## Open Questions
+(none)
+
+## Next Steps
+(none)
+
+## References
+(none)
+
+## Time Scope
+
+__node_content_end__
+
+Connections:
+"""
+        mock_search_result = [{
+            'search_result': [{dataset_name: graph_context}],
+            'dataset_id': 'test-dataset-id',
+            'dataset_name': dataset_name,
+            'dataset_tenant_id': None
+        }]
+        mock_cognee.search = AsyncMock(return_value=mock_search_result)
         mock_cognee.prune = MagicMock()
         mock_cognee.prune.prune_data = AsyncMock()
 
@@ -145,40 +193,45 @@ async def test_retrieve_with_search_results(temp_workspace, mock_env):
             result = await retrieve_context(str(temp_workspace), "Python", max_results=5)
 
             assert result['success'] is True
-            assert result['result_count'] == 1
-            assert result['total_results'] == 1
-            assert len(result['results']) == 1
-
-            # Verify result structure
-            first_result = result['results'][0]
-            assert 'text' in first_result
-            assert 'score' in first_result
-            assert 'final_score' in first_result
-            assert 'relevance_score' in first_result
-            assert 'semantic_score' in first_result
-            assert 'recency_multiplier' in first_result
-            assert 'status_multiplier' in first_result
-            assert 'tokens' in first_result
-
-            # Verify scoring calculations
-            assert 0 <= first_result['score'] <= 1
-            assert 0 <= first_result['recency_multiplier'] <= 1
+            # Plan 073: Now returns graphContext instead of processed results
+            assert 'contractVersion' in result
+            assert result['contractVersion'] == '2.0.0'
+            assert 'graphContext' in result
+            assert result['graphContext'] is not None
+            assert 'Python' in result['graphContext']  # Context should contain our test data
 
 
 @pytest.mark.asyncio
 async def test_retrieve_default_score(temp_workspace, mock_env):
-    """Test that retrieval defaults score to 0.0 when missing from search results."""
+    """Test retrieval returns graphContext with only_context=True format.
+    
+    Plan 073: With only_context=True, scoring/confidence is no longer computed
+    in the bridge - that's now handled by the TypeScript synthesis layer.
+    This test validates the new response structure.
+    """
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
         # Mock cognee package + required submodules
         mock_cognee = types.ModuleType('cognee')
         mock_cognee.__path__ = []
         mock_cognee.config = MagicMock()
-        # Result tuple: (text, metadata) - no score in metadata or text prefix
-        mock_search_result = (
-            "This is a test result without score.",
-            {"metadata": "test"}
-        )
-        mock_cognee.search = AsyncMock(return_value=[mock_search_result])
+        
+        # Plan 073: Mock the only_context=True return format
+        dataset_name = 'ws_test_default'
+        graph_context = """Nodes:
+Node: This is a test result without explicit scoring.
+__node_content_start__
+Test content here.
+__node_content_end__
+
+Connections:
+"""
+        mock_search_result = [{
+            'search_result': [{dataset_name: graph_context}],
+            'dataset_id': 'test-dataset-id',
+            'dataset_name': dataset_name,
+            'dataset_tenant_id': None
+        }]
+        mock_cognee.search = AsyncMock(return_value=mock_search_result)
         mock_cognee.prune = MagicMock()
         mock_cognee.prune.prune_data = AsyncMock()
 
@@ -206,32 +259,42 @@ async def test_retrieve_default_score(temp_workspace, mock_env):
             result = await retrieve_context(str(temp_workspace), "test")
 
             assert result['success'] is True
-            # Plan 023 Hotfix: Synthesized answers (score 0.0) should NOT be filtered
-            # Plan 026: Synthesized answers (score 0.0) are mapped to 1.0 with high confidence label
-            assert len(result['results']) == 1
-            assert result['results'][0]['score'] == 1.0
-            assert result['results'][0]['confidenceLabel'] == 'synthesized_high'
+            # Plan 073: Validate new contract version and graphContext
+            assert result['contractVersion'] == '2.0.0'
+            assert 'graphContext' in result
+            assert result['graphContext'] is not None
+            assert 'test result' in result['graphContext'].lower()
 
 
 @pytest.mark.asyncio
 async def test_retrieve_graph_completion_dict_format(temp_workspace, mock_env):
-    """Test that retrieval correctly extracts text from Cognee graph_completion dict format.
+    """Test that retrieval correctly extracts graphContext from Cognee only_context=True format.
     
-    Cognee's GRAPH_COMPLETION can return results as {'search_result': ['text...'], 'dataset_id': ...}
-    rather than tuples. This test verifies we correctly extract the text content.
+    Plan 073: With only_context=True, Cognee returns list[dict] where each dict has
+    'search_result' containing the graph context string keyed by dataset name.
     """
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
         mock_cognee = types.ModuleType('cognee')
         mock_cognee.__path__ = []
         mock_cognee.config = MagicMock()
         
-        # Mock result in dict format with 'search_result' key (as seen in production logs)
-        mock_search_result = {
-            'search_result': ["For Plan 060, the following actions were taken: implemented schema migration."],
+        # Plan 073: Mock result in only_context=True format
+        dataset_name = 'ws_test123'
+        graph_context = """Nodes:
+Node: [Plan 060] Schema migration implementation details.
+__node_content_start__
+For Plan 060, the following actions were taken: implemented schema migration.
+__node_content_end__
+
+Connections:
+"""
+        mock_search_result = [{
+            'search_result': [{dataset_name: graph_context}],
             'dataset_id': 'test-uuid',
-            'dataset_name': 'ws_test123'
-        }
-        mock_cognee.search = AsyncMock(return_value=[mock_search_result])
+            'dataset_name': dataset_name,
+            'dataset_tenant_id': None
+        }]
+        mock_cognee.search = AsyncMock(return_value=mock_search_result)
         mock_cognee.prune = MagicMock()
         mock_cognee.prune.prune_data = AsyncMock()
 
@@ -259,32 +322,47 @@ async def test_retrieve_graph_completion_dict_format(temp_workspace, mock_env):
             result = await retrieve_context(str(temp_workspace), "plan 060")
 
             assert result['success'] is True
-            assert len(result['results']) == 1
+            assert result['contractVersion'] == '2.0.0'
+            assert 'graphContext' in result
             
-            # Verify the text was correctly extracted from the dict, not stringified
-            first_result = result['results'][0]
-            assert 'For Plan 060' in first_result['text']
-            assert 'search_result' not in first_result['text']  # Should not contain raw dict keys
-            assert 'dataset_id' not in first_result['text']
+            # Verify the graphContext was correctly extracted
+            assert result['graphContext'] is not None
+            assert 'Plan 060' in result['graphContext']
+            assert 'schema migration' in result['graphContext']
 
 
 @pytest.mark.asyncio
 async def test_retrieve_token_limit_enforcement(temp_workspace, mock_env):
-    """Test that retrieval respects max_tokens limit."""
+    """Test that retrieval returns graphContext with character count info.
+    
+    Plan 073: With only_context=True, token limits are now handled by the TypeScript
+    synthesis layer (60,000 char limit). The bridge returns graphContextCharCount
+    for observability.
+    """
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
         # Mock cognee package + required submodules
         mock_cognee = types.ModuleType('cognee')
         mock_cognee.__path__ = []
         mock_cognee.config = MagicMock()
 
-        # Create results that would exceed token limit
-        large_text = "word " * 500  # ~500 tokens
-        mock_results = [
-            (f"[Timestamp: 2025-11-15T10:00:00Z] [Importance: 0.8] {large_text}", {"score": 0.8}),
-            (f"[Timestamp: 2025-11-15T09:00:00Z] [Importance: 0.7] {large_text}", {"score": 0.7}),
-            (f"[Timestamp: 2025-11-15T08:00:00Z] [Importance: 0.6] {large_text}", {"score": 0.6})
-        ]
-        mock_cognee.search = AsyncMock(return_value=mock_results)
+        # Create a large context
+        large_text = "word " * 500  # ~2500 characters
+        dataset_name = 'ws_test_large'
+        graph_context = f"""Nodes:
+Node: [Timestamp: 2025-11-15T10:00:00Z] Large content test.
+__node_content_start__
+{large_text}
+__node_content_end__
+
+Connections:
+"""
+        mock_search_result = [{
+            'search_result': [{dataset_name: graph_context}],
+            'dataset_id': 'test-uuid',
+            'dataset_name': dataset_name,
+            'dataset_tenant_id': None
+        }]
+        mock_cognee.search = AsyncMock(return_value=mock_search_result)
         mock_cognee.prune = MagicMock()
         mock_cognee.prune.prune_data = AsyncMock()
 
@@ -309,14 +387,16 @@ async def test_retrieve_token_limit_enforcement(temp_workspace, mock_env):
         }):
             from retrieve import retrieve_context
 
-            # Set low token limit
+            # max_tokens parameter is deprecated in v2.0 but still accepted for compatibility
             result = await retrieve_context(str(temp_workspace), "test", max_tokens=600)
 
             assert result['success'] is True
-            # Should only include first result due to token limit
-            assert result['result_count'] == 1
-            assert result['total_results'] == 3
-            assert result['total_tokens'] <= 600
+            assert result['contractVersion'] == '2.0.0'
+            assert 'graphContext' in result
+            assert result['graphContext'] is not None
+            # Plan 073: graphContextCharCount provides observability for truncation decisions
+            assert 'graphContextCharCount' in result
+            assert result['graphContextCharCount'] > 0
 
 
 def test_main_missing_arguments(capsys):

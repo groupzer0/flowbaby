@@ -1,7 +1,12 @@
-"""
-Unit tests for retrieve.py filtering logic.
+"""Unit tests for Plan 073 context-only retrieval contract.
 
-Tests sentinel filtering, score filtering, and status filtering.
+Plan 073 changed bridge retrieval to `only_context=True`, returning raw graph
+context for TypeScript-side Copilot synthesis. These tests validate that
+`retrieve_context`:
+
+- extracts `graphContext` from the observed Cognee `only_context=True` shape
+- returns `contractVersion` and `graphContextCharCount`
+- returns an empty payload when no context is available
 """
 import sys
 import types
@@ -52,119 +57,71 @@ def mock_cognee_module(monkeypatch):
         yield mock_cognee
 
 @pytest.mark.asyncio
-async def test_retrieve_sentinel_filtering(temp_workspace, mock_cognee_module):
-    """Test that NO_RELEVANT_CONTEXT is filtered only when it is the exact text."""
+async def test_retrieve_extracts_graph_context_from_dict_value(temp_workspace, mock_cognee_module):
+    """Extracts graphContext from the `[{search_result: [{dataset: context}]}]` shape."""
 
-    # Mock search results
-    # 1. Exact match (should be filtered)
-    # 2. Partial match (should be kept)
-    # 3. Case insensitive exact match (should be filtered)
-
-    mock_result1 = MagicMock()
-    mock_result1.text = "NO_RELEVANT_CONTEXT"
-    mock_result1.score = 0.9
-
-    mock_result2 = MagicMock()
-    mock_result2.text = "I found NO_RELEVANT_CONTEXT in the logs."
-    mock_result2.score = 0.8
-
-    mock_result3 = MagicMock()
-    mock_result3.text = "no_relevant_context"
-    mock_result3.score = 0.7
-
-    mock_cognee_module.search.return_value = [mock_result1, mock_result2, mock_result3]
+    dataset_name = 'ws_test_dataset'
+    graph_context = "Nodes:\nNode: Test\nConnections:\n"
+    mock_cognee_module.search.return_value = [
+        {
+            'search_result': [{dataset_name: graph_context}],
+            'dataset_id': 'test-dataset-id',
+            'dataset_name': dataset_name,
+            'dataset_tenant_id': None,
+        }
+    ]
 
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
         from retrieve import retrieve_context
 
-        result = await retrieve_context(
-            workspace_path=str(temp_workspace),
-            query="test query"
-        )
+        result = await retrieve_context(workspace_path=str(temp_workspace), query="test query")
 
         assert result['success'] is True
-        assert result['result_count'] == 1
-        assert result['filtered_count'] == 2
+        assert result['contractVersion'] == '2.0.0'
+        assert result['graphContext'] == graph_context
+        assert result['graphContextCharCount'] == len(graph_context)
+        assert isinstance(result.get('results'), list)
 
-        # Verify the only result is the partial match
-        assert result['results'][0]['text'] == "I found NO_RELEVANT_CONTEXT in the logs."
 
 @pytest.mark.asyncio
-async def test_retrieve_score_filtering(temp_workspace, mock_cognee_module):
-    """Test that low scores are filtered, but synthesized answers (score 0.0) are kept."""
+async def test_retrieve_extracts_graph_context_from_string_inner(temp_workspace, mock_cognee_module):
+    """Extracts graphContext when inner `search_result` item is a string."""
 
-    # 1. High score (keep)
-    mock_result1 = MagicMock()
-    mock_result1.text = "High score result"
-    mock_result1.score = 0.5
-
-    # 2. Low score (filter)
-    mock_result2 = MagicMock()
-    mock_result2.text = "Low score result"
-    mock_result2.score = 0.001
-
-    # 3. Synthesized answer (score 0.0) (keep)
-    mock_result3 = MagicMock()
-    mock_result3.text = "Synthesized answer"
-    mock_result3.score = 0.0
-
-    mock_cognee_module.search.return_value = [mock_result1, mock_result2, mock_result3]
+    graph_context = "Nodes:\nNode: String inner format\n"
+    mock_cognee_module.search.return_value = [
+        {
+            'search_result': [graph_context],
+            'dataset_id': 'test-dataset-id',
+            'dataset_name': 'ws_test_dataset',
+            'dataset_tenant_id': None,
+        }
+    ]
 
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
         from retrieve import retrieve_context
 
-        result = await retrieve_context(
-            workspace_path=str(temp_workspace),
-            query="test query"
-        )
+        result = await retrieve_context(workspace_path=str(temp_workspace), query="test query")
 
         assert result['success'] is True
-        # Should keep high score and synthesized
-        assert result['result_count'] == 2
-        assert result['filtered_count'] == 1
+        assert result['contractVersion'] == '2.0.0'
+        assert result['graphContext'] == graph_context
+        assert result['graphContextCharCount'] == len(graph_context)
 
-        texts = [r['text'] for r in result['results']]
-        assert "High score result" in texts
-        assert "Synthesized answer" in texts
-        assert "Low score result" not in texts
 
 @pytest.mark.asyncio
-async def test_retrieve_status_filtering(temp_workspace, mock_cognee_module):
-    """Test that Superseded items are filtered by default."""
+async def test_retrieve_returns_empty_when_no_context(temp_workspace, mock_cognee_module):
+    """Returns empty payload when Cognee returns no results."""
 
-    # 1. Active (keep)
-    mock_result1 = MagicMock()
-    mock_result1.text = "**Metadata:**\n- Status: Active\n\nActive result"
-    mock_result1.metadata = {'status': 'Active', 'score': 0.5}
-
-    # 2. Superseded (filter)
-    mock_result2 = MagicMock()
-    mock_result2.text = "**Metadata:**\n- Status: Superseded\n\nSuperseded result"
-    mock_result2.metadata = {'status': 'Superseded', 'score': 0.5}
-
-    mock_cognee_module.search.return_value = [mock_result1, mock_result2]
+    mock_cognee_module.search.return_value = []
 
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
         from retrieve import retrieve_context
 
-        # Default: include_superseded=False
-        result = await retrieve_context(
-            workspace_path=str(temp_workspace),
-            query="test query"
-        )
+        result = await retrieve_context(workspace_path=str(temp_workspace), query="test query")
 
         assert result['success'] is True
-        assert result['result_count'] == 1
-        assert result['filtered_count'] == 1
-        assert result['results'][0]['text'] == "**Metadata:**\n- Status: Active\n\nActive result"
+        assert result['contractVersion'] == '2.0.0'
+        assert result['graphContext'] is None
+        assert result['result_count'] == 0
 
-        # With include_superseded=True
-        result_with_superseded = await retrieve_context(
-            workspace_path=str(temp_workspace),
-            query="test query",
-            include_superseded=True
-        )
 
-        assert result_with_superseded['success'] is True
-        assert result_with_superseded['result_count'] == 2
-        assert result_with_superseded['filtered_count'] == 0

@@ -124,6 +124,10 @@ export async function activate(_context: vscode.ExtensionContext) {
 
         // Register command groups
         registerDebugCommands(_context);
+
+        // Plan 073: POC-2 commands removed - synthesis is now production (copilotSynthesis.ts)
+        // POC evaluation complete, synthesis integrated into retrieve() method
+        
         registerApiKeyCommands(_context, workspacePath, statusBar);
         registerSetupCommands(
             _context,
