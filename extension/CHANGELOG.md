@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Settings Clarity (Plan 075)**: Updated settings descriptions to clearly distinguish:
   - `Flowbaby.synthesis.modelId`: Controls Copilot synthesis model for memory retrieval
   - `Flowbaby.llm.*`: Controls Python bridge LLM for memory ingestion and graph operations (does NOT affect Copilot synthesis)
+- **Rebuild Tool Batch Processing & Resilience (Plan 076)**: The developer/tester rebuild CLI tool (`rebuild_workspace.py`) now supports robust filesystem-based rebuild with:
+  - **Batch ingestion**: Configurable batch size (`--batch-size`) with rate limiting (`--batch-delay`) for API quota management
+  - **Checkpointing & resumability**: JSON checkpoints with SHA-256 input fingerprinting allow resuming interrupted operations (`--resume`) or starting fresh (`--restart`)
+  - **Preflight/dry-run mode**: `--dry-run` shows file counts, total size, and skip reasons without making changes
+  - **Fail-closed semantics**: Destructive `reset-and-rebuild` mode validates all inputs before resetting stores; aborts on encoding errors or permission issues
+  - **Concurrent writer detection**: Refuses to run when daemon mode is active to prevent data corruption
+  - **File size limits**: Configurable maximum file size (`--max-file-size`, default 10MB) with override (`--allow-oversized`)
 
 ### Changed
 
