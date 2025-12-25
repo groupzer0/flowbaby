@@ -10,6 +10,7 @@ ENV/
 
 # Environment
 .env
+**/.env
 
 # Flowbaby/Cognee data (workspace-local)
 .flowbaby/
@@ -58,7 +59,7 @@ tmp/
 **/.pytest_cache/
 
 # Generated agent artifacts
-agent-output/
+#agent-output/
 
 # Local POC artifacts
 extension/bridge/poc/

@@ -30,7 +30,7 @@ export interface SynthesisResult {
     /** Error message (if success=false) */
     error?: string;
     /** Error code for programmatic handling */
-    errorCode?: 'NO_COPILOT' | 'SYNTHESIS_FAILED' | 'CONTEXT_EMPTY' | 'RATE_LIMITED';
+    errorCode?: 'NO_COPILOT' | 'SYNTHESIS_FAILED' | 'CONTEXT_EMPTY' | 'RATE_LIMITED' | 'SYNTHESIS_MODEL_NOT_AVAILABLE';
     /** Model used for synthesis */
     modelUsed?: string;
     /** Synthesis latency in milliseconds */
@@ -153,7 +153,10 @@ export async function synthesizeWithCopilot(
         });
     }
     
-    // Select Copilot model
+    // Select Copilot model - Plan 075: use Flowbaby.synthesis.modelId setting
+    // NOTE: Model selection happens at synthesis invocation time, NOT during activation
+    const configuredModelId = vscode.workspace.getConfiguration('Flowbaby.synthesis').get<string>('modelId', 'gpt-5-mini');
+    
     let models: vscode.LanguageModelChat[];
     try {
         models = await vscode.lm.selectChatModels({ vendor: 'copilot' });
@@ -182,8 +185,27 @@ export async function synthesizeWithCopilot(
         };
     }
     
-    // Prefer gpt-4o-mini for speed, fall back to first available
-    const preferredModel = models.find(m => m.family === 'gpt-4o-mini') || models[0];
+    // Plan 075: Select model based on Flowbaby.synthesis.modelId setting
+    // Fail-fast if configured model is not available (no silent fallback)
+    const selectedModel = models.find(m => m.family === configuredModelId);
+    
+    if (!selectedModel) {
+        const availableModels = models.map(m => m.family).join(', ');
+        debugLog('Configured synthesis model not available', { 
+            configured: configuredModelId, 
+            available: availableModels 
+        });
+        return {
+            success: false,
+            error: `Synthesis model '${configuredModelId}' is not available. Available models: ${availableModels}. Update Flowbaby.synthesis.modelId in settings.`,
+            errorCode: 'SYNTHESIS_MODEL_NOT_AVAILABLE',
+            latencyMs: Date.now() - startTime,
+            contextTruncated: wasTruncated,
+            contextCharCount
+        };
+    }
+    
+    const preferredModel = selectedModel;
     const modelName = `${preferredModel.vendor}/${preferredModel.family}`;
     
     debugLog('Using Copilot model for synthesis', { model: modelName });

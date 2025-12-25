@@ -436,6 +436,21 @@
           "default": true,
           "markdownDescription": "Show a notification when Flowbaby retrieves relevant memories. Disable to suppress retrieval toasts. Plan 067."
         },
+        "Flowbaby.synthesis.modelId": {
+          "type": "string",
+          "enum": [
+            "gpt-5-mini",
+            "gpt-4o",
+            "gpt-4.1"
+          ],
+          "enumDescriptions": [
+            "GPT-5 mini - Fast, capable, and cost-effective (recommended)",
+            "GPT-4o - High capability, balanced performance",
+            "GPT-4.1 - Latest GPT-4 series model"
+          ],
+          "default": "gpt-5-mini",
+          "markdownDescription": "**Copilot synthesis model** used for Plan 073 memory retrieval. This setting controls which VS Code LM API (Copilot) model synthesizes answers from retrieved graph context.\n\nSynthesis fails with a clear error if the selected model is unavailable (no silent fallback).\n\n**Note**: This curated list is reviewed each release as Copilot model availability evolves."
+        },
         "Flowbaby.llm.provider": {
           "type": "string",
           "enum": [
@@ -446,17 +461,17 @@
             "custom"
           ],
           "default": "openai",
-          "markdownDescription": "LLM provider for memory processing. Non-OpenAI providers may require additional configuration in the endpoint field."
+          "markdownDescription": "**Python bridge LLM provider** for memory ingestion and graph operations. This does NOT affect Copilot synthesis (use `Flowbaby.synthesis.modelId` for that).\n\nNon-OpenAI providers may require additional configuration in the endpoint field."
         },
         "Flowbaby.llm.model": {
           "type": "string",
           "default": "gpt-4o-mini",
-          "markdownDescription": "LLM model name (e.g., gpt-4o-mini, claude-3-haiku-20240307, llama2)"
+          "markdownDescription": "**Python bridge LLM model** for memory ingestion and graph operations (e.g., gpt-4o-mini, claude-3-haiku-20240307, llama2). This does NOT affect Copilot synthesis."
         },
         "Flowbaby.llm.endpoint": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Custom LLM endpoint URL (for Ollama, Azure, or self-hosted). Leave empty for default provider endpoints."
+          "markdownDescription": "**Python bridge LLM endpoint** URL (for Ollama, Azure, or self-hosted). Leave empty for default provider endpoints. This does NOT affect Copilot synthesis."
         }
       }
     }
