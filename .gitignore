@@ -16,8 +16,9 @@ ENV/
 .flowbaby/
 cognee_db
 cognee_graph_kuzu
-/.github
-/tmp
+**/.github
+**/tmp
+**/.claude
 
 # Tutorial artifacts (timestamped outputs)
 tutorial/artifacts/*.html
@@ -64,3 +65,6 @@ tmp/
 # Local POC artifacts
 extension/bridge/poc/
 extension/bridge/poc_results/
+
+# Ignore agent/internal skill files
+.claude/
