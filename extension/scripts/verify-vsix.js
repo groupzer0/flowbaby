@@ -12,7 +12,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const os = require('os');
 
 // Required files that must be present in the VSIX
@@ -53,11 +53,38 @@ function extractVSIX(vsixPath) {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vsix-verify-'));
     
     try {
-        // VSIX is a ZIP archive, extract it
-        execSync(`unzip -q "${vsixPath}" -d "${tmpDir}"`, { stdio: 'pipe' });
+        // Prefer unzip if available (common on macOS/Linux)
+        execFileSync('unzip', ['-q', vsixPath, '-d', tmpDir], { stdio: 'pipe' });
         return tmpDir;
-    } catch (error) {
-        throw new Error(`Failed to extract VSIX: ${error.message}`);
+    } catch (unzipError) {
+        // On Windows, unzip is often not installed; fall back to PowerShell
+        if (process.platform === 'win32') {
+            try {
+                const psEscape = (value) => String(value).replace(/'/g, "''");
+                const zipPath = path.join(tmpDir, 'archive.zip');
+                fs.copyFileSync(vsixPath, zipPath);
+
+                try {
+                    const psCommand = `Expand-Archive -LiteralPath '${psEscape(zipPath)}' -DestinationPath '${psEscape(tmpDir)}' -Force`;
+                    execFileSync(
+                        'powershell.exe',
+                        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psCommand],
+                        { stdio: 'pipe' }
+                    );
+                } finally {
+                    try {
+                        fs.unlinkSync(zipPath);
+                    } catch {
+                        // ignore cleanup errors
+                    }
+                }
+                return tmpDir;
+            } catch (psError) {
+                throw new Error(`Failed to extract VSIX (unzip and PowerShell failed): ${psError.message}`);
+            }
+        }
+
+        throw new Error(`Failed to extract VSIX: ${unzipError.message}`);
     }
 }
 

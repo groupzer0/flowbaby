@@ -574,22 +574,23 @@ export class FlowbabySetupService {
             debugLog('Workspace health check: FRESH (no .flowbaby directory)');
             return 'FRESH';
         }
+
+        // Scenario 2: Check for migration marker indicating unresolved migration
+        // This is BROKEN even if bridge-env.json is missing because it indicates
+        // an interrupted migration that needs repair.
+        const migrationMarkerPath = path.join(flowbabyDir, '.migration-in-progress');
+        if (this.fs.existsSync(migrationMarkerPath)) {
+            debugLog('Workspace health check: BROKEN (migration marker exists)');
+            return 'BROKEN';
+        }
         
-        // Scenario 2: .flowbaby exists but bridge-env.json is missing → FRESH
+        // Scenario 3: .flowbaby exists but bridge-env.json is missing → FRESH
         // Plan 040 M3: This is the expected state for new workspaces where only
         // .flowbaby/logs has been created. Treat as FRESH, not BROKEN.
         const bridgeEnv = await this.readBridgeEnv();
         if (!bridgeEnv) {
             debugLog('Workspace health check: FRESH (bridge-env.json missing - new workspace)');
             return 'FRESH';
-        }
-        
-        // Scenario 3: Check for migration marker indicating unresolved migration
-        // This IS a broken state since it indicates an interrupted migration
-        const migrationMarkerPath = path.join(flowbabyDir, '.migration-in-progress');
-        if (this.fs.existsSync(migrationMarkerPath)) {
-            debugLog('Workspace health check: BROKEN (migration marker exists)');
-            return 'BROKEN';
         }
         
         // Scenario 4: bridge-env.json exists, check Python environment health
