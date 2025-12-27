@@ -876,7 +876,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     private async getLLMEnvironment(): Promise<Record<string, string>> {
         const env: Record<string, string> = {};
 
-        // Get API key from SecretStorage
+        // Priority 1: SecretStorage (secure, encrypted)
         try {
             const apiKey = await this.context.secrets.get('flowbaby.llmApiKey');
             if (apiKey) {
@@ -886,15 +886,22 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             this.log('WARN', 'Failed to get API key from SecretStorage', { error: String(error) });
         }
 
-        // Get LLM configuration from settings
-        const config = vscode.workspace.getConfiguration('Flowbaby.llm');
-        const provider = config.get<string>('provider');
-        const model = config.get<string>('model');
-        const endpoint = config.get<string>('endpoint');
+        // Priority 2: System environment variable (for CI/automated environments)
+        if (!env['LLM_API_KEY'] && process.env.LLM_API_KEY) {
+            env['LLM_API_KEY'] = process.env.LLM_API_KEY;
+        }
 
-        if (provider) env['LLM_PROVIDER'] = provider;
-        if (model) env['LLM_MODEL'] = model;
-        if (endpoint) env['LLM_ENDPOINT'] = endpoint;
+        // Get LLM configuration from settings
+        const config = vscode.workspace.getConfiguration('Flowbaby');
+        const provider = config.get<string>('llm.provider', 'openai');
+        const model = config.get<string>('llm.model', 'gpt-4o-mini');
+        const endpoint = config.get<string>('llm.endpoint', '');
+
+        env['LLM_PROVIDER'] = provider;
+        env['LLM_MODEL'] = model;
+        if (endpoint) {
+            env['LLM_ENDPOINT'] = endpoint;
+        }
 
         return env;
     }

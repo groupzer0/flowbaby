@@ -175,7 +175,6 @@ class TestGetDataIntegrityStatus:
         containing sample data to verify the new row-counting logic.
         """
         import lancedb
-        import pyarrow as pa
 
         system_dir = tmp_path / '.flowbaby/system'
         lancedb_dir = system_dir / 'databases' / 'cognee.lancedb'
@@ -186,11 +185,6 @@ class TestGetDataIntegrityStatus:
 
         # Create DocumentChunk_text table with 5 sample rows
         # This mimics the Cognee 0.4.x schema
-        schema = pa.schema([
-            ('id', pa.string()),
-            ('text', pa.string()),
-            ('vector', pa.list_(pa.float32(), 8)),  # Simple 8-dim vector for testing
-        ])
         data = [
             {'id': f'chunk_{i}', 'text': f'Sample text {i}', 'vector': [0.1] * 8}
             for i in range(5)

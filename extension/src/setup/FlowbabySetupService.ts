@@ -40,6 +40,7 @@ export class FlowbabySetupService {
     private readonly fs: { existsSync: (path: string) => boolean };
     private readonly spawnFn: typeof spawn;
     private readonly statusBar?: FlowbabyStatusBar;
+    private readonly stopDaemonFn?: () => Promise<void>;
 
     private _isVerified: boolean = false;
 
@@ -66,7 +67,8 @@ export class FlowbabySetupService {
         outputChannel: vscode.OutputChannel,
         fileSystem?: { existsSync: (path: string) => boolean },
         spawnFunction?: typeof spawn,
-        statusBar?: FlowbabyStatusBar
+        statusBar?: FlowbabyStatusBar,
+        stopDaemonFn?: () => Promise<void>
     ) {
         this.workspacePath = workspacePath;
         this.outputChannel = outputChannel;
@@ -74,6 +76,7 @@ export class FlowbabySetupService {
         this.fs = fileSystem || fs;
         this.spawnFn = spawnFunction || spawn;
         this.statusBar = statusBar;
+        this.stopDaemonFn = stopDaemonFn;
     }
 
     /**
@@ -646,6 +649,18 @@ export class FlowbabySetupService {
             }
         }
 
+        // Plan 054: Stop the bridge daemon before touching the venv on Windows.
+        // The daemon can hold a lock on .flowbaby\venv, causing EPERM on rename.
+        try {
+            if (this.stopDaemonFn) {
+                await this.stopDaemonFn();
+                // Give Windows a moment to release file locks.
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+        } catch (error) {
+            debugLog('Failed to stop bridge daemon before refresh (continuing)', { error: String(error) });
+        }
+
         if (this.statusBar) {this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Refreshing dependencies...');}
 
         await vscode.window.withProgress({
@@ -684,7 +699,7 @@ export class FlowbabySetupService {
                     if (this.fs.existsSync(actualBackupPath)) {
                         await fs.promises.rm(actualBackupPath, { recursive: true, force: true });
                     }
-                    await fs.promises.rename(actualVenvPath, actualBackupPath);
+                    await this.renameWithRetries(actualVenvPath, actualBackupPath);
                 }
 
                 // 3. Recreate and Install
@@ -739,7 +754,7 @@ export class FlowbabySetupService {
                     if (this.fs.existsSync(actualVenvPath)) {
                         await fs.promises.rm(actualVenvPath, { recursive: true, force: true });
                     }
-                    await fs.promises.rename(actualBackupPath, actualVenvPath);
+                    await this.renameWithRetries(actualBackupPath, actualVenvPath);
                 }
                 
                 let msg = 'Refresh failed.';
@@ -755,6 +770,38 @@ export class FlowbabySetupService {
                 if (bgManager) {bgManager.resume();}
             }
         });
+    }
+
+    private async renameWithRetries(fromPath: string, toPath: string): Promise<void> {
+        const isWindows = process.platform === 'win32';
+        const maxAttempts = isWindows ? 6 : 2;
+        const baseDelayMs = isWindows ? 250 : 50;
+
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                await fs.promises.rename(fromPath, toPath);
+                return;
+            } catch (error) {
+                lastError = error;
+
+                const err = error as { code?: string; message?: string };
+                const code = err?.code;
+                const msg = err?.message || String(error);
+
+                // Windows frequently returns EPERM when a process holds a handle open.
+                // Retry a few times to allow file locks (or AV scanning) to settle.
+                const retryable = code === 'EPERM' || code === 'EBUSY' || code === 'EACCES';
+                if (!retryable || attempt === maxAttempts) {
+                    debugLog('renameWithRetries failed', { fromPath, toPath, attempt, code, error: msg });
+                    throw error;
+                }
+
+                await new Promise(resolve => setTimeout(resolve, baseDelayMs * attempt));
+            }
+        }
+
+        throw lastError;
     }
 
     /**

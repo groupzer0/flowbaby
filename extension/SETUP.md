@@ -156,11 +156,56 @@ If you see errors instead, check the "Common Issues" section below.
 
 ## Common Issues
 
+### Windows: Refresh fails with EPERM rename of `.flowbaby\\venv`
+
+**Symptom**
+
+You run **"Flowbaby: Refresh Bridge Dependencies"** and see something like:
+
+```
+[Setup] Refresh failed: EPERM: operation not permitted, rename
+   '...\\.flowbaby\\venv' -> '...\\.flowbaby\\venv.backup'
+```
+
+**Why this happens (Windows-specific)**
+
+On Windows, directories can’t be renamed while another process has an open handle inside them. In Flowbaby, the most common cause is the **Python bridge daemon** (`daemon.py`) still running and using the interpreter at `.flowbaby\\venv\\Scripts\\python.exe`.
+
+This is often invisible on Linux/macOS because rename semantics and open-file behavior differ.
+
+**Fix / Workarounds**
+
+1. **Reload VS Code window** (Command Palette → **Developer: Reload Window**), then re-run refresh.
+2. **Close all VS Code windows that have this workspace open**, wait ~2 seconds, then re-open and run refresh.
+3. If you want to verify the lock, check for a running process using the venv:
+
+    ```powershell
+    Get-CimInstance Win32_Process |
+       Where-Object { $_.Name -in @('python.exe','pythonw.exe') -and $_.CommandLine -match '\\.flowbaby\\venv' } |
+       Select-Object Name,ProcessId,CommandLine
+    ```
+
+    If you see one, stop it (last resort):
+
+    ```powershell
+    Stop-Process -Id <PID> -Force
+    ```
+
+4. If a previous refresh created `.flowbaby\\venv.backup`, delete it (only if you’re sure you don’t need it):
+
+    ```powershell
+    Remove-Item -Recurse -Force .\.flowbaby\\venv.backup
+    ```
+
+**Engineering note (for Windows compatibility reviews)**
+
+The extension refresh flow should stop the bridge daemon (if running) before backing up/renaming the venv, and it should retry renames briefly to tolerate transient file locks (AV scanning, delayed handle release).
+
 ### "LLM_API_KEY not found"
 
 **Cause**: Missing or incorrectly placed `.env` file
 
-**Solution**: 
+**Solution**:
 1. Create `.env` file in your **workspace root** (not extension directory)
 2. Add: `LLM_API_KEY=sk-your-key-here`
 3. Reload the Extension Development Host window (Ctrl+R or Cmd+R)

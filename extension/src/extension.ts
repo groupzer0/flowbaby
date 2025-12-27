@@ -120,7 +120,20 @@ export async function activate(_context: vscode.ExtensionContext) {
         const statusBar = new FlowbabyStatusBar(_context);
 
         // Initialize setup service for environment management
-        const setupService = new FlowbabySetupService(_context, workspacePath, agentOutputChannel, undefined, undefined, statusBar);
+        // Plan 054: Provide daemon stop hook so refresh can rename venv safely on Windows.
+        const setupService = new FlowbabySetupService(
+            _context,
+            workspacePath,
+            agentOutputChannel,
+            undefined,
+            undefined,
+            statusBar,
+            async () => {
+                if (flowbabyClient) {
+                    await flowbabyClient.stopDaemon();
+                }
+            }
+        );
 
         // Register command groups
         registerDebugCommands(_context);

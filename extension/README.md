@@ -136,6 +136,16 @@ This key is stored securely and applies to all workspaces automatically.
 2. If you see **"Flowbaby: Setup Required"** (yellow warning), click it to run setup
 3. Optional: Open the Output panel (**View → Output**) and select **"Flowbaby"** to see logs
 
+## Windows Troubleshooting
+
+### Refresh dependencies fails with EPERM (rename `.flowbaby\\venv`)
+
+If **"Flowbaby: Refresh Bridge Dependencies"** fails with an `EPERM` rename error on Windows, a Python process is usually still running and holding a lock inside `.flowbaby\\venv` (often the bridge daemon).
+
+- Reload the window (**Developer: Reload Window**) and retry
+- Close VS Code fully (all windows), wait a moment, then retry
+- As a last resort, stop the `python.exe` process that references `.flowbaby\\venv` in its command line
+
 ## Memory-Aware Copilot Instructions (Strong Defaults)
 
 > ⚠️ **Important**: Without explicit instructions, Copilot may not use memory tools in the way you desire. Adding a memory contract to your workspace ensures Copilot proactively stores and retrieves memories.
@@ -481,7 +491,7 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 
 #### 2. "Python not found" or "cognee module not found"
 
-**Solution**: 
+**Solution**:
 
 - Run **"Flowbaby: Initialize Workspace"** to set up the environment automatically
 - If using a custom Python environment, set `Flowbaby.pythonPath` to your Python path
@@ -526,7 +536,7 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 
 To reset your workspace memory (e.g., to start fresh or clear sensitive data):
 
-Use `Flowbaby: Clear Workspace Memory` command from the command pallette. This moves your current data to .flowbaby/.trash until you decide to delete it permanently. 
+Use `Flowbaby: Clear Workspace Memory` command from the command pallette. This moves your current data to .flowbaby/.trash until you decide to delete it permanently.
 
 The extension will reinitialize on next activation, creating a fresh knowledge graph.
 
@@ -593,7 +603,7 @@ This extension uses [Cognee](https://github.com/topoteretes/cognee) under the Ap
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for version history and release notes. 
+See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
 ---
 

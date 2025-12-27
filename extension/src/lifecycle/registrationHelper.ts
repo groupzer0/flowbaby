@@ -473,7 +473,8 @@ export function probeContextDisposed(context: vscode.ExtensionContext | undefine
         return { disposed: false };
     }
 
-    return detectSubscriptionsDisposed((context as any).subscriptions);
+    const subscriptions = (context as unknown as { subscriptions?: unknown }).subscriptions;
+    return detectSubscriptionsDisposed(subscriptions);
 }
 
 /**
@@ -632,8 +633,8 @@ export function recordPromptEvent(reason: string, mode: 'scheduled' | 'suppresse
 export function registerCommand(
     context: vscode.ExtensionContext,
     commandId: string,
-    callback: (...args: any[]) => any,
-    thisArg?: any
+    callback: (...args: unknown[]) => unknown,
+    thisArg?: unknown
 ) {
     const disposable = vscode.commands.registerCommand(commandId, callback, thisArg);
     safePush(context, disposable, { intent: { kind: 'command', id: commandId } });

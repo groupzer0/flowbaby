@@ -27,7 +27,6 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -470,19 +469,41 @@ async def process_request(request: dict, workspace_path: str, dataset_name: str,
 
 
 async def read_stdin_lines() -> Any:
-    """Async generator that yields lines from stdin."""
-    loop = asyncio.get_event_loop()
-    reader = asyncio.StreamReader()
-    protocol = asyncio.StreamReaderProtocol(reader)
+    """
+    Async generator that yields lines from stdin.
 
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+    On Windows, asyncio's connect_read_pipe() doesn't work with stdin pipes
+    from spawned subprocesses (ProactorEventLoop + IOCP limitation).
+    We use a thread-based reader instead, which works cross-platform.
+    """
+    import queue
+    import threading
+
+    line_queue: queue.Queue[str | None] = queue.Queue()
+
+    def stdin_reader():
+        """Synchronous stdin reader running in a background thread."""
+        try:
+            for line in sys.stdin:
+                line_queue.put(line.strip())
+        except Exception:
+            pass
+        finally:
+            line_queue.put(None)  # Signal EOF
+
+    # Start reader thread
+    reader_thread = threading.Thread(target=stdin_reader, daemon=True)
+    reader_thread.start()
+
+    loop = asyncio.get_event_loop()
 
     while True:
         try:
-            line = await reader.readline()
-            if not line:
+            # Use run_in_executor to avoid blocking the event loop
+            line = await loop.run_in_executor(None, line_queue.get)
+            if line is None:
                 break
-            yield line.decode('utf-8').strip()
+            yield line
         except Exception:
             break
 

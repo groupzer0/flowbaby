@@ -7,11 +7,8 @@ and recover_data.py to count SQLite documents and LanceDB embeddings.
 """
 
 import sqlite3
-from pathlib import Path
 
 import lancedb
-import pyarrow as pa
-import pytest
 
 from data_integrity_utils import (
     evaluate_data_health,
