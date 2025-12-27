@@ -105,10 +105,10 @@ Flowbaby now manages its own Python environment automatically.
 1. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
 2. Run **"Flowbaby: Initialize Workspace"**
 3. The extension will:
-	- Check for Python 3.8+
-	- Create a dedicated `.flowbaby/venv` in your workspace (isolated from project venvs)
-	- Install `cognee` and dependencies
-	- Verify the environment is ready
+   - Check for Python 3.10-3.12
+   - Create a dedicated `.flowbaby/venv` in your workspace (isolated from project venvs)
+   - Install `cognee` and dependencies
+   - Verify the environment is ready
 
 ### 2. Configure API Key
 
@@ -172,9 +172,9 @@ At the start of any turn where past work might matter (prior plans, decisions, c
 
 1. Call #flowbabyRetrieveMemory **before** deep planning or multi-step reasoning.
 2. Use a natural-language query that:
-	- Describes the current task, question, or challenge
-	- Mentions the area of the codebase or system involved
-	- States what you are looking for (e.g., prior decisions, constraints, risks, patterns, open questions)
+    - Describes the current task, question, or challenge
+    - Mentions the area of the codebase or system involved
+    - States what you are looking for (e.g., prior decisions, constraints, risks, patterns, open questions)
 3. Prefer a small set of high-value memories (default: 3) rather than many low-signal items.
 
 You MAY make at most one follow-up retrieval in the same turn, but only if:
@@ -271,10 +271,10 @@ The `@flowbaby` participant lets you directly query your workspace memory.
 1. Open GitHub Copilot Chat (`Ctrl+Alt+I` or click the chat icon).
 2. Address Flowbaby explicitly: `@flowbaby How did I implement caching?`
 3. Flowbaby:
-	- Retrieves relevant memories from your knowledge graph.
-	- Shows previews under **"📚 Retrieved memories"**.
-	- Augments your question with that context.
-	- Generates a context-aware response.
+   - Retrieves relevant memories from your knowledge graph.
+   - Shows previews under **"📚 Retrieved memories"**.
+   - Augments your question with that context.
+   - Generates a context-aware response.
 
 **Example queries**:
 - `@flowbaby What problems did we discuss about the authentication system?`
@@ -388,10 +388,14 @@ Access settings via **File → Preferences → Settings → Extensions → Flowb
 | `Flowbaby.maxContextTokens` | Maximum token budget for retrieved context (higher values may increase latency and memory usage) | `32000` |
 | `Flowbaby.searchTopK` | Maximum number of candidates to request from the Flowbaby search engine before ranking (normalized to be ≥ `maxContextResults`, hard-capped at 100) | `10` |
 | `Flowbaby.ranking.halfLifeDays` | Recency half-life (in days) used for ranking; older memories past this window have their relevance score halved | `7` |
+| `Flowbaby.bridgeMode` | Bridge execution mode: `daemon` (default, long-lived Python process for faster requests) or `spawn` (legacy per-request process; useful for troubleshooting daemon issues) | `daemon` |
+| `Flowbaby.daemonIdleTimeoutMinutes` | Minutes of inactivity before the bridge daemon exits; lower values save memory, higher values keep the daemon warm at the cost of a long-lived process | `30` |
 | `flowbaby.notifications.showIngestionSuccess` | Show toast notifications when memory ingestion completes successfully (errors are always shown) | `true` |
-| `Flowbaby.pythonPath` | Python interpreter to use for the Flowbaby bridge; leave as `python3` for auto-detection of workspace `.venv`, or set an explicit path | `python3` |
+| `flowbaby.showRetrievalNotifications` | Show a notification when Flowbaby retrieves relevant memories | `true` |
+| `Flowbaby.pythonPath` | Path to Python interpreter. Leave empty for auto-detection (uses `.flowbaby/venv` if present, otherwise system Python). Set an explicit path to override auto-detection. | *(empty)* |
 | `Flowbaby.logLevel` | Logging verbosity level: `error`, `warn`, `info`, or `debug` | `info` |
 | `Flowbaby.debugLogging` | Enable a dedicated debug output channel with detailed bridge and extension diagnostics | `false` |
+| `Flowbaby.synthesis.modelId` | **Copilot synthesis model** used to synthesize answers from retrieved memory context (does not affect the Python bridge LLM) | `gpt-5-mini` |
 
 ### LLM Configuration
 
@@ -418,19 +422,19 @@ Flowbaby Chat Memory provides **Language Model Tools** that allow GitHub Copilot
 ### Quick Start
 
 1. **Enable Tools via Configure Tools UI**:
-	- Open Copilot chat → Click "Tools" icon → "Configure Tools"
-	- Find the "Flowbaby" section
-	- Toggle "Store Memory in Flowbaby" and "Retrieve Flowbaby Memory"
-	- Toggle tools on/off individually (disabled by default for privacy)
+   - Open Copilot chat → Click "Tools" icon → "Configure Tools"
+   - Find the "Flowbaby" section
+   - Toggle "Store Memory in Flowbaby" and "Retrieve Flowbaby Memory"
+   - Toggle tools on/off individually (disabled by default for privacy)
 
 2. **Use in Chat**:
-	- Type `#flowbaby` to see autocomplete suggestions
-	- Select `#flowbabyStoreSummary` or `#flowbabyRetrieveMemory`
-	- Tools appear only when enabled via Configure Tools
+   - Type `#flowbaby` to see autocomplete suggestions
+   - Select `#flowbabyStoreSummary` or `#flowbabyRetrieveMemory`
+   - Tools appear only when enabled via Configure Tools
 
 3. **Transparency**:
-	- All tool invocations logged in Output channel ("Flowbaby Agent Activity")
-	- Configure Tools UI provides visual feedback for tool state
+   - All tool invocations logged in Output channel ("Flowbaby Agent Activity")
+   - Configure Tools UI provides visual feedback for tool state
 
 ### Available Tools
 
@@ -524,7 +528,7 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 5. Each workspace has separate memory-switching workspaces means different context
 6. If retrieval fails, you'll see "⚠️ Memory retrieval unavailable" but participant continues without context
 
-**Note**: Auto-detection works for standard `.venv` setups on Linux, macOS, and Windows. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, or pyenv, use explicit `Flowbaby.pythonPath` configuration.
+**Note**: Auto-detection prefers a workspace-managed `.flowbaby/venv` when present. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, pyenv, or other non-standard setups, use an explicit `Flowbaby.pythonPath`.
 
 ### Clearing Memory
 
@@ -551,7 +555,7 @@ rm -rf .flowbaby/ .flowbaby/system/ .flowbaby/data/  # In workspace root
 ## Known Limitations
 
 - **Workspace Required** - Extension doesn't work in single-file mode
-- **Python Dependency** - Requires Python 3.8+ on your system; Cognee and dependencies are installed automatically in an isolated environment
+- **Python Dependency** - Requires Python 3.10-3.12 on your system; Cognee and dependencies are installed automatically in an isolated environment
 - **Platform Support** - Primarily tested on macOS and Linux; Windows support may require additional configuration
 
 ## Screenshots

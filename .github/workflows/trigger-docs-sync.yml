@@ -1,0 +1,22 @@
+name: Trigger Docs Sync
+
+on:
+  push:
+    paths:
+      - 'extension/README.md'
+      - 'extension/AGENT_INTEGRATION.md'
+      - 'extension/CHANGELOG.md'
+    branches:
+      - main
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger flowbaby-docs sync
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.DOCS_SYNC_TOKEN }}" \
+            https://api.github.com/repos/groupzer0/flowbaby-docs/dispatches \
+            -d '{"event_type":"docs-updated"}'

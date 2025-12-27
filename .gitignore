@@ -16,7 +16,6 @@ ENV/
 .flowbaby/
 cognee_db
 cognee_graph_kuzu
-.github/
 **/tmp
 
 # Tutorial artifacts (timestamped outputs)
@@ -59,7 +58,13 @@ tmp/
 **/.pytest_cache/
 
 # Generated agent artifacts
-agent-output/
+#agent-output/
+
+# github
+.github/agents/
+.github/chatmodes/
+.github/instructions/
+.github/copilot-instructions.md
 
 # Local POC artifacts
 extension/bridge/poc/

@@ -105,7 +105,7 @@ Flowbaby now manages its own Python environment automatically.
 1. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
 2. Run **"Flowbaby: Initialize Workspace"**
 3. The extension will:
-   - Check for Python 3.8+
+   - Check for Python 3.10-3.12
    - Create a dedicated `.flowbaby/venv` in your workspace (isolated from project venvs)
    - Install `cognee` and dependencies
    - Verify the environment is ready
@@ -391,12 +391,14 @@ Access settings via **File → Preferences → Settings → Extensions → Flowb
 | `Flowbaby.maxContextTokens` | Maximum token budget for retrieved context (higher values may increase latency and memory usage) | `32000` |
 | `Flowbaby.searchTopK` | Maximum number of candidates to request from the Flowbaby search engine before ranking (normalized to be ≥ `maxContextResults`, hard-capped at 100) | `10` |
 | `Flowbaby.ranking.halfLifeDays` | Recency half-life (in days) used for ranking; older memories past this window have their relevance score halved | `7` |
-| `Flowbaby.bridgeMode` | Bridge execution mode: `daemon` (default, long‑lived Python process for faster requests) or `spawn` (legacy per‑request process; useful for troubleshooting daemon issues) | `daemon` |
-| `Flowbaby.daemonIdleTimeoutMinutes` | Minutes of inactivity before the bridge daemon exits; lower values save memory, higher values keep the daemon warm at the cost of a long‑lived process | `5` |
+| `Flowbaby.bridgeMode` | Bridge execution mode: `daemon` (default, long-lived Python process for faster requests) or `spawn` (legacy per-request process; useful for troubleshooting daemon issues) | `daemon` |
+| `Flowbaby.daemonIdleTimeoutMinutes` | Minutes of inactivity before the bridge daemon exits; lower values save memory, higher values keep the daemon warm at the cost of a long-lived process | `30` |
 | `flowbaby.notifications.showIngestionSuccess` | Show toast notifications when memory ingestion completes successfully (errors are always shown) | `true` |
-| `Flowbaby.pythonPath` | Python interpreter to use for the Flowbaby bridge; leave as `python3` for auto-detection of workspace `.venv`, or set an explicit path | `python3` |
+| `flowbaby.showRetrievalNotifications` | Show a notification when Flowbaby retrieves relevant memories | `true` |
+| `Flowbaby.pythonPath` | Path to Python interpreter. Leave empty for auto-detection (uses `.flowbaby/venv` if present, otherwise system Python). Set an explicit path to override auto-detection. | *(empty)* |
 | `Flowbaby.logLevel` | Logging verbosity level: `error`, `warn`, `info`, or `debug` | `info` |
 | `Flowbaby.debugLogging` | Enable a dedicated debug output channel with detailed bridge and extension diagnostics | `false` |
+| `Flowbaby.synthesis.modelId` | **Copilot synthesis model** used to synthesize answers from retrieved memory context (does not affect the Python bridge LLM) | `gpt-5-mini` |
 
 ### LLM Configuration
 
@@ -510,7 +512,7 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 - Check that `Flowbaby.logLevel` is not set to `"debug"` (this slows down operations)
 - Reduce `maxContextResults` to 1-2 for faster retrieval
 - Reduce `maxContextTokens` to 1000 for lighter processing
- - If the Python bridge daemon is unstable in your environment, switch `Flowbaby.bridgeMode` to `"spawn"` to fall back to the legacy per-request process model.
+- If the Python bridge daemon is unstable in your environment, switch `Flowbaby.bridgeMode` to `"spawn"` to fall back to the legacy per-request process model.
 
 #### 5. Capture or Retrieval Not Working
 
@@ -530,7 +532,7 @@ Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
 5. Each workspace has separate memory-switching workspaces means different context
 6. If retrieval fails, you'll see "⚠️ Memory retrieval unavailable" but participant continues without context
 
-**Note**: Auto-detection works for standard `.venv` setups on Linux, macOS, and Windows. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, or pyenv, use explicit `Flowbaby.pythonPath` configuration.
+**Note**: Auto-detection prefers a workspace-managed `.flowbaby/venv` when present. For remote contexts (Remote-SSH, WSL, Dev Containers), conda, pyenv, or other non-standard setups, use an explicit `Flowbaby.pythonPath`.
 
 ### Clearing Memory
 
@@ -557,7 +559,7 @@ rm -rf .flowbaby/ .flowbaby/system/ .flowbaby/data/  # In workspace root
 ## Known Limitations
 
 - **Workspace Required** - Extension doesn't work in single-file mode
-- **Python Dependency** - Requires Python 3.8+ on your system; Cognee and dependencies are installed automatically in an isolated environment
+- **Python Dependency** - Requires Python 3.10-3.12 on your system; Cognee and dependencies are installed automatically in an isolated environment
 - **Platform Support** - Primarily tested on macOS and Linux; Windows support may require additional configuration
 
 ## Screenshots
