@@ -46,6 +46,52 @@ This structure supports later migration to OpenAPI if needed:
 
 ## Cross-Repo Synchronization
 
+### Automatic Sync Workflow
+
+Changes pushed to `api-contract/` on `main` trigger the [sync-contract workflow](../.github/workflows/sync-contract.yml), which:
+
+1. Detects changes in `api-contract/**`
+2. Opens a PR in `groupzer0/flowbaby-cloud` with the updated files
+3. Updates the `source` field in `version.ts` to indicate the sync origin
+
+```
+┌─────────────────────────┐         ┌─────────────────────────┐
+│  groupzer0/flowbaby     │         │  groupzer0/flowbaby-    │
+│  (Extension Repo)       │         │  cloud (Backend Repo)   │
+│                         │         │                         │
+│  api-contract/          │  sync   │  api-contract/          │
+│  ├── types.ts      ─────┼────────>│  ├── types.ts           │
+│  ├── endpoints.md       │   PR    │  ├── endpoints.md       │
+│  └── version.ts         │         │  └── version.ts         │
+│                         │         │                         │
+│  CANONICAL SOURCE       │         │  SYNCED COPY            │
+└─────────────────────────┘         └─────────────────────────┘
+```
+
+#### Required Setup
+
+The workflow requires a `CROSS_REPO_PAT` secret in the extension repo:
+
+1. Create a **fine-grained** GitHub Personal Access Token at https://github.com/settings/personal-access-tokens/new
+   - Recommended token name: `flowbaby-contract-sync`
+2. Configure the token:
+   - **Repository access**: Only select repositories → `groupzer0/flowbaby-cloud`
+   - **Permissions** (Repository permissions):
+     - Contents: **Read and write** (to push branches)
+     - Pull requests: **Read and write** (to create PRs)
+     - Metadata: Read-only (auto-selected)
+3. Add it as a repository secret named `CROSS_REPO_PAT`:
+   ```bash
+   gh secret set CROSS_REPO_PAT --repo groupzer0/flowbaby
+   ```
+
+#### Manual Sync
+
+To force a sync without changes:
+1. Go to Actions → "Sync API Contract"
+2. Click "Run workflow"
+3. Check "Force sync even if no changes detected"
+
 ### For Extension Development (This Repo)
 - Import types directly from `api-contract/types.ts`
 - Check `version.ts` when debugging integration issues

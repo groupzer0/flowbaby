@@ -17,7 +17,7 @@
  * - MINOR: Backward-compatible additions (new optional fields, new endpoints)
  * - PATCH: Documentation or non-functional changes
  */
-export const CONTRACT_VERSION = '1.0.0';
+export const CONTRACT_VERSION = '1.1.0';
 
 /**
  * Indicates whether the contract is ready for implementation.
@@ -29,7 +29,7 @@ export const CONTRACT_IMPLEMENTATION_READY = true;
  * Minimum backend version required by this contract.
  * Used by extension to verify backend compatibility.
  */
-export const MIN_BACKEND_VERSION = '0.2.0';
+export const MIN_BACKEND_VERSION = '0.3.0';
 
 /**
  * Contract metadata for debugging and logging.
@@ -38,6 +38,6 @@ export const CONTRACT_METADATA = {
   version: CONTRACT_VERSION,
   implementationReady: CONTRACT_IMPLEMENTATION_READY,
   minBackendVersion: MIN_BACKEND_VERSION,
-  lastUpdated: '2025-12-27',
+  lastUpdated: '2025-12-28',
   source: 'flowbaby-cloud-stub', // Will be 'flowbaby' after sync
 } as const;
