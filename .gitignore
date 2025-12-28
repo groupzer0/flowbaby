@@ -58,7 +58,7 @@ tmp/
 **/.pytest_cache/
 
 # Generated agent artifacts
-#agent-output/
+agent-output/
 
 # github
 .github/agents/
