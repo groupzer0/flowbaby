@@ -150,8 +150,6 @@ jobs:
           labels: |
             api-contract
             automated
-          reviewers: |
-            groupzer0
 
       - name: Summary
         if: always()
