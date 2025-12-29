@@ -20,6 +20,7 @@ export type {
     UserTier,
     AuthRequest,
     AuthResponse,
+    RefreshRequest,
     VendRequest,
     VendResponse,
     ErrorCode,
@@ -167,6 +168,10 @@ export const SECRET_KEYS = {
     SESSION_EXPIRES_AT: 'flowbaby.cloud.sessionExpiresAt',
     /** User's subscription tier */
     USER_TIER: 'flowbaby.cloud.userTier',
+    /** Refresh token for session renewal (single-use, rotated) */
+    REFRESH_TOKEN: 'flowbaby.cloud.refreshToken',
+    /** GitHub user identifier (numeric string) */
+    GITHUB_ID: 'flowbaby.cloud.githubId',
 } as const;
 
 /**
@@ -192,4 +197,16 @@ export const CREDENTIAL_REFRESH = {
     REFRESH_BEFORE_EXPIRY_MINUTES: 15,
     /** Maximum drain window for daemon restart (seconds) */
     MAX_DRAIN_WINDOW_SECONDS: 30,
+} as const;
+
+/**
+ * Session refresh configuration.
+ */
+export const SESSION_REFRESH = {
+    /** Fraction of session TTL remaining before proactive refresh (10% = 0.1) */
+    REFRESH_THRESHOLD_FRACTION: 0.1,
+    /** Minimum seconds remaining before refresh attempt (safety floor) */
+    MIN_REFRESH_SECONDS: 300, // 5 minutes
+    /** Maximum seconds before session start to delay initial refresh check */
+    INITIAL_CHECK_DELAY_SECONDS: 60,
 } as const;

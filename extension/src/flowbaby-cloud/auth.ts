@@ -17,7 +17,7 @@
 
 import * as vscode from 'vscode';
 import type { AuthResponse } from './types';
-import { FlowbabyCloudError, SECRET_KEYS, OAUTH_CALLBACK_URI, FLOWBABY_CLOUD_CONFIG } from './types';
+import { FlowbabyCloudError, SECRET_KEYS, OAUTH_CALLBACK_URI, FLOWBABY_CLOUD_CONFIG, SESSION_REFRESH } from './types';
 import { FlowbabyCloudClient } from './client';
 
 /**
@@ -26,9 +26,15 @@ import { FlowbabyCloudClient } from './client';
  */
 export interface IAuthClient {
     /**
-     * Exchange an OAuth authorization code for a session token.
+     * Exchange a Flowbaby one-time exchange code for session and refresh tokens.
      */
     exchangeOAuthCode(code: string): Promise<AuthResponse>;
+
+    /**
+     * Refresh a session using a refresh token.
+     * Returns new session token and new refresh token (rotation).
+     */
+    refreshSession(refreshToken: string): Promise<AuthResponse>;
 }
 
 /**
@@ -40,6 +46,10 @@ class AuthClientAdapter implements IAuthClient {
 
     async exchangeOAuthCode(code: string): Promise<AuthResponse> {
         return this.client.exchangeOAuthCode({ code });
+    }
+
+    async refreshSession(refreshToken: string): Promise<AuthResponse> {
+        return this.client.refreshSession(refreshToken);
     }
 }
 
@@ -63,6 +73,7 @@ export class MockAuthClient implements IAuthClient {
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
             tier: 'free',
             githubId: 'mock-github-user',
+            refreshToken: 'mock-refresh-token-' + Date.now(),
             ...mockResponse,
         };
     }
@@ -71,6 +82,18 @@ export class MockAuthClient implements IAuthClient {
         // Simulate network delay
         await new Promise(resolve => setTimeout(resolve, 100));
         return this.mockResponse;
+    }
+
+    async refreshSession(_refreshToken: string): Promise<AuthResponse> {
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 100));
+        // Return new tokens (simulating rotation)
+        return {
+            ...this.mockResponse,
+            sessionToken: 'mock-refreshed-session-' + Date.now(),
+            refreshToken: 'mock-rotated-refresh-' + Date.now(),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        };
     }
 }
 
@@ -90,6 +113,12 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
 
     private pendingOAuthResolve?: (code: string) => void;
     private pendingOAuthReject?: (error: Error) => void;
+
+    /** Timer for proactive session refresh */
+    private refreshTimer?: NodeJS.Timeout;
+
+    /** Flag to prevent concurrent refresh attempts */
+    private isRefreshing = false;
 
     constructor(
         private readonly secretStorage: vscode.SecretStorage,
@@ -199,10 +228,15 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
     async logout(): Promise<void> {
         this.log('Logging out');
 
+        // Cancel any pending refresh
+        this.cancelRefreshTimer();
+
         await Promise.all([
             this.secretStorage.delete(SECRET_KEYS.SESSION_TOKEN),
             this.secretStorage.delete(SECRET_KEYS.SESSION_EXPIRES_AT),
             this.secretStorage.delete(SECRET_KEYS.USER_TIER),
+            this.secretStorage.delete(SECRET_KEYS.REFRESH_TOKEN),
+            this.secretStorage.delete(SECRET_KEYS.GITHUB_ID),
         ]);
 
         this._onDidChangeAuthState.fire({ isAuthenticated: false });
@@ -291,7 +325,146 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
             this.secretStorage.store(SECRET_KEYS.SESSION_TOKEN, response.sessionToken),
             this.secretStorage.store(SECRET_KEYS.SESSION_EXPIRES_AT, response.expiresAt),
             this.secretStorage.store(SECRET_KEYS.USER_TIER, response.tier),
+            this.secretStorage.store(SECRET_KEYS.REFRESH_TOKEN, response.refreshToken),
+            this.secretStorage.store(SECRET_KEYS.GITHUB_ID, response.githubId),
         ]);
+
+        // Schedule proactive refresh
+        this.scheduleRefresh(response.expiresAt);
+    }
+
+    /**
+     * Schedule a proactive session refresh before the session expires.
+     *
+     * Uses SESSION_REFRESH configuration to determine when to refresh:
+     * - Refreshes when less than REFRESH_THRESHOLD_FRACTION of TTL remains
+     * - Has a MIN_REFRESH_SECONDS safety floor
+     */
+    private scheduleRefresh(expiresAt: string): void {
+        this.cancelRefreshTimer();
+
+        const expiryDate = new Date(expiresAt);
+        const now = new Date();
+        const totalTtlMs = expiryDate.getTime() - now.getTime();
+
+        if (totalTtlMs <= 0) {
+            this.log('Session already expired, not scheduling refresh');
+            return;
+        }
+
+        // Calculate refresh time: when REFRESH_THRESHOLD_FRACTION of TTL remains
+        const thresholdMs = totalTtlMs * SESSION_REFRESH.REFRESH_THRESHOLD_FRACTION;
+        const minRefreshMs = SESSION_REFRESH.MIN_REFRESH_SECONDS * 1000;
+
+        // Use the larger of threshold-based time or minimum time before expiry
+        const refreshBeforeExpiryMs = Math.max(thresholdMs, minRefreshMs);
+        const refreshInMs = Math.max(totalTtlMs - refreshBeforeExpiryMs, SESSION_REFRESH.INITIAL_CHECK_DELAY_SECONDS * 1000);
+
+        this.log(`Session expires in ${Math.round(totalTtlMs / 1000 / 60)} minutes, scheduling refresh in ${Math.round(refreshInMs / 1000 / 60)} minutes`);
+
+        this.refreshTimer = setTimeout(() => {
+            void this.tryRefreshSession();
+        }, refreshInMs);
+    }
+
+    /**
+     * Cancel any pending refresh timer.
+     */
+    private cancelRefreshTimer(): void {
+        if (this.refreshTimer) {
+            clearTimeout(this.refreshTimer);
+            this.refreshTimer = undefined;
+        }
+    }
+
+    /**
+     * Attempt to refresh the session using the stored refresh token.
+     *
+     * This is called proactively before session expiry. If refresh fails
+     * due to an invalid refresh token, the user will need to re-authenticate.
+     *
+     * @returns true if refresh succeeded, false otherwise
+     */
+    async tryRefreshSession(): Promise<boolean> {
+        if (this.isRefreshing) {
+            this.log('Refresh already in progress, skipping');
+            return false;
+        }
+
+        const refreshToken = await this.secretStorage.get(SECRET_KEYS.REFRESH_TOKEN);
+        if (!refreshToken) {
+            this.log('No refresh token available, cannot refresh session');
+            return false;
+        }
+
+        this.isRefreshing = true;
+        this.log('Attempting to refresh session');
+
+        try {
+            const response = await this.authClient.refreshSession(refreshToken);
+            await this.storeSession(response);
+            this.log('Session refreshed successfully');
+            this._onDidChangeAuthState.fire({ isAuthenticated: true, tier: response.tier });
+            return true;
+        } catch (error) {
+            this.log(`Session refresh failed: ${error}`);
+
+            // If the refresh token is invalid, clear it so we don't keep trying
+            if (error instanceof FlowbabyCloudError && error.code === 'INVALID_REFRESH') {
+                this.log('Refresh token is invalid, clearing stored credentials');
+                await this.logout();
+            }
+
+            return false;
+        } finally {
+            this.isRefreshing = false;
+        }
+    }
+
+    /**
+     * Get the stored refresh token (for testing/debugging only).
+     * @internal
+     */
+    async getRefreshToken(): Promise<string | undefined> {
+        return this.secretStorage.get(SECRET_KEYS.REFRESH_TOKEN);
+    }
+
+    /**
+     * Check if session needs refresh and attempt it if so.
+     * Call this on extension activation to handle sessions that may have
+     * expired or be close to expiry while VS Code was closed.
+     */
+    async checkAndRefreshIfNeeded(): Promise<void> {
+        const expiresAt = await this.secretStorage.get(SECRET_KEYS.SESSION_EXPIRES_AT);
+        if (!expiresAt) {
+            return;
+        }
+
+        const expiryDate = new Date(expiresAt);
+        const now = new Date();
+        const remainingMs = expiryDate.getTime() - now.getTime();
+
+        // If already expired, try to refresh
+        if (remainingMs <= 0) {
+            this.log('Session has expired, attempting refresh');
+            const refreshed = await this.tryRefreshSession();
+            if (!refreshed) {
+                this.log('Could not refresh expired session, user will need to re-authenticate');
+            }
+            return;
+        }
+
+        // If close to expiry (within threshold), refresh proactively
+        const totalTtlMs = 24 * 60 * 60 * 1000; // Assume 24h TTL for threshold calculation
+        const thresholdMs = totalTtlMs * SESSION_REFRESH.REFRESH_THRESHOLD_FRACTION;
+        if (remainingMs < thresholdMs) {
+            this.log('Session close to expiry, refreshing proactively');
+            await this.tryRefreshSession();
+            return;
+        }
+
+        // Schedule refresh for later
+        this.scheduleRefresh(expiresAt);
     }
 
     /**
@@ -302,6 +475,7 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
     }
 
     dispose(): void {
+        this.cancelRefreshTimer();
         this._onDidChangeAuthState.dispose();
         this.disposables.forEach(d => d.dispose());
     }

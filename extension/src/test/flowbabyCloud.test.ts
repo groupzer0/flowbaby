@@ -77,14 +77,14 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('accepts custom mock response', async () => {
             const customResponse: Partial<AuthResponse> = {
                 sessionToken: 'custom-token',
-                tier: 'pro',
+                tier: 'basic',
                 githubId: 'custom-user',
             };
             const mockClient = new MockAuthClient(customResponse);
             const response = await mockClient.exchangeOAuthCode('test-code');
 
             assert.strictEqual(response.sessionToken, 'custom-token');
-            assert.strictEqual(response.tier, 'pro');
+            assert.strictEqual(response.tier, 'basic');
             assert.strictEqual(response.githubId, 'custom-user');
         });
     });

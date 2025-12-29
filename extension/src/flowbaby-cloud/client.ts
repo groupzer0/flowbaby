@@ -11,6 +11,7 @@
 import {
     AuthRequest,
     AuthResponse,
+    RefreshRequest,
     VendRequest,
     VendResponse,
     ApiError,
@@ -46,14 +47,33 @@ export class FlowbabyCloudClient {
     // =========================================================================
 
     /**
-     * Exchange a GitHub OAuth code for a Flowbaby session token.
+     * Exchange a Flowbaby one-time exchange code for a session token.
      *
-     * @param request - The auth request containing the OAuth code
-     * @returns The auth response with session token and user info
+     * NOTE: The `code` in AuthRequest is the Flowbaby exchange code issued by
+     * the backend after GitHub OAuth, NOT the GitHub authorization code directly.
+     *
+     * @param request - The auth request containing the exchange code
+     * @returns The auth response with session token, refresh token, and user info
      * @throws FlowbabyCloudError on API errors or network failures
      */
     async exchangeOAuthCode(request: AuthRequest): Promise<AuthResponse> {
         return this.post<AuthRequest, AuthResponse>('/auth/github', request);
+    }
+
+    /**
+     * Refresh a session using a refresh token.
+     *
+     * Refresh tokens are single-use and rotated on each successful refresh.
+     * After calling this method, the old refresh token is invalidated and
+     * the new one from the response must be stored.
+     *
+     * @param refreshToken - The refresh token from a previous AuthResponse
+     * @returns New AuthResponse with new session token and new refresh token
+     * @throws FlowbabyCloudError with code INVALID_REFRESH if token is invalid/expired/used
+     */
+    async refreshSession(refreshToken: string): Promise<AuthResponse> {
+        const request: RefreshRequest = { refreshToken };
+        return this.post<RefreshRequest, AuthResponse>('/auth/refresh', request);
     }
 
     // =========================================================================
@@ -222,6 +242,8 @@ export class FlowbabyCloudClient {
     private isValidErrorCode(code: string): code is ErrorCode {
         const validCodes: ErrorCode[] = [
             'INVALID_CODE',
+            'INVALID_REFRESH',
+            'STATE_MISMATCH',
             'GITHUB_ERROR',
             'RATE_LIMITED',
             'SESSION_EXPIRED',
