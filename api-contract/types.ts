@@ -15,8 +15,9 @@
 
 /**
  * User subscription tier determining quota limits and feature access.
+ * Note: 'pro' tier is reserved for future implementation.
  */
-export type UserTier = 'free' | 'basic' | 'pro';
+export type UserTier = 'free' | 'basic';
 
 // =============================================================================
 // Auth Endpoint Types
@@ -24,17 +25,31 @@ export type UserTier = 'free' | 'basic' | 'pro';
 
 /**
  * Request body for POST /auth/github
- * Exchange a GitHub OAuth authorization code for a Flowbaby session token.
+ *
+ * Exchanges a **Flowbaby one-time exchange code** for a Flowbaby session token.
+ *
+ * IMPORTANT: The `code` field is NOT the GitHub OAuth authorization code directly.
+ * It is the short-lived, single-use exchange code issued by the Flowbaby backend
+ * after completing GitHub OAuth server-side. The backend deep-links this code to
+ * the VS Code extension via `vscode://Flowbaby.flowbaby/auth/callback?code=...`.
  */
 export interface AuthRequest {
-  /** GitHub OAuth authorization code from the OAuth callback */
+  /**
+   * Flowbaby one-time exchange code.
+   * Issued by backend after successful GitHub OAuth callback.
+   * Single-use, short-lived (≤60 seconds), invalidated after redemption.
+   */
   code: string;
-  /** Optional CSRF state token for validation */
+  /**
+   * CSRF state token for validation.
+   * If provided to GET /auth/login, backend echoes it through the OAuth flow
+   * and includes it in the deep-link. Extension MUST verify it matches.
+   */
   state?: string;
 }
 
 /**
- * Successful response from POST /auth/github
+ * Successful response from POST /auth/github or POST /auth/refresh
  */
 export interface AuthResponse {
   /** Flowbaby JWT session token */
@@ -45,6 +60,22 @@ export interface AuthResponse {
   tier: UserTier;
   /** GitHub user identifier (numeric string) */
   githubId: string;
+  /**
+   * Refresh token for obtaining new session tokens without re-authenticating.
+   * Single-use: each refresh returns a new refreshToken (rotation).
+   * Longer-lived than sessionToken (e.g., 30 days).
+   * Store securely (VS Code SecretStorage).
+   */
+  refreshToken: string;
+}
+
+/**
+ * Request body for POST /auth/refresh
+ * Exchange a valid refresh token for a new session token + new refresh token.
+ */
+export interface RefreshRequest {
+  /** The refresh token from a previous AuthResponse */
+  refreshToken: string;
 }
 
 // =============================================================================
@@ -86,14 +117,16 @@ export interface VendResponse {
  * Each code maps to a specific HTTP status and failure scenario.
  */
 export type ErrorCode =
-  | 'INVALID_CODE'      // 400 - GitHub OAuth code is invalid or expired
-  | 'GITHUB_ERROR'      // 502 - GitHub API returned an error during code exchange
-  | 'RATE_LIMITED'      // 429 - Too many requests; retry after backoff
-  | 'SESSION_EXPIRED'   // 401 - Session token is expired
-  | 'SESSION_INVALID'   // 401 - Session token signature verification failed
-  | 'QUOTA_EXCEEDED'    // 403 - Monthly credit quota exhausted
-  | 'TIER_INVALID'      // 403 - User tier does not permit this operation
-  | 'INTERNAL_ERROR';   // 500 - Unexpected server error
+  | 'INVALID_CODE'        // 400 - Flowbaby exchange code is invalid or expired
+  | 'INVALID_REFRESH'     // 400 - Refresh token is invalid, expired, or already used
+  | 'STATE_MISMATCH'      // 400 - CSRF state validation failed
+  | 'GITHUB_ERROR'        // 502 - GitHub API returned an error during code exchange
+  | 'RATE_LIMITED'        // 429 - Too many requests; retry after backoff
+  | 'SESSION_EXPIRED'     // 401 - Session token is expired
+  | 'SESSION_INVALID'     // 401 - Session token signature verification failed
+  | 'QUOTA_EXCEEDED'      // 403 - Monthly credit quota exhausted
+  | 'TIER_INVALID'        // 403 - User tier does not permit this operation
+  | 'INTERNAL_ERROR';     // 500 - Unexpected server error
 
 /**
  * Standard error response envelope for all API errors.
@@ -119,6 +152,8 @@ export interface ApiError {
  */
 export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   INVALID_CODE: 400,
+  INVALID_REFRESH: 400,
+  STATE_MISMATCH: 400,
   GITHUB_ERROR: 502,
   RATE_LIMITED: 429,
   SESSION_EXPIRED: 401,
@@ -146,7 +181,6 @@ export interface TierConfig {
 export const TIER_LIMITS: Record<UserTier, TierConfig> = {
   free: { monthlyCredits: 100, maxConcurrent: 2 },
   basic: { monthlyCredits: 1000, maxConcurrent: 5 },
-  pro: { monthlyCredits: 10000, maxConcurrent: 10 },
 };
 
 /**

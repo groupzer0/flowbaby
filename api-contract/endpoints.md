@@ -48,10 +48,12 @@ https://github.com/login/oauth/authorize?
 
 **Success Flow**:
 1. User authorizes on GitHub
-2. GitHub redirects to backend's callback handler
-3. Backend exchanges code for GitHub token
-4. Backend creates/updates user record and generates session JWT
-5. Backend redirects to extension: `<redirect_uri>?code=<flowbaby-auth-code>`
+2. GitHub redirects to backend's callback handler (HTTPS URL, not vscode://)
+3. Backend exchanges GitHub auth code for GitHub access token (server-side)
+4. Backend creates/updates user record
+5. Backend generates a **short-lived, single-use Flowbaby exchange code** (NOT the session token)
+6. Backend redirects to extension: `<redirect_uri>?code=<flowbaby-exchange-code>` (and `state` if provided)
+7. Extension calls `POST /auth/github` with the exchange code to obtain session token
 
 **Error Flow**:
 Backend redirects to extension with error: `<redirect_uri>?error=<error_code>&error_description=<message>`
@@ -67,7 +69,12 @@ Backend redirects to extension with error: `<redirect_uri>?error=<error_code>&er
 
 ### POST /auth/github
 
-Exchange a GitHub OAuth code for a Flowbaby session token.
+Exchange a Flowbaby one-time exchange code for a session token and refresh token.
+
+> **IMPORTANT**: The `code` in this request is NOT the GitHub OAuth authorization code.
+> It is the **Flowbaby one-time exchange code** issued by the backend after completing
+> GitHub OAuth server-side. The backend deep-links this code to VS Code via
+> `vscode://Flowbaby.flowbaby/auth/callback?code=<flowbaby-exchange-code>`.
 
 **Request**: See `AuthRequest` in `types.ts`
 
@@ -76,8 +83,33 @@ Exchange a GitHub OAuth code for a Flowbaby session token.
 **Errors**:
 | Code | Description |
 |------|-------------|
-| `INVALID_CODE` | OAuth code is invalid or expired |
-| `GITHUB_ERROR` | GitHub API returned an error |
+| `INVALID_CODE` | Flowbaby exchange code is invalid, expired, or already used |
+| `STATE_MISMATCH` | CSRF state validation failed (state in request doesn't match stored state) |
+| `GITHUB_ERROR` | GitHub API returned an error during user lookup |
+
+---
+
+### POST /auth/refresh
+
+Exchange a valid refresh token for a new session token and new refresh token.
+
+Refresh tokens are single-use and rotated on each successful refresh. The old refresh
+token is invalidated immediately upon use.
+
+**Request**: See `RefreshRequest` in `types.ts`
+
+**Response**: See `AuthResponse` in `types.ts` (includes new `refreshToken`)
+
+**Errors**:
+| Code | Description |
+|------|-------------|
+| `INVALID_REFRESH` | Refresh token is invalid, expired, or already used |
+
+**Usage Pattern**:
+- Extension stores `refreshToken` in VS Code `SecretStorage`
+- Before session expires (e.g., when <10% TTL remains), call this endpoint
+- On success, store new `sessionToken` and `refreshToken`
+- On failure (`INVALID_REFRESH`), prompt user to re-authenticate via OAuth
 
 ---
 
