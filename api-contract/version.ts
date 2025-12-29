@@ -48,6 +48,6 @@ export const CONTRACT_METADATA = {
   version: CONTRACT_VERSION,
   implementationReady: CONTRACT_IMPLEMENTATION_READY,
   minBackendVersion: MIN_BACKEND_VERSION,
-  lastUpdated: '2025-12-28',
+  lastUpdated: '2025-12-29',
   source: 'flowbaby', // Canonical source
 } as const;

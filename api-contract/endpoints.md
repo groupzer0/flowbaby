@@ -11,6 +11,38 @@
 
 ---
 
+## GitHub OAuth App Configuration (Backend Requirement)
+
+The backend must have a configured GitHub OAuth App for the OAuth flow to work.
+
+### Required OAuth App Settings
+
+| Setting | Staging Value | Production Value |
+|---------|---------------|------------------|
+| **Application name** | `Flowbaby Cloud (Staging)` | `Flowbaby Cloud` |
+| **Homepage URL** | `https://flowbaby.ai` | `https://flowbaby.ai` |
+| **Authorization callback URL** | `https://0h552crqta.execute-api.us-east-1.amazonaws.com/auth/callback` | `https://api.flowbaby.ai/auth/callback` |
+
+### Required Secrets (AWS Secrets Manager)
+
+| Secret Name | Description |
+|-------------|-------------|
+| `GITHUB_CLIENT_ID` | OAuth App client ID from GitHub |
+| `GITHUB_CLIENT_SECRET` | OAuth App client secret from GitHub |
+
+### Extension Expectation
+
+The extension expects `/auth/login` to redirect to GitHub with a **valid** `client_id`. If the backend uses a placeholder value, GitHub will return 404 and the OAuth flow will fail.
+
+**Verification Command**:
+```bash
+curl -I "https://0h552crqta.execute-api.us-east-1.amazonaws.com/auth/login?redirect_uri=vscode://Flowbaby.flowbaby/auth/callback"
+# Expected: 302 redirect to github.com/login/oauth/authorize?client_id=<REAL_CLIENT_ID>&...
+# Failure: client_id=PLACEHOLDER_CLIENT_ID → GitHub 404
+```
+
+---
+
 ## Authentication
 
 All authenticated endpoints require:
@@ -52,8 +84,23 @@ https://github.com/login/oauth/authorize?
 3. Backend exchanges GitHub auth code for GitHub access token (server-side)
 4. Backend creates/updates user record
 5. Backend generates a **short-lived, single-use Flowbaby exchange code** (NOT the session token)
+   - TTL: ≤60 seconds
+   - Single-use: invalidated after first exchange attempt
+   - Format: opaque string (e.g., UUID or signed token)
 6. Backend redirects to extension: `<redirect_uri>?code=<flowbaby-exchange-code>` (and `state` if provided)
 7. Extension calls `POST /auth/github` with the exchange code to obtain session token
+
+**Deep-Link Format (Extension Expectation)**:
+```
+vscode://Flowbaby.flowbaby/auth/callback?code=<flowbaby-exchange-code>&state=<original-state>
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `code` | Yes | Flowbaby one-time exchange code (NOT GitHub's code) |
+| `state` | If provided | Original CSRF state from GET /auth/login query |
+| `error` | On failure | Error code (e.g., `access_denied`, `server_error`) |
+| `error_description` | On failure | Human-readable error message |
 
 **Error Flow**:
 Backend redirects to extension with error: `<redirect_uri>?error=<error_code>&error_description=<message>`
@@ -134,6 +181,18 @@ Request temporary AWS STS credentials for Bedrock access.
 
 These endpoints exist only in dev/staging environments for integration testing.
 They **MUST NOT** be deployed to production.
+
+### Test Infrastructure Responsibilities
+
+| Actor | Responsibility |
+|-------|----------------|
+| **Backend CI** | Retrieves `X-Staging-Test-Key` from Secrets Manager |
+| **Backend CI** | Provisions session tokens for cross-repo testing |
+| **Extension CI** | Receives session tokens (never the key itself) |
+| **Extension code** | NEVER accesses test-token endpoint or staging secrets |
+
+> **Security**: The `X-Staging-Test-Key` must remain within backend infrastructure.
+> Extension E2E tests should receive short-lived session tokens, not the staging key.
 
 ### POST /auth/test-token
 
