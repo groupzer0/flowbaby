@@ -1,0 +1,11 @@
+# Ignore agent artifacts (plans, critiques, implementation logs)
+agent-output/**
+
+# Ignore generated / temporary content
+.flowbaby/**
+tmp/**
+extension/tmp/**
+
+# Ignore Python/Node virtualenvs and dependencies
+**/.venv/**
+**/node_modules/**

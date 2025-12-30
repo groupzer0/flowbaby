@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { FlowbabyClient } from './flowbabyClient';
 import { FlowbabyContextProvider } from './flowbabyContextProvider';
 import { FlowbabySetupService } from './setup/FlowbabySetupService';
-import { FlowbabyStatusBar, FlowbabyStatus } from './statusBar/FlowbabyStatusBar';
+import { FlowbabyStatusBar } from './statusBar/FlowbabyStatusBar';
 import { disposeOutputChannels, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
 import { SessionManager } from './sessionManager';
@@ -18,6 +18,12 @@ import {
     setExtensionActive
 } from './lifecycle/registrationHelper';
 import { registerFlowbabyParticipant } from './activation/registrations';
+import {
+    createFlowbabyCloudAuth,
+    registerCloudCommands,
+    createFlowbabyCloudCredentials,
+    initializeProvider,
+} from './flowbaby-cloud';
 import {
     getActiveWorkspacePath,
     getInitState,
@@ -44,6 +50,8 @@ let flowbabyContextProvider: FlowbabyContextProvider | undefined;
 let sessionManager: SessionManager | undefined;
 let storeMemoryToolDisposable: vscode.Disposable | undefined;
 let retrieveMemoryToolDisposable: vscode.Disposable | undefined;
+let cloudAuthDisposable: vscode.Disposable | undefined;
+let cloudCredentialsDisposable: vscode.Disposable | undefined;
 
 /**
  * Extension activation entry point
@@ -159,6 +167,24 @@ export async function activate(_context: vscode.ExtensionContext) {
             }
         );
 
+        // Flowbaby Cloud (OAuth + command surface)
+        // Commands are contributed in package.json but must be registered at runtime.
+        const cloudOutputChannel = vscode.window.createOutputChannel('Flowbaby Cloud');
+        const cloudAuth = createFlowbabyCloudAuth(_context.secrets, cloudOutputChannel);
+        _context.subscriptions.push(cloudOutputChannel, cloudAuth);
+        registerCloudCommands(_context, cloudAuth);
+        cloudAuthDisposable = cloudAuth;
+
+        // Plan 081: Wire Cloud credentials manager and provider singleton
+        // This enables all Python bridge execution paths to receive Cloud env vars.
+        const cloudCredentials = createFlowbabyCloudCredentials(cloudAuth, cloudOutputChannel);
+        _context.subscriptions.push(cloudCredentials);
+        cloudCredentialsDisposable = cloudCredentials;
+
+        // Initialize the provider singleton so downstream components can get Cloud env
+        initializeProvider(cloudCredentials);
+        debugLog('Flowbaby Cloud credentials manager and provider initialized');
+
         // Register chat participant early - shows in UI immediately with graceful
         // degradation when backend is still initializing
         registerFlowbabyParticipant({
@@ -260,6 +286,17 @@ export async function deactivate() {
     if (retrieveMemoryToolDisposable) {
         retrieveMemoryToolDisposable.dispose();
         retrieveMemoryToolDisposable = undefined;
+    }
+
+    if (cloudAuthDisposable) {
+        cloudAuthDisposable.dispose();
+        cloudAuthDisposable = undefined;
+    }
+
+    // Plan 081: Dispose Cloud credentials manager (also resets provider singleton)
+    if (cloudCredentialsDisposable) {
+        cloudCredentialsDisposable.dispose();
+        cloudCredentialsDisposable = undefined;
     }
 
     // Dispose singleton output channels

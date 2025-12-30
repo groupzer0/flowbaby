@@ -9,6 +9,7 @@ import { FlowbabyClient } from '../flowbabyClient';
 import { FlowbabySetupService } from '../setup/FlowbabySetupService';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 import { EventEmitter } from 'events';
+import * as cloudProvider from '../flowbaby-cloud/provider';
 
 suite('Plan 028: Extension Isolation & Global Config', () => {
     let sandbox: sinon.SinonSandbox;
@@ -17,6 +18,17 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
 
     setup(() => {
         sandbox = sinon.createSandbox();
+        
+        // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+        // Return mock credentials to exercise the Cloud code path
+        sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+        sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+            AWS_ACCESS_KEY_ID: 'test-access-key',
+            AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+            AWS_SESSION_TOKEN: 'test-session-token',
+            AWS_REGION: 'us-east-1',
+            FLOWBABY_CLOUD_MODE: 'true'
+        });
         
         // Mock SecretStorage
         const secretStorage = {

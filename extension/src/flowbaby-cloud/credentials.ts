@@ -13,7 +13,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { VendResponse } from './types';
+import type { VendResponse, VendRequest } from './types';
 import {
     CachedCredentials,
     FlowbabyCloudError,
@@ -29,8 +29,10 @@ import { FlowbabyCloudAuth } from './auth';
 export interface ICredentialClient {
     /**
      * Vend temporary AWS credentials.
+     * @param sessionToken - The Flowbaby session token
+     * @param request - Optional request body with operation type and preferred region
      */
-    vendCredentials(sessionToken: string): Promise<VendResponse>;
+    vendCredentials(sessionToken: string, request?: VendRequest): Promise<VendResponse>;
 }
 
 /**
@@ -47,13 +49,13 @@ export class MockCredentialClient implements ICredentialClient {
             accessKeyId: 'MOCK_ACCESS_KEY_ID',
             secretAccessKey: 'MOCK_SECRET_ACCESS_KEY',
             sessionToken: 'MOCK_SESSION_TOKEN',
-            region: 'us-west-2',
+            region: 'us-east-1',
             expiration,
             ...mockResponse,
         };
     }
 
-    async vendCredentials(_sessionToken: string): Promise<VendResponse> {
+    async vendCredentials(_sessionToken: string, _request?: VendRequest): Promise<VendResponse> {
         // Simulate network delay
         await new Promise(resolve => setTimeout(resolve, 100));
         this.callCount++;
@@ -81,8 +83,8 @@ export class MockCredentialClient implements ICredentialClient {
 class CredentialClientAdapter implements ICredentialClient {
     constructor(private readonly client: FlowbabyCloudClient) {}
 
-    async vendCredentials(sessionToken: string): Promise<VendResponse> {
-        return this.client.vendCredentials(sessionToken);
+    async vendCredentials(sessionToken: string, request?: VendRequest): Promise<VendResponse> {
+        return this.client.vendCredentials(sessionToken, request);
     }
 }
 
@@ -228,10 +230,20 @@ export class FlowbabyCloudCredentials implements vscode.Disposable {
             throw new FlowbabyCloudError('NOT_AUTHENTICATED', 'Session token not available');
         }
 
-        this.log('Fetching new credentials');
+        // Read user's preferred region from settings (Plan 081)
+        const config = vscode.workspace.getConfiguration('flowbaby.cloud');
+        const preferredRegion = config.get<string>('preferredRegion');
+
+        this.log(`Fetching new credentials (preferredRegion: ${preferredRegion || 'default'})`);
 
         try {
-            const response = await this.credentialClient.vendCredentials(sessionToken);
+            // Pass preferredRegion to backend; backend validates and returns resolved region
+            const request: VendRequest = {};
+            if (preferredRegion) {
+                request.preferredRegion = preferredRegion as VendRequest['preferredRegion'];
+            }
+
+            const response = await this.credentialClient.vendCredentials(sessionToken, request);
 
             const credentials: CachedCredentials = {
                 accessKeyId: response.accessKeyId,

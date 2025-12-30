@@ -13,6 +13,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 // Plan 039 M5: Removed dotenv import - .env API key support removed for security
+// Plan 081: Import Cloud provider for Bedrock credentials
+import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled } from '../flowbaby-cloud';
 
 /**
  * Interface for daemon manager to avoid circular imports
@@ -223,10 +225,28 @@ export class BackgroundOperationManager {
 
     /**
      * Build LLM environment variables from config and resolved API key
+     * 
+     * Plan 081: In v0.7.0 (Cloud-only), merges Flowbaby Cloud AWS credentials
+     * when authenticated. Cloud env takes precedence for Bedrock calls.
      */
     private async getLLMEnvironment(workspacePath: string): Promise<Record<string, string>> {
         const env: Record<string, string> = {};
         
+        // Plan 081: If Cloud is enabled and provider is initialized, get Cloud credentials
+        if (isFlowbabyCloudEnabled() && isProviderInitialized()) {
+            try {
+                const cloudEnv = await getFlowbabyCloudEnvironment();
+                Object.assign(env, cloudEnv);
+                this.outputChannel.appendLine('[BACKGROUND] Cloud credentials injected into background operation environment');
+            } catch (error) {
+                // Cloud auth required but not available - fail fast with clear message
+                this.outputChannel.appendLine(`[BACKGROUND] Cloud credentials not available: ${error}`);
+                throw new Error(
+                    'Flowbaby Cloud login required. Run "Flowbaby Cloud: Login with GitHub" to authenticate.'
+                );
+            }
+        }
+
         // Resolve API key with priority chain
         const apiKey = await this.resolveApiKey(workspacePath);
         if (apiKey) {

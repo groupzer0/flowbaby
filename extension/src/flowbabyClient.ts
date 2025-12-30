@@ -8,6 +8,8 @@ import { SessionManager } from './sessionManager';
 import { PythonBridgeDaemonManager, DaemonHealthStatus } from './bridge/PythonBridgeDaemonManager';
 // Plan 073: Import synthesis module for Copilot-based answer generation
 import { synthesizeWithCopilot, isNoRelevantContext, SynthesisResult } from './synthesis';
+// Plan 081: Import Cloud provider for Bedrock credentials
+import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled } from './flowbaby-cloud';
 
 /**
  * Interface for BackgroundOperationManager to avoid circular imports.
@@ -2317,12 +2319,31 @@ export class FlowbabyClient {
      * Returns environment variables to inject into Python bridge process
      * for API key and LLM configuration.
      * 
+     * Plan 081: In v0.7.0 (Cloud-only), merges Flowbaby Cloud AWS credentials
+     * when authenticated. Cloud env takes precedence for Bedrock calls.
+     * 
      * @returns Promise<Record<string, string>> - Environment variables to inject
      */
     private async getLLMEnvironment(): Promise<Record<string, string>> {
         const env: Record<string, string> = {};
         
-        // Resolve and inject API key
+        // Plan 081: If Cloud is enabled and provider is initialized, get Cloud credentials
+        if (isFlowbabyCloudEnabled() && isProviderInitialized()) {
+            try {
+                const cloudEnv = await getFlowbabyCloudEnvironment();
+                Object.assign(env, cloudEnv);
+                debugLog('Cloud credentials injected into bridge environment');
+            } catch (error) {
+                // Cloud auth required but not available - fail fast with clear message
+                debugLog(`Cloud credentials not available: ${error}`);
+                throw new Error(
+                    'Flowbaby Cloud login required. Run "Flowbaby Cloud: Login with GitHub" to authenticate.'
+                );
+            }
+        }
+        
+        // Legacy LLM env (kept for backward compatibility if Cloud is disabled)
+        // In v0.7.0 Cloud-only mode, these are not used but harmless to set
         const apiKey = await this.resolveApiKey();
         if (apiKey) {
             env['LLM_API_KEY'] = apiKey;

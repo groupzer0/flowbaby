@@ -6,6 +6,7 @@ import * as sinon from 'sinon';
 import { EventEmitter } from 'events';
 import { FlowbabyClient } from '../flowbabyClient';
 import { PythonBridgeDaemonManager } from '../bridge/PythonBridgeDaemonManager';
+import * as cloudProvider from '../flowbaby-cloud/provider';
 
 // Helper to create directory structure
 function createTestStructure(basePath: string, structure: any) {
@@ -929,6 +930,16 @@ suite('FlowbabyClient Test Suite', () => {
 
         setup(() => {
             sandbox = sinon.createSandbox();
+            
+            // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+            sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+                AWS_ACCESS_KEY_ID: 'test-access-key',
+                AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+                AWS_SESSION_TOKEN: 'test-session-token',
+                AWS_REGION: 'us-east-1',
+                FLOWBABY_CLOUD_MODE: 'true'
+            });
         });
 
         teardown(() => {
@@ -1079,6 +1090,16 @@ suite('FlowbabyClient Test Suite', () => {
 
         setup(() => {
             sandbox = sinon.createSandbox();
+            
+            // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+            sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+                AWS_ACCESS_KEY_ID: 'test-access-key',
+                AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+                AWS_SESSION_TOKEN: 'test-session-token',
+                AWS_REGION: 'us-east-1',
+                FLOWBABY_CLOUD_MODE: 'true'
+            });
         });
 
         teardown(() => {

@@ -7,6 +7,7 @@ import { FlowbabySetupService, BridgeEnvMetadata } from '../../setup/FlowbabySet
 import { BackgroundOperationManager } from '../../background/BackgroundOperationManager';
 import { FlowbabyStatusBar, FlowbabyStatus } from '../../statusBar/FlowbabyStatusBar';
 import { EventEmitter } from 'events';
+import * as cloudProvider from '../../flowbaby-cloud/provider';
 
 suite('FlowbabySetupService Test Suite', () => {
     let sandbox: sinon.SinonSandbox;
@@ -22,6 +23,16 @@ suite('FlowbabySetupService Test Suite', () => {
 
     setup(() => {
         sandbox = sinon.createSandbox();
+        
+        // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+        sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+        sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+            AWS_ACCESS_KEY_ID: 'test-access-key',
+            AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+            AWS_SESSION_TOKEN: 'test-session-token',
+            AWS_REGION: 'us-east-1',
+            FLOWBABY_CLOUD_MODE: 'true'
+        });
         
         // Mock output channel
         outputChannel = {
@@ -63,17 +74,27 @@ suite('FlowbabySetupService Test Suite', () => {
         };
         sandbox.stub(BackgroundOperationManager, 'getInstance').returns(bgManagerStub);
 
-        // Mock vscode.window
-        sandbox.stub(vscode.window, 'showInformationMessage');
-        sandbox.stub(vscode.window, 'showWarningMessage');
-        sandbox.stub(vscode.window, 'showErrorMessage');
+        // Mock vscode.window - ensure stubs return Promises to prevent ".then() on undefined" errors
+        sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined as any);
+        sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined as any);
+        sandbox.stub(vscode.window, 'showErrorMessage').resolves(undefined as any);
         sandbox.stub(vscode.window, 'withProgress').callsFake(async (options, task) => {
             return task({ report: sandbox.stub() }, new vscode.CancellationTokenSource().token);
         });
-        sandbox.stub(vscode.commands, 'executeCommand');
+        sandbox.stub(vscode.commands, 'executeCommand').resolves();
 
+        // Create a proper mock statusBar with statusBarItem property
         statusBar = Object.create(FlowbabyStatusBar.prototype) as FlowbabyStatusBar;
-        const statusStub = sandbox.stub(statusBar, 'setStatus');
+        // Set up the private statusBarItem property to prevent undefined errors
+        (statusBar as any).statusBarItem = {
+            text: '',
+            tooltip: '',
+            backgroundColor: undefined,
+            show: sandbox.stub(),
+            hide: sandbox.stub(),
+            dispose: sandbox.stub()
+        };
+        sandbox.stub(statusBar, 'setStatus');
 
         service = new FlowbabySetupService(
             { extensionPath: '/ext' } as any, 

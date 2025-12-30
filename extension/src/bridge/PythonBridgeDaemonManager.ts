@@ -16,6 +16,8 @@ import { spawn, ChildProcess, SpawnOptions } from 'child_process';
 import { debugLog } from '../outputChannels';
 import { v4 as uuidv4 } from 'uuid';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
+// Plan 081: Import Cloud provider for Bedrock credentials
+import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled } from '../flowbaby-cloud';
 
 /**
  * JSON-RPC 2.0 request structure
@@ -872,9 +874,27 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
 
     /**
      * Get LLM environment variables from extension context
+     * 
+     * Plan 081: In v0.7.0 (Cloud-only), merges Flowbaby Cloud AWS credentials
+     * when authenticated. Cloud env takes precedence for Bedrock calls.
      */
     private async getLLMEnvironment(): Promise<Record<string, string>> {
         const env: Record<string, string> = {};
+
+        // Plan 081: If Cloud is enabled and provider is initialized, get Cloud credentials
+        if (isFlowbabyCloudEnabled() && isProviderInitialized()) {
+            try {
+                const cloudEnv = await getFlowbabyCloudEnvironment();
+                Object.assign(env, cloudEnv);
+                this.log('INFO', 'Cloud credentials injected into daemon environment');
+            } catch (error) {
+                // Cloud auth required but not available - fail fast with clear message
+                this.log('WARN', `Cloud credentials not available: ${error}`);
+                throw new Error(
+                    'Flowbaby Cloud login required. Run "Flowbaby Cloud: Login with GitHub" to authenticate.'
+                );
+            }
+        }
 
         // Priority 1: SecretStorage (secure, encrypted)
         try {

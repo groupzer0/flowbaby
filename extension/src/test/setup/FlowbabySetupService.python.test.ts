@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 import { FlowbabySetupService } from '../../setup/FlowbabySetupService';
 import { BackgroundOperationManager } from '../../background/BackgroundOperationManager';
+import * as cloudProvider from '../../flowbaby-cloud/provider';
 
 suite('FlowbabySetupService Python Detection Test Suite', () => {
     let sandbox: sinon.SinonSandbox;
@@ -20,6 +21,16 @@ suite('FlowbabySetupService Python Detection Test Suite', () => {
     setup(() => {
         sandbox = sinon.createSandbox();
         originalPlatform = process.platform;
+
+        // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+        sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+        sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+            AWS_ACCESS_KEY_ID: 'test-access-key',
+            AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+            AWS_SESSION_TOKEN: 'test-session-token',
+            AWS_REGION: 'us-east-1',
+            FLOWBABY_CLOUD_MODE: 'true'
+        });
 
         // Mock output channel
         outputChannel = {

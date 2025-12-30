@@ -7,6 +7,7 @@ import * as sinon from 'sinon';
 import * as vscode from 'vscode';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 import { ChildProcess } from 'child_process';
+import * as cloudProvider from '../flowbaby-cloud/provider';
 
 suite('BackgroundOperationManager - Windows Specific', () => {
     let workspacePath: string;
@@ -22,6 +23,17 @@ suite('BackgroundOperationManager - Windows Specific', () => {
 
     setup(async () => {
         sandbox = sinon.createSandbox();
+        
+        // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+        sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+        sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+            AWS_ACCESS_KEY_ID: 'test-access-key',
+            AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+            AWS_SESSION_TOKEN: 'test-session-token',
+            AWS_REGION: 'us-east-1',
+            FLOWBABY_CLOUD_MODE: 'true'
+        });
+        
         workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-bom-win-'));
         context = {
             subscriptions: [],

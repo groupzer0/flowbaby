@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.7.0] - Unreleased
+
+### Added
+
+- **Flowbaby Cloud Credential Provider Wiring (Plan 081)**: Unified credential/provider architecture wired into extension activation and all Python bridge paths. Key changes:
+  - **API Contract v2.1.0**: Added `BedrockRegion` type with `preferredRegion` field on `VendRequest` for region preference passthrough.
+  - **Region Preference Setting**: New `flowbaby.cloud.preferredRegion` setting allows users to express region affinity (us-east-1, eu-west-1, me-south-1, ap-southeast-1). Backend remains authoritative for actual routing.
+  - **Activation Wiring**: Credentials manager and provider singleton now initialize during extension activation (after Cloud auth) with proper dependency ordering.
+  - **Bridge Environment Injection**: All three bridge code paths (spawn-per-request, daemon-mode, background operations) now inject Cloud credentials into Python subprocess environment when authenticated.
+  - **Security Guardrails**: Verified no secret values (AWS keys, tokens, JWTs) are logged; existing redaction patterns remain adequate.
+
+### Changed
+
+- **Cloud Authentication Flow (Plans 077–081)**: The v0.7.0 Cloud integration now provides a complete OAuth → STS → Bridge credential flow, enabling managed AWS Bedrock inference without local API keys.
+
 ## [0.6.2] - 2025-12-20
 
 ### Added

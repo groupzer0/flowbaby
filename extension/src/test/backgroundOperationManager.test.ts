@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
 import { BackgroundOperationManager, OperationEntry } from '../background/BackgroundOperationManager';
+import * as cloudProvider from '../flowbaby-cloud/provider';
 
 suite('BackgroundOperationManager - Concurrency and Queue', () => {
     let workspacePath: string;
@@ -285,6 +286,8 @@ suite('BackgroundOperationManager - getLLMEnvironment (Plan 031)', () => {
     let manager: BackgroundOperationManager;
     let secretsStub: sinon.SinonStubbedInstance<vscode.SecretStorage>;
     let configStub: sinon.SinonStub;
+    let cloudProviderStub: sinon.SinonStub;
+    let cloudEnvStub: sinon.SinonStub;
 
     const resetSingleton = () => {
         (BackgroundOperationManager as unknown as { instance?: BackgroundOperationManager }).instance = undefined;
@@ -292,6 +295,16 @@ suite('BackgroundOperationManager - getLLMEnvironment (Plan 031)', () => {
 
     setup(async () => {
         workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-llmenv-'));
+        
+        // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+        cloudProviderStub = sinon.stub(cloudProvider, 'isProviderInitialized').returns(true);
+        cloudEnvStub = sinon.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+            AWS_ACCESS_KEY_ID: 'test-access-key',
+            AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+            AWS_SESSION_TOKEN: 'test-session-token',
+            AWS_REGION: 'us-east-1',
+            FLOWBABY_CLOUD_MODE: 'true'
+        });
         
         secretsStub = {
             get: sinon.stub(),
@@ -322,6 +335,8 @@ suite('BackgroundOperationManager - getLLMEnvironment (Plan 031)', () => {
     });
 
     teardown(async () => {
+        cloudProviderStub.restore();
+        cloudEnvStub.restore();
         configStub.restore();
         await manager.shutdown();
         resetSingleton();
@@ -375,17 +390,22 @@ suite('BackgroundOperationManager - getLLMEnvironment (Plan 031)', () => {
         assert.strictEqual(env.LLM_ENDPOINT, undefined, 'Unset config should not appear');
     });
 
-    test('getLLMEnvironment returns empty object when no config', async () => {
-        // No API key anywhere
+    test('getLLMEnvironment returns Cloud credentials when no local config (Plan 081)', async () => {
+        // No API key anywhere (local config empty)
         secretsStub.get.resolves(undefined);
         
-        // Empty config
+        // Empty local config
         const mockConfig = { get: () => undefined };
         configStub.withArgs('Flowbaby.llm').returns(mockConfig);
         
         const env = await (manager as any).getLLMEnvironment(workspacePath);
         
-        assert.deepStrictEqual(env, {}, 'Should return empty object when no config');
+        // Plan 081: In Cloud-only mode, Cloud credentials are always injected
+        assert.strictEqual(env.FLOWBABY_CLOUD_MODE, 'true', 'Cloud mode flag should be set');
+        assert.strictEqual(env.AWS_REGION, 'us-east-1', 'AWS region should be set');
+        assert.ok(env.AWS_ACCESS_KEY_ID, 'AWS access key should be set');
+        assert.ok(env.AWS_SECRET_ACCESS_KEY, 'AWS secret should be set');
+        assert.ok(env.AWS_SESSION_TOKEN, 'AWS session token should be set');
     });
 });
 
@@ -397,6 +417,8 @@ suite('BackgroundOperationManager - runPythonJson Env Injection (Plan 031)', () 
     let secretsStub: sinon.SinonStubbedInstance<vscode.SecretStorage>;
     let configStub: sinon.SinonStub;
     let spawnStub: sinon.SinonStub;
+    let cloudProviderStub: sinon.SinonStub;
+    let cloudEnvStub: sinon.SinonStub;
 
     const resetSingleton = () => {
         (BackgroundOperationManager as unknown as { instance?: BackgroundOperationManager }).instance = undefined;
@@ -404,6 +426,16 @@ suite('BackgroundOperationManager - runPythonJson Env Injection (Plan 031)', () 
 
     setup(async () => {
         workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-runjson-'));
+        
+        // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+        cloudProviderStub = sinon.stub(cloudProvider, 'isProviderInitialized').returns(true);
+        cloudEnvStub = sinon.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+            AWS_ACCESS_KEY_ID: 'test-access-key',
+            AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+            AWS_SESSION_TOKEN: 'test-session-token',
+            AWS_REGION: 'us-east-1',
+            FLOWBABY_CLOUD_MODE: 'true'
+        });
         
         secretsStub = {
             get: sinon.stub(),
@@ -433,6 +465,8 @@ suite('BackgroundOperationManager - runPythonJson Env Injection (Plan 031)', () 
     });
 
     teardown(async () => {
+        cloudProviderStub.restore();
+        cloudEnvStub.restore();
         configStub.restore();
         if (spawnStub) { spawnStub.restore(); }
         await manager.shutdown();
@@ -523,6 +557,8 @@ suite('BackgroundOperationManager - Notification Setting (Plan 043)', () => {
     let infoStub: sinon.SinonStub;
     let warnStub: sinon.SinonStub;
     let configStub: sinon.SinonStub;
+    let cloudProviderStub: sinon.SinonStub;
+    let cloudEnvStub: sinon.SinonStub;
 
     const resetSingleton = () => {
         (BackgroundOperationManager as unknown as { instance?: BackgroundOperationManager }).instance = undefined;
@@ -531,6 +567,17 @@ suite('BackgroundOperationManager - Notification Setting (Plan 043)', () => {
     setup(async () => {
         workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-notify-'));
         outputLines = [];
+        
+        // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+        cloudProviderStub = sinon.stub(cloudProvider, 'isProviderInitialized').returns(true);
+        cloudEnvStub = sinon.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+            AWS_ACCESS_KEY_ID: 'test-access-key',
+            AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+            AWS_SESSION_TOKEN: 'test-session-token',
+            AWS_REGION: 'us-east-1',
+            FLOWBABY_CLOUD_MODE: 'true'
+        });
+        
         context = {
             subscriptions: [],
             globalState: {
@@ -558,6 +605,8 @@ suite('BackgroundOperationManager - Notification Setting (Plan 043)', () => {
     });
 
     teardown(async () => {
+        cloudProviderStub.restore();
+        cloudEnvStub.restore();
         infoStub.restore();
         warnStub.restore();
         configStub.restore();
