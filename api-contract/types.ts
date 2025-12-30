@@ -83,12 +83,32 @@ export interface RefreshRequest {
 // =============================================================================
 
 /**
+ * Supported AWS Bedrock regions for Flowbaby Cloud.
+ * Users may express a preference; backend validates and resolves the final region.
+ *
+ * @see Plan 081 - User-selectable Bedrock region
+ */
+export type BedrockRegion =
+  | 'us-east-1'      // US East (N. Virginia) - Americas default
+  | 'eu-west-1'      // Europe (Ireland)
+  | 'me-south-1'     // Middle East (Bahrain)
+  | 'ap-southeast-1'; // Asia Pacific (Singapore)
+
+/**
  * Request body for POST /vend/credentials
  * Session token is passed via Authorization header, not in body.
  */
 export interface VendRequest {
   /** Operation type for quota tracking */
   operationType?: 'embed' | 'retrieve';
+  /**
+   * User's preferred AWS region for Bedrock calls.
+   * Optional: if omitted, backend defaults to 'us-east-1'.
+   * Backend validates against allowlist and returns resolved region in VendResponse.region.
+   *
+   * @see Plan 081 - User-selectable Bedrock region
+   */
+  preferredRegion?: BedrockRegion;
 }
 
 /**
@@ -104,8 +124,14 @@ export interface VendResponse {
   sessionToken: string;
   /** ISO-8601 timestamp when credentials expire */
   expiration: string;
-  /** AWS region for Bedrock calls (e.g., 'us-east-1') */
-  region: string;
+  /**
+   * Backend-resolved AWS region for Bedrock calls.
+   * This is the authoritative region to use—always prefer this over any
+   * user preference. Backend validates and resolves the region.
+   *
+   * @see Plan 081 - Backend-authoritative region resolution
+   */
+  region: BedrockRegion;
 }
 
 // =============================================================================

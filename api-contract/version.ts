@@ -17,6 +17,13 @@
  * - MINOR: Backward-compatible additions (new optional fields, new endpoints)
  * - PATCH: Documentation or non-functional changes
  *
+ * v2.1.0 CHANGELOG (Plan 081):
+ * - Added: BedrockRegion type (union of supported AWS regions)
+ * - Added: VendRequest.preferredRegion optional field for user region preference
+ * - Changed: VendResponse.region now typed as BedrockRegion (was string)
+ * - Clarified: VendResponse.region is backend-resolved (authoritative)
+ * - Rollout: Backend must accept/ignore preferredRegion before extension sends it
+ *
  * v2.0.0 CHANGELOG (Plan 080):
  * - BREAKING: Removed 'pro' from UserTier (was unused placeholder)
  * - BREAKING: AuthResponse now requires 'refreshToken' field
@@ -27,7 +34,7 @@
  *   Flowbaby one-time exchange code (not the GitHub OAuth authorization code)
  * - Fixed: GET /auth/login success flow documentation clarified
  */
-export const CONTRACT_VERSION = '2.0.0';
+export const CONTRACT_VERSION = '2.1.0';
 
 /**
  * Indicates whether the contract is ready for implementation.
@@ -48,6 +55,6 @@ export const CONTRACT_METADATA = {
   version: CONTRACT_VERSION,
   implementationReady: CONTRACT_IMPLEMENTATION_READY,
   minBackendVersion: MIN_BACKEND_VERSION,
-  lastUpdated: '2025-12-29',
+  lastUpdated: '2025-12-30',
   source: 'flowbaby', // Canonical source
 } as const;
