@@ -490,20 +490,8 @@
         },
         "flowbaby.cloud.preferredRegion": {
           "type": "string",
-          "enum": [
-            "us-east-1",
-            "eu-west-1",
-            "me-south-1",
-            "ap-southeast-1"
-          ],
-          "enumDescriptions": [
-            "US East (N. Virginia) - Americas (default)",
-            "Europe (Ireland) - Europe",
-            "Middle East (Bahrain) - Middle East",
-            "Asia Pacific (Singapore) - Asia Pacific"
-          ],
-          "default": "us-east-1",
-          "markdownDescription": "**Flowbaby Cloud: Preferred AWS region** for Bedrock LLM calls. Select a region closer to you for lower latency.\n\nThe backend validates your preference and may fall back to the default if the selected region is unavailable.\n\n@see Plan 081 - User-selectable Bedrock region"
+          "default": "",
+          "markdownDescription": "**Flowbaby Cloud: Preferred AWS region** for Bedrock LLM calls. Leave empty to use the backend default. The backend provides available regions and validates your preference."
         }
       }
     }
