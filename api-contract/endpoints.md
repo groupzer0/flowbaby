@@ -4,10 +4,19 @@
 
 ## Base URL
 
-- **Dev/Staging**: `https://0h552crqta.execute-api.us-east-1.amazonaws.com`
-- **Production**: `https://api.flowbaby.ai`
+| Environment | URL | Status |
+|-------------|-----|--------|
+| **Dev/Staging (preferred)** | `https://api-staging.flowbaby.ai` | **Planned** – use once custom domain is provisioned |
+| **Dev/Staging (fallback)** | `https://0h552crqta.execute-api.us-east-1.amazonaws.com` | Live – current execute-api URL |
+| **Production** | `https://api.flowbaby.ai` | **Planned** – use once custom domain is provisioned |
 
-> **Extension configuration**: Use `FLOWBABY_CLOUD_API_URL` environment variable to override (defaults to production).
+> **Extension default (v0.7.0)**: The extension defaults to `https://api-staging.flowbaby.ai` for staging/dev workflows.
+> Once `api.flowbaby.ai` is provisioned, marketplace-facing builds will default to production.
+
+> **Override options** (precedence: setting > env > default):
+> 1. VS Code setting: `flowbaby.cloud.apiEndpoint`
+> 2. Environment variable: `FLOWBABY_CLOUD_API_URL`
+> 3. Built-in default (staging or production depending on build target)
 
 ---
 
@@ -21,7 +30,9 @@ The backend must have a configured GitHub OAuth App for the OAuth flow to work.
 |---------|---------------|------------------|
 | **Application name** | `Flowbaby Cloud (Staging)` | `Flowbaby Cloud` |
 | **Homepage URL** | `https://flowbaby.ai` | `https://flowbaby.ai` |
-| **Authorization callback URL** | `https://0h552crqta.execute-api.us-east-1.amazonaws.com/auth/callback` | `https://api.flowbaby.ai/auth/callback` |
+| **Authorization callback URL** | `https://api-staging.flowbaby.ai/auth/callback` (preferred) or `https://0h552crqta.execute-api.us-east-1.amazonaws.com/auth/callback` (fallback) | `https://api.flowbaby.ai/auth/callback` |
+
+> **Note**: When transitioning from execute-api URL to custom domain, update the GitHub OAuth App callback URL accordingly.
 
 ### Required Secrets (AWS Secrets Manager)
 
