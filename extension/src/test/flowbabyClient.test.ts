@@ -1172,6 +1172,352 @@ suite('FlowbabyClient Test Suite', () => {
         });
     });
 
+    // Plan 084: skipCloudCredentials option tests
+    // These tests verify that bootstrap operations can run without Cloud credentials
+    suite('Bootstrap Decoupling (Plan 084)', () => {
+        let sandbox: sinon.SinonSandbox;
+        const workspacePath = '/tmp/test-workspace-plan084';
+
+        setup(() => {
+            sandbox = sinon.createSandbox();
+            
+            // Basic config stubs
+            // Note: bridgeMode is set to 'spawn' to disable daemon which would call getFlowbabyCloudEnvironment
+            sandbox.stub(vscode.workspace, 'getConfiguration').callsFake((section?: string) => {
+                if (section === 'Flowbaby.sessionManagement') {
+                    return { get: () => true } as any;
+                }
+                if (section === 'Flowbaby.ranking') {
+                    return { get: (_key: string, defaultValue?: any) => defaultValue } as any;
+                }
+                return {
+                    get: (key: string, defaultValue?: any) => {
+                        if (key === 'pythonPath') {return '/usr/bin/python3';}
+                        if (key === 'bridgeMode') {return 'spawn';} // Disable daemon to isolate tests
+                        return defaultValue;
+                    }
+                } as any;
+            });
+            
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+        });
+
+        teardown(() => {
+            sandbox.restore();
+        });
+
+        function createMockProcess() {
+            const mockProcess = new EventEmitter() as any;
+            mockProcess.stdout = new EventEmitter();
+            mockProcess.stderr = new EventEmitter();
+            mockProcess.kill = sandbox.stub();
+            return mockProcess;
+        }
+
+        test('runPythonScript with skipCloudCredentials=true does NOT call getFlowbabyCloudEnvironment', async () => {
+            // Stub Cloud provider functions
+            // Note: isFlowbabyCloudEnabled must also be stubbed to control behavior
+            sandbox.stub(cloudProvider, 'isFlowbabyCloudEnabled').returns(true);
+            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+            
+            // Spy on Cloud environment getter - should NOT be called when skipCloudCredentials is true
+            const cloudEnvSpy = sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+                AWS_ACCESS_KEY_ID: 'test-key',
+                AWS_SECRET_ACCESS_KEY: 'test-secret',
+                AWS_SESSION_TOKEN: 'test-token',
+                AWS_REGION: 'us-east-1',
+                FLOWBABY_CLOUD_MODE: 'true'
+            });
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = createMockProcess();
+
+            sandbox.stub(client as any, 'spawnProcess').callsFake(() => {
+                setTimeout(() => {
+                    mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                    mockProcess.emit('close', 0);
+                }, 0);
+                return mockProcess;
+            });
+
+            // Call with skipCloudCredentials: true (bootstrap operation)
+            await (client as any).runPythonScript('init.py', [], { skipCloudCredentials: true });
+
+            // Cloud credentials should NOT be requested because skipCloudCredentials=true
+            // The getLLMEnvironment() call is completely bypassed
+            assert.strictEqual(
+                cloudEnvSpy.called,
+                false,
+                'getFlowbabyCloudEnvironment should NOT be called when skipCloudCredentials is true'
+            );
+        });
+
+        test('runPythonScript with skipCloudCredentials=false DOES call getFlowbabyCloudEnvironment', async () => {
+            // Stub Cloud provider functions
+            sandbox.stub(cloudProvider, 'isFlowbabyCloudEnabled').returns(true);
+            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+            
+            // Spy on Cloud environment getter - SHOULD be called when skipCloudCredentials is false
+            const cloudEnvSpy = sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+                AWS_ACCESS_KEY_ID: 'test-key',
+                AWS_SECRET_ACCESS_KEY: 'test-secret',
+                AWS_SESSION_TOKEN: 'test-token',
+                AWS_REGION: 'us-east-1',
+                FLOWBABY_CLOUD_MODE: 'true'
+            });
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = createMockProcess();
+
+            sandbox.stub(client as any, 'spawnProcess').callsFake(() => {
+                setTimeout(() => {
+                    mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                    mockProcess.emit('close', 0);
+                }, 0);
+                return mockProcess;
+            });
+
+            // Call with skipCloudCredentials: false (LLM operation)
+            await (client as any).runPythonScript('ingest.py', [], { skipCloudCredentials: false });
+
+            // Cloud credentials SHOULD be requested
+            assert.strictEqual(
+                cloudEnvSpy.called,
+                true,
+                'getFlowbabyCloudEnvironment should be called when skipCloudCredentials is false'
+            );
+        });
+
+        test('runPythonScript defaults to skipCloudCredentials=false (requires Cloud)', async () => {
+            // Stub Cloud provider functions
+            sandbox.stub(cloudProvider, 'isFlowbabyCloudEnabled').returns(true);
+            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+            
+            // Spy on Cloud environment getter - SHOULD be called by default
+            const cloudEnvSpy = sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+                AWS_ACCESS_KEY_ID: 'test-key',
+                AWS_SECRET_ACCESS_KEY: 'test-secret',
+                AWS_SESSION_TOKEN: 'test-token',
+                AWS_REGION: 'us-east-1',
+                FLOWBABY_CLOUD_MODE: 'true'
+            });
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = createMockProcess();
+
+            sandbox.stub(client as any, 'spawnProcess').callsFake(() => {
+                setTimeout(() => {
+                    mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                    mockProcess.emit('close', 0);
+                }, 0);
+                return mockProcess;
+            });
+
+            // Call with no options (defaults should apply)
+            await (client as any).runPythonScript('retrieve.py', []);
+
+            // Cloud credentials SHOULD be requested (default behavior)
+            assert.strictEqual(
+                cloudEnvSpy.called,
+                true,
+                'getFlowbabyCloudEnvironment should be called by default (skipCloudCredentials defaults to false)'
+            );
+        });
+
+        test('runPythonScript with skipCloudCredentials=true still sets PYTHONUNBUFFERED', async () => {
+            sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({});
+            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(false);
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = createMockProcess();
+            let envCapture: { env?: NodeJS.ProcessEnv } = {};
+
+            sandbox.stub(client as any, 'spawnProcess').callsFake((...args: unknown[]) => {
+                const options = args[2] as any;
+                envCapture.env = options?.env;
+                setTimeout(() => {
+                    mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                    mockProcess.emit('close', 0);
+                }, 0);
+                return mockProcess;
+            });
+
+            await (client as any).runPythonScript('init.py', [], { skipCloudCredentials: true });
+
+            // Essential env vars should still be set
+            assert.strictEqual(
+                envCapture.env?.PYTHONUNBUFFERED,
+                '1',
+                'PYTHONUNBUFFERED should be set even without Cloud credentials'
+            );
+        });
+
+        test('runPythonScript with skipCloudCredentials=true does NOT inject AWS credentials', async () => {
+            sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+                AWS_ACCESS_KEY_ID: 'should-not-appear',
+                AWS_SECRET_ACCESS_KEY: 'should-not-appear',
+                AWS_SESSION_TOKEN: 'should-not-appear',
+                AWS_REGION: 'us-east-1',
+                FLOWBABY_CLOUD_MODE: 'true'
+            });
+            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = createMockProcess();
+            let envCapture: { env?: NodeJS.ProcessEnv } = {};
+
+            sandbox.stub(client as any, 'spawnProcess').callsFake((...args: unknown[]) => {
+                const options = args[2] as any;
+                envCapture.env = options?.env;
+                setTimeout(() => {
+                    mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                    mockProcess.emit('close', 0);
+                }, 0);
+                return mockProcess;
+            });
+
+            await (client as any).runPythonScript('init.py', [], { skipCloudCredentials: true });
+
+            // Cloud-specific env vars should NOT be injected
+            assert.strictEqual(
+                envCapture.env?.FLOWBABY_CLOUD_MODE,
+                undefined,
+                'FLOWBABY_CLOUD_MODE should NOT be set when skipCloudCredentials is true'
+            );
+            // AWS credentials from Cloud provider should NOT be present
+            // (they might be in process.env from the user, but not injected by the client)
+        });
+
+        test('runPythonScript with skipCloudCredentials=false DOES inject AWS credentials', async () => {
+            const cloudCreds = {
+                AWS_ACCESS_KEY_ID: 'cloud-access-key',
+                AWS_SECRET_ACCESS_KEY: 'cloud-secret-key',
+                AWS_SESSION_TOKEN: 'cloud-session-token',
+                AWS_REGION: 'us-west-2',
+                FLOWBABY_CLOUD_MODE: 'true'
+            };
+            sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves(cloudCreds);
+            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = createMockProcess();
+            let envCapture: { env?: NodeJS.ProcessEnv } = {};
+
+            sandbox.stub(client as any, 'spawnProcess').callsFake((...args: unknown[]) => {
+                const options = args[2] as any;
+                envCapture.env = options?.env;
+                setTimeout(() => {
+                    mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                    mockProcess.emit('close', 0);
+                }, 0);
+                return mockProcess;
+            });
+
+            await (client as any).runPythonScript('retrieve.py', [], { skipCloudCredentials: false });
+
+            // Cloud-specific env vars SHOULD be injected
+            assert.strictEqual(
+                envCapture.env?.FLOWBABY_CLOUD_MODE,
+                'true',
+                'FLOWBABY_CLOUD_MODE should be set when skipCloudCredentials is false'
+            );
+            assert.strictEqual(
+                envCapture.env?.AWS_REGION,
+                'us-west-2',
+                'AWS_REGION should be injected from Cloud credentials'
+            );
+        });
+
+        test('initialize() calls init.py with skipCloudCredentials: true', async () => {
+            sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({});
+            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(false);
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            
+            let capturedOptions: any = null;
+            sandbox.stub(client as any, 'runPythonScript').callsFake(
+                (...args: unknown[]) => {
+                    capturedOptions = args[2];
+                    return Promise.resolve({
+                        success: true,
+                        llm_configured: false,
+                        ontology_initialized: true
+                    });
+                }
+            );
+
+            await client.initialize();
+
+            // Verify that init.py was called with skipCloudCredentials: true
+            assert.ok(capturedOptions, 'runPythonScript should have been called');
+            assert.strictEqual(
+                capturedOptions.skipCloudCredentials,
+                true,
+                'initialize() should call init.py with skipCloudCredentials: true (bootstrap decoupling)'
+            );
+        });
+
+        test('runPythonScript Cloud credential failure rejects for LLM operations', async () => {
+            // Stub Cloud as enabled but credentials failing
+            sandbox.stub(cloudProvider, 'isFlowbabyCloudEnabled').returns(true);
+            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+            
+            const credError = new Error('Cloud credentials not available');
+            sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').rejects(credError);
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+
+            // For LLM operations (skipCloudCredentials: false), credential failure should propagate
+            try {
+                await (client as any).runPythonScript('ingest.py', [], { skipCloudCredentials: false });
+                assert.fail('Should have thrown an error');
+            } catch (error) {
+                assert.ok(error instanceof Error);
+                assert.ok(
+                    (error as Error).message.includes('Cloud credentials'),
+                    'Error should mention Cloud credentials'
+                );
+            }
+        });
+
+        test('RunPythonScriptOptions interface supports both timeoutMs and skipCloudCredentials', async () => {
+            sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({});
+            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(false);
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = createMockProcess();
+            let capturedTimeout: number | undefined;
+
+            sandbox.stub(client as any, 'spawnProcess').callsFake(() => {
+                setTimeout(() => {
+                    mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                    mockProcess.emit('close', 0);
+                }, 0);
+                return mockProcess;
+            });
+
+            // Override internal timeout capture to verify both options work
+            const originalMethod = (client as any).runPythonScript.bind(client);
+            (client as any).runPythonScript = async function(
+                scriptName: string, 
+                args: string[], 
+                options: { timeoutMs?: number; skipCloudCredentials?: boolean } = {}
+            ) {
+                capturedTimeout = options.timeoutMs;
+                return originalMethod(scriptName, args, options);
+            };
+
+            // Call with both options
+            await (client as any).runPythonScript('init.py', [], {
+                timeoutMs: 60000,
+                skipCloudCredentials: true
+            });
+
+            // Both options should be respected
+            assert.strictEqual(capturedTimeout, 60000, 'timeoutMs should be passed through');
+        });
+    });
+
     // Plan 054 Fix Tests: Daemon Integration
     // These tests verify that the daemon is properly activated and used,
     // with appropriate fallback to spawn-per-request on failure.

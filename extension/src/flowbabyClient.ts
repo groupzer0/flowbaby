@@ -45,6 +45,17 @@ interface FlowbabyResult {
 }
 
 /**
+ * Options for running a Python bridge script.
+ * Plan 084: Added skipCloudCredentials for bootstrap decoupling.
+ */
+interface RunPythonScriptOptions {
+    /** Timeout in milliseconds (default: 10000) */
+    timeoutMs?: number;
+    /** Skip Cloud credential injection for bootstrap operations (default: false) */
+    skipCloudCredentials?: boolean;
+}
+
+/**
  * Plan 045: Centralized API key state model
  * Tracks both Python-side (from init.py) and TypeScript-side (SecretStorage) API key status
  */
@@ -606,7 +617,11 @@ export class FlowbabyClient {
         try {
             // Plan 040.1: Use 60-second timeout for initialization
             // First-run database creation (SQLite, Kuzu, LanceDB) can exceed default 10s on slower machines
-            const result = await this.runPythonScript('init.py', [this.workspacePath], 60000);
+            // Plan 084: Bootstrap operations (init) must succeed without Cloud credentials
+            const result = await this.runPythonScript('init.py', [this.workspacePath], {
+                timeoutMs: 60000,
+                skipCloudCredentials: true  // Bootstrap decoupled from Cloud
+            });
             const duration = Date.now() - startTime;
 
             if (result.success) {
@@ -1980,8 +1995,15 @@ export class FlowbabyClient {
     private async runPythonScript(
         scriptName: string,
         args: string[],
-        timeoutMs: number = 10000
+        options: number | RunPythonScriptOptions = {}
     ): Promise<FlowbabyResult> {
+        // Support legacy number argument for backward compatibility
+        const opts: RunPythonScriptOptions = typeof options === 'number' 
+            ? { timeoutMs: options } 
+            : options;
+        const timeoutMs = opts.timeoutMs ?? 10000;
+        const skipCloudCredentials = opts.skipCloudCredentials ?? false;
+        
         const scriptPath = path.join(this.bridgePath, scriptName);
         const sanitizedArgs = args.map((arg, i) => 
             i === 0 ? arg : `<arg${i}>`  // Sanitize args (hide sensitive data)
@@ -2008,9 +2030,22 @@ export class FlowbabyClient {
             let timeoutFiredAt: number | null = null;
             
             // Plan 028 M5/M6: Get LLM environment async and spawn process
+            // Plan 084: Skip Cloud credentials for bootstrap operations to decouple init from Cloud
             // Note: We have to wrap the spawn in an async IIFE since Promise executor can't be async
             (async () => {
-                const llmEnv = await this.getLLMEnvironment();
+                let llmEnv: Record<string, string> = {};
+                if (!skipCloudCredentials) {
+                    try {
+                        llmEnv = await this.getLLMEnvironment();
+                    } catch (error) {
+                        // Plan 084: For LLM operations, propagate Cloud credential errors
+                        this.log('ERROR', 'Failed to get Cloud credentials', {
+                            error: error instanceof Error ? error.message : String(error)
+                        });
+                        reject(error);
+                        return;
+                    }
+                }
                 
                 // Spawn Python process with workspace as working directory
                 // This ensures relative paths in scripts resolve from workspace root

@@ -8,6 +8,8 @@
  * @see ./contract/types.ts for the synced copy used at compile time
  */
 
+import * as vscode from 'vscode';
+
 // Import types from the API contract (synced copy) for use within this file
 import type {
     UserTier as UserTierType,
@@ -115,7 +117,7 @@ export interface AuthState {
  * Configuration for the Flowbaby Cloud client.
  */
 export interface FlowbabyCloudConfig {
-    /** Backend API base URL (defaults to production) */
+    /** Backend API base URL (defaults to staging) */
     apiBaseUrl: string;
     /** Request timeout in milliseconds */
     timeoutMs: number;
@@ -124,20 +126,69 @@ export interface FlowbabyCloudConfig {
 }
 
 /**
+ * Staging base URL - use until production is provisioned.
+ * 
+ * Plan 084: Changed from non-existent api.flowbaby.dev to the staging custom domain.
+ * Once api-staging.flowbaby.ai is provisioned, this is the preferred URL.
+ * During transition, FLOWBABY_CLOUD_API_URL can be set to the execute-api fallback.
+ */
+export const STAGING_API_BASE_URL = 'https://api-staging.flowbaby.ai';
+
+/**
+ * Production base URL - use for marketplace-facing releases.
+ * 
+ * Plan 084: api.flowbaby.ai is planned but not yet provisioned.
+ * Marketplace-facing builds should use this once it's live.
+ */
+export const PRODUCTION_API_BASE_URL = 'https://api.flowbaby.ai';
+
+/**
+ * Fallback execute-api URL for when custom domains aren't provisioned.
+ * 
+ * Plan 084: This is the raw API Gateway URL from the staging deployment.
+ * Use this via FLOWBABY_CLOUD_API_URL env var if custom domains are unavailable.
+ */
+export const EXECUTE_API_FALLBACK_URL = 'https://0h552crqta.execute-api.us-east-1.amazonaws.com';
+
+/**
  * Default configuration values.
+ * 
+ * Plan 084: Changed default from non-existent api.flowbaby.dev to staging URL.
  */
 export const DEFAULT_CONFIG: FlowbabyCloudConfig = {
-    apiBaseUrl: 'https://api.flowbaby.dev',
+    apiBaseUrl: STAGING_API_BASE_URL,
     timeoutMs: 30000,
     maxRetries: 3,
 };
 
 /**
  * Get the configured API base URL.
- * Priority: FLOWBABY_CLOUD_API_URL env var > default production URL
+ * 
+ * Resolution precedence (Plan 084):
+ * 1. VS Code setting: flowbaby.cloud.apiEndpoint
+ * 2. Environment variable: FLOWBABY_CLOUD_API_URL
+ * 3. Built-in default (STAGING_API_BASE_URL for now; PRODUCTION once provisioned)
+ * 
+ * @returns The resolved API base URL
  */
 export function getApiBaseUrl(): string {
-    return process.env.FLOWBABY_CLOUD_API_URL || DEFAULT_CONFIG.apiBaseUrl;
+    // 1. VS Code setting (highest priority)
+    try {
+        const settingValue = vscode.workspace.getConfiguration('flowbaby.cloud').get<string>('apiEndpoint');
+        if (settingValue && settingValue.trim().length > 0) {
+            return settingValue.trim();
+        }
+    } catch {
+        // VS Code API not available (e.g., during testing) - fall through
+    }
+    
+    // 2. Environment variable
+    if (process.env.FLOWBABY_CLOUD_API_URL) {
+        return process.env.FLOWBABY_CLOUD_API_URL;
+    }
+    
+    // 3. Built-in default
+    return DEFAULT_CONFIG.apiBaseUrl;
 }
 
 /**
@@ -177,10 +228,15 @@ export const SECRET_KEYS = {
 /**
  * Flowbaby Cloud configuration object.
  * Used by auth and client modules.
+ * 
+ * Plan 084: baseUrl now uses getApiBaseUrl() for consistent resolution.
+ * The getter ensures VS Code setting > env var > default precedence.
  */
 export const FLOWBABY_CLOUD_CONFIG = {
-    /** Backend API base URL */
-    baseUrl: process.env.FLOWBABY_CLOUD_API_URL || 'https://api.flowbaby.dev',
+    /** Backend API base URL - use getApiBaseUrl() for resolved value */
+    get baseUrl(): string {
+        return getApiBaseUrl();
+    },
     /** OAuth login endpoint path */
     authLoginPath: '/auth/login',
     /** OAuth token exchange endpoint path */

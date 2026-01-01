@@ -227,7 +227,12 @@ export async function activate(_context: vscode.ExtensionContext) {
 
         // Initialize the provider singleton so downstream components can get Cloud env
         initializeProvider(cloudCredentials);
-        debugLog('Flowbaby Cloud credentials manager and provider initialized');
+        
+        // Plan 084: Log effective Cloud endpoint for diagnosability
+        const { getApiBaseUrl } = await import('./flowbaby-cloud/types');
+        const effectiveEndpoint = getApiBaseUrl();
+        cloudOutputChannel.appendLine(`[${new Date().toISOString()}] Cloud API endpoint: ${effectiveEndpoint}`);
+        debugLog('Flowbaby Cloud credentials manager and provider initialized', { endpoint: effectiveEndpoint });
 
         // Plan 083 M7: One-time legacy API key migration
         // Detect if user has a stored legacy API key and show migration message

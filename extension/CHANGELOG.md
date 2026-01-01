@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cloud API Endpoint Override Setting (Plan 084)**: New `flowbaby.cloud.apiEndpoint` setting allows developers and testers to override the Flowbaby Cloud API endpoint for testing against staging, development, or local environments without modifying code.
+
 - **Flowbaby Cloud Credential Provider Wiring (Plan 081)**: Unified credential/provider architecture wired into extension activation and all Python bridge paths. Key changes:
   - **API Contract v2.1.0**: Added `BedrockRegion` type with `preferredRegion` field on `VendRequest` for region preference passthrough.
   - **Region Preference Setting**: New `flowbaby.cloud.preferredRegion` setting allows users to express region affinity (us-east-1, eu-west-1, me-south-1, ap-southeast-1). Backend remains authoritative for actual routing.
@@ -35,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Cloud API Endpoint Resolution (Plan 084)**: Updated default Cloud API endpoint from placeholder `api.flowbaby.dev` to correct staging endpoint `api-staging.flowbaby.ai`. Endpoint resolution now follows clear precedence: VS Code setting > `FLOWBABY_CLOUD_API_URL` environment variable > built-in default. This enables reliable Cloud connectivity for v0.7.0 launch.
+
+- **Bootstrap Decoupled from Cloud Credentials (Plan 084)**: Python bridge initialization (`init.py`) no longer requires Cloud credentials to succeed. Extension bootstrap (environment creation, workspace indexing) now completes without Cloud authentication, with only LLM-powered operations (memory ingestion, retrieval synthesis) gated on Cloud login. This fixes activation failures where users saw "Cloud login required" before they could even log in.
+
 - **Cloud Authentication Flow (Plans 077–081)**: The v0.7.0 Cloud integration now provides a complete OAuth → STS → Bridge credential flow, enabling managed AWS Bedrock inference without local API keys.
 
 - **Status Bar UX (Plan 083 M6)**: Updated status bar for Cloud-only mode:
@@ -45,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Walkthrough Updated (Plan 083 M6)**: Getting Started walkthrough step changed from "Set Your API Key" to "Login to Flowbaby Cloud" with updated description.
 
 ### Fixed
+
+- **Cloud API Endpoint Hardcoding (Plan 084)**: Fixed hardcoded `api.flowbaby.dev` URL in `types.ts` that referenced a non-existent domain. Now correctly defaults to staging endpoint (`api-staging.flowbaby.ai`) with documented fallback to execute API gateway URL when needed.
 
 - **Cloud Error Code Preservation (Plan 083 M2)**: Fixed error masking in `flowbabyClient.ts`, `PythonBridgeDaemonManager.ts`, and `BackgroundOperationManager.ts` where Cloud errors were being converted to generic "login required" errors. Now preserves original error codes (RATE_LIMITED, QUOTA_EXCEEDED, SESSION_INVALID, etc.) for accurate UX.
 

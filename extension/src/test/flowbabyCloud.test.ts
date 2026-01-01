@@ -466,4 +466,266 @@ suite('Flowbaby Cloud Module Tests', () => {
             assert.strictEqual(requiresReAuthentication(error), false);
         });
     });
+
+    suite('Endpoint Resolution (Plan 084)', () => {
+        let originalEnv: NodeJS.ProcessEnv;
+        let configGetStub: sinon.SinonStub;
+
+        setup(() => {
+            // Save original environment
+            originalEnv = { ...process.env };
+            // Clear any existing env override
+            delete process.env.FLOWBABY_CLOUD_API_URL;
+        });
+
+        teardown(() => {
+            // Restore original environment
+            process.env = originalEnv;
+            if (configGetStub) {
+                configGetStub.restore();
+            }
+        });
+
+        test('STAGING_API_BASE_URL is correct staging domain', async () => {
+            // Import the constant directly
+            const types = await import('../flowbaby-cloud/types');
+            
+            assert.strictEqual(
+                types.STAGING_API_BASE_URL, 
+                'https://api-staging.flowbaby.ai',
+                'Staging URL should be api-staging.flowbaby.ai (Plan 084 fix)'
+            );
+            // Ensure it's not the old incorrect URL
+            assert.notStrictEqual(
+                types.STAGING_API_BASE_URL,
+                'https://api.flowbaby.dev',
+                'Should NOT be the old incorrect api.flowbaby.dev URL'
+            );
+        });
+
+        test('PRODUCTION_API_BASE_URL is correct production domain', async () => {
+            const types = await import('../flowbaby-cloud/types');
+            
+            assert.strictEqual(
+                types.PRODUCTION_API_BASE_URL,
+                'https://api.flowbaby.ai',
+                'Production URL should be api.flowbaby.ai'
+            );
+        });
+
+        test('EXECUTE_API_FALLBACK_URL is the raw API Gateway URL', async () => {
+            const types = await import('../flowbaby-cloud/types');
+            
+            assert.ok(
+                types.EXECUTE_API_FALLBACK_URL.includes('execute-api.us-east-1.amazonaws.com'),
+                'Fallback URL should be the execute-api gateway URL'
+            );
+        });
+
+        test('DEFAULT_CONFIG.apiBaseUrl defaults to staging (not api.flowbaby.dev)', async () => {
+            const types = await import('../flowbaby-cloud/types');
+            
+            assert.strictEqual(
+                types.DEFAULT_CONFIG.apiBaseUrl,
+                types.STAGING_API_BASE_URL,
+                'Default config should use staging URL'
+            );
+            assert.notStrictEqual(
+                types.DEFAULT_CONFIG.apiBaseUrl,
+                'https://api.flowbaby.dev',
+                'Default config should NOT use the old incorrect URL'
+            );
+        });
+
+        test('getApiBaseUrl returns default when no setting or env var', async () => {
+            const types = await import('../flowbaby-cloud/types');
+            
+            // Clear environment to ensure no override
+            delete process.env.FLOWBABY_CLOUD_API_URL;
+            
+            // Stub VS Code config to return undefined
+            configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: sandbox.stub().returns(undefined),
+                has: sandbox.stub().returns(false),
+                inspect: sandbox.stub().returns(undefined),
+                update: sandbox.stub().resolves(),
+            } as any);
+            
+            const result = types.getApiBaseUrl();
+            
+            assert.strictEqual(
+                result,
+                types.STAGING_API_BASE_URL,
+                'Should return staging URL as default'
+            );
+        });
+
+        test('getApiBaseUrl returns env var when set (precedence level 2)', async () => {
+            const types = await import('../flowbaby-cloud/types');
+            const customUrl = 'https://custom-api.example.com';
+            
+            // Set environment variable
+            process.env.FLOWBABY_CLOUD_API_URL = customUrl;
+            
+            // Stub VS Code config to return undefined (no setting override)
+            configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: sandbox.stub().returns(undefined),
+                has: sandbox.stub().returns(false),
+                inspect: sandbox.stub().returns(undefined),
+                update: sandbox.stub().resolves(),
+            } as any);
+            
+            const result = types.getApiBaseUrl();
+            
+            assert.strictEqual(
+                result,
+                customUrl,
+                'Should return env var when setting is not configured'
+            );
+        });
+
+        test('getApiBaseUrl returns VS Code setting when set (precedence level 1 - highest)', async () => {
+            const types = await import('../flowbaby-cloud/types');
+            const settingUrl = 'https://setting-api.example.com';
+            const envUrl = 'https://env-api.example.com';
+            
+            // Set both env var and VS Code setting
+            process.env.FLOWBABY_CLOUD_API_URL = envUrl;
+            
+            // Stub VS Code config to return the setting value
+            configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: sandbox.stub().callsFake((key: string) => {
+                    if (key === 'apiEndpoint') {
+                        return settingUrl;
+                    }
+                    return undefined;
+                }),
+                has: sandbox.stub().returns(true),
+                inspect: sandbox.stub().returns(undefined),
+                update: sandbox.stub().resolves(),
+            } as any);
+            
+            const result = types.getApiBaseUrl();
+            
+            assert.strictEqual(
+                result,
+                settingUrl,
+                'VS Code setting should take precedence over env var'
+            );
+        });
+
+        test('getApiBaseUrl ignores empty/whitespace-only setting', async () => {
+            const types = await import('../flowbaby-cloud/types');
+            const envUrl = 'https://env-api.example.com';
+            
+            process.env.FLOWBABY_CLOUD_API_URL = envUrl;
+            
+            // Stub VS Code config to return whitespace-only value
+            configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: sandbox.stub().callsFake((key: string) => {
+                    if (key === 'apiEndpoint') {
+                        return '   ';  // Whitespace only
+                    }
+                    return undefined;
+                }),
+                has: sandbox.stub().returns(true),
+                inspect: sandbox.stub().returns(undefined),
+                update: sandbox.stub().resolves(),
+            } as any);
+            
+            const result = types.getApiBaseUrl();
+            
+            assert.strictEqual(
+                result,
+                envUrl,
+                'Whitespace-only setting should fall through to env var'
+            );
+        });
+
+        test('getApiBaseUrl trims whitespace from valid setting', async () => {
+            const types = await import('../flowbaby-cloud/types');
+            const settingUrl = 'https://trimmed-api.example.com';
+            
+            // Stub VS Code config with whitespace-padded URL
+            configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: sandbox.stub().callsFake((key: string) => {
+                    if (key === 'apiEndpoint') {
+                        return `  ${settingUrl}  `;  // Whitespace padded
+                    }
+                    return undefined;
+                }),
+                has: sandbox.stub().returns(true),
+                inspect: sandbox.stub().returns(undefined),
+                update: sandbox.stub().resolves(),
+            } as any);
+            
+            const result = types.getApiBaseUrl();
+            
+            assert.strictEqual(
+                result,
+                settingUrl,
+                'Should trim whitespace from valid setting value'
+            );
+        });
+
+        test('getApiBaseUrl uses execute-api fallback when env var set to it', async () => {
+            const types = await import('../flowbaby-cloud/types');
+            
+            // Set env var to the fallback URL (common during CDK transition)
+            process.env.FLOWBABY_CLOUD_API_URL = types.EXECUTE_API_FALLBACK_URL;
+            
+            // No VS Code setting
+            configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: sandbox.stub().returns(undefined),
+                has: sandbox.stub().returns(false),
+                inspect: sandbox.stub().returns(undefined),
+                update: sandbox.stub().resolves(),
+            } as any);
+            
+            const result = types.getApiBaseUrl();
+            
+            assert.strictEqual(
+                result,
+                types.EXECUTE_API_FALLBACK_URL,
+                'Should allow execute-api fallback via env var'
+            );
+        });
+
+        test('endpoint constants are all valid HTTPS URLs', async () => {
+            const types = await import('../flowbaby-cloud/types');
+            
+            // Verify all endpoint constants are valid URLs
+            const urlPattern = /^https:\/\/[a-z0-9][a-z0-9.-]*[a-z0-9]\.[a-z]{2,}(\/.*)?$/i;
+            
+            assert.ok(
+                urlPattern.test(types.STAGING_API_BASE_URL),
+                `STAGING_API_BASE_URL should be valid HTTPS URL: ${types.STAGING_API_BASE_URL}`
+            );
+            assert.ok(
+                urlPattern.test(types.PRODUCTION_API_BASE_URL),
+                `PRODUCTION_API_BASE_URL should be valid HTTPS URL: ${types.PRODUCTION_API_BASE_URL}`
+            );
+            assert.ok(
+                urlPattern.test(types.EXECUTE_API_FALLBACK_URL),
+                `EXECUTE_API_FALLBACK_URL should be valid HTTPS URL: ${types.EXECUTE_API_FALLBACK_URL}`
+            );
+        });
+
+        test('endpoint constants have no trailing slashes', async () => {
+            const types = await import('../flowbaby-cloud/types');
+            
+            assert.ok(
+                !types.STAGING_API_BASE_URL.endsWith('/'),
+                'STAGING_API_BASE_URL should not end with /'
+            );
+            assert.ok(
+                !types.PRODUCTION_API_BASE_URL.endsWith('/'),
+                'PRODUCTION_API_BASE_URL should not end with /'
+            );
+            assert.ok(
+                !types.EXECUTE_API_FALLBACK_URL.endsWith('/'),
+                'EXECUTE_API_FALLBACK_URL should not end with /'
+            );
+        });
+    });
 });
