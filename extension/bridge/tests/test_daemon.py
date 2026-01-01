@@ -133,7 +133,8 @@ class TestSetupCogneeEnvironmentExtended:
         """Verify all Cognee directories are created."""
         from daemon import setup_cognee_environment
         
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use Cloud credentials (AWS_*) instead of LLM_API_KEY
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
         monkeypatch.delenv('CACHING', raising=False)
         monkeypatch.delenv('CACHE_BACKEND', raising=False)
         
@@ -144,31 +145,35 @@ class TestSetupCogneeEnvironmentExtended:
         assert (workspace / '.flowbaby' / 'cache').exists()
 
     def test_returns_dataset_name_and_api_key_status(self, workspace, monkeypatch, logger):
-        """Verify return values."""
+        """Verify return values with Cloud credentials."""
         from daemon import setup_cognee_environment
         
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083: Test with AWS credentials (Cloud mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIATEST123')
         
-        dataset_name, api_key_present = setup_cognee_environment(str(workspace), logger)
+        dataset_name, has_credentials = setup_cognee_environment(str(workspace), logger)
         
         assert dataset_name is not None
-        assert api_key_present is True
+        assert has_credentials is True
 
     def test_api_key_not_present(self, workspace, monkeypatch, logger):
-        """Verify handling when API key is missing."""
+        """Verify handling when no credentials are available."""
         from daemon import setup_cognee_environment
         
+        # Plan 083: Remove both AWS and legacy credentials
         monkeypatch.delenv('LLM_API_KEY', raising=False)
+        monkeypatch.delenv('AWS_ACCESS_KEY_ID', raising=False)
         
-        dataset_name, api_key_present = setup_cognee_environment(str(workspace), logger)
+        dataset_name, has_credentials = setup_cognee_environment(str(workspace), logger)
         
-        assert api_key_present is False
+        assert has_credentials is False
 
     def test_sets_environment_variables(self, workspace, monkeypatch, logger):
         """Verify Cognee env vars are set."""
         from daemon import setup_cognee_environment
         
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083: Test with AWS credentials (Cloud mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIATEST123')
         
         setup_cognee_environment(str(workspace), logger)
         
@@ -349,23 +354,26 @@ class TestHandleRetrieve:
 
     @pytest.mark.asyncio
     async def test_raises_when_api_key_missing(self, workspace, logger, monkeypatch, reset_daemon_state):
-        """Test error when API key is missing."""
+        """Test error when credentials are missing (Plan 083 Cloud-only)."""
         import daemon
         daemon.cognee_initialized = True
+        # Plan 083 M5: Remove all credentials - v0.7.0 is Cloud-only
         monkeypatch.delenv('LLM_API_KEY', raising=False)
+        monkeypatch.delenv('AWS_ACCESS_KEY_ID', raising=False)
         
         with pytest.raises(daemon.JsonRpcError) as exc_info:
             await daemon.handle_retrieve({'query': 'test'}, str(workspace), 'dataset', logger)
         
-        assert exc_info.value.code == daemon.INVALID_PARAMS
-        assert 'LLM_API_KEY' in exc_info.value.message
+        assert exc_info.value.code == daemon.NOT_AUTHENTICATED
+        assert 'Cloud login' in exc_info.value.message
 
     @pytest.mark.asyncio
     async def test_raises_when_query_missing(self, workspace, logger, monkeypatch, reset_daemon_state):
         """Test error when query parameter is missing."""
         import daemon
         daemon.cognee_initialized = True
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083: Use AWS credentials for test
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIATEST123')
         
         with pytest.raises(daemon.JsonRpcError) as exc_info:
             await daemon.handle_retrieve({}, str(workspace), 'dataset', logger)
@@ -378,7 +386,8 @@ class TestHandleRetrieve:
         """Test successful retrieve call."""
         import daemon
         daemon.cognee_initialized = True
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
         
         mock_result = {'memories': [], 'total': 0}
         with patch('retrieve.retrieve_context', new_callable=AsyncMock, return_value=mock_result):
@@ -408,22 +417,25 @@ class TestHandleIngest:
 
     @pytest.mark.asyncio
     async def test_raises_when_api_key_missing(self, workspace, logger, monkeypatch, reset_daemon_state):
-        """Test error when API key is missing."""
+        """Test error when credentials are missing (Plan 083 Cloud-only)."""
         import daemon
         daemon.cognee_initialized = True
+        # Plan 083 M5: Remove all credentials - v0.7.0 is Cloud-only
         monkeypatch.delenv('LLM_API_KEY', raising=False)
+        monkeypatch.delenv('AWS_ACCESS_KEY_ID', raising=False)
         
         with pytest.raises(daemon.JsonRpcError) as exc_info:
             await daemon.handle_ingest({'mode': 'add-only'}, str(workspace), 'dataset', logger)
         
-        assert exc_info.value.code == daemon.INVALID_PARAMS
+        assert exc_info.value.code == daemon.NOT_AUTHENTICATED
 
     @pytest.mark.asyncio
     async def test_raises_on_invalid_mode(self, workspace, logger, monkeypatch, reset_daemon_state):
         """Test error on invalid mode parameter."""
         import daemon
         daemon.cognee_initialized = True
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083: Use AWS credentials for test
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIATEST123')
         
         with pytest.raises(daemon.JsonRpcError) as exc_info:
             await daemon.handle_ingest({'mode': 'invalid'}, str(workspace), 'dataset', logger)
@@ -436,7 +448,8 @@ class TestHandleIngest:
         """Test add-only mode routing."""
         import daemon
         daemon.cognee_initialized = True
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
         
         mock_result = {'success': True}
         with patch('ingest.run_add_only', new_callable=AsyncMock, return_value=mock_result) as mock_add:
@@ -455,7 +468,8 @@ class TestHandleIngest:
         """Test sync mode routing."""
         import daemon
         daemon.cognee_initialized = True
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
         
         mock_result = {'success': True}
         with patch('ingest.run_sync', new_callable=AsyncMock, return_value=mock_result) as mock_sync:
@@ -474,7 +488,8 @@ class TestHandleIngest:
         """Plan 062: Test JSON string parsing for summary_json from TypeScript."""
         import daemon
         daemon.cognee_initialized = True
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
         
         # TypeScript sends summary_json as a JSON string (via JSON.stringify)
         summary_payload = {'topic': 'Test', 'context': 'Test context', 'workspace_path': str(workspace)}
@@ -500,7 +515,8 @@ class TestHandleIngest:
         """Plan 062: Test dict is passed through directly without parsing."""
         import daemon
         daemon.cognee_initialized = True
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
         
         # If params already contain a dict (e.g., direct JSON-RPC), pass through
         summary_payload = {'topic': 'Test', 'context': 'Test context', 'workspace_path': str(workspace)}
@@ -523,7 +539,8 @@ class TestHandleIngest:
         """Plan 062: Test error on malformed JSON string."""
         import daemon
         daemon.cognee_initialized = True
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
         
         with pytest.raises(daemon.JsonRpcError) as exc_info:
             await daemon.handle_ingest(
@@ -694,7 +711,8 @@ class TestSignalHandling:
         
         daemon.shutdown_requested = False
         monkeypatch.setenv('FLOWBABY_WORKSPACE_PATH', str(workspace))
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
         
         with patch.object(sig, 'signal', side_effect=capture_signal):
             with patch.object(daemon, 'setup_daemon_logging', return_value=MagicMock()):
@@ -739,7 +757,8 @@ class TestMain:
         import daemon
         
         monkeypatch.setenv('FLOWBABY_WORKSPACE_PATH', str(workspace))
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
         
         with patch.object(daemon, 'setup_daemon_logging', return_value=MagicMock()):
             with patch.object(daemon, 'setup_cognee_environment', return_value=('dataset', True)):
@@ -770,8 +789,8 @@ class TestErrorCodes:
 
     def test_custom_error_codes(self):
         """Verify custom error codes."""
-        from daemon import COGNEE_NOT_INITIALIZED, MISSING_API_KEY, OPERATION_FAILED
+        from daemon import COGNEE_NOT_INITIALIZED, NOT_AUTHENTICATED, OPERATION_FAILED
         
         assert COGNEE_NOT_INITIALIZED == -32000
-        assert MISSING_API_KEY == -32001
+        assert NOT_AUTHENTICATED == -32001
         assert OPERATION_FAILED == -32002

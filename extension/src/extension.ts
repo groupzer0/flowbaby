@@ -34,7 +34,7 @@ import {
     initializeClientWithTimeout,
     handleInitSuccess,
     handleInitFailure,
-    registerApiKeyCommands,
+    // Plan 083 M4: registerApiKeyCommands removed (Cloud-only in v0.7.0)
     registerSetupCommands,
     registerDebugCommands,
     WorkspaceInitDeps
@@ -52,6 +52,49 @@ let storeMemoryToolDisposable: vscode.Disposable | undefined;
 let retrieveMemoryToolDisposable: vscode.Disposable | undefined;
 let cloudAuthDisposable: vscode.Disposable | undefined;
 let cloudCredentialsDisposable: vscode.Disposable | undefined;
+
+/**
+ * Plan 083 M7: One-time legacy API key migration
+ * 
+ * Detects if user has a stored legacy API key (flowbaby.llmApiKey) from v0.6.x
+ * and shows a one-time migration message explaining Cloud-only mode.
+ * The legacy secret is deleted after showing the message.
+ */
+async function checkLegacyApiKeyMigration(context: vscode.ExtensionContext): Promise<void> {
+    try {
+        const legacyApiKey = await context.secrets.get('flowbaby.llmApiKey');
+        
+        if (!legacyApiKey) {
+            debugLog('No legacy API key found, migration not needed');
+            return;
+        }
+
+        debugLog('Legacy API key detected, showing migration message');
+        
+        // Show one-time migration info message
+        const action = await vscode.window.showInformationMessage(
+            'Flowbaby v0.7.0+ uses Flowbaby Cloud for LLM access. Your previously stored API key is no longer used and will be removed. Login to Flowbaby Cloud to continue using memory features.',
+            'Login to Cloud',
+            'Dismiss'
+        );
+
+        if (action === 'Login to Cloud') {
+            await vscode.commands.executeCommand('FlowbabyCloud.login');
+        }
+
+        // Delete the legacy secret regardless of user action
+        await context.secrets.delete('flowbaby.llmApiKey');
+        debugLog('Legacy API key deleted after migration message');
+        
+        // Log the migration for audit trail
+        getAuditLogger().logApiKeyClear(true);
+    } catch (error) {
+        debugLog('Error during legacy API key migration check', {
+            error: error instanceof Error ? error.message : String(error)
+        });
+        // Don't block activation on migration errors
+    }
+}
 
 /**
  * Extension activation entry point
@@ -149,7 +192,8 @@ export async function activate(_context: vscode.ExtensionContext) {
         // Plan 073: POC-2 commands removed - synthesis is now production (copilotSynthesis.ts)
         // POC evaluation complete, synthesis integrated into retrieve() method
         
-        registerApiKeyCommands(_context, workspacePath, statusBar);
+        // Plan 083 M4: Legacy API key commands removed (Cloud-only in v0.7.0)
+        // registerApiKeyCommands(_context, workspacePath, statusBar);
         registerSetupCommands(
             _context,
             workspacePath,
@@ -184,6 +228,10 @@ export async function activate(_context: vscode.ExtensionContext) {
         // Initialize the provider singleton so downstream components can get Cloud env
         initializeProvider(cloudCredentials);
         debugLog('Flowbaby Cloud credentials manager and provider initialized');
+
+        // Plan 083 M7: One-time legacy API key migration
+        // Detect if user has a stored legacy API key and show migration message
+        await checkLegacyApiKeyMigration(_context);
 
         // Register chat participant early - shows in UI immediately with graceful
         // degradation when backend is still initializing

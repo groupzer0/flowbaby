@@ -17,7 +17,8 @@ import { debugLog } from '../outputChannels';
 import { v4 as uuidv4 } from 'uuid';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 // Plan 081: Import Cloud provider for Bedrock credentials
-import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled } from '../flowbaby-cloud';
+// Plan 083: Import FlowbabyCloudError to preserve error codes end-to-end
+import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError } from '../flowbaby-cloud';
 
 /**
  * JSON-RPC 2.0 request structure
@@ -877,6 +878,8 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
      * 
      * Plan 081: In v0.7.0 (Cloud-only), merges Flowbaby Cloud AWS credentials
      * when authenticated. Cloud env takes precedence for Bedrock calls.
+     * 
+     * Plan 083: Preserves FlowbabyCloudError codes end-to-end for accurate UX.
      */
     private async getLLMEnvironment(): Promise<Record<string, string>> {
         const env: Record<string, string> = {};
@@ -888,40 +891,26 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
                 Object.assign(env, cloudEnv);
                 this.log('INFO', 'Cloud credentials injected into daemon environment');
             } catch (error) {
-                // Cloud auth required but not available - fail fast with clear message
+                // Plan 083: Preserve FlowbabyCloudError for accurate UX (rate limit vs auth failure)
                 this.log('WARN', `Cloud credentials not available: ${error}`);
-                throw new Error(
-                    'Flowbaby Cloud login required. Run "Flowbaby Cloud: Login with GitHub" to authenticate.'
-                );
+                if (error instanceof FlowbabyCloudError) {
+                    throw error; // Preserve original error code
+                }
+                // Unknown errors: wrap with context but don't mask as auth failure
+                throw new Error(`Cloud credentials error: ${error instanceof Error ? error.message : String(error)}`);
             }
         }
 
-        // Priority 1: SecretStorage (secure, encrypted)
-        try {
-            const apiKey = await this.context.secrets.get('flowbaby.llmApiKey');
-            if (apiKey) {
-                env['LLM_API_KEY'] = apiKey;
-            }
-        } catch (error) {
-            this.log('WARN', 'Failed to get API key from SecretStorage', { error: String(error) });
-        }
-
-        // Priority 2: System environment variable (for CI/automated environments)
-        if (!env['LLM_API_KEY'] && process.env.LLM_API_KEY) {
-            env['LLM_API_KEY'] = process.env.LLM_API_KEY;
-        }
-
-        // Get LLM configuration from settings
-        const config = vscode.workspace.getConfiguration('Flowbaby');
-        const provider = config.get<string>('llm.provider', 'openai');
-        const model = config.get<string>('llm.model', 'gpt-4o-mini');
-        const endpoint = config.get<string>('llm.endpoint', '');
-
-        env['LLM_PROVIDER'] = provider;
-        env['LLM_MODEL'] = model;
-        if (endpoint) {
-            env['LLM_ENDPOINT'] = endpoint;
-        }
+        // Plan 083 M5: Removed legacy LLM_API_KEY injection from SecretStorage
+        // Plan 083 M5: Removed legacy LLM_API_KEY fallback from process.env
+        // Plan 083 M5: Removed Flowbaby.llm.* settings injection (LLM_PROVIDER, LLM_MODEL, LLM_ENDPOINT)
+        //
+        // In v0.7.0+ (Cloud-only), LLM credentials are provided via AWS_* env vars
+        // from getFlowbabyCloudEnvironment() above. The Python bridge uses these
+        // to authenticate with AWS Bedrock.
+        //
+        // Legacy API keys stored in SecretStorage are handled by the migration
+        // message (M7) but are not used for LLM operations.
 
         return env;
     }

@@ -5,11 +5,13 @@ Cognee Graph Visualization Script for VS Code Extension
 Usage: python visualize.py <workspace_path> <output_path>
 
 Generates a standalone HTML graph visualization from the Cognee knowledge graph:
-1. Loads API key from environment (LLM_API_KEY)
+1. Validates Cloud credentials from environment (AWS_ACCESS_KEY_ID)
 2. Configures workspace-isolated Cognee directories
 3. Calls cognee.visualize_graph() to generate HTML
 4. Post-processes HTML to inline vendored D3 assets (offline-first)
 5. Returns JSON result with output file path
+
+Plan 083 M5: v0.7.0 is Cloud-only - uses AWS Bedrock via AWS_* env vars.
 
 Returns JSON to stdout:
     Success: {"success": true, "output_path": "/path/to/graph.html", "node_count": 42}
@@ -189,19 +191,19 @@ async def visualize_graph(
         # Ensure output directory exists
         output_file.parent.mkdir(parents=True, exist_ok=True)
         
-        # Check for API key (provided by TypeScript via LLM_API_KEY environment variable)
-        api_key = os.getenv('LLM_API_KEY')
-        if not api_key:
+        # Plan 083 M5: v0.7.0 is Cloud-only - AWS credentials required
+        aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+        if not aws_access_key:
             error_payload = {
                 'success': False,
-                'error_code': 'LLM_API_ERROR',
-                'error_type': 'MISSING_API_KEY',
-                'message': 'LLM_API_KEY not found in environment',
-                'user_message': 'LLM_API_KEY not found. Use "Flowbaby: Set API Key" for secure storage.',
-                'remediation': 'Run "Flowbaby: Set API Key" from Command Palette to configure your API key securely.',
-                'error': 'LLM_API_KEY environment variable is required but not set'
+                'error_code': 'NOT_AUTHENTICATED',
+                'error_type': 'MISSING_CREDENTIALS',
+                'message': 'Cloud login required',
+                'user_message': 'Cloud login required. Use "Flowbaby Cloud: Login with GitHub" command.',
+                'remediation': 'Run "Flowbaby Cloud: Login with GitHub" from Command Palette to authenticate.',
+                'error': 'AWS_ACCESS_KEY_ID not found'
             }
-            logger.error("Missing API key", extra={'data': error_payload})
+            logger.error("Missing Cloud credentials", extra={'data': error_payload})
             return error_payload
         
         # Configure Cognee environment variables BEFORE SDK import
@@ -227,10 +229,8 @@ async def visualize_graph(
         cognee.config.system_root_directory(system_root)
         cognee.config.data_root_directory(data_root)
         
-        # Configure Cognee with API key
-        logger.debug("Configuring LLM provider (OpenAI)")
-        cognee.config.set_llm_api_key(api_key)
-        cognee.config.set_llm_provider('openai')
+        # Plan 083 M5: v0.7.0 is Cloud-only - Cognee uses AWS Bedrock via AWS_* env vars
+        logger.debug("Cloud-only mode: Using AWS Bedrock via Cloud credentials")
         
         # Generate dataset name for this workspace
         dataset_name, _ = generate_dataset_name(workspace_path)

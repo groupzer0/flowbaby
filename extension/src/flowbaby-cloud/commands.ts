@@ -4,11 +4,12 @@
  * VS Code commands for Flowbaby Cloud authentication and management.
  *
  * @see Plan 077 M2 - Authentication Module
+ * @see Plan 083 M3 - Uses centralized error mapping
  */
 
 import * as vscode from 'vscode';
 import { FlowbabyCloudAuth } from './auth';
-import { FlowbabyCloudError } from './types';
+import { showCloudError } from './errorMapping';
 
 /**
  * Command identifiers for Flowbaby Cloud.
@@ -66,7 +67,8 @@ export function registerCloudCommands(
                     }
                 );
             } catch (error) {
-                handleCloudError('Login failed', error);
+                // Plan 083 M3: Use centralized error mapping
+                await showCloudError(error, 'during login');
             }
         })
     );
@@ -95,7 +97,8 @@ export function registerCloudCommands(
                 await auth.logout();
                 vscode.window.showInformationMessage('Successfully logged out of Flowbaby Cloud.');
             } catch (error) {
-                handleCloudError('Logout failed', error);
+                // Plan 083 M3: Use centralized error mapping
+                await showCloudError(error, 'during logout');
             }
         })
     );
@@ -119,7 +122,8 @@ export function registerCloudCommands(
                     }
                 }
             } catch (error) {
-                handleCloudError('Failed to check status', error);
+                // Plan 083 M3: Use centralized error mapping
+                await showCloudError(error, 'checking status');
             }
         })
     );
@@ -130,37 +134,5 @@ export function registerCloudCommands(
     return disposables;
 }
 
-/**
- * Handle errors from Cloud operations.
- * Shows appropriate error messages to the user.
- */
-function handleCloudError(prefix: string, error: unknown): void {
-    if (error instanceof FlowbabyCloudError) {
-        switch (error.code) {
-            case 'NOT_AUTHENTICATED':
-                vscode.window.showWarningMessage(`${prefix}: ${error.message}`);
-                break;
-            case 'RATE_LIMITED':
-                vscode.window.showWarningMessage(
-                    `${prefix}: Rate limited. ${error.retryAfter ? `Try again in ${error.retryAfter} seconds.` : 'Please try again later.'}`
-                );
-                break;
-            case 'QUOTA_EXCEEDED':
-                vscode.window.showErrorMessage(
-                    `${prefix}: You have exceeded your usage quota. Consider upgrading your subscription.`
-                );
-                break;
-            case 'NETWORK_ERROR':
-                vscode.window.showErrorMessage(
-                    `${prefix}: Network error. Please check your internet connection and try again.`
-                );
-                break;
-            default:
-                vscode.window.showErrorMessage(`${prefix}: ${error.message}`);
-        }
-    } else if (error instanceof Error) {
-        vscode.window.showErrorMessage(`${prefix}: ${error.message}`);
-    } else {
-        vscode.window.showErrorMessage(`${prefix}: An unexpected error occurred.`);
-    }
-}
+// Plan 083 M3: Removed handleCloudError - now using centralized showCloudError from errorMapping.ts
+

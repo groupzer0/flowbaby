@@ -65,17 +65,20 @@ def mock_env(temp_workspace: Path, monkeypatch) -> dict:
     Returns:
         Dictionary of environment variables set
     """
+    # Plan 083 M5: v0.7.0 is Cloud-only - use AWS_* credentials for tests
     env_vars = {
-        'LLM_API_KEY': 'sk-test-mock-key-12345',
+        'AWS_ACCESS_KEY_ID': 'AKIAIOSFODNN7EXAMPLE',
+        'AWS_SECRET_ACCESS_KEY': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        'AWS_SESSION_TOKEN': 'test-session-token',
+        'AWS_REGION': 'us-east-1',
         'WORKSPACE_PATH': str(temp_workspace)
     }
 
     for key, value in env_vars.items():
         monkeypatch.setenv(key, value)
 
-    # Create .env file in workspace
-    env_file = temp_workspace / '.env'
-    env_file.write_text('LLM_API_KEY=sk-test-mock-key-12345\n')
+    # Remove any legacy LLM_API_KEY that might be in the environment
+    monkeypatch.delenv('LLM_API_KEY', raising=False)
 
     return env_vars
 

@@ -122,21 +122,6 @@
         "category": "Flowbaby"
       },
       {
-        "command": "Flowbaby.configureApiKey",
-        "title": "Flowbaby: Configure API Key",
-        "category": "Flowbaby"
-      },
-      {
-        "command": "Flowbaby.setApiKey",
-        "title": "Flowbaby: Set API Key",
-        "category": "Flowbaby"
-      },
-      {
-        "command": "Flowbaby.clearApiKey",
-        "title": "Flowbaby: Clear API Key",
-        "category": "Flowbaby"
-      },
-      {
         "command": "Flowbaby.showDebugLogs",
         "title": "Flowbaby: Show Debug Logs",
         "category": "Flowbaby"
@@ -302,15 +287,15 @@
             ]
           },
           {
-            "id": "configureApiKey",
-            "title": "Set Your API Key",
-            "description": "Set your LLM provider API key (OpenAI, Anthropic, etc.). Stored securely via VS Code SecretStorage.\n\n💰 **Typical cost**: $0.02–$0.06/day with defaults (gpt-4o-mini)\n\n[Set API Key](command:Flowbaby.setApiKey)",
+            "id": "loginCloud",
+            "title": "Login to Flowbaby Cloud",
+            "description": "Login to Flowbaby Cloud to enable LLM-powered memory operations. Authentication uses GitHub OAuth.\n\n☁️ **No API key required** — Flowbaby Cloud provides managed LLM access via AWS Bedrock.\n\n[Login to Cloud](command:FlowbabyCloud.login)",
             "media": {
               "image": "media/flowbaby-icon-tightcrop.png",
-              "altText": "API Key Setup"
+              "altText": "Cloud Login"
             },
             "completionEvents": [
-              "onCommand:Flowbaby.setApiKey"
+              "onCommand:FlowbabyCloud.login"
             ]
           },
           {
@@ -465,28 +450,6 @@
           ],
           "default": "gpt-5-mini",
           "markdownDescription": "**Copilot synthesis model** used for Plan 073 memory retrieval. This setting controls which VS Code LM API (Copilot) model synthesizes answers from retrieved graph context.\n\nSynthesis fails with a clear error if the selected model is unavailable (no silent fallback).\n\n**Note**: This curated list is reviewed each release as Copilot model availability evolves."
-        },
-        "Flowbaby.llm.provider": {
-          "type": "string",
-          "enum": [
-            "openai",
-            "anthropic",
-            "azure",
-            "ollama",
-            "custom"
-          ],
-          "default": "openai",
-          "markdownDescription": "**Python bridge LLM provider** for memory ingestion and graph operations. This does NOT affect Copilot synthesis (use `Flowbaby.synthesis.modelId` for that).\n\nNon-OpenAI providers may require additional configuration in the endpoint field."
-        },
-        "Flowbaby.llm.model": {
-          "type": "string",
-          "default": "gpt-4o-mini",
-          "markdownDescription": "**Python bridge LLM model** for memory ingestion and graph operations (e.g., gpt-4o-mini, claude-3-haiku-20240307, llama2). This does NOT affect Copilot synthesis."
-        },
-        "Flowbaby.llm.endpoint": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "**Python bridge LLM endpoint** URL (for Ollama, Azure, or self-hosted). Leave empty for default provider endpoints. This does NOT affect Copilot synthesis."
         },
         "flowbaby.cloud.preferredRegion": {
           "type": "string",

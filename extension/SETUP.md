@@ -24,23 +24,15 @@
    - Install `cognee` and `python-dotenv`
    - Verify the environment is ready
 
-### 2. Configure API Key
+### 2. Login to Flowbaby Cloud
 
-**Option A: Global API Key (Recommended)**
+Flowbaby v0.7.0+ uses **Flowbaby Cloud** for LLM operations. No API key configuration needed.
+
 1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-2. Run **"Flowbaby: Set API Key"**
-3. Enter your API key when prompted
+2. Run **"Flowbaby Cloud: Login"**
+3. Complete authentication in your browser
 
-This stores the key securely via VS Code's SecretStorage and applies to all workspaces.
-
-**Option B: Workspace-Specific `.env` File**
-
-Create a `.env` file in your workspace root:
-```env
-LLM_API_KEY=sk-your-key-here
-```
-
-**Priority Order**: Workspace `.env` > Global SecretStorage > System environment
+Your Cloud session applies to all workspaces automatically.
 
 ### 3. Verify Setup
 
@@ -113,9 +105,8 @@ You must open the `extension/` folder in VS Code, not the repository root. The `
 2. Press **F5** to launch Extension Development Host
 3. **In the Extension Development Host window**:
    - File → Open Folder
-   - Select a workspace that has:
-     - ✅ `.venv/` directory with cognee installed
-     - ✅ `.env` file with LLM_API_KEY
+   - Select any workspace
+   - Run **"Flowbaby Cloud: Login"** if not already authenticated
 
 ### Verify Workspace Setup
 
@@ -201,16 +192,16 @@ This is often invisible on Linux/macOS because rename semantics and open-file be
 
 The extension refresh flow should stop the bridge daemon (if running) before backing up/renaming the venv, and it should retry renames briefly to tolerate transient file locks (AV scanning, delayed handle release).
 
-### "LLM_API_KEY not found"
+### "Cloud login required" / "NOT_AUTHENTICATED"
 
-**Cause**: Missing or incorrectly placed `.env` file
+**Cause**: Not logged in to Flowbaby Cloud
 
 **Solution**:
-1. Create `.env` file in your **workspace root** (not extension directory)
-2. Add: `LLM_API_KEY=sk-your-key-here`
-3. Reload the Extension Development Host window (Ctrl+R or Cmd+R)
+1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+2. Run **"Flowbaby Cloud: Login"**
+3. Complete authentication in your browser
 
-**Note**: As of v0.2.1, `OPENAI_API_KEY` is no longer supported. Use `LLM_API_KEY` to align with Cognee 0.4.0.
+**Note**: As of v0.7.0, Flowbaby uses Cloud authentication. Legacy `LLM_API_KEY` configuration is no longer supported.
 
 ### "Failed to import required module: No module named 'cognee'"
 
@@ -390,17 +381,17 @@ cat /path/to/workspace/.flowbaby/system/schema_migration_receipt.json
 ### Ingestion Fails
 
 Check that:
-1. ✅ Workspace has `.venv` with cognee: `.venv/bin/pip list | grep cognee`
-2. ✅ OpenAI API key is valid in `.env` file
-3. ✅ Internet connection is working (for OpenAI API calls)
+1. ✅ Workspace has been initialized (run **"Flowbaby: Initialize Workspace"**)
+2. ✅ You are logged in to Flowbaby Cloud (run **"Flowbaby Cloud: Login"**)
+3. ✅ Internet connection is working (for Cloud API calls)
 4. ✅ Output Channel shows Python interpreter detected
 
 ### Different Workspaces Behave Differently
 
-**This is expected!** Each workspace needs its own setup. If extension works in workspace A but not workspace B:
+**This is expected!** Each workspace needs its own initialization. If extension works in workspace A but not workspace B:
 
-1. Ensure workspace B has `.venv/` with cognee installed
-2. Ensure workspace B has `.env` with LLM_API_KEY
+1. Run **"Flowbaby: Initialize Workspace"** in workspace B
+2. Ensure you are logged in to Flowbaby Cloud (login is shared across workspaces)
 3. Check Output Channel in workspace B for specific errors
 
 ### Accidentally Committed .venv to Git
@@ -431,28 +422,14 @@ git commit -m "Remove Python venv and sensitive files from git"
 
 Every time you want to use the extension in a new workspace:
 
-```bash
-# 1. Navigate to workspace
-cd /path/to/new/workspace
+1. **Open workspace in VS Code**
+2. **Initialize workspace**: Run **"Flowbaby: Initialize Workspace"** from Command Palette
+3. **Login to Cloud** (first time only): Run **"Flowbaby Cloud: Login"**
+4. **Update .gitignore** (recommended):
 
-# 2. Create and activate venv
-python3 -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-
-# 3. Install dependencies
-pip install cognee python-dotenv
-
-# 4. Add API key
-echo "LLM_API_KEY=sk-your-key-here" > .env
-
-# 5. Update .gitignore (IMPORTANT - avoids committing 10k+ files!)
-echo ".venv/" >> .gitignore
-echo ".env" >> .gitignore
-echo ".flowbaby/" >> .gitignore
-
-# 6. Open in VS Code and test
-code .
-# Press F5 if in extension dev, or use normally if extension installed
+```gitignore
+# Flowbaby workspace data
+.flowbaby/
 ```
 
 **⚠️ Git Ignore Configuration**:
@@ -472,7 +449,7 @@ The virtual environment (`.venv/`) contains **over 10,000 files** from Python pa
 
 **Why ignore each**:
 - `.venv/`: 10k+ files, ~50-100MB, should be recreated per environment
-- `.env`: Contains your OpenAI API key (security risk if committed)
+- `.env`: May contain sensitive configuration (if present)
 - `.flowbaby/`: Workspace-specific memory metadata (not needed in git)
 
 **Time required**: 2-3 minutes per workspace

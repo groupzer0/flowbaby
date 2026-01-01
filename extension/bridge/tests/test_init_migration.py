@@ -241,7 +241,8 @@ class TestMigrationMarkerLocation:
         workspace.mkdir()
 
         # Plan 039 M5: Set API key via environment variable (not .env file)
-        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
         # Create workspace marker - should prevent prune
         system_dir = workspace / '.flowbaby/system'
@@ -279,7 +280,8 @@ class TestMigrationMarkerLocation:
         workspace.mkdir()
 
         # Plan 039 M5: Set API key via environment variable (not .env file)
-        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
         # Create data but NO marker
         system_dir = workspace / '.flowbaby/system'
@@ -323,7 +325,8 @@ class TestMigrationMarkerLocation:
         workspace.mkdir()
 
         # Plan 039 M5: Set API key via environment variable (not .env file)
-        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
         # Don't create any data or marker - fresh workspace
 
@@ -362,7 +365,8 @@ class TestMigrationMarkerLocation:
         workspace.mkdir()
 
         # Plan 039 M5: Set API key via environment variable (not .env file)
-        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
         # Create marker to skip prune logic
         system_dir = workspace / '.flowbaby/system'
@@ -407,7 +411,8 @@ class TestMarkerNotCheckedInVenv:
         workspace.mkdir()
 
         # Plan 039 M5: Set API key via environment variable (not .env file)
-        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
         # Create marker
         system_dir = workspace / '.flowbaby/system'
@@ -444,7 +449,8 @@ class TestMarkerPrecedence:
         workspace.mkdir()
 
         # Plan 039 M5: Set API key via environment variable (not .env file)
-        monkeypatch.setenv('LLM_API_KEY', 'test_key_123')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
         # Create workspace marker
         system_dir = workspace / '.flowbaby/system'

@@ -186,7 +186,7 @@ The bridge converts camelCase to snake_case internally for Python conventions in
 | `MISSING_UPDATED_AT` | `updatedAt` field missing | 400 | Include ISO 8601 timestamp in `updatedAt` |
 | `MISSING_REQUIRED_FIELD` | Required field missing (topic, context, topicId) | 400 | Include all required fields per schema |
 | `INVALID_JSON` | JSON parsing failed | 400 | Verify JSON is valid and properly escaped |
-| `MISSING_API_KEY` | `LLM_API_KEY` not found in workspace .env | 401 | Add `LLM_API_KEY=sk-...` to workspace .env |
+| `NOT_AUTHENTICATED` | Cloud credentials not found | 401 | Log in via "Flowbaby Cloud: Login" command |
 | `IMPORT_ERROR` | Failed to import cognee library | 500 | Run `pip install -r bridge/requirements.txt` |
 | `COGNEE_ERROR` | Cognee library threw exception | 500 | Check stderr logs for details |
 | `BRIDGE_TIMEOUT` | Script exceeded timeout limit | 504 | Increase timeout or reduce payload size |
@@ -273,7 +273,7 @@ This enriched text is stored as a string in Cognee, with metadata extractable vi
 The bridge validates:
 1. ✅ Required fields exist (`workspace_path`, `topicId`, `createdAt`, `updatedAt`)
 2. ✅ Workspace path is a valid directory
-3. ✅ LLM_API_KEY exists in workspace .env
+3. ✅ Cloud credentials (AWS_*) present
 4. ✅ JSON is parseable
 
 The bridge does **NOT** validate:

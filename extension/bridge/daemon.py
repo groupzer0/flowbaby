@@ -9,8 +9,10 @@ Usage: python daemon.py
 
 Environment Variables:
   FLOWBABY_WORKSPACE_PATH: Required. Absolute path to workspace root.
-  LLM_API_KEY: Required for ingest/retrieve operations.
+  AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN: Cloud credentials (v0.7.0+, primary)
   FLOWBABY_DEBUG_LOGGING: Optional. Enable verbose logging.
+
+Note: v0.7.0 is Cloud-only. Use "Flowbaby Cloud: Login" to authenticate.
 
 Communication:
   - Reads JSON-RPC 2.0 requests from stdin (one per line)
@@ -101,16 +103,16 @@ def setup_cognee_environment(workspace_path: str, logger: logging.Logger) -> tup
     2. Flowbaby-managed defaults - applied only when value not already set
 
     Returns:
-        tuple: (dataset_name, api_key_present: bool)
+        tuple: (dataset_name, has_credentials: bool) - True if AWS_* or LLM_API_KEY present
     """
     global _daemon_env_config
     
-    # Check for API key but don't fail - it may arrive later via request env
-    api_key = os.getenv('LLM_API_KEY')
-    api_key_present = api_key is not None
+    # Plan 083: v0.7.0 is Cloud-only. Check for Cloud credentials (AWS_*)
+    aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+    has_credentials = aws_access_key is not None
     
-    if not api_key_present:
-        logger.warning('LLM_API_KEY not found in startup environment - will check per-request')
+    if not has_credentials:
+        logger.warning('No Cloud credentials found in startup environment (AWS_*) - will check per-request')
 
     # Plan 074: Use shared bridge_env module for all environment wiring
     # This sets storage directories, caching config, AND ontology activation
@@ -131,7 +133,7 @@ def setup_cognee_environment(workspace_path: str, logger: logging.Logger) -> tup
     from workspace_utils import generate_dataset_name
     dataset_name, _ = generate_dataset_name(workspace_path)
 
-    return dataset_name, api_key_present
+    return dataset_name, has_credentials
 
 
 def initialize_cognee(workspace_path: str, logger: logging.Logger) -> None:
@@ -176,13 +178,13 @@ def initialize_cognee(workspace_path: str, logger: logging.Logger) -> None:
     cognee.config.system_root_directory(system_root)
     cognee.config.data_root_directory(data_root)
     
-    # Set API key if available (will be validated per-request in handlers)
-    api_key = os.getenv('LLM_API_KEY')
-    if api_key:
-        cognee.config.set_llm_api_key(api_key)
-        cognee.config.set_llm_provider('openai')
+    # Plan 083 M5: v0.7.0 is Cloud-only - AWS credentials are used automatically by Cognee
+    # LLM_API_KEY is no longer supported - Bedrock uses AWS_* env vars
+    aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+    if aws_access_key:
+        logger.debug("Cloud-only mode: Using AWS Bedrock via Cloud credentials")
     else:
-        logger.debug("LLM_API_KEY not set during initialization - will check per-request")
+        logger.debug("No Cloud credentials at daemon init - will check per-request")
 
     cognee_initialized = True
     elapsed = time.time() - start_time
@@ -218,7 +220,7 @@ INTERNAL_ERROR = -32603
 
 # Custom error codes
 COGNEE_NOT_INITIALIZED = -32000
-MISSING_API_KEY = -32001
+NOT_AUTHENTICATED = -32001
 OPERATION_FAILED = -32002
 
 
@@ -263,9 +265,10 @@ async def handle_retrieve(params: dict, workspace_path: str, dataset_name: str, 
     if not cognee_initialized:
         raise JsonRpcError(COGNEE_NOT_INITIALIZED, 'Cognee SDK not initialized')
 
-    # Validate API key is present before processing request
-    if not os.getenv('LLM_API_KEY'):
-        raise JsonRpcError(INVALID_PARAMS, 'LLM_API_KEY not found in environment - required for retrieval operations')
+    # Plan 083 M5: v0.7.0 is Cloud-only - AWS credentials required
+    has_credentials = os.getenv('AWS_ACCESS_KEY_ID')
+    if not has_credentials:
+        raise JsonRpcError(NOT_AUTHENTICATED, 'Cloud login required - use "Flowbaby Cloud: Login with GitHub" command')
 
     query = params.get('query')
     if not query:
@@ -306,9 +309,10 @@ async def handle_ingest(params: dict, workspace_path: str, dataset_name: str, lo
     if not cognee_initialized:
         raise JsonRpcError(COGNEE_NOT_INITIALIZED, 'Cognee SDK not initialized')
 
-    # Validate API key is present before processing request
-    if not os.getenv('LLM_API_KEY'):
-        raise JsonRpcError(INVALID_PARAMS, 'LLM_API_KEY not found in environment - required for ingest operations')
+    # Plan 083 M5: v0.7.0 is Cloud-only - AWS credentials required
+    has_credentials = os.getenv('AWS_ACCESS_KEY_ID')
+    if not has_credentials:
+        raise JsonRpcError(NOT_AUTHENTICATED, 'Cloud login required - use "Flowbaby Cloud: Login with GitHub" command')
 
     mode = params.get('mode', 'add-only')
     summary_json = params.get('summary_json')
@@ -373,9 +377,10 @@ async def handle_cognify(params: dict, workspace_path: str, dataset_name: str, l
     if not cognee_initialized:
         raise JsonRpcError(COGNEE_NOT_INITIALIZED, 'Cognee SDK not initialized')
     
-    # Validate API key is present
-    if not os.getenv('LLM_API_KEY'):
-        raise JsonRpcError(INVALID_PARAMS, 'LLM_API_KEY not found in environment - required for cognify operations')
+    # Plan 083 M5: v0.7.0 is Cloud-only - AWS credentials required
+    has_credentials = os.getenv('AWS_ACCESS_KEY_ID')
+    if not has_credentials:
+        raise JsonRpcError(NOT_AUTHENTICATED, 'Cloud login required - use "Flowbaby Cloud: Login with GitHub" command')
     
     operation_id = params.get('operation_id')
     if not operation_id:
@@ -595,7 +600,7 @@ def main() -> int:
             'jsonrpc': '2.0',
             'id': None,
             'error': {
-                'code': MISSING_API_KEY,
+                'code': NOT_AUTHENTICATED,
                 'message': str(e)
             }
         }))

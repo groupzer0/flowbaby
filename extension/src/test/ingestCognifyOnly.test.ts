@@ -51,7 +51,7 @@ suite('Ingest Script Cognify-Only Mode', () => {
         // Should NOT contain UnboundLocalError
         assert.ok(!output.includes('UnboundLocalError'), 'Script crashed with UnboundLocalError');
         
-        // Should contain MISSING_API_KEY error code
-        assert.ok(output.includes('MISSING_API_KEY'), 'Script did not report MISSING_API_KEY error');
+        // Plan 083: Should contain Cloud-only NOT_AUTHENTICATED error code
+        assert.ok(output.includes('NOT_AUTHENTICATED') || output.includes('Cloud'), 'Script did not report Cloud authentication error');
     });
 });

@@ -60,7 +60,15 @@ export {
     type IDaemonController,
     type RefreshManagerEvent,
 } from './refresh';
-// export * from './credentials';
 
-// Provider module will be added in M4
-// export * from './provider';
+// Re-export error mapping (Plan 083 M3)
+export {
+    mapCloudErrorToUX,
+    showCloudError,
+    isRecoverableCloudError,
+    requiresReAuthentication,
+    CLOUD_ERROR_COMMANDS,
+    type CloudErrorUX,
+    type ErrorAction,
+    type ErrorSeverity,
+} from './errorMapping';

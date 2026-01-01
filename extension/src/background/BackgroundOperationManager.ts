@@ -14,7 +14,8 @@ import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 // Plan 039 M5: Removed dotenv import - .env API key support removed for security
 // Plan 081: Import Cloud provider for Bedrock credentials
-import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled } from '../flowbaby-cloud';
+// Plan 083: Import FlowbabyCloudError to preserve error codes end-to-end
+import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError } from '../flowbaby-cloud';
 
 /**
  * Interface for daemon manager to avoid circular imports
@@ -198,28 +199,15 @@ export class BackgroundOperationManager {
     }
 
     /**
-     * Resolve API key from SecretStorage or system environment
-     * Priority: SecretStorage > process.env
-     * Note: Plan 039 M5 removed .env file support for security
+     * Plan 083 M5: Removed in v0.7.0 Cloud-only mode.
+     * Cloud credentials are now obtained via getFlowbabyCloudEnvironment().
+     * LLM_API_KEY is no longer supported - use Cloud login instead.
+     * 
+     * @deprecated Removed in v0.7.0 - always returns undefined
      */
-    private async resolveApiKey(_workspacePath: string): Promise<string | undefined> {
-        // Priority 1: Check SecretStorage (secure, encrypted)
-        try {
-            const secretKey = await this.context.secrets.get('flowbaby.llmApiKey');
-            if (secretKey) {
-                this.outputChannel.appendLine('[BACKGROUND] Using LLM_API_KEY from SecretStorage');
-                return secretKey;
-            }
-        } catch (err) {
-            this.outputChannel.appendLine(`[BACKGROUND] Failed to read SecretStorage: ${err}`);
-        }
-
-        // Priority 2: System environment (for CI/automated environments)
-        if (process.env.LLM_API_KEY) {
-            this.outputChannel.appendLine('[BACKGROUND] Using LLM_API_KEY from system environment');
-            return process.env.LLM_API_KEY;
-        }
-
+    private async resolveApiKey(_workspacePath: string): Promise<undefined> {
+        // Plan 083 M5: v0.7.0 is Cloud-only - no legacy API key support
+        this.outputChannel.appendLine('[BACKGROUND] resolveApiKey called but v0.7.0 is Cloud-only - returning undefined');
         return undefined;
     }
 
@@ -228,6 +216,8 @@ export class BackgroundOperationManager {
      * 
      * Plan 081: In v0.7.0 (Cloud-only), merges Flowbaby Cloud AWS credentials
      * when authenticated. Cloud env takes precedence for Bedrock calls.
+     * 
+     * Plan 083: Preserves FlowbabyCloudError codes end-to-end for accurate UX.
      */
     private async getLLMEnvironment(workspacePath: string): Promise<Record<string, string>> {
         const env: Record<string, string> = {};
@@ -239,37 +229,21 @@ export class BackgroundOperationManager {
                 Object.assign(env, cloudEnv);
                 this.outputChannel.appendLine('[BACKGROUND] Cloud credentials injected into background operation environment');
             } catch (error) {
-                // Cloud auth required but not available - fail fast with clear message
+                // Plan 083: Preserve FlowbabyCloudError for accurate UX (rate limit vs auth failure)
                 this.outputChannel.appendLine(`[BACKGROUND] Cloud credentials not available: ${error}`);
-                throw new Error(
-                    'Flowbaby Cloud login required. Run "Flowbaby Cloud: Login with GitHub" to authenticate.'
-                );
+                if (error instanceof FlowbabyCloudError) {
+                    throw error; // Preserve original error code
+                }
+                // Unknown errors: wrap with context but don't mask as auth failure
+                throw new Error(`Cloud credentials error: ${error instanceof Error ? error.message : String(error)}`);
             }
         }
 
-        // Resolve API key with priority chain
-        const apiKey = await this.resolveApiKey(workspacePath);
-        if (apiKey) {
-            env['LLM_API_KEY'] = apiKey;
-        }
-
-        // Get LLM configuration from VS Code settings
-        const config = vscode.workspace.getConfiguration('Flowbaby.llm');
-        
-        const provider = config.get<string>('provider');
-        if (provider) {
-            env['LLM_PROVIDER'] = provider;
-        }
-
-        const model = config.get<string>('model');
-        if (model) {
-            env['LLM_MODEL'] = model;
-        }
-
-        const endpoint = config.get<string>('endpoint');
-        if (endpoint) {
-            env['LLM_ENDPOINT'] = endpoint;
-        }
+        // Plan 083 M5: v0.7.0 is Cloud-only - no LLM_* env vars injected
+        // Bridge subprocess env no longer includes LLM_API_KEY, LLM_PROVIDER, LLM_MODEL, LLM_ENDPOINT
+        // Cloud credentials (AWS_*) are the only auth mechanism supported
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const _workspacePathUnused = workspacePath; // Silence unused parameter warning
 
         return env;
     }

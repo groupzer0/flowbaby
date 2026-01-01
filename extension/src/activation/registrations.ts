@@ -672,13 +672,13 @@ export function registerFlowbabyParticipant(deps: ParticipantRegistrationDeps): 
 
                     const hasApiKey = await flowbabyClient.hasApiKey();
                     if (!hasApiKey) {
-                        stream.markdown('🔑 **LLM API Key Required**\n\n');
-                        stream.markdown('Flowbaby needs an LLM API key (OpenAI by default) to process memory operations.\n\n');
+                        stream.markdown('☁️ **Flowbaby Cloud Login Required**\n\n');
+                        stream.markdown('Flowbaby v0.7.0+ uses Cloud authentication for memory operations.\n\n');
                         stream.markdown('**Quick Fix:**\n');
-                        stream.markdown('1. Run command: `Flowbaby: Set API Key`\n');
-                        stream.markdown('2. Enter your OpenAI API key (or Anthropic, Azure, Ollama if configured)\n\n');
-                        stream.markdown('[Set API Key Now](command:Flowbaby.setApiKey)');
-                        return { metadata: { error: 'api_key_required' } };
+                        stream.markdown('1. Run command: `Flowbaby: Login to Cloud`\n');
+                        stream.markdown('2. Complete authentication in your browser\n\n');
+                        stream.markdown('[Login to Cloud](command:flowbaby.cloud.login)');
+                        return { metadata: { error: 'cloud_login_required' } };
                     }
 
                     // Help request handling
@@ -1019,8 +1019,9 @@ async function handleRetrievalFlow(
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error('Retrieval failed:', error);
 
-        if (errorMessage.includes('API key') || errorMessage.includes('API_KEY')) {
-            stream.markdown('⚠️ **LLM API key not configured** - Use "Flowbaby: Set API Key" command to enable memory retrieval\n\n');
+        // Plan 083 M6: Cloud-only messaging (v0.7.0)
+        if (errorMessage.includes('API key') || errorMessage.includes('API_KEY') || errorMessage.includes('NOT_AUTHENTICATED')) {
+            stream.markdown('⚠️ **Cloud login required** - Use "Flowbaby Cloud: Login with GitHub" command to enable memory retrieval\n\n');
         } else {
             stream.markdown('⚠️ **Memory retrieval unavailable** - continuing without context\n\n');
         }

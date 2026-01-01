@@ -225,8 +225,7 @@ class TestReindexOnly:
             }):
                 result = await do_reindex_only(
                     str(mock_workspace),
-                    'test_dataset',
-                    'test-api-key'
+                    'test_dataset'
                 )
                 
                 assert result['success'] is True
@@ -260,8 +259,7 @@ class TestReindexOnly:
             }):
                 result = await do_reindex_only(
                     str(mock_workspace),
-                    'test_dataset',
-                    'test-api-key'
+                    'test_dataset'
                 )
                 
                 assert result['success'] is True
@@ -307,8 +305,7 @@ class TestResetAndRebuild:
             }):
                 result = await do_reset_and_rebuild(
                     str(mock_workspace),
-                    'test_dataset',
-                    'test-api-key'
+                    'test_dataset'
                 )
                 
                 assert result['success'] is True
@@ -346,8 +343,7 @@ class TestResetAndRebuild:
             }):
                 result = await do_reset_and_rebuild(
                     str(mock_workspace),
-                    'test_dataset',
-                    'test-api-key'
+                    'test_dataset'
                 )
                 
                 assert result['success'] is True
@@ -384,8 +380,7 @@ class TestResetAndRebuild:
             }):
                 result = await do_reset_and_rebuild(
                     str(mock_workspace),
-                    'test_dataset',
-                    'test-api-key'
+                    'test_dataset'
                 )
                 
                 assert result['success'] is False
@@ -412,7 +407,8 @@ class TestCLIValidation:
             ],
             capture_output=True,
             text=True,
-            env={**os.environ, 'LLM_API_KEY': 'test-key'},
+            # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+            env={**os.environ, 'AWS_ACCESS_KEY_ID': 'AKIAIOSFODNN7EXAMPLE'},
         )
         
         # Should exit with code 3 (user cancelled)
@@ -487,7 +483,8 @@ class TestIntegration:
             ],
             capture_output=True,
             text=True,
-            env={**os.environ, 'LLM_API_KEY': 'test-key'},
+            # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+            env={**os.environ, 'AWS_ACCESS_KEY_ID': 'AKIAIOSFODNN7EXAMPLE'},
             timeout=30,
         )
         
@@ -514,8 +511,8 @@ class TestMainAsync:
         # Ensure the relative path resolves to an existing directory.
         monkeypatch.chdir(tmp_path)
 
-        # Ensure API key present so we hit the absolute-path validation.
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Ensure AWS credentials present so we hit the absolute-path validation.
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
         rel_path = os.path.relpath(str(workspace), start=str(tmp_path))
         args = type("Args", (), {"workspace_path": rel_path, "mode": "reindex-only", "force": False})
@@ -526,7 +523,8 @@ class TestMainAsync:
     async def test_main_async_requires_flowbaby_dir(self, tmp_path, monkeypatch):
         workspace = tmp_path / "workspace"
         workspace.mkdir()
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
         args = type("Args", (), {"workspace_path": str(workspace), "mode": "reindex-only", "force": False})
         rc = await main_async(args)
@@ -536,7 +534,9 @@ class TestMainAsync:
     async def test_main_async_missing_api_key_exits_before_lock(self, tmp_path, monkeypatch):
         workspace = tmp_path / "workspace"
         (workspace / '.flowbaby').mkdir(parents=True)
+        # Plan 083 M5: Remove all credentials - v0.7.0 is Cloud-only
         monkeypatch.delenv('LLM_API_KEY', raising=False)
+        monkeypatch.delenv('AWS_ACCESS_KEY_ID', raising=False)
 
         args = type("Args", (), {"workspace_path": str(workspace), "mode": "reindex-only", "force": False})
         rc = await main_async(args)
@@ -547,7 +547,8 @@ class TestMainAsync:
     async def test_main_async_lock_acquisition_failure_returns_2(self, tmp_path, monkeypatch):
         workspace = tmp_path / "workspace"
         (workspace / '.flowbaby').mkdir(parents=True)
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
         # Create an existing lock to force acquisition failure.
         assert acquire_lock(workspace) is True
@@ -566,7 +567,8 @@ class TestMainAsync:
     async def test_main_async_success_releases_lock(self, tmp_path, monkeypatch):
         workspace = tmp_path / "workspace"
         (workspace / '.flowbaby').mkdir(parents=True)
-        monkeypatch.setenv('LLM_API_KEY', 'test-key')
+        # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
         async def _fake_reindex(*_args, **_kwargs):
             return {'success': True, 'mode': 'reindex-only', 'summaries_processed': 0}

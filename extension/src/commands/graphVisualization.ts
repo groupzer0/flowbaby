@@ -129,14 +129,14 @@ export function registerVisualizeGraphCommand(
                                 vscode.window.showWarningMessage(
                                     'Flowbaby: No graph data available. Ingest some memories first using the chat participant.'
                                 );
-                            } else if (result.error_code === 'MISSING_API_KEY') {
-                                const setKeyAction = 'Set API Key';
+                            } else if (result.error_code === 'NOT_AUTHENTICATED') {
+                                const loginAction = 'Login to Cloud';
                                 const action = await vscode.window.showErrorMessage(
-                                    'Flowbaby: API key not configured.',
-                                    setKeyAction
+                                    'Flowbaby: Cloud login required.',
+                                    loginAction
                                 );
-                                if (action === setKeyAction) {
-                                    await vscode.commands.executeCommand('Flowbaby.setApiKey');
+                                if (action === loginAction) {
+                                    await vscode.commands.executeCommand('flowbaby.cloud.login');
                                 }
                             } else {
                                 vscode.window.showErrorMessage(

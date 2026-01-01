@@ -10,6 +10,7 @@ import * as vscode from 'vscode';
 import * as sinon from 'sinon';
 import { FlowbabyClient, ApiKeyState, InitializeResult } from '../flowbabyClient';
 import { FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
+import * as cloudProvider from '../flowbaby-cloud/provider';
 
 suite('API Key State Tests (Plan 045)', () => {
     let sandbox: sinon.SinonSandbox;
@@ -38,17 +39,19 @@ suite('API Key State Tests (Plan 045)', () => {
         });
 
         test('ApiKeyState with no keys configured', () => {
+            // Plan 083 M6: Cloud-only messaging (v0.7.0)
             const state: ApiKeyState = {
                 pythonConfigured: false,
                 typescriptConfigured: false,
                 llmReady: false,
-                statusMessage: 'API key not configured - use "Flowbaby: Set API Key" command'
+                statusMessage: 'Cloud login required - use "Flowbaby Cloud: Login with GitHub" command'
             };
 
             assert.strictEqual(state.pythonConfigured, false);
             assert.strictEqual(state.typescriptConfigured, false);
             assert.strictEqual(state.llmReady, false);
-            assert.ok(state.statusMessage.includes('not configured'));
+            // Plan 083: Cloud-only messaging
+            assert.ok(state.statusMessage.includes('Cloud login'));
         });
 
         test('ApiKeyState with only TypeScript key (SecretStorage)', () => {
@@ -130,16 +133,20 @@ suite('API Key State Tests (Plan 045)', () => {
     });
 
     suite('FlowbabyClient.hasApiKey()', () => {
-        test('hasApiKey returns true when SecretStorage has key', async function() {
+        test('hasApiKey returns true when Cloud provider is initialized (Plan 083)', async function() {
             // Skip if no workspace
             if (!vscode.workspace.workspaceFolders?.length) {
                 this.skip();
                 return;
             }
 
+            // Plan 083: Stub Cloud provider as initialized
+            const isInitializedStub = sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+            const isEnabledStub = sandbox.stub(cloudProvider, 'isFlowbabyCloudEnabled').returns(true);
+
             const mockContext = {
                 secrets: {
-                    get: sandbox.stub().resolves('test-api-key'),
+                    get: sandbox.stub().resolves(undefined), // Not used in Cloud-only mode
                     store: sandbox.stub().resolves(),
                     delete: sandbox.stub().resolves(),
                     onDidChange: sandbox.stub()
@@ -152,21 +159,30 @@ suite('API Key State Tests (Plan 045)', () => {
                 }
             } as unknown as vscode.ExtensionContext;
 
-            const client = new FlowbabyClient(
-                vscode.workspace.workspaceFolders[0].uri.fsPath,
-                mockContext
-            );
+            try {
+                const client = new FlowbabyClient(
+                    vscode.workspace.workspaceFolders[0].uri.fsPath,
+                    mockContext
+                );
 
-            const result = await client.hasApiKey();
-            assert.strictEqual(result, true);
+                const result = await client.hasApiKey();
+                assert.strictEqual(result, true, 'Should have credentials when Cloud provider is initialized');
+            } finally {
+                isInitializedStub.restore();
+                isEnabledStub.restore();
+            }
         });
 
-        test('hasApiKey returns false when no key in any source', async function() {
+        test('hasApiKey returns false when no credentials in any source', async function() {
             // Skip if no workspace
             if (!vscode.workspace.workspaceFolders?.length) {
                 this.skip();
                 return;
             }
+
+            // Plan 083: Stub Cloud provider as NOT initialized
+            const isInitializedStub = sandbox.stub(cloudProvider, 'isProviderInitialized').returns(false);
+            const isEnabledStub = sandbox.stub(cloudProvider, 'isFlowbabyCloudEnabled').returns(true);
 
             const mockContext = {
                 secrets: {
@@ -194,8 +210,10 @@ suite('API Key State Tests (Plan 045)', () => {
                 );
 
                 const result = await client.hasApiKey();
-                assert.strictEqual(result, false);
+                assert.strictEqual(result, false, 'Should return false when Cloud not initialized and no CI env var');
             } finally {
+                isInitializedStub.restore();
+                isEnabledStub.restore();
                 // Restore env var if it existed
                 if (originalEnv) {
                     process.env.LLM_API_KEY = originalEnv;
@@ -204,13 +222,16 @@ suite('API Key State Tests (Plan 045)', () => {
         });
     });
 
-    suite('FlowbabyStatus Enum (Plan 045)', () => {
-        test('FlowbabyStatus.NeedsApiKey is a distinct state', () => {
-            // Verify the NeedsApiKey state exists and is distinct from other states
-            assert.strictEqual(FlowbabyStatus.NeedsApiKey, 'NeedsApiKey');
-            assert.notStrictEqual(FlowbabyStatus.NeedsApiKey, FlowbabyStatus.Ready);
-            assert.notStrictEqual(FlowbabyStatus.NeedsApiKey, FlowbabyStatus.Error);
-            assert.notStrictEqual(FlowbabyStatus.NeedsApiKey, FlowbabyStatus.SetupRequired);
+    // Plan 083 M6: Updated tests for Cloud-only status (NeedsCloudLogin replaces NeedsApiKey)
+    suite('FlowbabyStatus Enum (Plan 045, updated Plan 083)', () => {
+        test('FlowbabyStatus.NeedsCloudLogin is a distinct state', () => {
+            // Plan 083 M6: NeedsApiKey is now an alias for NeedsCloudLogin
+            assert.strictEqual(FlowbabyStatus.NeedsCloudLogin, 'NeedsCloudLogin');
+            assert.notStrictEqual(FlowbabyStatus.NeedsCloudLogin, FlowbabyStatus.Ready);
+            assert.notStrictEqual(FlowbabyStatus.NeedsCloudLogin, FlowbabyStatus.Error);
+            assert.notStrictEqual(FlowbabyStatus.NeedsCloudLogin, FlowbabyStatus.SetupRequired);
+            // Plan 083 M6: Backward compatibility alias
+            assert.strictEqual(FlowbabyStatus.NeedsApiKey, FlowbabyStatus.NeedsCloudLogin);
         });
 
         test('All FlowbabyStatus values are defined', () => {
@@ -219,10 +240,12 @@ suite('API Key State Tests (Plan 045)', () => {
             assert.ok(FlowbabyStatus.SetupRequired);
             assert.ok(FlowbabyStatus.Refreshing);
             assert.ok(FlowbabyStatus.Error);
+            assert.ok(FlowbabyStatus.NeedsCloudLogin);
+            // Backward compat alias still works
             assert.ok(FlowbabyStatus.NeedsApiKey);
         });
 
-        test('NeedsApiKey should be used when init succeeds without API key', () => {
+        test('NeedsCloudLogin should be used when init succeeds without Cloud login', () => {
             // Simulate the logic that determines status based on InitializeResult
             const initResultWithoutKey: InitializeResult = {
                 success: true,
@@ -230,7 +253,7 @@ suite('API Key State Tests (Plan 045)', () => {
                     pythonConfigured: false,
                     typescriptConfigured: false,
                     llmReady: false,
-                    statusMessage: 'API key not configured'
+                    statusMessage: 'Cloud login not configured'
                 }
             };
 
@@ -240,13 +263,13 @@ suite('API Key State Tests (Plan 045)', () => {
                     return FlowbabyStatus.Error;
                 }
                 if (!result.apiKeyState.llmReady) {
-                    return FlowbabyStatus.NeedsApiKey;
+                    return FlowbabyStatus.NeedsCloudLogin;
                 }
                 return FlowbabyStatus.Ready;
             };
 
             const status = determineStatus(initResultWithoutKey);
-            assert.strictEqual(status, FlowbabyStatus.NeedsApiKey);
+            assert.strictEqual(status, FlowbabyStatus.NeedsCloudLogin);
         });
 
         test('Ready should be used when init succeeds with API key', () => {

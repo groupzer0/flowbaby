@@ -1,7 +1,7 @@
-"""
-Unit tests for retrieve.py bridge script.
+"""Unit tests for retrieve.py bridge script.
 
-Tests LLM_API_KEY validation, workspace path validation, and structured error messages.
+Tests Cloud credential validation (AWS_*), workspace path validation, and structured error messages.
+Plan 083 M5: v0.7.0 is Cloud-only - LLM_API_KEY is no longer supported.
 """
 import json
 import os
@@ -17,9 +17,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 @pytest.mark.asyncio
-async def test_retrieve_missing_llm_api_key(temp_workspace, monkeypatch):
-    """Test that retrieval fails with clear structured error when LLM_API_KEY is missing."""
-    # Remove LLM_API_KEY from environment
+async def test_retrieve_missing_cloud_credentials(temp_workspace, monkeypatch):
+    """Test that retrieval fails with clear structured error when Cloud credentials are missing."""
+    # Plan 083 M5: Remove all Cloud credentials - v0.7.0 is Cloud-only
+    monkeypatch.delenv('AWS_ACCESS_KEY_ID', raising=False)
+    monkeypatch.delenv('AWS_SECRET_ACCESS_KEY', raising=False)
+    monkeypatch.delenv('AWS_SESSION_TOKEN', raising=False)
     monkeypatch.delenv('LLM_API_KEY', raising=False)
 
     # Remove .env file if it exists
@@ -33,23 +36,22 @@ async def test_retrieve_missing_llm_api_key(temp_workspace, monkeypatch):
         result = await retrieve_context(str(temp_workspace), "test query")
 
         assert result['success'] is False
-        # Check for structured error format with new taxonomy
+        # Check for structured error format with Plan 083 Cloud-only taxonomy
         assert 'error_code' in result
-        assert result['error_code'] == 'LLM_API_ERROR'
+        assert result['error_code'] == 'NOT_AUTHENTICATED'
         assert 'error_type' in result
-        assert result['error_type'] == 'MISSING_API_KEY'
+        assert result['error_type'] == 'MISSING_CREDENTIALS'
         assert 'user_message' in result
-        assert 'LLM_API_KEY' in result['user_message']
+        assert 'Cloud' in result['user_message'] or 'credentials' in result['user_message'].lower()
         assert 'remediation' in result
-        # Plan 039 M5: Remediation now points to secure storage command, not .env file
-        assert 'Flowbaby: Set API Key' in result['remediation']
+        # Plan 083: Remediation now points to Cloud login command
+        assert 'Flowbaby Cloud: Login' in result['remediation']
         assert 'error' in result
-        assert 'LLM_API_KEY' in result['error']
 
 
 @pytest.mark.asyncio
-async def test_retrieve_success_with_llm_api_key(temp_workspace, mock_env):
-    """Test successful retrieval with valid LLM_API_KEY and workspace-local storage."""
+async def test_retrieve_success_with_cloud_credentials(temp_workspace, mock_env):
+    """Test successful retrieval with valid Cloud credentials (AWS_*) and workspace-local storage."""
     with patch('sys.path', [str(temp_workspace.parent)] + sys.path):
         # Mock cognee package + required submodules
         mock_cognee = types.ModuleType('cognee')
@@ -89,8 +91,8 @@ async def test_retrieve_success_with_llm_api_key(temp_workspace, mock_env):
             assert 'total_results' in result
             assert result['half_life_days'] > 0
             assert result['include_superseded'] is False
-            # Verify API key was set (using key from mock_env fixture)
-            mock_cognee.config.set_llm_api_key.assert_called_once_with('sk-test-mock-key-12345')
+            # Plan 083 M5: Cloud-only mode - Cognee uses AWS Bedrock via AWS_* env vars
+            # No explicit API key configuration required
             # Verify workspace-local storage directories configured
             expected_system_dir = str(temp_workspace / '.flowbaby/system')
             expected_data_dir = str(temp_workspace / '.flowbaby/data')

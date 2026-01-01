@@ -147,7 +147,7 @@ suite('Graph Visualization Test Suite (Plan 067)', () => {
             );
         });
 
-        test('handles MISSING_API_KEY error code with link to settings', async () => {
+        test('handles NOT_AUTHENTICATED error code with Cloud login action (Plan 083)', async () => {
             const errorMsgStub = sandbox.stub(vscode.window, 'showErrorMessage').resolves();
             
             // Use a temp directory that actually exists to avoid fs stubs
@@ -159,8 +159,8 @@ suite('Graph Visualization Test Suite (Plan 067)', () => {
             const mockClient = {
                 visualize: sandbox.stub().resolves({
                     success: false,
-                    error_code: 'MISSING_API_KEY',
-                    user_message: 'LLM_API_KEY not configured'
+                    error_code: 'NOT_AUTHENTICATED',
+                    user_message: 'Cloud login required'
                 } as VisualizeResult)
             } as unknown as FlowbabyClient;
 
@@ -178,10 +178,10 @@ suite('Graph Visualization Test Suite (Plan 067)', () => {
 
             assert.ok(
                 errorMsgStub.calledWith(
-                    sinon.match(/API key/i),
-                    sinon.match.string // 'Set API Key' button
+                    sinon.match(/Cloud.*login.*required/i),
+                    sinon.match.string // 'Login to Cloud' button
                 ),
-                'Should show API key error with configure option'
+                'Should show Cloud login error with login action'
             );
         });
 

@@ -51,7 +51,9 @@ def setup_environment(workspace_path: str):
     NOT prefixed with COGNEE_. The original Plan 032 incorrectly used COGNEE_ prefix.
 
     Plan 039 M5: Workspace .env loading removed per Plan 037 F2 security finding.
-    API key is now resolved by TypeScript and passed via LLM_API_KEY environment variable.
+    
+    Plan 083 M5: v0.7.0 is Cloud-only. Cloud credentials (AWS_*) are required.
+    LLM_API_KEY is no longer supported - use Flowbaby Cloud login instead.
 
     Plan 059: Added filesystem cache backend configuration (CACHE_BACKEND=fs).
     Cognee 0.5.1+ supports filesystem session caching via diskcache, removing
@@ -62,10 +64,10 @@ def setup_environment(workspace_path: str):
     """
     workspace_dir = Path(workspace_path)
 
-    # Check for API key (provided by TypeScript via LLM_API_KEY environment variable)
-    api_key = os.getenv('LLM_API_KEY')
-    if not api_key:
-        raise ValueError('LLM_API_KEY not found in environment. Use "Flowbaby: Set API Key" for secure storage.')
+    # Plan 083 M5: v0.7.0 is Cloud-only. Cloud credentials (AWS_*) are required.
+    aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+    if not aws_access_key:
+        raise ValueError('Cloud credentials not found. Please login to Flowbaby Cloud using the "Flowbaby Cloud: Login" command.')
 
     # Plan 074: Use shared bridge_env module for all environment wiring
     # This sets storage directories, caching config, AND ontology activation
@@ -75,7 +77,8 @@ def setup_environment(workspace_path: str):
     dataset_name, _ = generate_dataset_name(workspace_path)
 
     # Return config (maintaining backward-compatible interface)
-    return dataset_name, api_key, {
+    # Note: api_key is None in Cloud-only mode - Bedrock uses AWS credentials
+    return dataset_name, None, {
         'system_root': env_config.system_root,
         'data_root': env_config.data_root,
         'cache_root': env_config.cache_root,
@@ -245,8 +248,7 @@ async def run_add_only(
 
         cognee.config.system_root_directory(cognee_config['system_root'])
         cognee.config.data_root_directory(cognee_config['data_root'])
-        cognee.config.set_llm_api_key(api_key)
-        cognee.config.set_llm_provider('openai')
+        # Plan 083 M5: Cloud-only mode uses AWS credentials via Bedrock, no LLM API key needed
         metrics['init_cognee_sec'] = perf_counter() - step_start
 
         # Step 3: Create enriched summary text
@@ -288,11 +290,11 @@ async def run_add_only(
     except ValueError as e:
         error_payload = {
             'success': False,
-            'error_code': 'MISSING_API_KEY',
+            'error_code': 'NOT_AUTHENTICATED',
             'error': str(e)
         }
         if logger:
-            logger.error("Missing API key", extra={'data': error_payload})
+            logger.error("Missing Cloud credentials", extra={'data': error_payload})
         else:
             print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
@@ -385,8 +387,7 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
 
         cognee.config.system_root_directory(cognee_config['system_root'])
         cognee.config.data_root_directory(cognee_config['data_root'])
-        cognee.config.set_llm_api_key(api_key)
-        cognee.config.set_llm_provider('openai')
+        # Plan 083 M5: Cloud-only mode uses AWS credentials via Bedrock, no LLM API key needed
 
         # Step 3: Run cognify on dataset
         logger.info("Cognify started (this may take 30-90s)")
@@ -426,9 +427,9 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
 
     except ValueError as e:
         elapsed_ms = int((perf_counter() - overall_start) * 1000)
-        error_code = 'MISSING_API_KEY'
+        error_code = 'NOT_AUTHENTICATED'
         error_message = str(e)
-        remediation = 'Add LLM_API_KEY=sk-... to workspace .env file'
+        remediation = 'Run "Flowbaby Cloud: Login" from Command Palette to authenticate.'
 
         write_status_stub(
             operation_id=operation_id,
@@ -556,8 +557,7 @@ async def run_sync(summary_json: dict = None, workspace_path: str = None,
 
         cognee.config.system_root_directory(cognee_config['system_root'])
         cognee.config.data_root_directory(cognee_config['data_root'])
-        cognee.config.set_llm_api_key(api_key)
-        cognee.config.set_llm_provider('openai')
+        # Plan 083 M5: Cloud-only mode uses AWS credentials via Bedrock, no LLM API key needed
         metrics['init_cognee_sec'] = perf_counter() - step_start
 
         # Step 3: Create text content
@@ -636,11 +636,11 @@ Metadata: timestamp={timestamp}, importance={importance}"""
     except ValueError as e:
         error_payload = {
             'success': False,
-            'error_code': 'MISSING_API_KEY',
+            'error_code': 'NOT_AUTHENTICATED',
             'error': str(e)
         }
         if logger:
-            logger.error("Missing API key", extra={'data': error_payload})
+            logger.error("Missing Cloud credentials", extra={'data': error_payload})
         else:
             print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload

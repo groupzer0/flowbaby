@@ -14,7 +14,7 @@ import { FlowbabyStatusBar, FlowbabyStatus } from '../statusBar/FlowbabyStatusBa
 import { FlowbabyContextProvider } from '../flowbabyContextProvider';
 import { SessionManager } from '../sessionManager';
 import { getFlowbabyOutputChannel, debugLog } from '../outputChannels';
-import { getAuditLogger } from '../audit/AuditLogger';
+// Plan 083 M4: getAuditLogger import removed - was only used by legacy API key commands
 import {
     recordActivationCompletion,
     areToolsRegistered,
@@ -358,12 +358,13 @@ export function handleInitFailure(
     setInitState(workspacePath, { initialized: false, initFailed: true });
 
     // Show helpful guidance
+    // Plan 083 M5: Updated guidance for Cloud-only v0.7.0+
     const outputChannel = getFlowbabyOutputChannel();
     outputChannel.appendLine('Failed to initialize Flowbaby. Common issues:');
     outputChannel.appendLine('');
-    outputChannel.appendLine('1. Missing LLM API Key:');
-    outputChannel.appendLine('   - Use "Flowbaby: Set API Key" command for secure storage');
-    outputChannel.appendLine('   - Or set LLM_API_KEY environment variable for CI/automated environments');
+    outputChannel.appendLine('1. Not logged in to Flowbaby Cloud:');
+    outputChannel.appendLine('   - Use "Flowbaby Cloud: Login" command to authenticate');
+    outputChannel.appendLine('   - Cloud login is required for LLM memory operations');
     outputChannel.appendLine('');
     outputChannel.appendLine('2. Missing Python dependencies:');
     outputChannel.appendLine('   - Use "Flowbaby: Initialize Workspace" to set up the environment');
@@ -377,16 +378,17 @@ export function handleInitFailure(
     });
 
     // Non-blocking warning message
+    // Plan 083 M4: Removed Set API Key option (Cloud-only in v0.7.0)
     vscode.window.showWarningMessage(
         'Flowbaby initialization failed. Check Output > Flowbaby for setup instructions.',
         'Open Output',
-        'Set API Key',
+        'Login to Cloud',
         'Dismiss'
     ).then(action => {
         if (action === 'Open Output') {
             outputChannel.show();
-        } else if (action === 'Set API Key') {
-            vscode.commands.executeCommand('Flowbaby.setApiKey');
+        } else if (action === 'Login to Cloud') {
+            vscode.commands.executeCommand('FlowbabyCloud.login');
         }
     });
 
@@ -405,21 +407,21 @@ async function showPostInitPrompts(
     initResult: InitializeResult
 ): Promise<void> {
     if (!initResult.apiKeyState.llmReady) {
-        // Modal prompt for API key
+        // Plan 083 M4: Prompt for Cloud login instead of legacy API key
         const prompt = vscode.window.showWarningMessage(
-            'Flowbaby initialized successfully! Configure your API key to enable memory operations.',
+            'Flowbaby initialized successfully! Login to Flowbaby Cloud to enable memory operations.',
             { modal: true },
-            'Set API Key',
+            'Login to Cloud',
             'Later'
         );
 
         if (prompt && typeof (prompt as Thenable<string | undefined>).then === 'function') {
             prompt.then(action => {
-                if (action === 'Set API Key') {
-                    vscode.commands.executeCommand('Flowbaby.setApiKey');
+                if (action === 'Login to Cloud') {
+                    vscode.commands.executeCommand('FlowbabyCloud.login');
                 }
             }, error => {
-                debugLog('Init API key prompt suppressed', {
+                debugLog('Init Cloud login prompt suppressed', {
                     error: error instanceof Error ? error.message : String(error)
                 });
             });
@@ -459,91 +461,32 @@ async function showPostInitPrompts(
 }
 
 // ============================================================================
-// API Key Commands
+// API Key Commands (DEPRECATED - Plan 083 M4: Cloud-only in v0.7.0)
 // ============================================================================
 
 /**
  * Register API key management commands
+ * 
+ * @deprecated Plan 083 M4: Legacy API key commands removed in v0.7.0.
+ * Users should use FlowbabyCloud.login instead.
+ * This function is preserved for backward compatibility but is no longer
+ * called from extension.ts. Will be removed in a future version.
  */
 export function registerApiKeyCommands(
-    context: vscode.ExtensionContext,
-    workspacePath: string,
-    statusBar: FlowbabyStatusBar
+    _context: vscode.ExtensionContext,
+    _workspacePath: string,
+    _statusBar: FlowbabyStatusBar
 ): void {
-    // Set API Key command
-    const setApiKeyCommand = vscode.commands.registerCommand(
-        'Flowbaby.setApiKey',
-        async () => {
-            const apiKey = await vscode.window.showInputBox({
-                prompt: 'Enter your LLM API Key (e.g., OpenAI, Anthropic)',
-                placeHolder: 'sk-...',
-                password: true,
-                ignoreFocusOut: true,
-                validateInput: (value) => {
-                    if (!value || value.trim().length < 10) {
-                        return 'API key appears too short. Please enter a valid key.';
-                    }
-                    return null;
-                }
-            });
-
-            if (apiKey) {
-                try {
-                    await context.secrets.store('flowbaby.llmApiKey', apiKey.trim());
-                    vscode.window.showInformationMessage(
-                        'API key stored securely. It will be used for all workspaces.'
-                    );
-                    debugLog('API key stored via SecretStorage');
-                    getAuditLogger().logApiKeySet(true, 'command');
-
-                    // Update status bar if workspace is initialized
-                    const activeWorkspace = getActiveWorkspacePath() || workspacePath;
-                    if (statusBar && activeWorkspace && getInitState(activeWorkspace).initialized) {
-                        statusBar.setStatus(FlowbabyStatus.Ready);
-                        debugLog('Status bar updated to Ready after API key configuration');
-                    }
-                } catch (error) {
-                    getAuditLogger().logApiKeySet(false, 'command');
-                    throw error;
-                }
-            }
-        }
-    );
-    context.subscriptions.push(setApiKeyCommand);
-
-    // Configure API Key command (alias)
-    const configureApiKeyCommand = vscode.commands.registerCommand(
-        'Flowbaby.configureApiKey',
-        async () => {
-            await vscode.commands.executeCommand('Flowbaby.setApiKey');
-        }
-    );
-    context.subscriptions.push(configureApiKeyCommand);
-
-    // Clear API Key command
-    const clearApiKeyCommand = vscode.commands.registerCommand(
-        'Flowbaby.clearApiKey',
-        async () => {
-            const confirm = await vscode.window.showWarningMessage(
-                'Clear the stored API key? You will need to set the key again.',
-                { modal: true },
-                'Clear Key'
-            );
-
-            if (confirm === 'Clear Key') {
-                try {
-                    await context.secrets.delete('flowbaby.llmApiKey');
-                    vscode.window.showInformationMessage('API key cleared.');
-                    debugLog('API key cleared from SecretStorage');
-                    getAuditLogger().logApiKeyClear(true);
-                } catch (error) {
-                    getAuditLogger().logApiKeyClear(false);
-                    throw error;
-                }
-            }
-        }
-    );
-    context.subscriptions.push(clearApiKeyCommand);
+    // Plan 083 M4: All legacy API key commands removed in v0.7.0
+    // Commands removed from package.json:
+    // - Flowbaby.configureApiKey
+    // - Flowbaby.setApiKey  
+    // - Flowbaby.clearApiKey
+    //
+    // Users should use FlowbabyCloud.login for authentication.
+    // This function body intentionally left empty to maintain export signature
+    // for any external callers during transition period.
+    debugLog('registerApiKeyCommands called but is deprecated - Cloud-only in v0.7.0');
 }
 
 // ============================================================================
@@ -659,23 +602,23 @@ export function registerSetupCommands(
                         }
                     });
 
-                    // Post-init prompts
+                    // Plan 083 M4: Post-init prompts updated for Cloud-only
                     const currentClientAfterInit = getClient();
                     if (!currentClientAfterInit?.getApiKeyState()?.llmReady) {
                         const prompt = vscode.window.showWarningMessage(
-                            'Flowbaby initialized successfully! Configure your API key to enable memory operations.',
+                            'Flowbaby initialized successfully! Login to Flowbaby Cloud to enable memory operations.',
                             { modal: true },
-                            'Set API Key',
+                            'Login to Cloud',
                             'Later'
                         );
 
                         if (prompt && typeof (prompt as Thenable<string | undefined>).then === 'function') {
                             prompt.then(action => {
-                                if (action === 'Set API Key') {
-                                    vscode.commands.executeCommand('Flowbaby.setApiKey');
+                                if (action === 'Login to Cloud') {
+                                    vscode.commands.executeCommand('FlowbabyCloud.login');
                                 }
                             }, error => {
-                                debugLog('Init API key prompt suppressed', {
+                                debugLog('Init Cloud login prompt suppressed', {
                                     error: error instanceof Error ? error.message : String(error)
                                 });
                             });

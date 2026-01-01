@@ -224,7 +224,7 @@ suite('Agent Ingestion Integration Tests', () => {
             sandbox.restore();
         });
 
-        test('returns MISSING_API_KEY when API key not configured', async function() {
+        test('returns NOT_AUTHENTICATED when Cloud login not configured (Plan 083)', async function() {
             this.timeout(5000);
 
             // Create stubs for mock client
@@ -258,10 +258,10 @@ suite('Agent Ingestion Integration Tests', () => {
 
             const validPayload = {
                 topic: 'Test Topic',
-                context: 'Test context for API key pre-check',
+                context: 'Test context for Cloud login pre-check',
                 decisions: ['Test decision'],
                 metadata: {
-                    topicId: 'test-api-key-check',
+                    topicId: 'test-cloud-login-check',
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 },
@@ -283,9 +283,9 @@ suite('Agent Ingestion Integration Tests', () => {
 
             // Verify error response
             expect(response.success).to.be.false;
-            expect(response.errorCode).to.equal('MISSING_API_KEY');
-            expect(response.error).to.include('API key not configured');
-            expect(response.error).to.include('Set API Key');
+            expect(response.errorCode).to.equal('NOT_AUTHENTICATED');
+            expect(response.error).to.include('Cloud login required');
+            expect(response.error).to.include('Login to Cloud');
 
             // Verify ingest was NOT called (short-circuit)
             expect(ingestStub.called).to.be.false;
@@ -293,10 +293,10 @@ suite('Agent Ingestion Integration Tests', () => {
             // Verify logging occurred
             expect(appendLineStub.called).to.be.true;
             const logCalls = appendLineStub.getCalls();
-            const hasApiKeyLog = logCalls.some((call: sinon.SinonSpyCall) => 
-                call.args[0].includes('API key not configured')
+            const hasCloudLoginLog = logCalls.some((call: sinon.SinonSpyCall) => 
+                call.args[0].includes('Cloud login required')
             );
-            expect(hasApiKeyLog).to.be.true;
+            expect(hasCloudLoginLog).to.be.true;
         });
 
         test('proceeds past API key check when key is configured', async function() {

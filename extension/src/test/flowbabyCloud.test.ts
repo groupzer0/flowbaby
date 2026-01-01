@@ -17,9 +17,14 @@ import {
     MockAuthClient,
     MockCredentialClient,
     FlowbabyCloudError,
+    mapCloudErrorToUX,
+    isRecoverableCloudError,
+    requiresReAuthentication,
     type AuthResponse,
     type ApiError,
+    type VendResponse,
 } from '../flowbaby-cloud';
+import { ICredentialClient } from '../flowbaby-cloud/credentials';
 
 suite('Flowbaby Cloud Module Tests', () => {
     let sandbox: sinon.SinonSandbox;
@@ -241,6 +246,56 @@ suite('Flowbaby Cloud Module Tests', () => {
             assert.strictEqual(credentials.hasValidCredentials(), false);
         });
 
+        test('Plan 083: single-flight guard prevents concurrent vend requests', async () => {
+            // Verify the mock client tracks calls correctly
+            assert.strictEqual(mockCredentialClient.getCallCount(), 0, 'No calls yet');
+
+            // Issue 3 concurrent credential requests (simulating spawn + daemon + background)
+            const [creds1, creds2, creds3] = await Promise.all([
+                credentials.ensureCredentials(),
+                credentials.ensureCredentials(),
+                credentials.ensureCredentials(),
+            ]);
+
+            // All three should have returned the same credentials
+            assert.strictEqual(creds1.accessKeyId, creds2.accessKeyId);
+            assert.strictEqual(creds2.accessKeyId, creds3.accessKeyId);
+
+            // But only ONE actual vend request should have been made
+            assert.strictEqual(
+                mockCredentialClient.getCallCount(),
+                1,
+                'Single-flight guard should prevent multiple concurrent vend requests'
+            );
+        });
+
+        test('Plan 083: FlowbabyCloudError codes are preserved end-to-end', async () => {
+            // Create credentials with a mock client that throws FlowbabyCloudError
+            const errorClient: ICredentialClient = {
+                async vendCredentials(): Promise<VendResponse> {
+                    throw new FlowbabyCloudError('RATE_LIMITED', 'Too many requests', 60);
+                }
+            };
+
+            const errorCredentials = new FlowbabyCloudCredentials(
+                mockAuth,
+                errorClient,
+                mockOutputChannel
+            );
+
+            // Ensure the error is preserved with its original code
+            try {
+                await errorCredentials.ensureCredentials();
+                assert.fail('Should have thrown FlowbabyCloudError');
+            } catch (error) {
+                assert.ok(error instanceof FlowbabyCloudError, 'Error should be FlowbabyCloudError');
+                assert.strictEqual((error as FlowbabyCloudError).code, 'RATE_LIMITED', 'Error code should be preserved');
+                assert.strictEqual((error as FlowbabyCloudError).retryAfter, 60, 'retryAfter should be preserved');
+            } finally {
+                errorCredentials.dispose();
+            }
+        });
+
         test('onDidRefreshCredentials fires on refresh', async () => {
             let eventFired = false;
             const disposable = credentials.onDidRefreshCredentials(event => {
@@ -341,6 +396,74 @@ suite('Flowbaby Cloud Module Tests', () => {
             
             assert.strictEqual(error.code, 'QUOTA_EXCEEDED');
             assert.strictEqual(error.message, 'Monthly quota exceeded');
+        });
+    });
+
+    suite('Error Mapping (Plan 083 M3)', () => {
+        test('mapCloudErrorToUX handles NOT_AUTHENTICATED', () => {
+            const error = new FlowbabyCloudError('NOT_AUTHENTICATED', 'Please log in');
+            const ux = mapCloudErrorToUX(error);
+            
+            assert.strictEqual(ux.severity, 'warning');
+            assert.ok(ux.message.includes('login required'));
+            assert.strictEqual(ux.actions.length, 1);
+            assert.strictEqual(ux.actions[0].label, 'Login to Cloud');
+            assert.strictEqual(ux.logMetadata.category, 'authentication');
+        });
+
+        test('mapCloudErrorToUX handles RATE_LIMITED with retryAfter', () => {
+            const error = new FlowbabyCloudError('RATE_LIMITED', 'Too many requests', 30);
+            const ux = mapCloudErrorToUX(error);
+            
+            assert.strictEqual(ux.severity, 'warning');
+            assert.ok(ux.message.includes('30 seconds'));
+            assert.strictEqual(ux.logMetadata.retryAfter, 30);
+        });
+
+        test('mapCloudErrorToUX handles QUOTA_EXCEEDED', () => {
+            const error = new FlowbabyCloudError('QUOTA_EXCEEDED', 'Quota exceeded');
+            const ux = mapCloudErrorToUX(error);
+            
+            assert.strictEqual(ux.severity, 'error');
+            assert.ok(ux.message.includes('quota'));
+            assert.strictEqual(ux.actions.length, 1);
+            assert.strictEqual(ux.actions[0].label, 'Check Status');
+        });
+
+        test('mapCloudErrorToUX handles generic Error', () => {
+            const error = new Error('Something went wrong');
+            const ux = mapCloudErrorToUX(error);
+            
+            assert.strictEqual(ux.severity, 'error');
+            assert.ok(ux.message.includes('Something went wrong'));
+            assert.strictEqual(ux.actions.length, 0);
+        });
+
+        test('mapCloudErrorToUX includes context suffix', () => {
+            const error = new FlowbabyCloudError('NETWORK_ERROR', 'Failed to connect');
+            const ux = mapCloudErrorToUX(error, 'during retrieval');
+            
+            assert.ok(ux.message.includes('during retrieval'));
+        });
+
+        test('isRecoverableCloudError returns true for RATE_LIMITED', () => {
+            const error = new FlowbabyCloudError('RATE_LIMITED', 'Too many requests');
+            assert.strictEqual(isRecoverableCloudError(error), true);
+        });
+
+        test('isRecoverableCloudError returns false for QUOTA_EXCEEDED', () => {
+            const error = new FlowbabyCloudError('QUOTA_EXCEEDED', 'Quota exceeded');
+            assert.strictEqual(isRecoverableCloudError(error), false);
+        });
+
+        test('requiresReAuthentication returns true for SESSION_EXPIRED', () => {
+            const error = new FlowbabyCloudError('SESSION_EXPIRED', 'Session expired');
+            assert.strictEqual(requiresReAuthentication(error), true);
+        });
+
+        test('requiresReAuthentication returns false for RATE_LIMITED', () => {
+            const error = new FlowbabyCloudError('RATE_LIMITED', 'Too many requests');
+            assert.strictEqual(requiresReAuthentication(error), false);
         });
     });
 });

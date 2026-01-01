@@ -67,7 +67,7 @@ All data stays on your machine; only chat content already sent to GitHub Copilot
 
 1. **Install** from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Flowbaby.flowbaby)
 2. **Initialize** — Run `Flowbaby: Initialize Workspace` from the Command Palette
-3. **Set API Key** — Run `Flowbaby: Set API Key` (your LLM provider key, stored securely)
+3. **Login to Cloud** — Run `Flowbaby Cloud: Login` to authenticate with Flowbaby Cloud
 4. **Use** — Type `@flowbaby` in Copilot Chat to start using memory
 
 📖 **Need help?** [View the Getting Started guide](command:workbench.action.openWalkthrough?%22Flowbaby.flowbabySetup%22) · [Ask questions on GitHub Discussions](https://github.com/groupzer0/flowbaby/discussions)
@@ -112,23 +112,23 @@ Flowbaby now manages its own Python environment automatically.
 
 ### 2. Configure API Key
 
-Flowbaby needs an **LLM provider API key** (OpenAI, Anthropic, etc.) for memory operations:
+### 2. Authenticate with Flowbaby Cloud
 
-| What the API key does | What it does NOT do |
-|----------------------|--------------------|
+Flowbaby v0.7.0+ uses **Flowbaby Cloud** for LLM operations:
+
+| What Flowbaby Cloud provides | What it does NOT do |
+|----------------------|--------------------||
 | ✅ Embed memories into searchable vectors | ❌ No telemetry or analytics |
 | ✅ Retrieve relevant context via semantic search | ❌ No code analysis |
-| ✅ Summarize conversations for long-term storage | ❌ Never transmitted except to your LLM provider |
+| ✅ Summarize conversations for long-term storage | ❌ Your data stays on your machine |
 
-> 💰 **Cost**: With default settings (OpenAI gpt-4o-mini), typical usage costs **$0.02–$0.06 per day** (~2-6 US cents). Your experience may vary. You can change providers/models in Settings → Flowbaby.
-
-**Set your API key (stored securely via VS Code SecretStorage):**
+**Login to Flowbaby Cloud:**
 
 1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-2. Run **"Flowbaby: Set API Key"**
-3. Enter your LLM provider API key when prompted
+2. Run **"Flowbaby Cloud: Login"**
+3. Complete authentication in your browser
 
-This key is stored securely and applies to all workspaces automatically.
+Your Cloud session applies to all workspaces automatically.
 
 ### 3. Verify Extension Activation
 
@@ -485,11 +485,11 @@ When agents use Flowbaby, you see:
 
 **Common Issues**:
 
-#### 1. "LLM_API_KEY not found"
+#### 1. "Cloud credentials not found" or "NOT_AUTHENTICATED"
 
-**Solution**: Use the **"Flowbaby: Set API Key"** command
+**Solution**: Run **"Flowbaby Cloud: Login"** command
 
-Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"**
+Then reload VS Code: `Ctrl+Shift+P` → **"Reload Window"****
 
 #### 2. "Python not found" or "cognee module not found"
 

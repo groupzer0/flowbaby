@@ -21,7 +21,8 @@ def test_daemon_sets_cache_defaults_when_unset(tmp_path, monkeypatch, logger):
     workspace = tmp_path / "ws"
     workspace.mkdir()
 
-    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
     monkeypatch.delenv("CACHING", raising=False)
     monkeypatch.delenv("CACHE_BACKEND", raising=False)
 
@@ -39,7 +40,8 @@ def test_daemon_respects_existing_cache_env_vars(tmp_path, monkeypatch, logger):
     workspace = tmp_path / "ws"
     workspace.mkdir()
 
-    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
     monkeypatch.setenv("CACHING", "false")
     monkeypatch.setenv("CACHE_BACKEND", "redis")
 

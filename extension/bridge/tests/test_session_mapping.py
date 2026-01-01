@@ -21,7 +21,9 @@ from retrieve import retrieve_context
 
 @pytest.fixture
 def mock_env(monkeypatch):
-    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
 
 
 @pytest.fixture

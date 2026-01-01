@@ -9,7 +9,8 @@ import { PythonBridgeDaemonManager, DaemonHealthStatus } from './bridge/PythonBr
 // Plan 073: Import synthesis module for Copilot-based answer generation
 import { synthesizeWithCopilot, isNoRelevantContext, SynthesisResult } from './synthesis';
 // Plan 081: Import Cloud provider for Bedrock credentials
-import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled } from './flowbaby-cloud';
+// Plan 083: Import FlowbabyCloudError to preserve error codes end-to-end
+import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError } from './flowbaby-cloud';
 
 /**
  * Interface for BackgroundOperationManager to avoid circular imports.
@@ -586,11 +587,12 @@ export class FlowbabyClient {
             const typescriptConfigured = !!tsApiKey;
             const llmReady = pythonConfigured || typescriptConfigured;
             
+            // Plan 083 M6: Cloud-only messaging (v0.7.0)
             let statusMessage: string;
             if (llmReady) {
-                statusMessage = 'LLM API key configured - memory operations ready';
+                statusMessage = 'Cloud credentials configured - memory operations ready';
             } else {
-                statusMessage = 'LLM API key not configured (OpenAI by default) - use "Flowbaby: Set API Key" command';
+                statusMessage = 'Cloud login required - use "Flowbaby Cloud: Login with GitHub" command';
             }
             
             return {
@@ -1636,9 +1638,10 @@ export class FlowbabyClient {
                     return [];
                 }
                 
+                // Plan 083 M6: Cloud-only messaging (v0.7.0)
                 // Throw actionable errors so callers can show meaningful messages
-                if (result.error?.includes('API_KEY')) {
-                    throw new Error('LLM API key not configured. Use "Flowbaby: Set API Key" command.');
+                if (result.error?.includes('API_KEY') || result.error?.includes('NOT_AUTHENTICATED')) {
+                    throw new Error('Cloud login required. Use "Flowbaby Cloud: Login with GitHub" command.');
                 }
                 
                 return [];
@@ -1848,10 +1851,11 @@ export class FlowbabyClient {
     async validateConfiguration(): Promise<{ valid: boolean; errors: string[] }> {
         const errors: string[] = [];
 
-        // Plan 039 M5: Check for API key via resolveApiKey (SecretStorage or env var)
-        const apiKey = await this.resolveApiKey();
-        if (!apiKey) {
-            errors.push('LLM API key not configured. Use "Flowbaby: Set API Key" command (OpenAI by default, or set LLM_API_KEY env var).');
+        // Plan 083 M6: Cloud-only validation (v0.7.0)
+        // Check Cloud provider readiness via hasApiKey() (not resolveApiKey which always returns undefined)
+        const hasKey = await this.hasApiKey();
+        if (!hasKey) {
+            errors.push('Cloud login required. Use "Flowbaby Cloud: Login with GitHub" command.');
         }
 
         return {
@@ -2277,39 +2281,16 @@ export class FlowbabyClient {
     }
 
     /**
-     * Resolve LLM API key with priority order (Plan 039 M5 - Security Hardening)
+     * Plan 083 M5: Removed in v0.7.0 Cloud-only mode.
+     * Cloud credentials are now obtained via getFlowbabyCloudEnvironment().
+     * LLM_API_KEY is no longer supported - use Cloud login instead.
      * 
-     * Priority:
-     * 1. SecretStorage global key (flowbaby.llmApiKey) - secure, encrypted storage
-     * 2. System environment LLM_API_KEY (fallback for CI/automated environments)
-     * 
-     * NOTE: Workspace .env support removed per Plan 037 F2 security finding.
-     * Plaintext API keys in .env files are a credential exposure risk.
-     * Users should use "Flowbaby: Set API Key" command for secure storage.
-     * 
-     * @returns Promise<string | undefined> - Resolved API key or undefined
+     * @deprecated Removed in v0.7.0 - always returns undefined
+     * @returns Promise<undefined> - Always undefined in Cloud-only mode
      */
-    private async resolveApiKey(): Promise<string | undefined> {
-        // Priority 1: Check SecretStorage (secure, encrypted)
-        try {
-            const secretKey = await this.context.secrets.get('flowbaby.llmApiKey');
-            if (secretKey) {
-                debugLog('API key resolved from SecretStorage');
-                return secretKey;
-            }
-        } catch (error) {
-            this.log('DEBUG', 'Failed to read from SecretStorage', {
-                error: error instanceof Error ? error.message : String(error)
-            });
-        }
-        
-        // Priority 2: System environment variable (for CI/automated environments)
-        if (process.env.LLM_API_KEY) {
-            debugLog('API key resolved from system environment');
-            return process.env.LLM_API_KEY;
-        }
-        
-        debugLog('No API key found in any source');
+    private async resolveApiKey(): Promise<undefined> {
+        // Plan 083 M5: v0.7.0 is Cloud-only - no legacy API key support
+        debugLog('resolveApiKey called but v0.7.0 is Cloud-only - returning undefined');
         return undefined;
     }
 
@@ -2321,6 +2302,8 @@ export class FlowbabyClient {
      * 
      * Plan 081: In v0.7.0 (Cloud-only), merges Flowbaby Cloud AWS credentials
      * when authenticated. Cloud env takes precedence for Bedrock calls.
+     * 
+     * Plan 083: Preserves FlowbabyCloudError codes end-to-end for accurate UX.
      * 
      * @returns Promise<Record<string, string>> - Environment variables to inject
      */
@@ -2334,47 +2317,41 @@ export class FlowbabyClient {
                 Object.assign(env, cloudEnv);
                 debugLog('Cloud credentials injected into bridge environment');
             } catch (error) {
-                // Cloud auth required but not available - fail fast with clear message
+                // Plan 083: Preserve FlowbabyCloudError for accurate UX (rate limit vs auth failure)
                 debugLog(`Cloud credentials not available: ${error}`);
-                throw new Error(
-                    'Flowbaby Cloud login required. Run "Flowbaby Cloud: Login with GitHub" to authenticate.'
-                );
+                if (error instanceof FlowbabyCloudError) {
+                    throw error; // Preserve original error code
+                }
+                // Unknown errors: wrap with context but don't mask as auth failure
+                throw new Error(`Cloud credentials error: ${error instanceof Error ? error.message : String(error)}`);
             }
         }
         
-        // Legacy LLM env (kept for backward compatibility if Cloud is disabled)
-        // In v0.7.0 Cloud-only mode, these are not used but harmless to set
-        const apiKey = await this.resolveApiKey();
-        if (apiKey) {
-            env['LLM_API_KEY'] = apiKey;
-        }
-        
-        // Plan 028 M6: Get LLM provider settings
-        const config = vscode.workspace.getConfiguration('Flowbaby');
-        const provider = config.get<string>('llm.provider', 'openai');
-        const model = config.get<string>('llm.model', 'gpt-4o-mini');
-        const endpoint = config.get<string>('llm.endpoint', '');
-        
-        env['LLM_PROVIDER'] = provider;
-        env['LLM_MODEL'] = model;
-        if (endpoint) {
-            env['LLM_ENDPOINT'] = endpoint;
-        }
+        // Plan 083 M5: v0.7.0 is Cloud-only - no LLM_* env vars injected
+        // Bridge subprocess env no longer includes LLM_API_KEY, LLM_PROVIDER, LLM_MODEL, LLM_ENDPOINT
+        // Cloud credentials (AWS_*) are the only auth mechanism supported
         
         return env;
     }
 
     /**
-     * Plan 045: Check if API key is configured
+     * Plan 083 M5: Check if Cloud credentials are configured
      * 
-     * Public method to check API key availability without exposing the key.
-     * Used by extension.ts to determine if API key prompt is needed.
+     * In v0.7.0 (Cloud-only), checks if Cloud provider is initialized.
+     * No legacy API key fallback - Cloud login is the only supported auth.
      * 
-     * @returns Promise<boolean> - true if API key is available
+     * Used by extension.ts to determine if login prompt is needed.
+     * 
+     * @returns Promise<boolean> - true if Cloud credentials are available
      */
     async hasApiKey(): Promise<boolean> {
-        const apiKey = await this.resolveApiKey();
-        return !!apiKey;
+        // Plan 083 M5: v0.7.0 is Cloud-only - only Cloud credentials supported
+        if (isFlowbabyCloudEnabled() && isProviderInitialized()) {
+            return true;
+        }
+        
+        // Plan 083 M5: No legacy API key fallback in Cloud-only mode
+        return false;
     }
 
     /**

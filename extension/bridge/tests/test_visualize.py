@@ -203,9 +203,10 @@ class TestVisualizeGraph:
 
     @pytest.mark.asyncio
     async def test_missing_api_key_returns_structured_error(self, temp_workspace, monkeypatch):
-        """Test that missing LLM_API_KEY returns structured error."""
-        # Remove API key from environment
+        """Test that missing credentials returns structured error (Plan 083 Cloud-only)."""
+        # Remove all credentials from environment
         monkeypatch.delenv('LLM_API_KEY', raising=False)
+        monkeypatch.delenv('AWS_ACCESS_KEY_ID', raising=False)
         
         # Remove .env file if it exists
         env_file = temp_workspace / '.env'
@@ -219,9 +220,10 @@ class TestVisualizeGraph:
             result = await visualize_graph(str(temp_workspace), output_path)
             
             assert result['success'] is False
-            assert result.get('error_code') == 'LLM_API_ERROR'
-            assert result.get('error_type') == 'MISSING_API_KEY'
-            assert 'LLM_API_KEY' in result.get('message', '') or 'LLM_API_KEY' in result.get('error', '')
+            # Plan 083: Cloud-only error codes
+            assert result.get('error_code') == 'NOT_AUTHENTICATED'
+            assert result.get('error_type') == 'MISSING_CREDENTIALS'
+            assert 'Cloud login' in result.get('user_message', '')
 
     @pytest.mark.asyncio
     async def test_result_has_expected_structure(self, temp_workspace, mock_env, mock_cognee_module):

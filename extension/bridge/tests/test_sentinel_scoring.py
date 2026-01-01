@@ -19,7 +19,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 async def test_sentinel_scoring_synthesized_answer(tmp_path, monkeypatch):
     """Plan 073: returns contract v2.0.0 and graphContext when Cognee returns only_context payload."""
 
-    monkeypatch.setenv('LLM_API_KEY', 'test-key')
+    # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
     with patch('sys.path', [str(tmp_path.parent)] + sys.path):
         # Mock cognee package + required submodules
@@ -71,7 +72,8 @@ async def test_sentinel_scoring_synthesized_answer(tmp_path, monkeypatch):
 async def test_normal_scoring_non_sentinel(tmp_path, monkeypatch):
     """Plan 073: returns empty payload with contractVersion when no results/context exist."""
 
-    monkeypatch.setenv('LLM_API_KEY', 'test-key')
+    # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
 
     with patch('sys.path', [str(tmp_path.parent)] + sys.path):
         # Mock cognee package + required submodules

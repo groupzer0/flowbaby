@@ -113,6 +113,10 @@ export interface CredentialExpiryEvent {
  *
  * Handles credential vending, caching, and proactive refresh.
  * Credentials are held in memory only and never persisted.
+ *
+ * Plan 083: Single-flight guard ensures concurrent credential requests
+ * from spawn, daemon, and background operations share the same in-flight
+ * request to avoid backend concurrency limit errors.
  */
 export class FlowbabyCloudCredentials implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
@@ -134,6 +138,14 @@ export class FlowbabyCloudCredentials implements vscode.Disposable {
 
     /** Timer for proactive refresh */
     private refreshTimer?: NodeJS.Timeout;
+
+    /**
+     * Plan 083: Single-flight guard for credential vending.
+     * When multiple callers request credentials simultaneously (e.g., spawn + daemon
+     * during activation), they all await this single promise instead of issuing
+     * separate /vend/credentials calls that would hit the backend concurrency limit.
+     */
+    private inFlightRefresh?: Promise<CachedCredentials>;
 
     constructor(
         private readonly auth: FlowbabyCloudAuth,
@@ -216,10 +228,38 @@ export class FlowbabyCloudCredentials implements vscode.Disposable {
     /**
      * Force a credential refresh.
      *
+     * Plan 083: Uses single-flight guard to ensure concurrent callers (spawn, daemon,
+     * background operations) share the same in-flight request. This prevents hitting
+     * backend concurrency limits during activation when multiple subsystems start
+     * simultaneously.
+     *
      * @returns The new credentials
      * @throws FlowbabyCloudError if refresh fails
      */
     async refreshCredentials(): Promise<CachedCredentials> {
+        // Plan 083: Single-flight guard - if a refresh is already in progress,
+        // return the same promise to all concurrent callers
+        if (this.inFlightRefresh) {
+            this.log('Credential refresh already in flight, awaiting existing request');
+            return this.inFlightRefresh;
+        }
+
+        // Start the actual refresh and store the promise
+        this.inFlightRefresh = this.doRefreshCredentials();
+
+        try {
+            return await this.inFlightRefresh;
+        } finally {
+            // Always clear the in-flight marker, whether success or failure
+            this.inFlightRefresh = undefined;
+        }
+    }
+
+    /**
+     * Internal method that performs the actual credential refresh.
+     * Called by refreshCredentials() which wraps it with single-flight guard.
+     */
+    private async doRefreshCredentials(): Promise<CachedCredentials> {
         // Ensure authenticated
         if (!(await this.auth.isAuthenticated())) {
             throw new FlowbabyCloudError('NOT_AUTHENTICATED', 'Must be logged in to vend credentials');

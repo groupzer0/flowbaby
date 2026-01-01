@@ -63,8 +63,10 @@ The extension spawns Python scripts as child processes, passing arguments via co
 
 **Environment Variables**:
 - `FLOWBABY_WORKSPACE_PATH`: Required. Workspace root path.
-- `LLM_API_KEY`: Required for ingest/retrieve operations.
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_DEFAULT_REGION`: Cloud credentials (from Flowbaby Cloud).
 - `FLOWBABY_DEBUG_LOGGING`: Optional. Enable verbose logging.
+
+> **Note**: v0.7.0+ uses Cloud authentication exclusively. End users authenticate via "Flowbaby Cloud: Login".
 
 **JSON-RPC Commands**:
 - `health`: Check daemon status and Cognee version
@@ -144,14 +146,15 @@ python init.py <workspace_path>
 
 **Arguments**:
 
-- `workspace_path`: Absolute path to workspace root (where .env file is located)
+- `workspace_path`: Absolute path to workspace root
 
 **Behavior**:
 
-1. Loads `.env` from workspace_path/.env
-1. Validates `LLM_API_KEY` exists (note: `OPENAI_API_KEY` is deprecated as of v0.2.2)
-1. Calls `cognee.config.set_llm_api_key(api_key)`
+1. Loads `.env` from workspace_path/.env (if present)
+1. Configures Cognee with Cloud credentials (AWS_*)
 1. Creates `.flowbaby/` directory in workspace_path if it doesn't exist
+
+**Note**: As of v0.7.0, Flowbaby uses Cloud authentication. End users should log in via "Flowbaby Cloud: Login" command.
 
 **Output** (JSON):
 
@@ -499,7 +502,7 @@ python bridge/init.py /home/luke/Documents/Github-projects/cognee
 Expected output:
 
 ```json
-{"success": false, "error_code": "MISSING_API_KEY", "user_message": "LLM_API_KEY not found. Please add it to your workspace .env file.", "remediation": "Create .env in workspace root with: LLM_API_KEY=your_key_here", "error": "LLM_API_KEY environment variable is required but not set"}
+{"success": false, "error_code": "NOT_AUTHENTICATED", "user_message": "Cloud login required. Please log in via 'Flowbaby Cloud: Login' command.", "remediation": "Run 'Flowbaby Cloud: Login' from the VS Code command palette.", "error": "No Cloud credentials or CI fallback key found"}
 ```
 
 All scripts follow these conventions:

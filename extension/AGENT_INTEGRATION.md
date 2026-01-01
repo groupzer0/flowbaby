@@ -63,15 +63,14 @@ Flowbaby tools are controlled through VS Code's **Configure Tools** UI:
 
 No workspace settings required for authorization.
 
-### LLM API Key (Required)
+### Authentication (Required)
 
-Configure LLM API key in workspace `.env`:
+Flowbaby v0.7.0+ uses **Cloud authentication**. Log in via:
 
-```env
-LLM_API_KEY=sk-...
-```
+1. Command Palette → "Flowbaby Cloud: Login"
+2. Complete OAuth flow in browser
 
-Without this, ingestion will fail with error code `MISSING_API_KEY`.
+Without Cloud login, ingestion will fail with error code `NOT_AUTHENTICATED`.
 
 ---
 
@@ -193,11 +192,15 @@ if (!response.success) {
       // Fix payload and retry
       break;
 
-    case 'MISSING_API_KEY':
+    case 'NOT_AUTHENTICATED':
       vscode.window.showErrorMessage(
-        'LLM_API_KEY not found. Add it to your workspace .env file.',
-        'Open Docs'
-      );
+        'Cloud login required. Please log in to Flowbaby Cloud.',
+        'Login'
+      ).then(selection => {
+        if (selection === 'Login') {
+          vscode.commands.executeCommand('flowbaby.cloud.login');
+        }
+      });
       break;
 
     case 'BRIDGE_TIMEOUT':
@@ -215,7 +218,7 @@ if (!response.success) {
 | Error Code | Description | Remediation |
 |------------|-------------|-------------|
 | `INVALID_PAYLOAD` | Payload failed schema validation | Check `response.error` for field details |
-| `MISSING_API_KEY` | `LLM_API_KEY` not in workspace `.env` | Add API key to `.env` file |
+| `NOT_AUTHENTICATED` | Cloud login required | Run "Flowbaby Cloud: Login" command |
 | `INVALID_WORKSPACE_PATH` | Workspace path invalid or inaccessible | Verify workspace exists |
 | `BRIDGE_TIMEOUT` | Python bridge exceeded timeout | Retry; check bridge logs |
 | `FLOWBABY_ERROR` | Flowbaby library threw exception | Check Output channel for details |

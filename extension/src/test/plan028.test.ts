@@ -77,48 +77,42 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
         mock.restore();
     });
 
-    suite('FlowbabyClient API Key Resolution', () => {
-        // Plan 039 M5: Removed .env support - SecretStorage is now Priority 1
-        test('Priority 1: SecretStorage is the primary API key source', async () => {
-            // Note: .env files are no longer supported per Plan 039 M5
+    suite('FlowbabyClient API Key Resolution (Plan 083 Cloud-only)', () => {
+        // Plan 083: Cloud-only mode - resolveApiKey only checks process.env.LLM_API_KEY for CI fallback
+        test('Priority 1: Cloud credentials from provider (tested in Cloud-only tests)', async () => {
+            // Note: Cloud credentials are verified via hasApiKey() and getLLMEnvironment()
+            // resolveApiKey() is now deprecated and only for CI fallback
             mock({
-                [testWorkspacePath]: {
-                    '.env': 'LLM_API_KEY=env-key'  // This is now ignored
-                }
+                [testWorkspacePath]: {}
             });
-            
-            // Setup SecretStorage with key
-            (mockContext.secrets.get as sinon.SinonStub).resolves('secret-key');
-            
-            // Setup Process Env
-            process.env.LLM_API_KEY = 'process-key';
 
             const client = new FlowbabyClient(testWorkspacePath, mockContext);
-            const apiKey = await (client as any).resolveApiKey();
-
-            // SecretStorage takes priority (Plan 039 M5 removed .env support)
-            assert.strictEqual(apiKey, 'secret-key');
+            
+            // Plan 083: hasApiKey() should return true when Cloud provider is initialized
+            const hasKey = await client.hasApiKey();
+            assert.strictEqual(hasKey, true, 'Should have credentials when Cloud provider is initialized');
         });
 
-        test('Priority 2: SecretStorage used if no .env', async () => {
+        test('Priority 2: resolveApiKey returns undefined in Cloud-only mode (Plan 083)', async () => {
             // No .env (empty workspace)
             mock({
                 [testWorkspacePath]: {}
             });
             
-            // Setup SecretStorage
-            (mockContext.secrets.get as sinon.SinonStub).resolves('secret-key');
+            // SecretStorage is no longer used for API keys in Plan 083
+            (mockContext.secrets.get as sinon.SinonStub).resolves(undefined);
             
-            // Setup Process Env
+            // Even with process.env.LLM_API_KEY set, Cloud-only mode ignores it
             process.env.LLM_API_KEY = 'process-key';
 
             const client = new FlowbabyClient(testWorkspacePath, mockContext);
             const apiKey = await (client as any).resolveApiKey();
 
-            assert.strictEqual(apiKey, 'secret-key');
+            // Plan 083: resolveApiKey always returns undefined - Cloud credentials are handled via provider
+            assert.strictEqual(apiKey, undefined);
         });
 
-        test('Priority 3: Process Env used if no .env and no Secret', async () => {
+        test('Priority 3: resolveApiKey ignores process.env in Cloud-only mode (Plan 083)', async () => {
             // No .env
             mock({
                 [testWorkspacePath]: {}
@@ -127,35 +121,33 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
             // No Secret
             (mockContext.secrets.get as sinon.SinonStub).resolves(undefined);
             
-            // Setup Process Env
+            // Setup Process Env - should be ignored in Cloud-only mode
             process.env.LLM_API_KEY = 'process-key';
 
             const client = new FlowbabyClient(testWorkspacePath, mockContext);
             const apiKey = await (client as any).resolveApiKey();
 
-            assert.strictEqual(apiKey, 'process-key');
+            // Plan 083: resolveApiKey always returns undefined - use hasApiKey() + Cloud provider instead
+            assert.strictEqual(apiKey, undefined);
         });
     });
 
-    suite('FlowbabyClient LLM Environment Injection', () => {
-        test('Injects LLM settings into environment', async () => {
-            // Mock Config
+    suite('FlowbabyClient LLM Environment Injection (Plan 083 Cloud-only)', () => {
+        test('Injects Cloud credentials from provider', async () => {
+            // Mock Config - not used for Cloud credentials
             const configMock = {
-                get: (key: string, defaultValue?: any) => {
-                    if (key === 'llm.provider') {return 'anthropic';}
-                    if (key === 'llm.model') {return 'claude-3-opus';}
-                    if (key === 'llm.endpoint') {return 'https://api.anthropic.com';}
-                    return defaultValue;
-                }
+                get: (key: string, defaultValue?: any) => defaultValue
             };
             (vscode.workspace.getConfiguration as sinon.SinonStub).returns(configMock as any);
 
             const client = new FlowbabyClient(testWorkspacePath, mockContext);
             const env = await (client as any).getLLMEnvironment();
 
-            assert.strictEqual(env['LLM_PROVIDER'], 'anthropic');
-            assert.strictEqual(env['LLM_MODEL'], 'claude-3-opus');
-            assert.strictEqual(env['LLM_ENDPOINT'], 'https://api.anthropic.com');
+            // Plan 083: Cloud credentials should be injected from provider
+            assert.strictEqual(env['AWS_ACCESS_KEY_ID'], 'test-access-key');
+            assert.strictEqual(env['AWS_SECRET_ACCESS_KEY'], 'test-secret-key');
+            assert.strictEqual(env['AWS_SESSION_TOKEN'], 'test-session-token');
+            assert.strictEqual(env['FLOWBABY_CLOUD_MODE'], 'true');
         });
     });
 

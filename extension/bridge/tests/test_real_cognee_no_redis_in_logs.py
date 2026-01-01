@@ -63,7 +63,9 @@ async def test_retrieve_real_cognee_produces_no_redis_failures_in_logs(tmp_path:
     workspace = tmp_path / "ws"
     workspace.mkdir(parents=True)
 
-    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    # Plan 083 M5: Use AWS credentials (Cloud-only mode)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
 
     for key in [
         "SYSTEM_ROOT_DIRECTORY",

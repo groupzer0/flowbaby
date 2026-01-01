@@ -20,13 +20,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 @pytest.fixture
 def mock_cognee_module(monkeypatch):
-    """Mock cognee module with LLM_API_KEY set for filtering tests.
+    """Mock cognee module with AWS credentials set for filtering tests.
 
-    Plan 039 M5: LLM_API_KEY must be set in environment for retrieve to proceed
-    past the API key validation guard and reach filtering logic.
+    Plan 083 M5: v0.7.0 is Cloud-only - AWS_ACCESS_KEY_ID must be set in environment
+    for retrieve to proceed past the credential validation guard and reach filtering logic.
     """
-    # Plan 039: Set API key so retrieve_context reaches filtering logic
-    monkeypatch.setenv('LLM_API_KEY', 'sk-test-filtering-key')
+    # Plan 083 M5: Set AWS credentials so retrieve_context reaches filtering logic
+    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
+    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')
 
     mock_cognee = types.ModuleType('cognee')
     mock_cognee.__path__ = []

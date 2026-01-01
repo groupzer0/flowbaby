@@ -364,8 +364,8 @@ class TestBackwardCompatibility:
 class TestErrorHandling:
     """Tests for error handling across modes"""
 
-    def test_missing_api_key_error(self, tmp_path):
-        """Verify missing API key produces correct error code."""
+    def test_missing_credentials_error(self, tmp_path):
+        """Verify missing Cloud credentials produces correct error code (Plan 083)."""
         workspace = tmp_path / "no_env_workspace"
         workspace.mkdir()
 
@@ -374,6 +374,7 @@ class TestErrorHandling:
 
         env = os.environ.copy()
         env.pop("LLM_API_KEY", None)
+        env.pop("AWS_ACCESS_KEY_ID", None)
 
         cmd = [
             sys.executable,
@@ -395,7 +396,7 @@ class TestErrorHandling:
         assert result.returncode == 1
         output = _parse_json_stdout(result.stdout)
         assert output['success'] is False
-        assert output['error_code'] == 'MISSING_API_KEY'
+        assert output['error_code'] == 'NOT_AUTHENTICATED'
 
     def test_invalid_mode_rejected(self, test_workspace):
         """Verify invalid mode value is rejected."""

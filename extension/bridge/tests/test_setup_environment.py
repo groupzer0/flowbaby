@@ -17,32 +17,37 @@ import pytest
 class TestSetupEnvironment:
     """Tests for the setup_environment() function in ingest.py
 
-    Plan 039 M5: .env file support has been removed for security (F2).
-    All tests must set LLM_API_KEY via environment variable, not .env file.
+    Plan 083 M5: v0.7.0 is Cloud-only - tests must set AWS_ACCESS_KEY_ID.
+    All tests must set AWS credentials via environment variable.
     """
 
     @pytest.fixture
     def temp_workspace(self, tmp_path, monkeypatch):
-        """Create a temporary workspace with LLM_API_KEY set via environment.
+        """Create a temporary workspace with Cloud credentials set via environment.
 
-        Plan 039: API key is now provided via environment variable from TypeScript,
-        not read from .env files.
+        Plan 083 M5: v0.7.0 is Cloud-only - AWS credentials from Flowbaby Cloud login.
         """
         workspace = tmp_path / "test_workspace"
         workspace.mkdir()
 
-        # Plan 039 M5: Set API key via environment variable (not .env file)
-        monkeypatch.setenv('LLM_API_KEY', 'test-api-key-12345')
+        # Plan 083 M5: Set AWS credentials (Cloud-only mode)
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
+        monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')
+        monkeypatch.setenv('AWS_SESSION_TOKEN', 'test-session-token')
+        monkeypatch.setenv('AWS_REGION', 'us-east-1')
 
         return workspace
 
     @pytest.fixture
     def temp_workspace_no_env(self, tmp_path, monkeypatch):
-        """Create a temporary workspace without API key in environment."""
+        """Create a temporary workspace without Cloud credentials in environment."""
         workspace = tmp_path / "test_workspace_no_env"
         workspace.mkdir()
-        # Ensure LLM_API_KEY is not set
+        # Plan 083 M5: Ensure all credentials are unset
         monkeypatch.delenv('LLM_API_KEY', raising=False)
+        monkeypatch.delenv('AWS_ACCESS_KEY_ID', raising=False)
+        monkeypatch.delenv('AWS_SECRET_ACCESS_KEY', raising=False)
+        monkeypatch.delenv('AWS_SESSION_TOKEN', raising=False)
         return workspace
 
     def test_sets_system_root_directory_env_var(self, temp_workspace):
@@ -156,18 +161,19 @@ class TestSetupEnvironment:
         assert config['data_root'] == str(temp_workspace / '.flowbaby/data')
         assert config['workspace_dir'] == temp_workspace
 
-    def test_returns_api_key_from_environment(self, temp_workspace):
-        """Verify API key is extracted from environment variable.
+    def test_returns_api_key_as_none(self, temp_workspace):
+        """Verify api_key is None in Cloud-only mode.
 
-        Plan 039 M5: API key now comes from LLM_API_KEY environment variable,
-        injected by TypeScript client. .env file support removed for security.
+        Plan 083 M5: v0.7.0 is Cloud-only - API key is no longer used.
+        Cloud credentials (AWS_*) are read directly by Cognee from env vars.
         """
         from ingest import setup_environment
 
-        # temp_workspace fixture already sets LLM_API_KEY='test-api-key-12345'
+        # temp_workspace fixture sets AWS_ACCESS_KEY_ID for Cloud auth
         dataset_name, api_key, config = setup_environment(str(temp_workspace))
 
-        assert api_key == 'test-api-key-12345'
+        # Plan 083 M5: api_key is always None in Cloud-only mode
+        assert api_key is None
 
     def test_returns_dataset_name(self, temp_workspace):
         """Verify dataset name is generated"""
@@ -180,22 +186,21 @@ class TestSetupEnvironment:
         assert dataset_name.startswith('ws_')
 
     def test_raises_when_no_api_key(self, temp_workspace_no_env):
-        """Verify ValueError is raised when no API key is available.
+        """Verify ValueError is raised when no credentials are available.
 
-        Plan 039 M5: Error message now directs user to 'Flowbaby: Set API Key'
-        command rather than .env file.
+        Plan 083: Error message now directs user to 'Flowbaby Cloud: Login'
+        command for Cloud-only authentication.
         """
         from ingest import setup_environment
 
-        # temp_workspace_no_env fixture ensures LLM_API_KEY is not set
+        # temp_workspace_no_env fixture ensures credentials are not set
 
         with pytest.raises(ValueError) as exc_info:
             setup_environment(str(temp_workspace_no_env))
 
         error_message = str(exc_info.value)
-        assert 'LLM_API_KEY' in error_message
-        # Plan 039: Remediation now points to secure storage command
-        assert 'Flowbaby: Set API Key' in error_message
+        # Plan 083: Cloud-only remediation
+        assert 'Flowbaby Cloud: Login' in error_message
 
     def test_env_vars_set_before_directories_exist(self, temp_workspace):
         """Verify env vars are set even if directories don't exist yet (idempotent)"""

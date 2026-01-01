@@ -73,28 +73,28 @@ export async function handleIngestForAgent(
             return JSON.stringify(response);
         }
 
-        // Plan 045: Pre-check API key availability for faster feedback
+        // Plan 083: Pre-check Cloud credentials for faster feedback (Cloud-only v0.7.0+)
         const hasApiKey = await flowbabyClient.hasApiKey();
         if (!hasApiKey) {
             outputChannel.appendLine(
-                `[Agent Ingest] ${new Date().toISOString()} - LLM API key not configured`
+                `[Agent Ingest] ${new Date().toISOString()} - Cloud login required`
             );
             
             // Surface actionable prompt to user
             const action = await vscode.window.showWarningMessage(
-                'Flowbaby needs an LLM API key (OpenAI by default) for memory operations.',
-                'Set API Key',
+                'Flowbaby Cloud login required for memory operations.',
+                'Login to Cloud',
                 'Cancel'
             );
             
-            if (action === 'Set API Key') {
-                await vscode.commands.executeCommand('Flowbaby.setApiKey');
+            if (action === 'Login to Cloud') {
+                await vscode.commands.executeCommand('flowbaby.cloud.login');
             }
             
             const response: FlowbabyIngestResponse = {
                 success: false,
-                error: 'LLM API key not configured. Use "Flowbaby: Set API Key" command.',
-                errorCode: 'MISSING_API_KEY'
+                error: 'Cloud login required. Use "Flowbaby: Login to Cloud" command.',
+                errorCode: 'NOT_AUTHENTICATED'
             };
             return JSON.stringify(response);
         }

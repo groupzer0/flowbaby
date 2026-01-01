@@ -140,17 +140,20 @@ suite('BackgroundOperationManager - Concurrency and Queue', () => {
 });
 
 /**
- * Plan 031 - API Key Resolution and LLM Environment Tests
+ * Plan 083 M5 - Cloud-only API Key Resolution and LLM Environment Tests
  * 
- * Tests for the new resolveApiKey() and getLLMEnvironment() methods
- * that implement the priority chain: .env > SecretStorage > process.env
+ * Tests for resolveApiKey() and getLLMEnvironment() methods
+ * Plan 083 M5: v0.7.0 is Cloud-only - resolveApiKey always returns undefined, 
+ * Cloud credentials come via getLLMEnvironment from cloudProvider
  */
-suite('BackgroundOperationManager - API Key Resolution (Plan 031)', () => {
+suite('BackgroundOperationManager - API Key Resolution (Plan 083 M5 Cloud-only)', () => {
     let workspacePath: string;
     let context: vscode.ExtensionContext;
     let output: vscode.OutputChannel;
     let manager: BackgroundOperationManager;
     let secretsStub: sinon.SinonStubbedInstance<vscode.SecretStorage>;
+    let cloudProviderStub: sinon.SinonStub;
+    let cloudEnvStub: sinon.SinonStub;
 
     const resetSingleton = () => {
         (BackgroundOperationManager as unknown as { instance?: BackgroundOperationManager }).instance = undefined;
@@ -159,7 +162,17 @@ suite('BackgroundOperationManager - API Key Resolution (Plan 031)', () => {
     setup(async () => {
         workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-apikey-'));
         
-        // Create mock secrets storage
+        // Plan 083: Stub Cloud provider as the primary credential source
+        cloudProviderStub = sinon.stub(cloudProvider, 'isProviderInitialized').returns(true);
+        cloudEnvStub = sinon.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+            AWS_ACCESS_KEY_ID: 'cloud-access-key',
+            AWS_SECRET_ACCESS_KEY: 'cloud-secret-key',
+            AWS_SESSION_TOKEN: 'cloud-session-token',
+            AWS_REGION: 'us-east-1',
+            FLOWBABY_CLOUD_MODE: 'true'
+        });
+        
+        // Create mock secrets storage (no longer used for API keys in Plan 083)
         secretsStub = {
             get: sinon.stub(),
             store: sinon.stub(),
@@ -186,100 +199,49 @@ suite('BackgroundOperationManager - API Key Resolution (Plan 031)', () => {
     });
 
     teardown(async () => {
+        cloudProviderStub.restore();
+        cloudEnvStub.restore();
         await manager.shutdown();
         resetSingleton();
         fs.rmSync(workspacePath, { recursive: true, force: true });
-        // Restore any process.env changes
-        delete process.env.LLM_API_KEY;
     });
 
-    // Plan 039 M5: Removed .env support - SecretStorage is now Priority 1
-    test('resolveApiKey uses SecretStorage as primary source (Plan 039 M5)', async () => {
-        // Create .env file with API key (should be IGNORED per Plan 039 M5)
-        const envContent = 'LLM_API_KEY=env-file-key-123\nOTHER_VAR=value';
-        fs.writeFileSync(path.join(workspacePath, '.env'), envContent);
-        
-        // Set SecretStorage to return a different key
-        secretsStub.get.resolves('secret-storage-key-456');
-        
-        // Set process.env to a third key
-        process.env.LLM_API_KEY = 'process-env-key-789';
-        
-        // Call resolveApiKey (private method, access via prototype)
-        const apiKey = await (manager as any).resolveApiKey(workspacePath);
-        
-        // SecretStorage should be used (not .env) per Plan 039 M5
-        assert.strictEqual(apiKey, 'secret-storage-key-456', 'SecretStorage should have highest priority (Plan 039 M5 removed .env support)');
-    });
-
-    test('resolveApiKey uses SecretStorage when no .env file exists', async () => {
-        // No .env file created
-        
-        // Set SecretStorage to return a key
-        secretsStub.get.resolves('secret-storage-key-456');
-        
-        // Set process.env as fallback
-        process.env.LLM_API_KEY = 'process-env-key-789';
+    // Plan 083 M5: resolveApiKey always returns undefined - Cloud-only mode
+    test('resolveApiKey always returns undefined (Plan 083 M5)', async () => {
+        // v0.7.0 is Cloud-only - resolveApiKey no longer checks process.env
+        // Cloud credentials are obtained via getLLMEnvironment instead
         
         const apiKey = await (manager as any).resolveApiKey(workspacePath);
         
-        assert.strictEqual(apiKey, 'secret-storage-key-456', 'SecretStorage should be used when .env missing');
-        sinon.assert.calledWith(secretsStub.get, 'flowbaby.llmApiKey');
+        assert.strictEqual(apiKey, undefined, 'Should always return undefined in Cloud-only mode');
     });
 
-    test('resolveApiKey uses process.env when .env and SecretStorage are empty', async () => {
-        // No .env file
+    test('resolveApiKey returns undefined even with process.env set (Plan 083 M5)', async () => {
+        // This test verifies that resolveApiKey ignores process.env.LLM_API_KEY
+        // even if it's set - v0.7.0 is Cloud-only
+        process.env.LLM_API_KEY = 'should-be-ignored';
         
-        // SecretStorage returns undefined
-        secretsStub.get.resolves(undefined);
-        
-        // Set process.env
-        process.env.LLM_API_KEY = 'process-env-key-789';
+        try {
+            const apiKey = await (manager as any).resolveApiKey(workspacePath);
+            
+            assert.strictEqual(apiKey, undefined, 'Should return undefined (Cloud-only mode ignores process.env)');
+        } finally {
+            delete process.env.LLM_API_KEY;
+        }
+    });
+
+    test('resolveApiKey returns undefined even with .env file (Plan 083 M5)', async () => {
+        // Create .env file - should be completely ignored in Cloud-only mode
+        fs.writeFileSync(path.join(workspacePath, '.env'), 'LLM_API_KEY=env-key');
         
         const apiKey = await (manager as any).resolveApiKey(workspacePath);
         
-        assert.strictEqual(apiKey, 'process-env-key-789', 'process.env should be final fallback');
-    });
-
-    test('resolveApiKey returns undefined when no key is available', async () => {
-        // No .env file
-        // SecretStorage empty
-        secretsStub.get.resolves(undefined);
-        // process.env empty
-        delete process.env.LLM_API_KEY;
-        
-        const apiKey = await (manager as any).resolveApiKey(workspacePath);
-        
-        assert.strictEqual(apiKey, undefined, 'Should return undefined when no key available');
-    });
-
-    test('resolveApiKey handles malformed .env file gracefully', async () => {
-        // Create malformed .env file
-        fs.writeFileSync(path.join(workspacePath, '.env'), 'NOT_VALID_FORMAT\n===broken');
-        
-        // SecretStorage has a key
-        secretsStub.get.resolves('secret-storage-key-456');
-        
-        const apiKey = await (manager as any).resolveApiKey(workspacePath);
-        
-        // Should fall through to SecretStorage since .env has no LLM_API_KEY
-        assert.strictEqual(apiKey, 'secret-storage-key-456', 'Should fall back to SecretStorage on malformed .env');
-    });
-
-    test('resolveApiKey ignores .env without LLM_API_KEY', async () => {
-        // Create .env file without the key we need
-        fs.writeFileSync(path.join(workspacePath, '.env'), 'OTHER_KEY=value\nANOTHER=123');
-        
-        // SecretStorage has the key
-        secretsStub.get.resolves('secret-storage-key-456');
-        
-        const apiKey = await (manager as any).resolveApiKey(workspacePath);
-        
-        assert.strictEqual(apiKey, 'secret-storage-key-456', 'Should use SecretStorage when .env lacks LLM_API_KEY');
+        // Should return undefined - .env is ignored in Cloud-only mode
+        assert.strictEqual(apiKey, undefined, 'Should ignore .env files in Cloud-only mode');
     });
 });
 
-suite('BackgroundOperationManager - getLLMEnvironment (Plan 031)', () => {
+suite('BackgroundOperationManager - getLLMEnvironment (Plan 083 M5 Cloud-only)', () => {
     let workspacePath: string;
     let context: vscode.ExtensionContext;
     let output: vscode.OutputChannel;
@@ -344,29 +306,24 @@ suite('BackgroundOperationManager - getLLMEnvironment (Plan 031)', () => {
         delete process.env.LLM_API_KEY;
     });
 
-    test('getLLMEnvironment returns complete LLM config', async () => {
-        // Plan 039 M5: Use SecretStorage instead of .env file
-        secretsStub.get.resolves('test-key-xyz');
+    test('getLLMEnvironment returns Cloud credentials (Plan 083)', async () => {
+        // SecretStorage not used for credentials in Cloud-only mode
+        secretsStub.get.resolves(undefined);
         
-        // Mock VS Code configuration
+        // Mock VS Code configuration - not used for Cloud credentials
         const mockConfig = {
-            get: (key: string) => {
-                switch (key) {
-                    case 'provider': return 'openai';
-                    case 'model': return 'gpt-4';
-                    case 'endpoint': return 'https://api.openai.com/v1';
-                    default: return undefined;
-                }
-            }
+            get: (_key: string) => undefined
         };
         configStub.withArgs('Flowbaby.llm').returns(mockConfig);
         
         const env = await (manager as any).getLLMEnvironment(workspacePath);
         
-        assert.strictEqual(env.LLM_API_KEY, 'test-key-xyz');
-        assert.strictEqual(env.LLM_PROVIDER, 'openai');
-        assert.strictEqual(env.LLM_MODEL, 'gpt-4');
-        assert.strictEqual(env.LLM_ENDPOINT, 'https://api.openai.com/v1');
+        // Plan 083: Cloud credentials should be injected
+        assert.strictEqual(env.AWS_ACCESS_KEY_ID, 'test-access-key');
+        assert.strictEqual(env.AWS_SECRET_ACCESS_KEY, 'test-secret-key');
+        assert.strictEqual(env.AWS_SESSION_TOKEN, 'test-session-token');
+        assert.strictEqual(env.AWS_REGION, 'us-east-1');
+        assert.strictEqual(env.FLOWBABY_CLOUD_MODE, 'true');
     });
 
     test('getLLMEnvironment omits missing config values', async () => {
@@ -384,10 +341,12 @@ suite('BackgroundOperationManager - getLLMEnvironment (Plan 031)', () => {
         
         const env = await (manager as any).getLLMEnvironment(workspacePath);
         
-        assert.strictEqual(env.LLM_API_KEY, undefined, 'No key should be set');
-        assert.strictEqual(env.LLM_PROVIDER, 'anthropic');
-        assert.strictEqual(env.LLM_MODEL, undefined, 'Unset config should not appear');
-        assert.strictEqual(env.LLM_ENDPOINT, undefined, 'Unset config should not appear');
+        // Plan 083 M5: LLM_API_KEY is never set - Cloud-only mode
+        assert.strictEqual(env.LLM_API_KEY, undefined, 'LLM_API_KEY should never be set in Cloud-only mode');
+        // Plan 083 M5: LLM_PROVIDER and other legacy vars are also removed
+        assert.strictEqual(env.LLM_PROVIDER, undefined, 'LLM_PROVIDER should not be set in Cloud-only mode');
+        assert.strictEqual(env.LLM_MODEL, undefined, 'LLM_MODEL should not be set in Cloud-only mode');
+        assert.strictEqual(env.LLM_ENDPOINT, undefined, 'LLM_ENDPOINT should not be set in Cloud-only mode');
     });
 
     test('getLLMEnvironment returns Cloud credentials when no local config (Plan 081)', async () => {
@@ -409,7 +368,7 @@ suite('BackgroundOperationManager - getLLMEnvironment (Plan 031)', () => {
     });
 });
 
-suite('BackgroundOperationManager - runPythonJson Env Injection (Plan 031)', () => {
+suite('BackgroundOperationManager - runPythonJson Env Injection (Plan 083 Cloud-only)', () => {
     let workspacePath: string;
     let context: vscode.ExtensionContext;
     let output: vscode.OutputChannel;
@@ -475,12 +434,12 @@ suite('BackgroundOperationManager - runPythonJson Env Injection (Plan 031)', () 
         delete process.env.LLM_API_KEY;
     });
 
-    test('runPythonJson injects LLM environment when workspacePath provided', async () => {
-        // Plan 039 M5: Use SecretStorage instead of .env file
-        secretsStub.get.resolves('injected-key-abc');
+    test('runPythonJson injects Cloud environment when workspacePath provided (Plan 083)', async () => {
+        // SecretStorage not used in Cloud-only mode
+        secretsStub.get.resolves(undefined);
         
         // Mock config
-        const mockConfig = { get: (key: string) => key === 'provider' ? 'openai' : undefined };
+        const mockConfig = { get: (_key: string) => undefined };
         configStub.withArgs('Flowbaby.llm').returns(mockConfig);
         
         let capturedEnv: NodeJS.ProcessEnv | undefined;
@@ -508,8 +467,9 @@ suite('BackgroundOperationManager - runPythonJson Env Injection (Plan 031)', () 
         await (manager as any).runPythonJson('/usr/bin/python3', ['test.py'], workspacePath, workspacePath);
         
         assert.ok(capturedEnv, 'Env should be passed to spawn');
-        assert.strictEqual(capturedEnv!.LLM_API_KEY, 'injected-key-abc', 'LLM_API_KEY should be injected');
-        assert.strictEqual(capturedEnv!.LLM_PROVIDER, 'openai', 'LLM_PROVIDER should be injected');
+        // Plan 083: Cloud credentials should be injected, not LLM_API_KEY
+        assert.strictEqual(capturedEnv!.AWS_ACCESS_KEY_ID, 'test-access-key', 'AWS_ACCESS_KEY_ID should be injected');
+        assert.strictEqual(capturedEnv!.FLOWBABY_CLOUD_MODE, 'true', 'FLOWBABY_CLOUD_MODE should be injected');
         assert.strictEqual(capturedEnv!.PYTHONUNBUFFERED, '1', 'PYTHONUNBUFFERED should always be set');
     });
 

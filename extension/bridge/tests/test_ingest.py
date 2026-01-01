@@ -1,7 +1,7 @@
-"""
-Unit tests for ingest.py bridge script.
+"""Unit tests for ingest.py bridge script.
 
-Tests add() and cognify() parameter usage, LLM_API_KEY validation, and structured error logging.
+Tests add() and cognify() parameter usage, Cloud credential validation (AWS_*), and structured error logging.
+Plan 083 M5: v0.7.0 is Cloud-only - LLM_API_KEY is no longer supported.
 """
 import json
 import sys
@@ -15,9 +15,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 @pytest.mark.asyncio
-async def test_ingest_missing_llm_api_key(temp_workspace, monkeypatch):
-    """Test that ingestion fails with clear error when LLM_API_KEY is missing."""
-    # Remove LLM_API_KEY from environment
+async def test_ingest_missing_cloud_credentials(temp_workspace, monkeypatch):
+    """Test that ingestion fails with clear error when Cloud credentials are missing."""
+    # Plan 083 M5: Remove all Cloud credentials - v0.7.0 is Cloud-only
+    monkeypatch.delenv('AWS_ACCESS_KEY_ID', raising=False)
+    monkeypatch.delenv('AWS_SECRET_ACCESS_KEY', raising=False)
+    monkeypatch.delenv('AWS_SESSION_TOKEN', raising=False)
     monkeypatch.delenv('LLM_API_KEY', raising=False)
 
     # Remove .env file if it exists
@@ -35,8 +38,8 @@ async def test_ingest_missing_llm_api_key(temp_workspace, monkeypatch):
         )
 
         assert result['success'] is False
-        assert 'LLM_API_KEY not found' in result['error']
-        # assert 'Set LLM_API_KEY=' in result['error']
+        # Plan 083: Cloud-only error message
+        assert 'Cloud' in result['error'] or 'credentials' in result['error'].lower()
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.0] - Unreleased
 
+### ⚠️ Breaking Changes
+
+- **Cloud-Only Mode (Plan 083)**: Flowbaby v0.7.0 is Cloud-only. Local API key configuration (`Flowbaby: Set API Key`) has been removed. Users must login to Flowbaby Cloud for LLM-powered memory operations.
+  - Removed commands: `Flowbaby.configureApiKey`, `Flowbaby.setApiKey`, `Flowbaby.clearApiKey`
+  - Removed settings: `Flowbaby.llm.provider`, `Flowbaby.llm.model`, `Flowbaby.llm.endpoint`
+  - Removed env var injection: `LLM_API_KEY`, `LLM_PROVIDER`, `LLM_MODEL` no longer injected into Python bridge
+  - Legacy API keys stored in SecretStorage are automatically migrated with a one-time info message
+
 ### Added
 
 - **Flowbaby Cloud Credential Provider Wiring (Plan 081)**: Unified credential/provider architecture wired into extension activation and all Python bridge paths. Key changes:
@@ -18,9 +26,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Bridge Environment Injection**: All three bridge code paths (spawn-per-request, daemon-mode, background operations) now inject Cloud credentials into Python subprocess environment when authenticated.
   - **Security Guardrails**: Verified no secret values (AWS keys, tokens, JWTs) are logged; existing redaction patterns remain adequate.
 
+- **Credential Single-Flight Guard (Plan 083 M1)**: Prevents concurrent `/vend/credentials` requests during high-frequency operations. Multiple callers share a single in-flight refresh, reducing API load and preventing credential thrashing.
+
+- **Centralized Cloud Error → UX Mapping (Plan 083 M3)**: New `errorMapping.ts` module provides consistent error messaging across all Cloud error scenarios:
+  - Maps error codes to severity, actionable messages, and recovery actions
+  - Supports rate limiting, quota exceeded, session expiry, and network errors
+  - Provides `showCloudError()` helper for consistent toast notifications
+
 ### Changed
 
 - **Cloud Authentication Flow (Plans 077–081)**: The v0.7.0 Cloud integration now provides a complete OAuth → STS → Bridge credential flow, enabling managed AWS Bedrock inference without local API keys.
+
+- **Status Bar UX (Plan 083 M6)**: Updated status bar for Cloud-only mode:
+  - Renamed `NeedsApiKey` status to `NeedsCloudLogin` (backward-compatible alias preserved)
+  - Status menu now shows "Flowbaby Cloud Status" instead of "Set API Key"
+  - Tooltip updated to "Cloud Login Required" instead of "LLM API Key Required"
+
+- **Walkthrough Updated (Plan 083 M6)**: Getting Started walkthrough step changed from "Set Your API Key" to "Login to Flowbaby Cloud" with updated description.
+
+### Fixed
+
+- **Cloud Error Code Preservation (Plan 083 M2)**: Fixed error masking in `flowbabyClient.ts`, `PythonBridgeDaemonManager.ts`, and `BackgroundOperationManager.ts` where Cloud errors were being converted to generic "login required" errors. Now preserves original error codes (RATE_LIMITED, QUOTA_EXCEEDED, SESSION_INVALID, etc.) for accurate UX.
 
 ## [0.6.2] - 2025-12-20
 

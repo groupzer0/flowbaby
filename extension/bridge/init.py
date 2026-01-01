@@ -216,15 +216,16 @@ async def initialize_cognee(workspace_path: str) -> dict:
         # Workspace .env loading removed per Plan 037 F2 security finding
         # (plaintext API keys in .env files are a credential exposure risk)
 
-        # Plan 045: Check for API key but don't fail if missing
-        # Per Architectural Decision 1: Initialization no longer implies LLM readiness
-        # The TypeScript layer will handle prompting users to configure the API key
-        api_key = os.getenv('LLM_API_KEY')
-        api_key_configured = bool(api_key)
+        # Plan 083 M5: v0.7.0 is Cloud-only - AWS_* credentials are the only supported auth
+        # LLM_API_KEY is no longer supported - use Flowbaby Cloud login instead
+        aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+        api_key_configured = bool(aws_access_key)
 
-        if not api_key:
-            logger.warning('LLM_API_KEY not found in environment - initialization will continue without LLM configuration')
-            logger.info('User will be prompted to set API key after initialization completes')
+        if not api_key_configured:
+            logger.warning('No Cloud credentials (AWS_*) found - initialization will continue')
+            logger.info('User should log in via "Flowbaby Cloud: Login" command')
+        else:
+            logger.debug('Cloud credentials detected - using Flowbaby Cloud authentication')
 
         # ============================================================================
         # PLAN 074: Use shared bridge_env module for all environment wiring
@@ -272,26 +273,13 @@ async def initialize_cognee(workspace_path: str) -> dict:
         # These are redundant since env vars are set before import, but kept for safety
         # ============================================================================
 
-        # Plan 028 M6: Read LLM configuration from environment with workspace .env fallback
-        # Priority: Environment variable (from TypeScript) > workspace .env > default
-        llm_api_key = os.environ.get('LLM_API_KEY') or api_key  # api_key loaded from .env earlier
-        llm_provider = os.environ.get('LLM_PROVIDER') or os.getenv('LLM_PROVIDER') or 'openai'
-        llm_model = os.environ.get('LLM_MODEL') or os.getenv('LLM_MODEL') or 'gpt-4o-mini'
-        llm_endpoint = os.environ.get('LLM_ENDPOINT') or os.getenv('LLM_ENDPOINT') or ''
-
-        logger.debug(f"LLM configuration: provider={llm_provider}, model={llm_model}, endpoint={'<set>' if llm_endpoint else '<default>'}")
-
-        # Configure Cognee with LLM settings in the correct order (per architecture review §2.6)
-        # 1. Set API key first
-        cognee.config.set_llm_api_key(llm_api_key)
-        # 2. Set provider
-        cognee.config.set_llm_provider(llm_provider)
-        # 3. Set model
-        cognee.config.set_llm_model(llm_model)
-        # 4. Set endpoint only if non-empty
-        if llm_endpoint:
-            cognee.config.set_llm_endpoint(llm_endpoint)
-            logger.debug(f"Custom LLM endpoint configured: {llm_endpoint}")
+        # Plan 083 M5: v0.7.0 is Cloud-only - Bedrock is configured via AWS_* env vars
+        # LLM_API_KEY, LLM_PROVIDER, LLM_MODEL, LLM_ENDPOINT are no longer used
+        # Cognee SDK will use AWS Bedrock when AWS_* credentials are present
+        if aws_access_key:
+            logger.debug("Cloud-only mode: Using AWS Bedrock via Cloud credentials")
+        else:
+            logger.warning("No Cloud credentials - LLM operations will fail until user logs in")
 
         # Belt-and-suspenders: Also call config methods (redundant but safe)
         # Plan 074: Env vars are set via bridge_env before import, so these are now confirmatory

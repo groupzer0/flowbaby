@@ -669,7 +669,7 @@ def get_workspace_summary(workspace_dir: Path) -> dict:
     return summary
 
 
-async def do_reindex_only(workspace_path: str, dataset_name: str, api_key: str) -> dict:
+async def do_reindex_only(workspace_path: str, dataset_name: str) -> dict:
     """
     Reindex-only mode: Re-run add+cognify on existing data.
 
@@ -690,8 +690,7 @@ async def do_reindex_only(workspace_path: str, dataset_name: str, api_key: str) 
     env_config = get_env_config_snapshot()
     cognee.config.system_root_directory(env_config['SYSTEM_ROOT_DIRECTORY'])
     cognee.config.data_root_directory(env_config['DATA_ROOT_DIRECTORY'])
-    cognee.config.set_llm_api_key(api_key)
-    cognee.config.set_llm_provider('openai')
+    # Plan 083 M5: Cloud-only - Cognee uses AWS Bedrock via AWS_* env vars
 
     log_rebuild(workspace_dir, f"Dataset: {dataset_name}")
     log_rebuild(workspace_dir, f"Ontology: {env_config['ONTOLOGY_FILE_PATH']}")
@@ -747,7 +746,7 @@ async def do_reindex_only(workspace_path: str, dataset_name: str, api_key: str) 
         }
 
 
-async def do_reset_and_rebuild(workspace_path: str, dataset_name: str, api_key: str) -> dict:
+async def do_reset_and_rebuild(workspace_path: str, dataset_name: str) -> dict:
     """
     Reset-and-rebuild mode: Clear stores, then rebuild from scratch.
 
@@ -771,8 +770,7 @@ async def do_reset_and_rebuild(workspace_path: str, dataset_name: str, api_key: 
     env_config = get_env_config_snapshot()
     cognee.config.system_root_directory(env_config['SYSTEM_ROOT_DIRECTORY'])
     cognee.config.data_root_directory(env_config['DATA_ROOT_DIRECTORY'])
-    cognee.config.set_llm_api_key(api_key)
-    cognee.config.set_llm_provider('openai')
+    # Plan 083 M5: Cloud-only - Cognee uses AWS Bedrock via AWS_* env vars
 
     log_rebuild(workspace_dir, f"Dataset: {dataset_name}")
     log_rebuild(workspace_dir, f"Ontology: {env_config['ONTOLOGY_FILE_PATH']}")
@@ -868,7 +866,6 @@ async def do_reset_and_rebuild(workspace_path: str, dataset_name: str, api_key: 
 async def do_reindex_only_v2(
     workspace_path: str,
     dataset_name: str,
-    api_key: str,
     config: RebuildConfig,
     start_batch: int = 0,
 ) -> RebuildResult:
@@ -881,7 +878,6 @@ async def do_reindex_only_v2(
     Args:
         workspace_path: Absolute path to workspace
         dataset_name: Cognee dataset name
-        api_key: LLM API key
         config: Rebuild configuration
         start_batch: Batch index to start from (for resume)
 
@@ -901,8 +897,7 @@ async def do_reindex_only_v2(
     env_config = get_env_config_snapshot()
     cognee.config.system_root_directory(env_config['SYSTEM_ROOT_DIRECTORY'])
     cognee.config.data_root_directory(env_config['DATA_ROOT_DIRECTORY'])
-    cognee.config.set_llm_api_key(api_key)
-    cognee.config.set_llm_provider('openai')
+    # Plan 083 M5: Cloud-only - Cognee uses AWS Bedrock via AWS_* env vars
 
     log_rebuild(workspace_dir, f"Dataset: {dataset_name}")
     log_rebuild(workspace_dir, f"Ontology: {env_config['ONTOLOGY_FILE_PATH']}")
@@ -1034,7 +1029,6 @@ async def do_reindex_only_v2(
 async def do_reset_and_rebuild_v2(
     workspace_path: str,
     dataset_name: str,
-    api_key: str,
     config: RebuildConfig,
     start_batch: int = 0,
 ) -> RebuildResult:
@@ -1047,7 +1041,6 @@ async def do_reset_and_rebuild_v2(
     Args:
         workspace_path: Absolute path to workspace
         dataset_name: Cognee dataset name
-        api_key: LLM API key
         config: Rebuild configuration
         start_batch: Batch index to start from (for resume, post-reset only)
 
@@ -1068,8 +1061,7 @@ async def do_reset_and_rebuild_v2(
     env_config = get_env_config_snapshot()
     cognee.config.system_root_directory(env_config['SYSTEM_ROOT_DIRECTORY'])
     cognee.config.data_root_directory(env_config['DATA_ROOT_DIRECTORY'])
-    cognee.config.set_llm_api_key(api_key)
-    cognee.config.set_llm_provider('openai')
+    # Plan 083 M5: Cloud-only - Cognee uses AWS Bedrock via AWS_* env vars
 
     log_rebuild(workspace_dir, f"Dataset: {dataset_name}")
     log_rebuild(workspace_dir, f"Ontology: {env_config['ONTOLOGY_FILE_PATH']}")
@@ -1263,11 +1255,11 @@ async def main_async(args: argparse.Namespace) -> int:
         print("=" * 60)
         return 0
 
-    # Check for API key
-    api_key = os.getenv('LLM_API_KEY')
-    if not api_key:
-        print("Error: LLM_API_KEY environment variable not set.", file=sys.stderr)
-        print("Set your API key: export LLM_API_KEY='your-key-here'", file=sys.stderr)
+    # Plan 083 M5: v0.7.0 is Cloud-only - check for AWS credentials
+    aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+    if not aws_access_key:
+        print("Error: Cloud credentials not found.", file=sys.stderr)
+        print("Please login to Flowbaby Cloud: use 'Flowbaby Cloud: Login with GitHub' command", file=sys.stderr)
         return 1
 
     # Validate mode-specific requirements
@@ -1360,9 +1352,9 @@ async def main_async(args: argparse.Namespace) -> int:
     try:
         # Execute the requested operation using Plan 076 filesystem-based functions
         if args.mode == 'reindex-only':
-            result = await do_reindex_only_v2(workspace_path, dataset_name, api_key, config, start_batch)
+            result = await do_reindex_only_v2(workspace_path, dataset_name, config, start_batch)
         elif args.mode == 'reset-and-rebuild':
-            result = await do_reset_and_rebuild_v2(workspace_path, dataset_name, api_key, config, start_batch)
+            result = await do_reset_and_rebuild_v2(workspace_path, dataset_name, config, start_batch)
         else:
             print(f"Error: Unknown mode: {args.mode}", file=sys.stderr)
             return 1
@@ -1427,7 +1419,9 @@ Examples:
   python rebuild_workspace.py --mode reindex-only --max-files 100 --batch-size 25 /path/to/workspace
 
 Environment Variables:
-  LLM_API_KEY    Required. Your OpenAI API key for cognify operations.
+  AWS_ACCESS_KEY_ID      Required. Cloud credentials from Flowbaby Cloud login.
+  AWS_SECRET_ACCESS_KEY  Required. Cloud credentials from Flowbaby Cloud login.
+  AWS_SESSION_TOKEN      Required. Cloud credentials from Flowbaby Cloud login.
 
 Exit Codes:
   0 - Success

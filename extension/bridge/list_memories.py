@@ -45,13 +45,12 @@ async def list_memories(workspace_path: str, limit: int = 10) -> dict:
     try:
         workspace_dir = Path(workspace_path)
 
-        # Plan 039 M5: Workspace .env loading removed per Plan 037 F2 security finding
-        # API key is now resolved by TypeScript and passed via LLM_API_KEY environment variable
-        api_key = os.getenv('LLM_API_KEY')
-        if not api_key:
-            error_msg = "LLM_API_KEY missing. Use 'Flowbaby: Set API Key' for secure storage."
+        # Plan 083 M5: v0.7.0 is Cloud-only. Only AWS credentials are supported.
+        aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+        if not aws_access_key:
+            error_msg = "Cloud credentials not found. Please login to Flowbaby Cloud using the 'Flowbaby Cloud: Login' command."
             logger.error(error_msg)
-            return {"success": False, "error": error_msg}
+            return {"success": False, "error_code": "NOT_AUTHENTICATED", "error": error_msg}
 
         # ============================================================================
         # PLAN 033 FIX: Set environment variables BEFORE importing cognee SDK
@@ -80,8 +79,7 @@ async def list_memories(workspace_path: str, limit: int = 10) -> dict:
         # Belt-and-suspenders: Also call config methods (redundant but safe)
         cognee.config.system_root_directory(system_root)
         cognee.config.data_root_directory(data_root)
-        cognee.config.set_llm_api_key(api_key)
-        cognee.config.set_llm_provider('openai')
+        # Plan 083 M5: Cloud-only mode uses AWS credentials via Bedrock, no LLM API key needed
 
         dataset_name, _ = generate_dataset_name(workspace_path)
         logger.info(f"Using dataset: {dataset_name}")

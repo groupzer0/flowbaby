@@ -14,6 +14,7 @@ import { StoreMemoryTool, StoreMemoryToolInput } from '../tools/storeMemoryTool'
 import { handleIngestForAgent } from '../commands/ingestForAgent';
 import { FlowbabyClient } from '../flowbabyClient';
 import { FlowbabySetupService } from '../setup/FlowbabySetupService';
+import * as cloudProvider from '../flowbaby-cloud/provider';
 
 suite('Hotfix v0.5.8 Tests', () => {
     let sandbox: sinon.SinonSandbox;
@@ -507,11 +508,15 @@ suite('v0.5.8 Error Code Contract Tests', () => {
         assert.strictEqual(parsed.errorCode, 'NOT_INITIALIZED');
     });
 
-    test('MISSING_API_KEY error code is used for no API key', async function() {
+    test('NOT_AUTHENTICATED error code is used when Cloud login missing (Plan 083)', async function() {
         if (!vscode.workspace.workspaceFolders?.length) {
             this.skip();
             return;
         }
+
+        // Plan 083: Stub Cloud provider as NOT initialized
+        const isInitializedStub = sandbox.stub(cloudProvider, 'isProviderInitialized').returns(false);
+        const isEnabledStub = sandbox.stub(cloudProvider, 'isFlowbabyCloudEnabled').returns(true);
 
         // Clear environment
         const originalEnv = process.env.LLM_API_KEY;
@@ -520,7 +525,7 @@ suite('v0.5.8 Error Code Contract Tests', () => {
         try {
             const mockContext = {
                 secrets: {
-                    get: sandbox.stub().resolves(undefined), // No API key in secrets
+                    get: sandbox.stub().resolves(undefined), // No credentials in secrets
                     store: sandbox.stub().resolves(),
                     delete: sandbox.stub().resolves(),
                     onDidChange: sandbox.stub()
@@ -556,11 +561,13 @@ suite('v0.5.8 Error Code Contract Tests', () => {
 
             const response = JSON.parse(responseJson);
 
-            assert.strictEqual(response.errorCode, 'MISSING_API_KEY',
-                'Error code must be MISSING_API_KEY when no API key configured');
+            assert.strictEqual(response.errorCode, 'NOT_AUTHENTICATED',
+                'Error code must be NOT_AUTHENTICATED when Cloud login missing (Plan 083 Cloud-only)');
 
             outputChannel.dispose();
         } finally {
+            isInitializedStub.restore();
+            isEnabledStub.restore();
             if (originalEnv) {
                 process.env.LLM_API_KEY = originalEnv;
             }

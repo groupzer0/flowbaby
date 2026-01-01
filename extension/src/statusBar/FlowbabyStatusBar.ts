@@ -4,15 +4,18 @@ import { safePush } from '../lifecycle/registrationHelper';
 
 /**
  * Status bar states for Flowbaby extension
- * Plan 045: Added NeedsApiKey state for fresh installs without API key
+ * Plan 083 M6: Simplified statuses for Cloud-only v0.7.0+
+ * NeedsApiKey renamed to NeedsCloudLogin for conceptual clarity
  */
 export enum FlowbabyStatus {
     Ready = 'Ready',
     SetupRequired = 'SetupRequired',
     Refreshing = 'Refreshing',
     Error = 'Error',
-    /** Plan 045: Core initialized but API key not configured */
-    NeedsApiKey = 'NeedsApiKey'
+    /** Plan 083 M6: Core initialized but Cloud login required */
+    NeedsCloudLogin = 'NeedsCloudLogin',
+    /** @deprecated Plan 083 M6: Use NeedsCloudLogin instead */
+    NeedsApiKey = 'NeedsCloudLogin' // Alias for backward compatibility
 }
 
 export class FlowbabyStatusBar {
@@ -47,6 +50,8 @@ export class FlowbabyStatusBar {
     private async showStatusMenu() {
         debugLog('Status menu opened', { currentStatus: this.status });
         
+        // Plan 083 M4: Removed "Set API Key" option (Cloud-only in v0.7.0)
+        // Cloud login is handled via FlowbabyCloud.login command
         const items: vscode.QuickPickItem[] = [
             {
                 label: '$(sync) Refresh Dependencies',
@@ -59,9 +64,9 @@ export class FlowbabyStatusBar {
                 detail: 'Create managed environment in .flowbaby/venv'
             },
             {
-                label: '$(key) Set API Key',
-                description: 'Store LLM API key securely',
-                detail: 'Global API key for all workspaces'
+                label: '$(cloud) Flowbaby Cloud Status',
+                description: 'Check Cloud login status',
+                detail: 'Login to Flowbaby Cloud for LLM access'
             },
             {
                 label: '$(output) Show Debug Logs',
@@ -81,8 +86,9 @@ export class FlowbabyStatusBar {
                 vscode.commands.executeCommand('Flowbaby.refreshDependencies');
             } else if (selection.label.includes('Setup Environment')) {
                 vscode.commands.executeCommand('Flowbaby.setupEnvironment');
-            } else if (selection.label.includes('Set API Key')) {
-                vscode.commands.executeCommand('Flowbaby.setApiKey');
+            } else if (selection.label.includes('Flowbaby Cloud Status')) {
+                // Plan 083 M4: Route to Cloud status instead of legacy API key
+                vscode.commands.executeCommand('FlowbabyCloud.status');
             } else if (selection.label.includes('Show Debug Logs')) {
                 vscode.commands.executeCommand('Flowbaby.showDebugLogs');
             }
@@ -126,10 +132,10 @@ export class FlowbabyStatusBar {
                 this.statusBarItem.tooltip = `Flowbaby: Error - ${this.message}`;
                 this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
                 break;
-            case FlowbabyStatus.NeedsApiKey:
-                // Plan 045: Distinct state for initialized but missing API key
-                this.statusBarItem.text = '$(key) Flowbaby';
-                this.statusBarItem.tooltip = 'Flowbaby: LLM API Key Required (OpenAI by default) - Click to configure';
+            case FlowbabyStatus.NeedsCloudLogin:
+                // Plan 083 M6: Cloud login required (replaces legacy NeedsApiKey)
+                this.statusBarItem.text = '$(cloud) Flowbaby';
+                this.statusBarItem.tooltip = 'Flowbaby: Cloud Login Required - Click to login';
                 this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
                 break;
         }

@@ -555,12 +555,12 @@ suite('FlowbabyContextProvider Test Suite', () => {
             assert.strictEqual('error' in response, true, 'Should return error response');
             if ('error' in response) {
                 assert.strictEqual(response.error, AgentErrorCode.INVALID_REQUEST);
-                assert.ok(response.message.includes('API key not configured'));
-                assert.ok(response.message.includes('Set API Key'));
+                assert.ok(response.message.includes('Cloud login required'));
+                assert.ok(response.message.includes('Login to Cloud'));
             }
             
             // Verify client.retrieve was NOT called (short-circuit)
-            assert.strictEqual(mockClient.retrieve.called, false, 'Should not call bridge when API key missing');
+            assert.strictEqual(mockClient.retrieve.called, false, 'Should not call bridge when Cloud login missing');
             
             // Verify user was prompted
             assert.strictEqual(showWarningStub.called, true, 'Should show warning to user');
@@ -585,7 +585,7 @@ suite('FlowbabyContextProvider Test Suite', () => {
             assert.strictEqual(mockClient.retrieve.called, true, 'Should call bridge when API key present');
         });
 
-        test('Logs API key missing to output channel', async () => {
+        test('Logs Cloud login missing to output channel', async () => {
             const provider = createProvider();
             mockClient.hasApiKey.resolves(false);
             sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
@@ -594,10 +594,10 @@ suite('FlowbabyContextProvider Test Suite', () => {
 
             // Verify logging
             const appendLineCalls = (outputChannel.appendLine as sinon.SinonStub).getCalls();
-            const hasApiKeyLog = appendLineCalls.some(call => 
-                call.args[0].includes('API key not configured')
+            const hasCloudLoginLog = appendLineCalls.some(call => 
+                call.args[0].includes('Cloud login required')
             );
-            assert.strictEqual(hasApiKeyLog, true, 'Should log API key missing');
+            assert.strictEqual(hasCloudLoginLog, true, 'Should log Cloud login missing');
         });
     });
 

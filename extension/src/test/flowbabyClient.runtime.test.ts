@@ -5,6 +5,10 @@ import * as fs from 'fs';
 import * as sinon from 'sinon';
 import mock = require('mock-fs');
 import { FlowbabyClient } from '../flowbabyClient';
+import * as cloudProvider from '../flowbaby-cloud/provider';
+
+// Sandbox for stubbing Cloud provider
+let sandbox: sinon.SinonSandbox;
 
 /**
  * Creates a mock VS Code ExtensionContext for testing.
@@ -46,7 +50,16 @@ suite('FlowbabyClient Runtime Behaviors', () => {
     let mockContext: vscode.ExtensionContext;
 
     setup(() => {
+        sandbox = sinon.createSandbox();
         mockContext = createMockContext();
+        
+        // Plan 083: Default Cloud provider stubs - not initialized (requires explicit login)
+        sandbox.stub(cloudProvider, 'isProviderInitialized').returns(false);
+        sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({});
+    });
+    
+    teardown(() => {
+        sandbox.restore();
     });
 
     suiteTeardown(() => {
@@ -135,9 +148,9 @@ suite('FlowbabyClient Runtime Behaviors', () => {
         // Act: missing API key (SecretStorage returns undefined, process.env cleared)
         const result = await client.validateConfiguration();
         
-        // Assert: should fail with API key error
+        // Assert: should fail with Cloud login error (Plan 083)
         assert.strictEqual(result.valid, false);
-        assert.ok(result.errors.find(e => e.includes('API key')));
+        assert.ok(result.errors.find(e => e.includes('Cloud login')));
 
         // Cleanup
         mock.restore();
@@ -146,27 +159,27 @@ suite('FlowbabyClient Runtime Behaviors', () => {
         }
     });
 
-    test('validateConfiguration passes when SecretStorage has key', async () => {
-        // Arrange: workspace with API key in SecretStorage
+    test('validateConfiguration passes when Cloud provider is initialized (Plan 083)', async () => {
+        // Arrange: workspace with Cloud provider initialized
         mock({
             [testWorkspacePath]: {}
         });
         
-        // Create a new mock context with API key available
-        const contextWithKey: vscode.ExtensionContext = {
-            ...mockContext,
-            secrets: {
-                get: sinon.stub().resolves('sk-test-key'),
-                store: sinon.stub().resolves(),
-                delete: sinon.stub().resolves(),
-                keys: sinon.stub().resolves([]),
-                onDidChange: new vscode.EventEmitter<vscode.SecretStorageChangeEvent>().event
-            }
-        } as any;
+        // Plan 083: Cloud-only mode - reset and re-stub Cloud provider as initialized with credentials
+        sandbox.restore();
+        sandbox = sinon.createSandbox();
+        sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+        sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+            AWS_ACCESS_KEY_ID: 'test-access-key',
+            AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+            AWS_SESSION_TOKEN: 'test-session-token',
+            AWS_REGION: 'us-east-1',
+            FLOWBABY_CLOUD_MODE: 'true'
+        });
         
-        const client = new FlowbabyClient(testWorkspacePath, contextWithKey);
+        const client = new FlowbabyClient(testWorkspacePath, mockContext);
 
-        // Act: API key available via SecretStorage
+        // Act: Cloud credentials available via provider
         const result = await client.validateConfiguration();
 
         // Assert

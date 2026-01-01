@@ -283,23 +283,21 @@ async def retrieve_context(
             'final_top_k': final_top_k
         }})
 
-        # Plan 039 M5: Workspace .env loading removed per Plan 037 F2 security finding
-        # API key is now resolved by TypeScript and passed via LLM_API_KEY environment variable
+        # Plan 083 M5: v0.7.0 is Cloud-only - AWS credentials required
         workspace_dir = Path(workspace_path)
 
-        # Check for API key (provided by TypeScript via LLM_API_KEY environment variable)
-        api_key = os.getenv('LLM_API_KEY')
-        if not api_key:
+        aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+        if not aws_access_key:
             error_payload = {
                 'success': False,
-                'error_code': 'LLM_API_ERROR',
-                'error_type': 'MISSING_API_KEY',
-                'message': 'LLM_API_KEY not found in environment',
-                'user_message': 'LLM_API_KEY not found. Use "Flowbaby: Set API Key" for secure storage.',
-                'remediation': 'Run "Flowbaby: Set API Key" from Command Palette to configure your API key securely.',
-                'error': 'LLM_API_KEY environment variable is required but not set'
+                'error_code': 'NOT_AUTHENTICATED',
+                'error_type': 'MISSING_CREDENTIALS',
+                'message': 'Cloud credentials not found in environment',
+                'user_message': 'Please login to Flowbaby Cloud to use memory features.',
+                'remediation': 'Run "Flowbaby Cloud: Login with GitHub" from Command Palette to authenticate.',
+                'error': 'AWS_ACCESS_KEY_ID not found in environment'
             }
-            logger.error("Missing API key", extra={'data': error_payload})
+            logger.error("Missing Cloud credentials", extra={'data': error_payload})
             return error_payload
 
         # Plan 074: Use shared bridge_env module for all environment wiring
@@ -325,10 +323,8 @@ async def retrieve_context(
         cognee.config.system_root_directory(system_root)
         cognee.config.data_root_directory(data_root)
 
-        # Configure Cognee with API key
-        logger.debug("Configuring LLM provider (OpenAI)")
-        cognee.config.set_llm_api_key(api_key)
-        cognee.config.set_llm_provider('openai')
+        # Plan 083 M5: v0.7.0 is Cloud-only - Cognee uses AWS Bedrock via AWS_* env vars
+        logger.debug("Cloud-only mode: Using AWS Bedrock via Cloud credentials")
 
         # 1. Generate same unique dataset name as init.py and ingest.py (using canonical path)
         dataset_name, _ = generate_dataset_name(workspace_path)
