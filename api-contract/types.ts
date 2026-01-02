@@ -100,7 +100,7 @@ export interface VendRequest {
 
 /**
  * Successful response from POST /vend/credentials
- * Contains temporary AWS credentials for Bedrock access.
+ * Contains temporary AWS credentials for Bedrock access plus model configuration.
  */
 export interface VendResponse {
   /** AWS Access Key ID */
@@ -117,6 +117,24 @@ export interface VendResponse {
    * user preference. Backend validates and resolves the region.
    */
   region: string;
+  /**
+   * Bedrock LLM model ID for cognify/completion operations.
+   * Backend-controlled: enables model updates without extension release.
+   * Example: "anthropic.claude-3-haiku-20240307-v1:0"
+   */
+  llmModel: string;
+  /**
+   * Bedrock embedding model ID with LiteLLM prefix for vector operations.
+   * Backend-controlled: must match STS role policy allowlist.
+   * Example: "bedrock/amazon.titan-embed-text-v2:0"
+   */
+  embeddingModel: string;
+  /**
+   * Embedding dimensions for the configured embedding model.
+   * Required for Cognee vector store configuration.
+   * Example: 1024 for Titan Embed Text v2
+   */
+  embeddingDimensions: number;
 }
 
 // =============================================================================

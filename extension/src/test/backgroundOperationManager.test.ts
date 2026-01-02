@@ -162,14 +162,19 @@ suite('BackgroundOperationManager - API Key Resolution (Plan 083 M5 Cloud-only)'
     setup(async () => {
         workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-apikey-'));
         
-        // Plan 083: Stub Cloud provider as the primary credential source
+        // Plan 086: Stub Cloud provider as the primary credential source with model config
         cloudProviderStub = sinon.stub(cloudProvider, 'isProviderInitialized').returns(true);
         cloudEnvStub = sinon.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
             AWS_ACCESS_KEY_ID: 'cloud-access-key',
             AWS_SECRET_ACCESS_KEY: 'cloud-secret-key',
             AWS_SESSION_TOKEN: 'cloud-session-token',
             AWS_REGION: 'us-east-1',
-            FLOWBABY_CLOUD_MODE: 'true'
+            FLOWBABY_CLOUD_MODE: 'true',
+            LLM_PROVIDER: 'bedrock',
+            EMBEDDING_PROVIDER: 'bedrock',
+            LLM_MODEL: 'anthropic.claude-3-haiku-20240307-v1:0',
+            EMBEDDING_MODEL: 'bedrock/amazon.titan-embed-text-v2:0',
+            EMBEDDING_DIMENSIONS: '1024',
         });
         
         // Create mock secrets storage (no longer used for API keys in Plan 083)
@@ -258,14 +263,19 @@ suite('BackgroundOperationManager - getLLMEnvironment (Plan 083 M5 Cloud-only)',
     setup(async () => {
         workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-llmenv-'));
         
-        // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+        // Plan 086: Stub Cloud provider with model configuration
         cloudProviderStub = sinon.stub(cloudProvider, 'isProviderInitialized').returns(true);
         cloudEnvStub = sinon.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
             AWS_ACCESS_KEY_ID: 'test-access-key',
             AWS_SECRET_ACCESS_KEY: 'test-secret-key',
             AWS_SESSION_TOKEN: 'test-session-token',
             AWS_REGION: 'us-east-1',
-            FLOWBABY_CLOUD_MODE: 'true'
+            FLOWBABY_CLOUD_MODE: 'true',
+            LLM_PROVIDER: 'bedrock',
+            EMBEDDING_PROVIDER: 'bedrock',
+            LLM_MODEL: 'anthropic.claude-3-haiku-20240307-v1:0',
+            EMBEDDING_MODEL: 'bedrock/amazon.titan-embed-text-v2:0',
+            EMBEDDING_DIMENSIONS: '1024',
         });
         
         secretsStub = {
@@ -324,13 +334,19 @@ suite('BackgroundOperationManager - getLLMEnvironment (Plan 083 M5 Cloud-only)',
         assert.strictEqual(env.AWS_SESSION_TOKEN, 'test-session-token');
         assert.strictEqual(env.AWS_REGION, 'us-east-1');
         assert.strictEqual(env.FLOWBABY_CLOUD_MODE, 'true');
+        // Plan 086: Provider and model configuration
+        assert.strictEqual(env.LLM_PROVIDER, 'bedrock', 'LLM_PROVIDER should be bedrock');
+        assert.strictEqual(env.EMBEDDING_PROVIDER, 'bedrock', 'EMBEDDING_PROVIDER should be bedrock');
+        assert.strictEqual(env.LLM_MODEL, 'anthropic.claude-3-haiku-20240307-v1:0', 'LLM_MODEL should be set');
+        assert.strictEqual(env.EMBEDDING_MODEL, 'bedrock/amazon.titan-embed-text-v2:0', 'EMBEDDING_MODEL should be set');
+        assert.strictEqual(env.EMBEDDING_DIMENSIONS, '1024', 'EMBEDDING_DIMENSIONS should be set');
     });
 
-    test('getLLMEnvironment omits missing config values', async () => {
+    test('getLLMEnvironment omits legacy config values (Plan 086 update)', async () => {
         // No .env file
         secretsStub.get.resolves(undefined);
         
-        // Mock config with only provider set
+        // Mock config with only provider set - ignored in Cloud-only mode
         const mockConfig = {
             get: (key: string) => {
                 if (key === 'provider') { return 'anthropic'; }
@@ -343,9 +359,11 @@ suite('BackgroundOperationManager - getLLMEnvironment (Plan 083 M5 Cloud-only)',
         
         // Plan 083 M5: LLM_API_KEY is never set - Cloud-only mode
         assert.strictEqual(env.LLM_API_KEY, undefined, 'LLM_API_KEY should never be set in Cloud-only mode');
-        // Plan 083 M5: LLM_PROVIDER and other legacy vars are also removed
-        assert.strictEqual(env.LLM_PROVIDER, undefined, 'LLM_PROVIDER should not be set in Cloud-only mode');
-        assert.strictEqual(env.LLM_MODEL, undefined, 'LLM_MODEL should not be set in Cloud-only mode');
+        // Plan 086: LLM_PROVIDER is now 'bedrock' (backend-controlled), not from local config
+        assert.strictEqual(env.LLM_PROVIDER, 'bedrock', 'LLM_PROVIDER should be bedrock in Cloud-only mode');
+        // Plan 086: LLM_MODEL is now backend-controlled
+        assert.strictEqual(env.LLM_MODEL, 'anthropic.claude-3-haiku-20240307-v1:0', 'LLM_MODEL should be from Cloud');
+        // Legacy config is not used
         assert.strictEqual(env.LLM_ENDPOINT, undefined, 'LLM_ENDPOINT should not be set in Cloud-only mode');
     });
 
@@ -386,14 +404,19 @@ suite('BackgroundOperationManager - runPythonJson Env Injection (Plan 083 Cloud-
     setup(async () => {
         workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-runjson-'));
         
-        // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+        // Plan 086: Stub Cloud provider with model configuration
         cloudProviderStub = sinon.stub(cloudProvider, 'isProviderInitialized').returns(true);
         cloudEnvStub = sinon.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
             AWS_ACCESS_KEY_ID: 'test-access-key',
             AWS_SECRET_ACCESS_KEY: 'test-secret-key',
             AWS_SESSION_TOKEN: 'test-session-token',
             AWS_REGION: 'us-east-1',
-            FLOWBABY_CLOUD_MODE: 'true'
+            FLOWBABY_CLOUD_MODE: 'true',
+            LLM_PROVIDER: 'bedrock',
+            EMBEDDING_PROVIDER: 'bedrock',
+            LLM_MODEL: 'anthropic.claude-3-haiku-20240307-v1:0',
+            EMBEDDING_MODEL: 'bedrock/amazon.titan-embed-text-v2:0',
+            EMBEDDING_DIMENSIONS: '1024',
         });
         
         secretsStub = {
@@ -528,14 +551,19 @@ suite('BackgroundOperationManager - Notification Setting (Plan 043)', () => {
         workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-notify-'));
         outputLines = [];
         
-        // Plan 081: Stub Cloud provider to avoid auth requirement in tests
+        // Plan 086: Stub Cloud provider to avoid auth requirement in tests
         cloudProviderStub = sinon.stub(cloudProvider, 'isProviderInitialized').returns(true);
         cloudEnvStub = sinon.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
             AWS_ACCESS_KEY_ID: 'test-access-key',
             AWS_SECRET_ACCESS_KEY: 'test-secret-key',
             AWS_SESSION_TOKEN: 'test-session-token',
             AWS_REGION: 'us-east-1',
-            FLOWBABY_CLOUD_MODE: 'true'
+            FLOWBABY_CLOUD_MODE: 'true',
+            LLM_PROVIDER: 'bedrock',
+            EMBEDDING_PROVIDER: 'bedrock',
+            LLM_MODEL: 'anthropic.claude-3-haiku-20240307-v1:0',
+            EMBEDDING_MODEL: 'bedrock/amazon.titan-embed-text-v2:0',
+            EMBEDDING_DIMENSIONS: '1024',
         });
         
         context = {

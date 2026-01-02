@@ -173,18 +173,47 @@ token is invalidated immediately upon use.
 
 ### POST /vend/credentials
 
-Request temporary AWS STS credentials for Bedrock access.
+Request temporary AWS STS credentials for Bedrock access plus model configuration.
+
+**Semantics (Plan 086)**:
+- Vend **SHOULD succeed** whenever the session is valid and monthly quota is not exhausted.
+- Vend does **NOT** enforce application-level concurrency limits. Concurrent requests from the same user are permitted.
+- `QUOTA_EXCEEDED` is returned **only** for monthly credit exhaustion, not for transient limits.
+- `RATE_LIMITED` (429) may occur due to infrastructure throttling (API Gateway, etc.) and should be treated as retryable.
 
 **Request**: See `VendRequest` in `types.ts`
 
 **Response**: See `VendResponse` in `types.ts`
 
+**Response Fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `accessKeyId` | string | AWS Access Key ID |
+| `secretAccessKey` | string | AWS Secret Access Key |
+| `sessionToken` | string | AWS Session Token |
+| `expiration` | string | ISO-8601 timestamp when credentials expire |
+| `region` | string | Backend-resolved AWS region (authoritative) |
+| `llmModel` | string | Bedrock LLM model ID (e.g., `anthropic.claude-3-haiku-20240307-v1:0`) |
+| `embeddingModel` | string | Bedrock embedding model ID with LiteLLM prefix (e.g., `bedrock/amazon.titan-embed-text-v2:0`) |
+| `embeddingDimensions` | number | Embedding vector dimensions (backend-controlled) |
+
+> **Backend-controlled models**: The `llmModel`, `embeddingModel`, and `embeddingDimensions` fields
+> enable model updates without extension release and ensure consistency with the STS role policy allowlist.
+> Extension passes these values to the Python bridge as environment variables.
+
 **Errors**:
 | Code | Description |
 |------|-------------|
 | `SESSION_EXPIRED` | Session token has expired; re-authenticate |
-| `QUOTA_EXCEEDED` | Credit limit reached for current window |
+| `SESSION_INVALID` | Session token signature verification failed; re-authenticate |
+| `QUOTA_EXCEEDED` | Monthly credit quota exhausted; wait for reset or upgrade |
 | `TIER_INVALID` | User tier does not permit this operation |
+| `RATE_LIMITED` | Infrastructure throttling; retry with backoff (check `retryAfter` if present) |
+| `INTERNAL_ERROR` | Unexpected server error |
+
+> **Note**: The backend does **NOT** return concurrency-related errors for vend operations. If a vend fails
+> and the cause cannot be classified, the backend returns `INTERNAL_ERROR` with a non-ambiguous message.
 
 ---
 

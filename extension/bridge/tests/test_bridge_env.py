@@ -42,6 +42,12 @@ class TestBridgeEnvApplyWorkspaceEnv:
             'ONTOLOGY_FILE_PATH',
             'ONTOLOGY_RESOLVER',
             'MATCHING_STRATEGY',
+            # Plan 086: Backend-controlled model configuration
+            'LLM_PROVIDER',
+            'LLM_MODEL',
+            'EMBEDDING_PROVIDER',
+            'EMBEDDING_MODEL',
+            'EMBEDDING_DIMENSIONS',
         ]
         for var in env_vars:
             monkeypatch.delenv(var, raising=False)
@@ -200,6 +206,53 @@ class TestBridgeEnvApplyWorkspaceEnv:
         assert 'ontology=' in log_string
         assert 'resolver=' in log_string
         assert 'strategy=' in log_string
+
+    def test_reads_model_config_from_env_plan_086(self, temp_workspace, clean_env, monkeypatch):
+        """Verify Plan 086 model configuration is read from env and included in config snapshot."""
+        from bridge_env import apply_workspace_env
+
+        monkeypatch.setenv('LLM_PROVIDER', 'bedrock')
+        monkeypatch.setenv('LLM_MODEL', 'anthropic.claude-3-haiku-20240307-v1:0')
+        monkeypatch.setenv('EMBEDDING_PROVIDER', 'bedrock')
+        monkeypatch.setenv('EMBEDDING_MODEL', 'bedrock/amazon.titan-embed-text-v2:0')
+        monkeypatch.setenv('EMBEDDING_DIMENSIONS', '1024')
+
+        config = apply_workspace_env(str(temp_workspace))
+
+        assert config.llm_provider == 'bedrock'
+        assert config.llm_model == 'anthropic.claude-3-haiku-20240307-v1:0'
+        assert config.embedding_provider == 'bedrock'
+        assert config.embedding_model == 'bedrock/amazon.titan-embed-text-v2:0'
+        assert config.embedding_dimensions == 1024
+
+        config_dict = config.to_dict()
+        assert config_dict['llm_provider'] == 'bedrock'
+        assert config_dict['llm_model'] == 'anthropic.claude-3-haiku-20240307-v1:0'
+        assert config_dict['embedding_provider'] == 'bedrock'
+        assert config_dict['embedding_model'] == 'bedrock/amazon.titan-embed-text-v2:0'
+        assert config_dict['embedding_dimensions'] == 1024
+
+        log_string = config.to_log_string()
+        assert 'llm=' in log_string
+        assert 'embedding=' in log_string
+        assert 'dims=1024' in log_string
+
+    def test_get_env_config_snapshot_includes_model_fields_plan_086(self, clean_env, monkeypatch):
+        """Verify get_env_config_snapshot includes Plan 086 model config variables."""
+        from bridge_env import get_env_config_snapshot
+
+        monkeypatch.setenv('LLM_PROVIDER', 'bedrock')
+        monkeypatch.setenv('LLM_MODEL', 'anthropic.claude-3-haiku-20240307-v1:0')
+        monkeypatch.setenv('EMBEDDING_PROVIDER', 'bedrock')
+        monkeypatch.setenv('EMBEDDING_MODEL', 'bedrock/amazon.titan-embed-text-v2:0')
+        monkeypatch.setenv('EMBEDDING_DIMENSIONS', '1024')
+
+        snapshot = get_env_config_snapshot()
+        assert snapshot['LLM_PROVIDER'] == 'bedrock'
+        assert snapshot['LLM_MODEL'] == 'anthropic.claude-3-haiku-20240307-v1:0'
+        assert snapshot['EMBEDDING_PROVIDER'] == 'bedrock'
+        assert snapshot['EMBEDDING_MODEL'] == 'bedrock/amazon.titan-embed-text-v2:0'
+        assert snapshot['EMBEDDING_DIMENSIONS'] == '1024'
 
     def test_raises_on_empty_workspace_path(self, clean_env):
         """Verify ValueError is raised when workspace_path is empty."""

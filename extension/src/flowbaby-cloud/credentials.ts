@@ -37,6 +37,7 @@ export interface ICredentialClient {
 
 /**
  * Mock credential client for testing without network calls.
+ * Plan 086: Now includes backend-controlled model configuration fields.
  */
 export class MockCredentialClient implements ICredentialClient {
     private mockResponse: VendResponse;
@@ -51,6 +52,10 @@ export class MockCredentialClient implements ICredentialClient {
             sessionToken: 'MOCK_SESSION_TOKEN',
             region: 'us-east-1',
             expiration,
+            // Plan 086: Backend-controlled model configuration
+            llmModel: 'anthropic.claude-3-haiku-20240307-v1:0',
+            embeddingModel: 'bedrock/amazon.titan-embed-text-v2:0',
+            embeddingDimensions: 1024,
             ...mockResponse,
         };
     }
@@ -285,6 +290,7 @@ export class FlowbabyCloudCredentials implements vscode.Disposable {
 
             const response = await this.credentialClient.vendCredentials(sessionToken, request);
 
+            // Plan 086: Map model configuration fields from VendResponse to CachedCredentials
             const credentials: CachedCredentials = {
                 accessKeyId: response.accessKeyId,
                 secretAccessKey: response.secretAccessKey,
@@ -292,7 +298,21 @@ export class FlowbabyCloudCredentials implements vscode.Disposable {
                 region: response.region,
                 expiresAt: new Date(response.expiration),
                 fetchedAt: new Date(),
+                // Backend-controlled model configuration (Plan 086)
+                llmModel: response.llmModel,
+                embeddingModel: response.embeddingModel,
+                embeddingDimensions: response.embeddingDimensions,
             };
+
+            // Plan 086: Validate required model fields for Cloud-only mode
+            // If missing, fail loudly with user-friendly message
+            if (!response.llmModel || !response.embeddingModel || response.embeddingDimensions === undefined) {
+                this.log('WARNING: Backend did not return model configuration fields. Cloud may need an update.');
+                // Note: We continue with credentials since they're still usable for auth,
+                // but the bridge will fail loudly when model config is missing.
+            } else {
+                this.log(`Model config: llm=${response.llmModel}, embedding=${response.embeddingModel}, dims=${response.embeddingDimensions}`);
+            }
 
             this.cachedCredentials = credentials;
             this.scheduleRefresh(credentials);

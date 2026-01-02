@@ -97,6 +97,24 @@ export interface CachedCredentials {
     expiresAt: Date;
     /** When the credentials were fetched (for staleness detection) */
     fetchedAt: Date;
+    /**
+     * Backend-controlled LLM model ID for cognify/completion operations.
+     * Example: "anthropic.claude-3-haiku-20240307-v1:0"
+     * @see Plan 086 - Backend-controlled model selection
+     */
+    llmModel?: string;
+    /**
+     * Backend-controlled embedding model ID with LiteLLM prefix.
+     * Example: "bedrock/amazon.titan-embed-text-v2:0"
+     * @see Plan 086 - Backend-controlled model selection
+     */
+    embeddingModel?: string;
+    /**
+     * Embedding dimensions for the configured embedding model.
+     * Backend-controlled: extension/bridge must not hardcode dimensions.
+     * @see Plan 086 - Backend-controlled model selection
+     */
+    embeddingDimensions?: number;
 }
 
 /**

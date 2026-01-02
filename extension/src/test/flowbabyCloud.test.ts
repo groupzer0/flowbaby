@@ -108,6 +108,30 @@ suite('Flowbaby Cloud Module Tests', () => {
             assert.ok(response.expiration, 'Should return expiration');
         });
 
+        test('returns backend-controlled model configuration (Plan 086)', async () => {
+            const mockClient = new MockCredentialClient();
+            const response = await mockClient.vendCredentials('test-token');
+
+            // Plan 086: Mock client returns backend-controlled model configuration
+            assert.strictEqual(response.llmModel, 'anthropic.claude-3-haiku-20240307-v1:0', 'Should return default LLM model');
+            assert.strictEqual(response.embeddingModel, 'bedrock/amazon.titan-embed-text-v2:0', 'Should return default embedding model');
+            assert.strictEqual(response.embeddingDimensions, 1024, 'Should return default embedding dimensions');
+        });
+
+        test('accepts custom model configuration (Plan 086)', async () => {
+            const customResponse = {
+                llmModel: 'anthropic.claude-3-sonnet-20240229-v1:0',
+                embeddingModel: 'bedrock/cohere.embed-english-v3',
+                embeddingDimensions: 768,
+            };
+            const mockClient = new MockCredentialClient(customResponse);
+            const response = await mockClient.vendCredentials('test-token');
+
+            assert.strictEqual(response.llmModel, 'anthropic.claude-3-sonnet-20240229-v1:0');
+            assert.strictEqual(response.embeddingModel, 'bedrock/cohere.embed-english-v3');
+            assert.strictEqual(response.embeddingDimensions, 768);
+        });
+
         test('tracks call count', async () => {
             const mockClient = new MockCredentialClient();
 
@@ -311,6 +335,55 @@ suite('Flowbaby Cloud Module Tests', () => {
 
             assert.strictEqual(eventFired, true);
         });
+
+        test('Plan 086: logs warning when model config fields are missing from vend response', async () => {
+            // Track what gets logged
+            const loggedMessages: string[] = [];
+            const trackingOutputChannel = {
+                ...mockOutputChannel,
+                appendLine: (message: string) => { loggedMessages.push(message); },
+            } as vscode.OutputChannel;
+
+            // Create mock client that returns response WITHOUT model config
+            const noModelClient = new MockCredentialClient({
+                accessKeyId: 'AKIATEST',
+                secretAccessKey: 'secret',
+                sessionToken: 'session',
+                region: 'us-east-1',
+                llmModel: undefined,
+                embeddingModel: undefined,
+                embeddingDimensions: undefined,
+            });
+
+            const noModelAuth = new FlowbabyCloudAuth(mockSecretStorage, new MockAuthClient(), trackingOutputChannel);
+            const futureDate = new Date(Date.now() + 3600000).toISOString();
+            storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+            storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+            const noModelCredentials = new FlowbabyCloudCredentials(noModelAuth, noModelClient, trackingOutputChannel);
+
+            try {
+                await noModelCredentials.ensureCredentials();
+                
+                // Verify warning was logged (Plan 086 requirement: "fail loudly")
+                const warningLogged = loggedMessages.some(msg => 
+                    msg.includes('WARNING') && msg.includes('model configuration')
+                );
+                assert.ok(warningLogged, 'Should log WARNING about missing model config fields');
+            } finally {
+                noModelCredentials.dispose();
+                noModelAuth.dispose();
+            }
+        });
+
+        test('Plan 086: includes model config in credentials when present', async () => {
+            // Default MockCredentialClient includes model config
+            const creds = await credentials.ensureCredentials();
+            
+            assert.strictEqual(creds.llmModel, 'anthropic.claude-3-haiku-20240307-v1:0', 'llmModel should be mapped');
+            assert.strictEqual(creds.embeddingModel, 'bedrock/amazon.titan-embed-text-v2:0', 'embeddingModel should be mapped');
+            assert.strictEqual(creds.embeddingDimensions, 1024, 'embeddingDimensions should be mapped');
+        });
     });
 
     suite('FlowbabyCloudProvider', () => {
@@ -355,6 +428,9 @@ suite('Flowbaby Cloud Module Tests', () => {
             assert.strictEqual(env.AWS_SESSION_TOKEN, 'sessiontokentest');
             assert.strictEqual(env.AWS_REGION, 'us-east-1');
             assert.strictEqual(env.FLOWBABY_CLOUD_MODE, 'true');
+            // Plan 086: Provider and model configuration
+            assert.strictEqual(env.LLM_PROVIDER, 'bedrock', 'LLM_PROVIDER should be bedrock');
+            assert.strictEqual(env.EMBEDDING_PROVIDER, 'bedrock', 'EMBEDDING_PROVIDER should be bedrock');
         });
 
         test('getCachedEnvironment returns undefined when no cache', () => {
@@ -369,6 +445,53 @@ suite('Flowbaby Cloud Module Tests', () => {
             const env = provider.getCachedEnvironment();
             assert.ok(env);
             assert.strictEqual(env.FLOWBABY_CLOUD_MODE, 'true');
+        });
+
+        test('getEnvironment includes model config when present (Plan 086)', async () => {
+            // MockCredentialClient includes model config by default
+            const env = await provider.getEnvironment();
+
+            // Plan 086: Model configuration should be forwarded
+            assert.strictEqual(env.LLM_MODEL, 'anthropic.claude-3-haiku-20240307-v1:0', 'LLM_MODEL should be set');
+            assert.strictEqual(env.EMBEDDING_MODEL, 'bedrock/amazon.titan-embed-text-v2:0', 'EMBEDDING_MODEL should be set');
+            assert.strictEqual(env.EMBEDDING_DIMENSIONS, '1024', 'EMBEDDING_DIMENSIONS should be string');
+        });
+
+        test('getEnvironment omits model config when not present (backward compat Plan 086)', async () => {
+            // Create provider with mock that doesn't include model config
+            const noModelClient = new MockCredentialClient({
+                accessKeyId: 'AKIATEST123',
+                secretAccessKey: 'secrettest123',
+                sessionToken: 'sessiontokentest',
+                region: 'us-east-1',
+                llmModel: undefined,
+                embeddingModel: undefined,
+                embeddingDimensions: undefined,
+            });
+            const mockAuthClient = new MockAuthClient();
+            const noModelAuth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
+            
+            const futureDate = new Date(Date.now() + 3600000).toISOString();
+            storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+            storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+            const noModelCredentials = new FlowbabyCloudCredentials(noModelAuth, noModelClient, mockOutputChannel);
+            const noModelProvider = new FlowbabyCloudProvider(noModelCredentials);
+
+            try {
+                const env = await noModelProvider.getEnvironment();
+
+                // Providers are still set
+                assert.strictEqual(env.LLM_PROVIDER, 'bedrock');
+                assert.strictEqual(env.EMBEDDING_PROVIDER, 'bedrock');
+                // Model config fields should be undefined (not set)
+                assert.strictEqual(env.LLM_MODEL, undefined, 'LLM_MODEL should be omitted when not provided');
+                assert.strictEqual(env.EMBEDDING_MODEL, undefined, 'EMBEDDING_MODEL should be omitted when not provided');
+                assert.strictEqual(env.EMBEDDING_DIMENSIONS, undefined, 'EMBEDDING_DIMENSIONS should be omitted when not provided');
+            } finally {
+                noModelCredentials.dispose();
+                noModelAuth.dispose();
+            }
         });
     });
 
@@ -463,9 +586,34 @@ suite('Flowbaby Cloud Module Tests', () => {
             assert.strictEqual(requiresReAuthentication(error), true);
         });
 
+        test('requiresReAuthentication returns true for SESSION_INVALID (Plan 086)', () => {
+            const error = new FlowbabyCloudError('SESSION_INVALID', 'Session invalid');
+            assert.strictEqual(requiresReAuthentication(error), true);
+        });
+
         test('requiresReAuthentication returns false for RATE_LIMITED', () => {
             const error = new FlowbabyCloudError('RATE_LIMITED', 'Too many requests');
             assert.strictEqual(requiresReAuthentication(error), false);
+        });
+
+        test('mapCloudErrorToUX handles SESSION_INVALID same as SESSION_EXPIRED (Plan 086)', () => {
+            const error = new FlowbabyCloudError('SESSION_INVALID', 'Session invalid');
+            const ux = mapCloudErrorToUX(error);
+            
+            assert.strictEqual(ux.severity, 'warning');
+            assert.ok(ux.message.includes('login required'), 'Should suggest login');
+            assert.strictEqual(ux.actions.length, 1);
+            assert.strictEqual(ux.actions[0].label, 'Login to Cloud');
+            assert.strictEqual(ux.logMetadata.category, 'authentication');
+        });
+
+        test('RATE_LIMITED is recoverable but does not require re-auth (Plan 086)', () => {
+            const error = new FlowbabyCloudError('RATE_LIMITED', 'Infrastructure throttle');
+            
+            // Should be retryable
+            assert.strictEqual(isRecoverableCloudError(error), true, 'RATE_LIMITED should be recoverable');
+            // Should NOT require re-authentication (Plan 086 clarification)
+            assert.strictEqual(requiresReAuthentication(error), false, 'RATE_LIMITED should NOT require re-auth');
         });
     });
 

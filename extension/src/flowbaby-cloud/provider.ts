@@ -19,6 +19,10 @@ import { CachedCredentials } from './types';
 
 /**
  * Environment variables for Flowbaby Cloud mode.
+ * 
+ * Plan 086: Added LLM_MODEL, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS for
+ * backend-controlled model selection. LLM_PROVIDER and EMBEDDING_PROVIDER
+ * are set to 'bedrock' to ensure Cloud-only mode uses Bedrock deterministically.
  */
 export interface FlowbabyCloudEnvironment {
     AWS_ACCESS_KEY_ID: string;
@@ -26,6 +30,16 @@ export interface FlowbabyCloudEnvironment {
     AWS_SESSION_TOKEN: string;
     AWS_REGION: string;
     FLOWBABY_CLOUD_MODE: 'true';
+    /** Bedrock provider for LLM operations */
+    LLM_PROVIDER: 'bedrock';
+    /** Bedrock provider for embedding operations */
+    EMBEDDING_PROVIDER: 'bedrock';
+    /** Backend-controlled LLM model ID (optional until backend returns it) */
+    LLM_MODEL?: string;
+    /** Backend-controlled embedding model ID (optional until backend returns it) */
+    EMBEDDING_MODEL?: string;
+    /** Backend-controlled embedding dimensions (optional until backend returns it) */
+    EMBEDDING_DIMENSIONS?: string;
 }
 
 /**
@@ -78,15 +92,33 @@ export class FlowbabyCloudProvider {
 
     /**
      * Convert cached credentials to environment variables.
+     * 
+     * Plan 086: Now includes backend-controlled model configuration.
+     * LLM_PROVIDER and EMBEDDING_PROVIDER are always 'bedrock' in Cloud-only mode.
      */
     private credentialsToEnv(creds: CachedCredentials): FlowbabyCloudEnvironment {
-        return {
+        const env: FlowbabyCloudEnvironment = {
             AWS_ACCESS_KEY_ID: creds.accessKeyId,
             AWS_SECRET_ACCESS_KEY: creds.secretAccessKey,
             AWS_SESSION_TOKEN: creds.sessionToken,
             AWS_REGION: creds.region,
             FLOWBABY_CLOUD_MODE: 'true',
+            LLM_PROVIDER: 'bedrock',
+            EMBEDDING_PROVIDER: 'bedrock',
         };
+
+        // Add backend-controlled model configuration if present
+        if (creds.llmModel) {
+            env.LLM_MODEL = creds.llmModel;
+        }
+        if (creds.embeddingModel) {
+            env.EMBEDDING_MODEL = creds.embeddingModel;
+        }
+        if (creds.embeddingDimensions !== undefined) {
+            env.EMBEDDING_DIMENSIONS = String(creds.embeddingDimensions);
+        }
+
+        return env;
     }
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Flowbaby Bridge Environment Configuration - Plan 074
+Flowbaby Bridge Environment Configuration - Plan 074 / Plan 086
 
 This module provides the SINGLE source of truth for all environment variable
 configuration required by Cognee and the Flowbaby bridge. All bridge entrypoints
@@ -23,7 +23,19 @@ Environment Variables Set:
 - ONTOLOGY_RESOLVER: Ontology resolver type (Plan 074: rdflib)
 - MATCHING_STRATEGY: Entity matching strategy (Plan 074: fuzzy)
 
+Environment Variables Read (Plan 086 - Backend-Controlled Model Selection):
+- LLM_PROVIDER: Provider for LLM operations (e.g., 'bedrock')
+- LLM_MODEL: Backend-controlled LLM model ID
+- EMBEDDING_PROVIDER: Provider for embedding operations (e.g., 'bedrock')
+- EMBEDDING_MODEL: Backend-controlled embedding model ID
+- EMBEDDING_DIMENSIONS: Embedding vector dimensions (backend-controlled)
+
+These model configuration env vars are set by the extension from VendResponse
+when using Flowbaby Cloud mode. The bridge reads them and includes them in the
+config snapshot for observability.
+
 @see agent-output/planning/074-activate-ontology-mapping.md
+@see agent-output/planning/086-cloud-quota-concurrency-error-contract.md
 @see agent-output/architecture/074-activate-ontology-mapping-architecture-findings.md
 """
 
@@ -42,6 +54,8 @@ class BridgeEnvConfig:
     This config is returned by apply_workspace_env() and should be used
     for logging/observability. The values reflect what was actually set
     in os.environ at the time of the call.
+    
+    Plan 086: Added model configuration fields for backend-controlled model selection.
     """
     workspace_path: str
     system_root: str
@@ -53,6 +67,12 @@ class BridgeEnvConfig:
     ontology_resolver: str
     matching_strategy: str
     ontology_file_exists: bool
+    # Plan 086: Backend-controlled model configuration
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    embedding_provider: Optional[str] = None
+    embedding_model: Optional[str] = None
+    embedding_dimensions: Optional[int] = None
     
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -67,15 +87,24 @@ class BridgeEnvConfig:
             'ontology_resolver': self.ontology_resolver,
             'matching_strategy': self.matching_strategy,
             'ontology_file_exists': self.ontology_file_exists,
+            # Plan 086: Backend-controlled model configuration
+            'llm_provider': self.llm_provider,
+            'llm_model': self.llm_model,
+            'embedding_provider': self.embedding_provider,
+            'embedding_model': self.embedding_model,
+            'embedding_dimensions': self.embedding_dimensions,
         }
     
     def to_log_string(self) -> str:
         """Format for log output."""
+        model_info = ""
+        if self.llm_model or self.embedding_model:
+            model_info = f", llm={self.llm_model}, embedding={self.embedding_model}, dims={self.embedding_dimensions}"
         return (
             f"BridgeEnv: workspace={self.workspace_path}, "
             f"ontology={self.ontology_file_path} (exists={self.ontology_file_exists}), "
             f"resolver={self.ontology_resolver}, strategy={self.matching_strategy}, "
-            f"cache={self.caching}/{self.cache_backend}"
+            f"cache={self.caching}/{self.cache_backend}{model_info}"
         )
 
 
@@ -224,6 +253,27 @@ def apply_workspace_env(
     if logger:
         logger.debug(f"Set ontology config: path={ontology_path}, resolver=rdflib, strategy=fuzzy")
     
+    # --- Model Configuration (Plan 086) ---
+    # Read backend-controlled model configuration from environment.
+    # These are set by the extension from VendResponse when using Cloud mode.
+    # If not present, the bridge will fail loudly when model operations are attempted.
+    llm_provider = os.environ.get('LLM_PROVIDER')
+    llm_model = os.environ.get('LLM_MODEL')
+    embedding_provider = os.environ.get('EMBEDDING_PROVIDER')
+    embedding_model = os.environ.get('EMBEDDING_MODEL')
+    embedding_dimensions_str = os.environ.get('EMBEDDING_DIMENSIONS')
+    embedding_dimensions = int(embedding_dimensions_str) if embedding_dimensions_str else None
+    
+    if logger:
+        if llm_provider or embedding_provider:
+            logger.debug(
+                f"Model config from env: LLM_PROVIDER={llm_provider}, LLM_MODEL={llm_model}, "
+                f"EMBEDDING_PROVIDER={embedding_provider}, EMBEDDING_MODEL={embedding_model}, "
+                f"EMBEDDING_DIMENSIONS={embedding_dimensions}"
+            )
+        else:
+            logger.debug("No model config in environment (legacy mode or missing Cloud credentials)")
+    
     # --- Build Config Snapshot ---
     config = BridgeEnvConfig(
         workspace_path=str(workspace_dir),
@@ -236,6 +286,12 @@ def apply_workspace_env(
         ontology_resolver='rdflib',
         matching_strategy='fuzzy',
         ontology_file_exists=ontology_file_exists,
+        # Plan 086: Backend-controlled model configuration
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        embedding_provider=embedding_provider,
+        embedding_model=embedding_model,
+        embedding_dimensions=embedding_dimensions,
     )
     
     if logger:
@@ -298,6 +354,7 @@ def get_env_config_snapshot() -> dict:
     Get a snapshot of all bridge-related environment variables.
     
     This is useful for diagnostics and observability logging.
+    Plan 086: Now includes model configuration variables.
     
     Returns:
         Dictionary with all bridge environment variable values
@@ -311,4 +368,10 @@ def get_env_config_snapshot() -> dict:
         'ONTOLOGY_FILE_PATH': os.environ.get('ONTOLOGY_FILE_PATH', ''),
         'ONTOLOGY_RESOLVER': os.environ.get('ONTOLOGY_RESOLVER', ''),
         'MATCHING_STRATEGY': os.environ.get('MATCHING_STRATEGY', ''),
+        # Plan 086: Backend-controlled model configuration
+        'LLM_PROVIDER': os.environ.get('LLM_PROVIDER', ''),
+        'LLM_MODEL': os.environ.get('LLM_MODEL', ''),
+        'EMBEDDING_PROVIDER': os.environ.get('EMBEDDING_PROVIDER', ''),
+        'EMBEDDING_MODEL': os.environ.get('EMBEDDING_MODEL', ''),
+        'EMBEDDING_DIMENSIONS': os.environ.get('EMBEDDING_DIMENSIONS', ''),
     }
