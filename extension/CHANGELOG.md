@@ -56,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Cloud Error Code Preservation (Plan 083 M2)**: Fixed error masking in `flowbabyClient.ts`, `PythonBridgeDaemonManager.ts`, and `BackgroundOperationManager.ts` where Cloud errors were being converted to generic "login required" errors. Now preserves original error codes (RATE_LIMITED, QUOTA_EXCEEDED, SESSION_INVALID, etc.) for accurate UX.
 
+- **Cloud Login Commands Not Responding (Plan 085)**: Fixed UI entrypoints (first-run prompt buttons, status bar menu) that invoked unregistered command IDs (`FlowbabyCloud.*`) instead of canonical registered commands (`flowbaby.cloud.*`). Clicking "Login to Cloud" or "Flowbaby Cloud Status" now reliably triggers the intended action. Status bar now updates automatically after login/logout without requiring an extension reload.
+
 ## [0.6.2] - 2025-12-20
 
 ### Added

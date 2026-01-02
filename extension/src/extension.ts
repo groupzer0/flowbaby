@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { FlowbabyClient } from './flowbabyClient';
 import { FlowbabyContextProvider } from './flowbabyContextProvider';
 import { FlowbabySetupService } from './setup/FlowbabySetupService';
-import { FlowbabyStatusBar } from './statusBar/FlowbabyStatusBar';
+import { FlowbabyStatusBar, FlowbabyStatus } from './statusBar/FlowbabyStatusBar';
 import { disposeOutputChannels, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
 import { SessionManager } from './sessionManager';
@@ -79,7 +79,8 @@ async function checkLegacyApiKeyMigration(context: vscode.ExtensionContext): Pro
         );
 
         if (action === 'Login to Cloud') {
-            await vscode.commands.executeCommand('FlowbabyCloud.login');
+            // Plan 085: Use canonical command ID
+            await vscode.commands.executeCommand('flowbaby.cloud.login');
         }
 
         // Delete the legacy secret regardless of user action
@@ -216,8 +217,41 @@ export async function activate(_context: vscode.ExtensionContext) {
         const cloudOutputChannel = vscode.window.createOutputChannel('Flowbaby Cloud');
         const cloudAuth = createFlowbabyCloudAuth(_context.secrets, cloudOutputChannel);
         _context.subscriptions.push(cloudOutputChannel, cloudAuth);
-        registerCloudCommands(_context, cloudAuth);
+        // Plan 085: Pass output channel for command observability
+        registerCloudCommands(_context, cloudAuth, cloudOutputChannel);
         cloudAuthDisposable = cloudAuth;
+
+        // Plan 085: Wire status bar to auth state changes
+        // When user logs in/out, update status bar without requiring reload
+        _context.subscriptions.push(
+            cloudAuth.onDidChangeAuthState(async (event) => {
+                const currentWorkspacePath = getActiveWorkspacePath();
+                const initState = currentWorkspacePath ? getInitState(currentWorkspacePath) : undefined;
+                const clientInitialized = initState?.initialized === true;
+
+                if (event.isAuthenticated) {
+                    // User logged in - set Ready if client is initialized
+                    if (clientInitialized) {
+                        statusBar.setStatus(FlowbabyStatus.Ready);
+                        debugLog('Plan 085: Status bar updated to Ready after Cloud login', {
+                            tier: event.tier,
+                            clientInitialized
+                        });
+                    } else {
+                        // Client not yet initialized - stay in current state
+                        // The init flow will set the correct status when it completes
+                        debugLog('Plan 085: Cloud login complete but client not initialized', {
+                            tier: event.tier,
+                            clientInitialized
+                        });
+                    }
+                } else {
+                    // User logged out - set NeedsCloudLogin
+                    statusBar.setStatus(FlowbabyStatus.NeedsCloudLogin);
+                    debugLog('Plan 085: Status bar updated to NeedsCloudLogin after logout');
+                }
+            })
+        );
 
         // Plan 081: Wire Cloud credentials manager and provider singleton
         // This enables all Python bridge execution paths to receive Cloud env vars.

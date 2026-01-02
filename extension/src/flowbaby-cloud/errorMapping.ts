@@ -51,10 +51,11 @@ export interface CloudErrorUX {
 
 /**
  * Cloud commands - centralized command IDs for error action buttons.
+ * Plan 085: Use canonical flowbaby.cloud.* namespace to match registered commands.
  */
 export const CLOUD_ERROR_COMMANDS = {
-    LOGIN: 'FlowbabyCloud.login',
-    STATUS: 'FlowbabyCloud.status',
+    LOGIN: 'flowbaby.cloud.login',
+    STATUS: 'flowbaby.cloud.status',
     RETRY: 'workbench.action.reloadWindow',
 } as const;
 

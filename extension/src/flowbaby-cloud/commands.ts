@@ -25,20 +25,35 @@ export const CLOUD_COMMANDS = {
  *
  * @param context - Extension context for registering disposables
  * @param auth - Authentication manager instance
+ * @param outputChannel - Optional output channel for command observability (Plan 085)
  * @returns Array of disposables for the registered commands
  */
 export function registerCloudCommands(
     context: vscode.ExtensionContext,
-    auth: FlowbabyCloudAuth
+    auth: FlowbabyCloudAuth,
+    outputChannel?: vscode.OutputChannel
 ): vscode.Disposable[] {
     const disposables: vscode.Disposable[] = [];
+
+    // Plan 085: Helper for safe observability logging (no secrets)
+    const logCommand = (command: string, detail?: string) => {
+        if (outputChannel) {
+            const timestamp = new Date().toISOString();
+            const message = detail
+                ? `[${timestamp}] Command invoked: ${command} - ${detail}`
+                : `[${timestamp}] Command invoked: ${command}`;
+            outputChannel.appendLine(message);
+        }
+    };
 
     // Login command
     disposables.push(
         vscode.commands.registerCommand(CLOUD_COMMANDS.LOGIN, async () => {
+            logCommand(CLOUD_COMMANDS.LOGIN, 'starting login flow');
             try {
                 // Check if already authenticated
                 if (await auth.isAuthenticated()) {
+                    logCommand(CLOUD_COMMANDS.LOGIN, 'already authenticated, prompting for logout');
                     const action = await vscode.window.showInformationMessage(
                         'You are already logged in to Flowbaby Cloud.',
                         'Logout',
@@ -61,12 +76,14 @@ export function registerCloudCommands(
                         progress.report({ message: 'Logging in with GitHub...' });
                         await auth.login();
                         const tier = await auth.getUserTier();
+                        logCommand(CLOUD_COMMANDS.LOGIN, `login successful (tier: ${tier || 'free'})`);
                         vscode.window.showInformationMessage(
                             `Successfully logged in to Flowbaby Cloud (${tier || 'free'} tier)`
                         );
                     }
                 );
             } catch (error) {
+                logCommand(CLOUD_COMMANDS.LOGIN, `login failed: ${error instanceof Error ? error.message : 'unknown error'}`);
                 // Plan 083 M3: Use centralized error mapping
                 await showCloudError(error, 'during login');
             }
@@ -76,9 +93,11 @@ export function registerCloudCommands(
     // Logout command
     disposables.push(
         vscode.commands.registerCommand(CLOUD_COMMANDS.LOGOUT, async () => {
+            logCommand(CLOUD_COMMANDS.LOGOUT, 'starting logout flow');
             try {
                 // Check if authenticated
                 if (!(await auth.isAuthenticated())) {
+                    logCommand(CLOUD_COMMANDS.LOGOUT, 'not authenticated');
                     vscode.window.showInformationMessage('You are not logged in to Flowbaby Cloud.');
                     return;
                 }
@@ -91,12 +110,15 @@ export function registerCloudCommands(
                 );
 
                 if (action !== 'Logout') {
+                    logCommand(CLOUD_COMMANDS.LOGOUT, 'cancelled by user');
                     return;
                 }
 
                 await auth.logout();
+                logCommand(CLOUD_COMMANDS.LOGOUT, 'logout successful');
                 vscode.window.showInformationMessage('Successfully logged out of Flowbaby Cloud.');
             } catch (error) {
+                logCommand(CLOUD_COMMANDS.LOGOUT, `logout failed: ${error instanceof Error ? error.message : 'unknown error'}`);
                 // Plan 083 M3: Use centralized error mapping
                 await showCloudError(error, 'during logout');
             }
@@ -106,13 +128,16 @@ export function registerCloudCommands(
     // Status command
     disposables.push(
         vscode.commands.registerCommand(CLOUD_COMMANDS.STATUS, async () => {
+            logCommand(CLOUD_COMMANDS.STATUS, 'checking status');
             try {
                 if (await auth.isAuthenticated()) {
                     const tier = await auth.getUserTier();
+                    logCommand(CLOUD_COMMANDS.STATUS, `authenticated (tier: ${tier || 'free'})`);
                     vscode.window.showInformationMessage(
                         `Flowbaby Cloud: Logged in (${tier || 'free'} tier)`
                     );
                 } else {
+                    logCommand(CLOUD_COMMANDS.STATUS, 'not authenticated');
                     const action = await vscode.window.showInformationMessage(
                         'Flowbaby Cloud: Not logged in',
                         'Login'
@@ -122,6 +147,7 @@ export function registerCloudCommands(
                     }
                 }
             } catch (error) {
+                logCommand(CLOUD_COMMANDS.STATUS, `status check failed: ${error instanceof Error ? error.message : 'unknown error'}`);
                 // Plan 083 M3: Use centralized error mapping
                 await showCloudError(error, 'checking status');
             }

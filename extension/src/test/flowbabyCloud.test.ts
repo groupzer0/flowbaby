@@ -5,6 +5,7 @@
  * Uses mock clients to test behavior without real backend.
  *
  * @see Plan 077 M6 - Mock Integration Tests
+ * @see Plan 085 - Command Wiring and Status Consistency Tests
  */
 
 import * as assert from 'assert';
@@ -25,6 +26,7 @@ import {
     type VendResponse,
 } from '../flowbaby-cloud';
 import { ICredentialClient } from '../flowbaby-cloud/credentials';
+import { FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
 
 suite('Flowbaby Cloud Module Tests', () => {
     let sandbox: sinon.SinonSandbox;
@@ -725,6 +727,138 @@ suite('Flowbaby Cloud Module Tests', () => {
             assert.ok(
                 !types.EXECUTE_API_FALLBACK_URL.endsWith('/'),
                 'EXECUTE_API_FALLBACK_URL should not end with /'
+            );
+        });
+    });
+
+    // Plan 085: Cloud Login Command Wiring + Status Consistency Tests
+    suite('Plan 085: Command Wiring and Status Transitions', () => {
+        test('CLOUD_COMMANDS uses canonical flowbaby.cloud.* namespace', async () => {
+            const { CLOUD_COMMANDS } = await import('../flowbaby-cloud/commands');
+            
+            // Verify all command IDs use canonical namespace
+            assert.strictEqual(
+                CLOUD_COMMANDS.LOGIN,
+                'flowbaby.cloud.login',
+                'LOGIN command should use canonical namespace'
+            );
+            assert.strictEqual(
+                CLOUD_COMMANDS.LOGOUT,
+                'flowbaby.cloud.logout',
+                'LOGOUT command should use canonical namespace'
+            );
+            assert.strictEqual(
+                CLOUD_COMMANDS.STATUS,
+                'flowbaby.cloud.status',
+                'STATUS command should use canonical namespace'
+            );
+        });
+
+        test('CLOUD_ERROR_COMMANDS uses canonical flowbaby.cloud.* namespace', async () => {
+            const { CLOUD_ERROR_COMMANDS } = await import('../flowbaby-cloud/errorMapping');
+            
+            // Plan 085: Error action buttons must use canonical command IDs
+            assert.strictEqual(
+                CLOUD_ERROR_COMMANDS.LOGIN,
+                'flowbaby.cloud.login',
+                'Error LOGIN action should use canonical namespace'
+            );
+            assert.strictEqual(
+                CLOUD_ERROR_COMMANDS.STATUS,
+                'flowbaby.cloud.status',
+                'Error STATUS action should use canonical namespace'
+            );
+        });
+
+        test('No FlowbabyCloud.* command IDs in CLOUD_COMMANDS', async () => {
+            const { CLOUD_COMMANDS } = await import('../flowbaby-cloud/commands');
+            
+            // Verify none of the commands use the legacy namespace
+            const commandValues = Object.values(CLOUD_COMMANDS);
+            for (const cmd of commandValues) {
+                assert.ok(
+                    !cmd.startsWith('FlowbabyCloud.'),
+                    `Command ${cmd} should not use legacy FlowbabyCloud.* namespace`
+                );
+            }
+        });
+
+        test('No FlowbabyCloud.* command IDs in CLOUD_ERROR_COMMANDS', async () => {
+            const { CLOUD_ERROR_COMMANDS } = await import('../flowbaby-cloud/errorMapping');
+            
+            const commandValues = Object.values(CLOUD_ERROR_COMMANDS);
+            for (const cmd of commandValues) {
+                assert.ok(
+                    !cmd.startsWith('FlowbabyCloud.'),
+                    `Error command ${cmd} should not use legacy FlowbabyCloud.* namespace`
+                );
+            }
+        });
+
+        test('onDidChangeAuthState fires with correct payload on logout', async () => {
+            const mockAuthClient = new MockAuthClient();
+            const auth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
+            
+            // Set up valid session
+            storedSecrets.set('flowbaby.cloud.sessionToken', 'test-token');
+            storedSecrets.set('flowbaby.cloud.sessionExpiresAt', new Date(Date.now() + 3600000).toISOString());
+            
+            let authEvent: { isAuthenticated: boolean; tier?: string } | undefined;
+            const disposable = auth.onDidChangeAuthState(event => {
+                authEvent = event;
+            });
+
+            await auth.logout();
+            disposable.dispose();
+            auth.dispose();
+
+            assert.ok(authEvent, 'Auth state change event should fire');
+            assert.strictEqual(authEvent!.isAuthenticated, false, 'Should indicate not authenticated');
+        });
+
+        test('registerCloudCommands function signature supports optional outputChannel', async () => {
+            const { registerCloudCommands } = await import('../flowbaby-cloud/commands');
+            
+            // Verify function exists and has expected signature
+            // We cannot actually call registerCloudCommands in tests because the commands
+            // are already registered by the extension activation. Instead, we verify:
+            // 1. Function exists
+            // 2. Function has 3 parameters (context, auth, outputChannel?)
+            // Note: Function.length counts all formal parameters regardless of defaults
+            assert.ok(typeof registerCloudCommands === 'function', 'registerCloudCommands should be a function');
+            assert.strictEqual(registerCloudCommands.length, 3, 'Function should have 3 parameters (context, auth, outputChannel)');
+            
+            // The third parameter (outputChannel) is optional, verified by TypeScript compilation
+            // Plan 085: This signature change enables observability logging without breaking existing calls
+        });
+
+        test('Status bar enum has NeedsCloudLogin state', () => {
+            // Import FlowbabyStatus from the test file's existing imports
+            // This validates the status bar can represent Cloud login required state
+            assert.ok(
+                FlowbabyStatus.NeedsCloudLogin !== undefined,
+                'FlowbabyStatus should have NeedsCloudLogin state'
+            );
+            assert.strictEqual(
+                FlowbabyStatus.NeedsCloudLogin,
+                'NeedsCloudLogin',
+                'NeedsCloudLogin should have correct string value'
+            );
+        });
+
+        test('NeedsApiKey is aliased to NeedsCloudLogin for backward compatibility', () => {
+            assert.strictEqual(
+                FlowbabyStatus.NeedsApiKey,
+                FlowbabyStatus.NeedsCloudLogin,
+                'NeedsApiKey should be an alias for NeedsCloudLogin'
+            );
+        });
+
+        test('Ready and NeedsCloudLogin are distinct states', () => {
+            assert.notStrictEqual(
+                FlowbabyStatus.Ready,
+                FlowbabyStatus.NeedsCloudLogin,
+                'Ready and NeedsCloudLogin should be different values'
             );
         });
     });

@@ -51,7 +51,7 @@ export class FlowbabyStatusBar {
         debugLog('Status menu opened', { currentStatus: this.status });
         
         // Plan 083 M4: Removed "Set API Key" option (Cloud-only in v0.7.0)
-        // Cloud login is handled via FlowbabyCloud.login command
+        // Plan 085: Cloud login handled via flowbaby.cloud.login command
         const items: vscode.QuickPickItem[] = [
             {
                 label: '$(sync) Refresh Dependencies',
@@ -87,8 +87,8 @@ export class FlowbabyStatusBar {
             } else if (selection.label.includes('Setup Environment')) {
                 vscode.commands.executeCommand('Flowbaby.setupEnvironment');
             } else if (selection.label.includes('Flowbaby Cloud Status')) {
-                // Plan 083 M4: Route to Cloud status instead of legacy API key
-                vscode.commands.executeCommand('FlowbabyCloud.status');
+                // Plan 085: Use canonical command ID (was FlowbabyCloud.status)
+                vscode.commands.executeCommand('flowbaby.cloud.status');
             } else if (selection.label.includes('Show Debug Logs')) {
                 vscode.commands.executeCommand('Flowbaby.showDebugLogs');
             }

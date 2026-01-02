@@ -388,7 +388,8 @@ export function handleInitFailure(
         if (action === 'Open Output') {
             outputChannel.show();
         } else if (action === 'Login to Cloud') {
-            vscode.commands.executeCommand('FlowbabyCloud.login');
+            // Plan 085: Use canonical command ID
+            vscode.commands.executeCommand('flowbaby.cloud.login');
         }
     });
 
@@ -418,7 +419,8 @@ async function showPostInitPrompts(
         if (prompt && typeof (prompt as Thenable<string | undefined>).then === 'function') {
             prompt.then(action => {
                 if (action === 'Login to Cloud') {
-                    vscode.commands.executeCommand('FlowbabyCloud.login');
+                    // Plan 085: Use canonical command ID
+                    vscode.commands.executeCommand('flowbaby.cloud.login');
                 }
             }, error => {
                 debugLog('Init Cloud login prompt suppressed', {
@@ -468,7 +470,7 @@ async function showPostInitPrompts(
  * Register API key management commands
  * 
  * @deprecated Plan 083 M4: Legacy API key commands removed in v0.7.0.
- * Users should use FlowbabyCloud.login instead.
+ * Users should use flowbaby.cloud.login instead (Plan 085: canonical command ID).
  * This function is preserved for backward compatibility but is no longer
  * called from extension.ts. Will be removed in a future version.
  */
@@ -483,7 +485,7 @@ export function registerApiKeyCommands(
     // - Flowbaby.setApiKey  
     // - Flowbaby.clearApiKey
     //
-    // Users should use FlowbabyCloud.login for authentication.
+    // Users should use flowbaby.cloud.login for authentication (Plan 085).
     // This function body intentionally left empty to maintain export signature
     // for any external callers during transition period.
     debugLog('registerApiKeyCommands called but is deprecated - Cloud-only in v0.7.0');
@@ -615,7 +617,8 @@ export function registerSetupCommands(
                         if (prompt && typeof (prompt as Thenable<string | undefined>).then === 'function') {
                             prompt.then(action => {
                                 if (action === 'Login to Cloud') {
-                                    vscode.commands.executeCommand('FlowbabyCloud.login');
+                                    // Plan 085: Use canonical command ID
+                                    vscode.commands.executeCommand('flowbaby.cloud.login');
                                 }
                             }, error => {
                                 debugLog('Init Cloud login prompt suppressed', {
