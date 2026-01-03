@@ -1010,4 +1010,287 @@ suite('Flowbaby Cloud Module Tests', () => {
             );
         });
     });
+
+    // =========================================================================
+    // Plan 087: CloudReadinessService Tests
+    // =========================================================================
+    suite('CloudReadinessService (Plan 087)', () => {
+        let auth: FlowbabyCloudAuth;
+        let credentials: FlowbabyCloudCredentials;
+        let mockAuthClient: MockAuthClient;
+        let mockCredentialClient: MockCredentialClient;
+        let mockBridgeChecker: {
+            checkHealth: sinon.SinonStub;
+            isDaemonHealthy: sinon.SinonStub;
+        };
+
+        setup(() => {
+            mockAuthClient = new MockAuthClient();
+            mockCredentialClient = new MockCredentialClient();
+            mockBridgeChecker = {
+                checkHealth: sandbox.stub().resolves(true),
+                isDaemonHealthy: sandbox.stub().returns(false),
+            };
+
+            auth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
+            credentials = new FlowbabyCloudCredentials(auth, mockCredentialClient, mockOutputChannel);
+        });
+
+        teardown(() => {
+            credentials.dispose();
+            auth.dispose();
+        });
+
+        test('CloudReadinessService can be imported', async () => {
+            const { CloudReadinessService } = await import('../flowbaby-cloud/readiness');
+            assert.ok(CloudReadinessService, 'CloudReadinessService should be exported');
+        });
+
+        test('initial state shows not authenticated', async () => {
+            const { CloudReadinessService } = await import('../flowbaby-cloud/readiness');
+            const service = new CloudReadinessService(
+                auth,
+                credentials,
+                mockBridgeChecker,
+                mockOutputChannel
+            );
+
+            const state = service.getState();
+            assert.strictEqual(state.auth, 'not_authenticated');
+            assert.strictEqual(state.overall, 'login_required');
+
+            service.dispose();
+        });
+
+        test('needsLogin returns true when not authenticated', async () => {
+            const { CloudReadinessService } = await import('../flowbaby-cloud/readiness');
+            const service = new CloudReadinessService(
+                auth,
+                credentials,
+                mockBridgeChecker,
+                mockOutputChannel
+            );
+
+            assert.strictEqual(service.needsLogin(), true);
+
+            service.dispose();
+        });
+
+        test('evaluateReadiness with authenticated user shows ready', async () => {
+            // Set up authenticated state
+            const futureDate = new Date(Date.now() + 3600000).toISOString();
+            storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+            storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+            const { CloudReadinessService } = await import('../flowbaby-cloud/readiness');
+            const service = new CloudReadinessService(
+                auth,
+                credentials,
+                mockBridgeChecker,
+                mockOutputChannel
+            );
+
+            const state = await service.evaluateReadiness();
+
+            assert.strictEqual(state.auth, 'authenticated');
+            assert.strictEqual(state.vend, 'ready');
+            assert.strictEqual(state.overall, 'ready');
+
+            service.dispose();
+        });
+
+        test('evaluateReadiness skips bridge check when requested', async () => {
+            const futureDate = new Date(Date.now() + 3600000).toISOString();
+            storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+            storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+            const { CloudReadinessService } = await import('../flowbaby-cloud/readiness');
+            const service = new CloudReadinessService(
+                auth,
+                credentials,
+                mockBridgeChecker,
+                mockOutputChannel
+            );
+
+            await service.evaluateReadiness({ skipBridgeCheck: true });
+
+            // Bridge health check should not have been called
+            assert.strictEqual(mockBridgeChecker.checkHealth.called, false);
+            assert.strictEqual(mockBridgeChecker.isDaemonHealthy.called, false);
+
+            service.dispose();
+        });
+
+        test('getRemediation returns login guidance when not authenticated', async () => {
+            const { CloudReadinessService } = await import('../flowbaby-cloud/readiness');
+            const service = new CloudReadinessService(
+                auth,
+                credentials,
+                mockBridgeChecker,
+                mockOutputChannel
+            );
+
+            const remediation = service.getRemediation();
+
+            assert.ok(remediation.message.toLowerCase().includes('login'));
+            assert.ok(remediation.primaryAction);
+            assert.strictEqual(remediation.primaryAction!.commandId, 'flowbaby.cloud.login');
+
+            service.dispose();
+        });
+
+        test('showThrottledError respects throttle limits', async () => {
+            const { CloudReadinessService, DEFAULT_THROTTLE_CONFIG } = await import('../flowbaby-cloud/readiness');
+
+            // Use a very short throttle for testing
+            const testThrottleConfig = {
+                minIntervalMs: 100,
+                maxPerWindow: 2,
+                windowMs: 1000,
+            };
+
+            const service = new CloudReadinessService(
+                auth,
+                credentials,
+                mockBridgeChecker,
+                mockOutputChannel,
+                testThrottleConfig
+            );
+
+            // Stub vscode.window methods to prevent actual notifications
+            const showErrorStub = sandbox.stub(vscode.window, 'showErrorMessage').resolves(undefined);
+
+            const error = new FlowbabyCloudError('INTERNAL_ERROR', 'Test error');
+
+            // First notification should show
+            const shown1 = await service.showThrottledError(error);
+            assert.strictEqual(shown1, true, 'First notification should be shown');
+
+            // Wait less than minInterval - should be throttled
+            const shown2 = await service.showThrottledError(error);
+            assert.strictEqual(shown2, false, 'Second notification should be throttled (min interval)');
+
+            showErrorStub.restore();
+            service.dispose();
+        });
+
+        test('hasValidCredentials returns false when vend not attempted', async () => {
+            const { CloudReadinessService } = await import('../flowbaby-cloud/readiness');
+            const service = new CloudReadinessService(
+                auth,
+                credentials,
+                mockBridgeChecker,
+                mockOutputChannel
+            );
+
+            assert.strictEqual(service.hasValidCredentials(), false);
+
+            service.dispose();
+        });
+
+        test('hasValidCredentials returns true after successful vend', async () => {
+            const futureDate = new Date(Date.now() + 3600000).toISOString();
+            storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+            storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+            const { CloudReadinessService } = await import('../flowbaby-cloud/readiness');
+            const service = new CloudReadinessService(
+                auth,
+                credentials,
+                mockBridgeChecker,
+                mockOutputChannel
+            );
+
+            await service.evaluateReadiness();
+            assert.strictEqual(service.hasValidCredentials(), true);
+
+            service.dispose();
+        });
+
+        test('fires onDidChangeReadiness event when state changes', async () => {
+            const { CloudReadinessService } = await import('../flowbaby-cloud/readiness');
+            const service = new CloudReadinessService(
+                auth,
+                credentials,
+                mockBridgeChecker,
+                mockOutputChannel
+            );
+
+            let eventFired = false;
+            const disposable = service.onDidChangeReadiness(() => {
+                eventFired = true;
+            });
+
+            // Set up authenticated state to trigger change
+            const futureDate = new Date(Date.now() + 3600000).toISOString();
+            storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+            storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+            await service.evaluateReadiness();
+
+            assert.strictEqual(eventFired, true, 'Event should fire when state changes');
+
+            disposable.dispose();
+            service.dispose();
+        });
+
+        test('overall status is degraded when vend fails', async () => {
+            // Set up authenticated state
+            const futureDate = new Date(Date.now() + 3600000).toISOString();
+            storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+            storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+            // Create a failing credential client
+            const failingClient: ICredentialClient = {
+                vendCredentials: sandbox.stub().rejects(new FlowbabyCloudError('INTERNAL_ERROR', 'Vend failed')),
+            };
+
+            const failingCredentials = new FlowbabyCloudCredentials(auth, failingClient, mockOutputChannel);
+
+            const { CloudReadinessService } = await import('../flowbaby-cloud/readiness');
+            const service = new CloudReadinessService(
+                auth,
+                failingCredentials,
+                mockBridgeChecker,
+                mockOutputChannel
+            );
+
+            const state = await service.evaluateReadiness();
+
+            assert.strictEqual(state.auth, 'authenticated');
+            assert.strictEqual(state.vend, 'failed');
+            assert.strictEqual(state.overall, 'degraded');
+            assert.ok(state.lastError, 'Should have lastError set');
+
+            failingCredentials.dispose();
+            service.dispose();
+        });
+
+        test('singleton management works correctly', async () => {
+            const { 
+                initializeReadinessService, 
+                getReadinessService, 
+                resetReadinessService 
+            } = await import('../flowbaby-cloud/readiness');
+
+            // Initially undefined
+            resetReadinessService();
+            assert.strictEqual(getReadinessService(), undefined);
+
+            // Initialize
+            const service = initializeReadinessService(
+                auth,
+                credentials,
+                mockBridgeChecker,
+                mockOutputChannel
+            );
+            assert.ok(service);
+            assert.strictEqual(getReadinessService(), service);
+
+            // Reset
+            resetReadinessService();
+            assert.strictEqual(getReadinessService(), undefined);
+        });
+    });
 });
+

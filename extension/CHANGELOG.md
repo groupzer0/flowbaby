@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cloud Readiness Service (Plan 087)**: Unified Cloud readiness state management with three-axis model (auth/vend/bridge) and throttled error display. Eliminates misleading login prompts when user is authenticated but vending fails.
+  - **Structured readiness model**: `AuthReadinessState`, `VendReadinessState`, `BridgeReadinessState` with `CloudOverallStatus` (ready/login_required/degraded/error)
+  - **Error throttling**: Vend failures surface via toast with 30s min interval and max 3 per 5 minutes to prevent notification spam
+  - **Actionable remediation**: `getRemediation()` provides context-specific guidance based on current readiness state
+  - **Event-driven updates**: `onDidChangeReadiness` event fires on state changes for UI responsiveness
+
+- **Debug Logging for Cloud API Errors (Plan 087)**: When `flowbaby.debug` is enabled, Cloud client now logs HTTP status codes and error codes (without secrets) to the "Flowbaby Cloud" output channel for improved diagnosability.
+
 - **Cloud API Endpoint Override Setting (Plan 084)**: New `flowbaby.cloud.apiEndpoint` setting allows developers and testers to override the Flowbaby Cloud API endpoint for testing against staging, development, or local environments without modifying code.
 
 - **Flowbaby Cloud Credential Provider Wiring (Plan 081)**: Unified credential/provider architecture wired into extension activation and all Python bridge paths. Key changes:
@@ -37,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Activation Prompt Gating (Plan 087)**: Post-init prompts now use `CloudReadinessService.needsLogin()` instead of legacy `llmReady` flag. Login prompts only appear when user genuinely needs to authenticate—not when already authenticated but vending is failing.
+
+- **Status Bar Driven by Cloud Readiness (Plan 087)**: Status bar icon and text now reflect the unified `CloudOverallStatus` state. When vend fails for an authenticated user, shows "degraded" state with appropriate guidance instead of misleading "login required".
+
+- **Vend Errors Now User-Visible (Plan 087)**: All three Python bridge code paths (`FlowbabyClient`, `PythonBridgeDaemonManager`, `BackgroundOperationManager`) now surface vend failures via throttled toast notifications with actionable remediation guidance.
+
 - **Cloud API Endpoint Resolution (Plan 084)**: Updated default Cloud API endpoint from placeholder `api.flowbaby.dev` to correct staging endpoint `api-staging.flowbaby.ai`. Endpoint resolution now follows clear precedence: VS Code setting > `FLOWBABY_CLOUD_API_URL` environment variable > built-in default. This enables reliable Cloud connectivity for v0.7.0 launch.
 
 - **Bootstrap Decoupled from Cloud Credentials (Plan 084)**: Python bridge initialization (`init.py`) no longer requires Cloud credentials to succeed. Extension bootstrap (environment creation, workspace indexing) now completes without Cloud authentication, with only LLM-powered operations (memory ingestion, retrieval synthesis) gated on Cloud login. This fixes activation failures where users saw "Cloud login required" before they could even log in.
@@ -51,6 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Walkthrough Updated (Plan 083 M6)**: Getting Started walkthrough step changed from "Set Your API Key" to "Login to Flowbaby Cloud" with updated description.
 
 ### Fixed
+
+- **Misleading Login Prompts After Vend Failures (Plan 087)**: Fixed issue where users who were authenticated but experienced credential vending failures would be repeatedly prompted to log in. The extension now correctly distinguishes between "not logged in" and "logged in but vend failing" states, showing appropriate guidance for each.
+
+- **Silent Credential Vending Failures (Plan 087)**: Fixed issue where credential vending failures were silently swallowed, leaving users confused about why operations were failing. Vend errors now surface with throttled toast notifications (max 3 per 5 minutes, 30s min interval) with context-specific error messages.
 
 - **Cloud API Endpoint Hardcoding (Plan 084)**: Fixed hardcoded `api.flowbaby.dev` URL in `types.ts` that referenced a non-existent domain. Now correctly defaults to staging endpoint (`api-staging.flowbaby.ai`) with documented fallback to execute API gateway URL when needed.
 

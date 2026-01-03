@@ -8,6 +8,7 @@
  * @see api-contract/endpoints.md for endpoint documentation
  */
 
+import * as vscode from 'vscode';
 import {
     AuthRequest,
     AuthResponse,
@@ -23,6 +24,24 @@ import {
 } from './types';
 
 /**
+ * Debug logger for Cloud client operations.
+ *
+ * Plan 087: Captures HTTP status code and Cloud error code/message for diagnosability.
+ * NEVER logs secrets (Authorization headers, tokens, AWS keys).
+ */
+function createDebugLogger(name: string): (msg: string) => void {
+    const outputChannel = vscode.window.createOutputChannel('Flowbaby Cloud', { log: true });
+    return (msg: string) => {
+        // Only log when debug mode is enabled
+        const config = vscode.workspace.getConfiguration('flowbaby');
+        const debug = config.get<boolean>('debug', false);
+        if (debug) {
+            outputChannel.appendLine(`[${name}] ${msg}`);
+        }
+    };
+}
+
+/**
  * HTTP client for Flowbaby Cloud API.
  *
  * Design notes:
@@ -33,6 +52,7 @@ import {
  */
 export class FlowbabyCloudClient {
     private readonly config: FlowbabyCloudConfig;
+    private readonly log: (msg: string) => void;
 
     constructor(config: Partial<FlowbabyCloudConfig> = {}) {
         this.config = {
@@ -40,6 +60,7 @@ export class FlowbabyCloudClient {
             apiBaseUrl: getApiBaseUrl(),
             ...config,
         };
+        this.log = createDebugLogger('FlowbabyCloudClient');
     }
 
     // =========================================================================
@@ -145,6 +166,8 @@ export class FlowbabyCloudClient {
                 // Check for error response
                 if (!response.ok) {
                     const apiError = this.parseApiError(responseData, response.status);
+                    // Plan 087: Debug log HTTP status and error code (never secrets)
+                    this.log(`API error: HTTP ${response.status}, code=${apiError.code}, message="${apiError.message}"${apiError.retryAfter ? `, retryAfter=${apiError.retryAfter}` : ''}`);
                     throw FlowbabyCloudError.fromApiError(apiError);
                 }
 
@@ -177,9 +200,12 @@ export class FlowbabyCloudClient {
 
         // All retries exhausted
         if (lastError instanceof FlowbabyCloudError) {
+            this.log(`Request to ${path} failed after ${this.config.maxRetries + 1} attempts: code=${lastError.code}`);
             throw lastError;
         }
-        throw new FlowbabyCloudError('NETWORK_ERROR', lastError?.message || 'Request failed after retries');
+        const networkError = new FlowbabyCloudError('NETWORK_ERROR', lastError?.message || 'Request failed after retries');
+        this.log(`Network error on ${path}: ${networkError.message}`);
+        throw networkError;
     }
 
     /**

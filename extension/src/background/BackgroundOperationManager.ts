@@ -15,7 +15,8 @@ import { spawn, ChildProcess } from 'child_process';
 // Plan 039 M5: Removed dotenv import - .env API key support removed for security
 // Plan 081: Import Cloud provider for Bedrock credentials
 // Plan 083: Import FlowbabyCloudError to preserve error codes end-to-end
-import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError } from '../flowbaby-cloud';
+// Plan 087: Import getReadinessService for user-visible error surfacing
+import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError, getReadinessService } from '../flowbaby-cloud';
 
 /**
  * Interface for daemon manager to avoid circular imports
@@ -218,6 +219,7 @@ export class BackgroundOperationManager {
      * when authenticated. Cloud env takes precedence for Bedrock calls.
      * 
      * Plan 083: Preserves FlowbabyCloudError codes end-to-end for accurate UX.
+     * Plan 087: Shows throttled user notification on vend failure.
      */
     private async getLLMEnvironment(workspacePath: string): Promise<Record<string, string>> {
         const env: Record<string, string> = {};
@@ -231,6 +233,13 @@ export class BackgroundOperationManager {
             } catch (error) {
                 // Plan 083: Preserve FlowbabyCloudError for accurate UX (rate limit vs auth failure)
                 this.outputChannel.appendLine(`[BACKGROUND] Cloud credentials not available: ${error}`);
+
+                // Plan 087: Surface vend failure to user via throttled notification
+                const readinessService = getReadinessService();
+                if (readinessService) {
+                    await readinessService.showThrottledError(error, 'during background operation');
+                }
+
                 if (error instanceof FlowbabyCloudError) {
                     throw error; // Preserve original error code
                 }

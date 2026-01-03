@@ -72,3 +72,21 @@ export {
     type ErrorAction,
     type ErrorSeverity,
 } from './errorMapping';
+
+// Re-export readiness module (Plan 087)
+export {
+    CloudReadinessService,
+    createCloudReadinessService,
+    initializeReadinessService,
+    getReadinessService,
+    resetReadinessService,
+    DEFAULT_THROTTLE_CONFIG,
+    type CloudReadinessState,
+    type CloudOverallStatus,
+    type CloudRemediation,
+    type AuthReadinessState,
+    type VendReadinessState,
+    type BridgeReadinessState,
+    type IBridgeHealthChecker,
+    type ThrottleConfig,
+} from './readiness';

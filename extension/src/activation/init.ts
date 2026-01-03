@@ -15,6 +15,8 @@ import { FlowbabyContextProvider } from '../flowbabyContextProvider';
 import { SessionManager } from '../sessionManager';
 import { getFlowbabyOutputChannel, debugLog } from '../outputChannels';
 // Plan 083 M4: getAuditLogger import removed - was only used by legacy API key commands
+// Plan 087: Import readiness service for prompt gating
+import { getReadinessService } from '../flowbaby-cloud';
 import {
     recordActivationCompletion,
     areToolsRegistered,
@@ -266,11 +268,36 @@ export async function handleInitSuccess(
     console.log('Flowbaby client initialized successfully');
     debugLog('Client initialization successful', { duration_ms: initDuration });
 
-    // Set status bar based on API key state
-    if (initResult.apiKeyState.llmReady) {
-        statusBar.setStatus(FlowbabyStatus.Ready);
+    // Plan 087: Set status bar based on Cloud readiness state (not legacy API key)
+    const readinessService = getReadinessService();
+    if (readinessService) {
+        // Evaluate readiness (skip bridge check during bootstrap per Plan 084)
+        const state = await readinessService.evaluateReadiness({ skipBridgeCheck: true });
+        debugLog('Plan 087: Initial readiness evaluation', {
+            auth: state.auth,
+            vend: state.vend,
+            overall: state.overall,
+        });
+
+        switch (state.overall) {
+            case 'ready':
+                statusBar.setStatus(FlowbabyStatus.Ready);
+                break;
+            case 'login_required':
+                statusBar.setStatus(FlowbabyStatus.NeedsCloudLogin);
+                break;
+            case 'degraded':
+            case 'error':
+                statusBar.setStatus(FlowbabyStatus.Error, state.lastError?.message || 'Cloud service issue');
+                break;
+        }
     } else {
-        statusBar.setStatus(FlowbabyStatus.NeedsApiKey);
+        // Fallback to legacy logic if readiness service not available
+        if (initResult.apiKeyState.llmReady) {
+            statusBar.setStatus(FlowbabyStatus.Ready);
+        } else {
+            statusBar.setStatus(FlowbabyStatus.NeedsCloudLogin);
+        }
     }
 
     // Mark client as initialized for graceful degradation
@@ -402,13 +429,26 @@ export function handleInitFailure(
 
 /**
  * Show post-initialization prompts (API key or walkthrough)
+ * 
+ * Plan 087: Uses CloudReadinessService for prompt gating instead of legacy llmReady.
+ * This ensures prompts reflect actual Cloud auth state, not legacy API key state.
  */
 async function showPostInitPrompts(
     context: vscode.ExtensionContext,
     initResult: InitializeResult
 ): Promise<void> {
-    if (!initResult.apiKeyState.llmReady) {
-        // Plan 083 M4: Prompt for Cloud login instead of legacy API key
+    // Plan 087: Use readiness service for truthful Cloud state
+    const readinessService = getReadinessService();
+    const needsLogin = readinessService?.needsLogin() ?? !initResult.apiKeyState.llmReady;
+
+    if (needsLogin) {
+        // Plan 087: Prompt for Cloud login only when not authenticated
+        // Uses readiness service to avoid prompting when already logged in but vend failing
+        debugLog('Plan 087: Post-init prompt - login required', {
+            readinessServiceAvailable: !!readinessService,
+            needsLogin,
+        });
+
         const prompt = vscode.window.showWarningMessage(
             'Flowbaby initialized successfully! Login to Flowbaby Cloud to enable memory operations.',
             { modal: true },
@@ -429,34 +469,55 @@ async function showPostInitPrompts(
             });
         }
     } else {
-        // Offer walkthrough for users who are fully set up
-        const hasGlobalState = !!context.globalState;
-        const canReadGlobalState = hasGlobalState && typeof context.globalState.get === 'function';
-        const canWriteGlobalState = hasGlobalState && typeof context.globalState.update === 'function';
+        // Already authenticated - check if we should show degraded state message
+        const isFullyReady = readinessService?.isFullyReady() ?? initResult.apiKeyState.llmReady;
 
-        const walkthroughPromptDismissed = canReadGlobalState
-            ? context.globalState.get<boolean>('flowbaby.walkthroughPromptDismissed', false)
-            : false;
+        if (!isFullyReady && readinessService) {
+            // Plan 087: User is authenticated but vend/bridge has issues - show degraded guidance
+            const remediation = readinessService.getRemediation();
+            debugLog('Plan 087: Post-init prompt - degraded state', { message: remediation.message });
 
-        if (!walkthroughPromptDismissed) {
-            const info = vscode.window.showInformationMessage(
-                'Flowbaby is ready! View the Getting Started guide?',
-                'View Guide',
-                'Don\'t Show Again'
-            );
+            vscode.window.showWarningMessage(
+                remediation.message,
+                remediation.primaryAction?.label || 'Check Status',
+                'Dismiss'
+            ).then(action => {
+                if (action === remediation.primaryAction?.label) {
+                    vscode.commands.executeCommand(remediation.primaryAction!.commandId);
+                } else if (action === 'Check Status') {
+                    vscode.commands.executeCommand('flowbaby.cloud.status');
+                }
+            });
+        } else {
+            // Offer walkthrough for users who are fully set up
+            const hasGlobalState = !!context.globalState;
+            const canReadGlobalState = hasGlobalState && typeof context.globalState.get === 'function';
+            const canWriteGlobalState = hasGlobalState && typeof context.globalState.update === 'function';
 
-            if (info && typeof (info as Thenable<string | undefined>).then === 'function') {
-                info.then(action => {
-                    if (action === 'View Guide') {
-                        vscode.commands.executeCommand('workbench.action.openWalkthrough', 'Flowbaby.flowbabySetup');
-                    } else if (action === 'Don\'t Show Again' && canWriteGlobalState) {
-                        context.globalState.update('flowbaby.walkthroughPromptDismissed', true);
-                    }
-                }, error => {
-                    debugLog('Walkthrough prompt suppressed', {
-                        error: error instanceof Error ? error.message : String(error)
+            const walkthroughPromptDismissed = canReadGlobalState
+                ? context.globalState.get<boolean>('flowbaby.walkthroughPromptDismissed', false)
+                : false;
+
+            if (!walkthroughPromptDismissed) {
+                const info = vscode.window.showInformationMessage(
+                    'Flowbaby is ready! View the Getting Started guide?',
+                    'View Guide',
+                    'Don\'t Show Again'
+                );
+
+                if (info && typeof (info as Thenable<string | undefined>).then === 'function') {
+                    info.then(action => {
+                        if (action === 'View Guide') {
+                            vscode.commands.executeCommand('workbench.action.openWalkthrough', 'Flowbaby.flowbabySetup');
+                        } else if (action === 'Don\'t Show Again' && canWriteGlobalState) {
+                            context.globalState.update('flowbaby.walkthroughPromptDismissed', true);
+                        }
+                    }, error => {
+                        debugLog('Walkthrough prompt suppressed', {
+                            error: error instanceof Error ? error.message : String(error)
+                        });
                     });
-                });
+                }
             }
         }
     }
@@ -557,10 +618,26 @@ export function registerSetupCommands(
                         if (initResult.success) {
                             setInitState(workspacePath, { initialized: true, initFailed: false });
 
-                            if (initResult.apiKeyState.llmReady) {
+                            // Plan 087: Use readiness service for status bar state (not legacy llmReady)
+                            const readinessService = getReadinessService();
+                            if (readinessService) {
+                                const state = await readinessService.evaluateReadiness({ skipBridgeCheck: true });
+                                switch (state.overall) {
+                                    case 'ready':
+                                        statusBar.setStatus(FlowbabyStatus.Ready);
+                                        break;
+                                    case 'login_required':
+                                        statusBar.setStatus(FlowbabyStatus.NeedsCloudLogin);
+                                        break;
+                                    case 'degraded':
+                                    case 'error':
+                                        statusBar.setStatus(FlowbabyStatus.Error, state.lastError?.message || 'Cloud service issue');
+                                        break;
+                                }
+                            } else if (initResult.apiKeyState.llmReady) {
                                 statusBar.setStatus(FlowbabyStatus.Ready);
                             } else {
-                                statusBar.setStatus(FlowbabyStatus.NeedsApiKey);
+                                statusBar.setStatus(FlowbabyStatus.NeedsCloudLogin);
                             }
 
                             // Initialize BackgroundOperationManager
@@ -604,9 +681,12 @@ export function registerSetupCommands(
                         }
                     });
 
-                    // Plan 083 M4: Post-init prompts updated for Cloud-only
-                    const currentClientAfterInit = getClient();
-                    if (!currentClientAfterInit?.getApiKeyState()?.llmReady) {
+                    // Plan 087: Use readiness service for post-init prompt gating
+                    const readinessService = getReadinessService();
+                    const needsLogin = readinessService?.needsLogin() ?? !getClient()?.getApiKeyState()?.llmReady;
+
+                    if (needsLogin) {
+                        debugLog('Plan 087: Post-init prompt (setup command) - login required');
                         const prompt = vscode.window.showWarningMessage(
                             'Flowbaby initialized successfully! Login to Flowbaby Cloud to enable memory operations.',
                             { modal: true },

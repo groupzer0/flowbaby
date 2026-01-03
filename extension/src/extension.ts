@@ -23,6 +23,9 @@ import {
     registerCloudCommands,
     createFlowbabyCloudCredentials,
     initializeProvider,
+    initializeReadinessService,
+    resetReadinessService,
+    getReadinessService,
 } from './flowbaby-cloud';
 import {
     getActiveWorkspacePath,
@@ -52,6 +55,7 @@ let storeMemoryToolDisposable: vscode.Disposable | undefined;
 let retrieveMemoryToolDisposable: vscode.Disposable | undefined;
 let cloudAuthDisposable: vscode.Disposable | undefined;
 let cloudCredentialsDisposable: vscode.Disposable | undefined;
+let cloudReadinessDisposable: vscode.Disposable | undefined;
 
 /**
  * Plan 083 M7: One-time legacy API key migration
@@ -261,6 +265,53 @@ export async function activate(_context: vscode.ExtensionContext) {
 
         // Initialize the provider singleton so downstream components can get Cloud env
         initializeProvider(cloudCredentials);
+
+        // Plan 087: Initialize Cloud Readiness Service
+        // This provides unified readiness state (auth/vend/bridge) and throttled error display.
+        // Note: bridgeChecker is undefined during bootstrap - will be wired after daemon init.
+        const readinessService = initializeReadinessService(
+            cloudAuth,
+            cloudCredentials,
+            undefined, // Bridge checker wired later after daemon init
+            cloudOutputChannel
+        );
+        _context.subscriptions.push(readinessService);
+        cloudReadinessDisposable = readinessService;
+        debugLog('Plan 087: CloudReadinessService initialized');
+
+        // Plan 087: Wire status bar updates to readiness state changes
+        _context.subscriptions.push(
+            readinessService.onDidChangeReadiness((state) => {
+                const currentWorkspacePath = getActiveWorkspacePath();
+                const initState = currentWorkspacePath ? getInitState(currentWorkspacePath) : undefined;
+                const clientInitialized = initState?.initialized === true;
+
+                debugLog('Plan 087: Readiness state changed', {
+                    auth: state.auth,
+                    vend: state.vend,
+                    bridge: state.bridge,
+                    overall: state.overall,
+                    clientInitialized,
+                });
+
+                // Only update status bar if client is initialized (avoid race with bootstrap)
+                if (clientInitialized) {
+                    switch (state.overall) {
+                        case 'ready':
+                            statusBar.setStatus(FlowbabyStatus.Ready);
+                            break;
+                        case 'login_required':
+                            statusBar.setStatus(FlowbabyStatus.NeedsCloudLogin);
+                            break;
+                        case 'degraded':
+                        case 'error':
+                            statusBar.setStatus(FlowbabyStatus.Error, 
+                                state.lastError?.message || 'Cloud service issue');
+                            break;
+                    }
+                }
+            })
+        );
         
         // Plan 084: Log effective Cloud endpoint for diagnosability
         const { getApiBaseUrl } = await import('./flowbaby-cloud/types');
@@ -385,6 +436,13 @@ export async function deactivate() {
         cloudCredentialsDisposable.dispose();
         cloudCredentialsDisposable = undefined;
     }
+
+    // Plan 087: Dispose Cloud readiness service
+    if (cloudReadinessDisposable) {
+        cloudReadinessDisposable.dispose();
+        cloudReadinessDisposable = undefined;
+    }
+    resetReadinessService();
 
     // Dispose singleton output channels
     disposeOutputChannels();

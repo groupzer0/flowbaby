@@ -18,7 +18,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 // Plan 081: Import Cloud provider for Bedrock credentials
 // Plan 083: Import FlowbabyCloudError to preserve error codes end-to-end
-import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError } from '../flowbaby-cloud';
+// Plan 087: Import getReadinessService for user-visible error surfacing
+import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError, getReadinessService } from '../flowbaby-cloud';
 
 /**
  * JSON-RPC 2.0 request structure
@@ -880,6 +881,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
      * when authenticated. Cloud env takes precedence for Bedrock calls.
      * 
      * Plan 083: Preserves FlowbabyCloudError codes end-to-end for accurate UX.
+     * Plan 087: Shows throttled user notification on vend failure.
      */
     private async getLLMEnvironment(): Promise<Record<string, string>> {
         const env: Record<string, string> = {};
@@ -893,6 +895,13 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             } catch (error) {
                 // Plan 083: Preserve FlowbabyCloudError for accurate UX (rate limit vs auth failure)
                 this.log('WARN', `Cloud credentials not available: ${error}`);
+
+                // Plan 087: Surface vend failure to user via throttled notification
+                const readinessService = getReadinessService();
+                if (readinessService) {
+                    await readinessService.showThrottledError(error, 'during daemon startup');
+                }
+
                 if (error instanceof FlowbabyCloudError) {
                     throw error; // Preserve original error code
                 }

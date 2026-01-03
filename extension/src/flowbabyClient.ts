@@ -10,7 +10,8 @@ import { PythonBridgeDaemonManager, DaemonHealthStatus } from './bridge/PythonBr
 import { synthesizeWithCopilot, isNoRelevantContext, SynthesisResult } from './synthesis';
 // Plan 081: Import Cloud provider for Bedrock credentials
 // Plan 083: Import FlowbabyCloudError to preserve error codes end-to-end
-import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError } from './flowbaby-cloud';
+// Plan 087: Import getReadinessService for user-visible error surfacing
+import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError, getReadinessService } from './flowbaby-cloud';
 
 /**
  * Interface for BackgroundOperationManager to avoid circular imports.
@@ -2339,6 +2340,7 @@ export class FlowbabyClient {
      * when authenticated. Cloud env takes precedence for Bedrock calls.
      * 
      * Plan 083: Preserves FlowbabyCloudError codes end-to-end for accurate UX.
+     * Plan 087: Shows throttled user notification on vend failure.
      * 
      * @returns Promise<Record<string, string>> - Environment variables to inject
      */
@@ -2354,6 +2356,13 @@ export class FlowbabyClient {
             } catch (error) {
                 // Plan 083: Preserve FlowbabyCloudError for accurate UX (rate limit vs auth failure)
                 debugLog(`Cloud credentials not available: ${error}`);
+
+                // Plan 087: Surface vend failure to user via throttled notification
+                const readinessService = getReadinessService();
+                if (readinessService) {
+                    await readinessService.showThrottledError(error, 'during bridge operation');
+                }
+
                 if (error instanceof FlowbabyCloudError) {
                     throw error; // Preserve original error code
                 }
