@@ -63,7 +63,7 @@ export const CONTRACT_IMPLEMENTATION_READY = true;
  * Minimum backend version required by this contract.
  * Used by extension to verify backend compatibility.
  */
-export const MIN_BACKEND_VERSION = '0.5.0';
+export const MIN_BACKEND_VERSION = '0.4.5';
 
 /**
  * Contract metadata for debugging and logging.
