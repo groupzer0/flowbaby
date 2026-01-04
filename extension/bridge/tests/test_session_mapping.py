@@ -63,8 +63,19 @@ def mock_cognee_session():
         'cognee.context_global_variables': mock_context_vars
     }
 
+    # Mock bedrock health check to pass (Plan 088)
+    async def mock_health_check_success(model=None):
+        return {
+            "success": True,
+            "error": None,
+            "error_code": None,
+            "remediation": None,
+            "raw_content": "test",
+        }
+
     with patch.dict('sys.modules', modules):
-        yield mock_cognee, mock_cognee, mock_users.methods.get_default_user, mock_context_vars.set_session_user_context_variable
+        with patch('bedrock_health.check_bedrock_health', mock_health_check_success):
+            yield mock_cognee, mock_cognee, mock_users.methods.get_default_user, mock_context_vars.set_session_user_context_variable
 
 @pytest.mark.asyncio
 async def test_ingest_does_not_pass_session_id(mock_cognee_session, mock_env, temp_workspace):

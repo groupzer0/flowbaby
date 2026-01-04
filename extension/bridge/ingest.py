@@ -235,6 +235,36 @@ async def run_add_only(
         dataset_name, api_key, cognee_config = setup_environment(workspace_path)
         metrics['setup_env_sec'] = perf_counter() - step_start
 
+        # Plan 088: Authoritative Bedrock pre-flight health check
+        # This runs BEFORE any Cognee operations to provide actionable diagnostics
+        # when Bedrock is unavailable (auth, region, deps) instead of cryptic failures.
+        from bedrock_health import check_bedrock_health
+        logger.debug("Plan 088: Running Bedrock pre-flight health check")
+        step_start = perf_counter()
+        health_result = await check_bedrock_health()
+        metrics['bedrock_health_sec'] = perf_counter() - step_start
+        
+        if not health_result['success']:
+            logger.error("Plan 088: Bedrock health check failed", extra={'data': health_result})
+            return {
+                'success': False,
+                'error_code': health_result['error_code'],
+                'error': health_result['error'],
+                'remediation': health_result['remediation'],
+            }
+        logger.debug("Plan 088: Bedrock health check passed")
+
+        # Plan 088: Apply Cognee probe bypass BEFORE importing cognee
+        # This prevents Cognee's internal test_llm_connection() from running,
+        # which fails with Bedrock due to structured-output instability.
+        # The bridge-side health check (bedrock_health.py) is authoritative.
+        from cognee_probe_bypass import apply_cognee_probe_bypass
+        bypass_applied = apply_cognee_probe_bypass()
+        if bypass_applied:
+            logger.debug("Plan 088: Cognee probe bypass applied")
+        else:
+            logger.warning("Plan 088: Cognee probe bypass failed - internal probes may run")
+
         # Step 2: Import and configure cognee
         logger.debug("Importing cognee SDK")
         step_start = perf_counter()
@@ -375,6 +405,16 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
             'matching_strategy': cognee_config.get('matching_strategy'),
             'ontology_active': bool(cognee_config.get('ontology_file_path')),
         }})
+
+        # Plan 088: Apply Cognee probe bypass BEFORE importing cognee
+        # This prevents Cognee's internal test_llm_connection() from running,
+        # which fails with Bedrock due to structured-output instability.
+        from cognee_probe_bypass import apply_cognee_probe_bypass
+        bypass_applied = apply_cognee_probe_bypass()
+        if bypass_applied:
+            logger.debug("Plan 088: Cognee probe bypass applied")
+        else:
+            logger.warning("Plan 088: Cognee probe bypass failed - internal probes may run")
 
         # Step 2: Import and configure cognee
         logger.debug("Importing cognee SDK")
@@ -543,6 +583,15 @@ async def run_sync(summary_json: dict = None, workspace_path: str = None,
         step_start = perf_counter()
         dataset_name, api_key, cognee_config = setup_environment(workspace_path)
         metrics['setup_env_sec'] = perf_counter() - step_start
+
+        # Plan 088: Apply Cognee probe bypass BEFORE importing cognee
+        from cognee_probe_bypass import apply_cognee_probe_bypass
+        bypass_applied = apply_cognee_probe_bypass()
+        if logger:
+            if bypass_applied:
+                logger.debug("Plan 088: Cognee probe bypass applied")
+            else:
+                logger.warning("Plan 088: Cognee probe bypass failed - internal probes may run")
 
         # Step 2: Import and configure cognee
         if logger: logger.debug("Importing cognee SDK")

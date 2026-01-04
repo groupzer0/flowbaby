@@ -19,6 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Bedrock Health Check Module (Plan 088)**: New `bedrock_health.py` module provides deterministic Bedrock connectivity validation using configuration proven stable in Analysis 088:
+  - Uses `TextOut` Pydantic response model (not `response_model=str` which is unstable)
+  - Strict JSON instruction prompt achieving 20/20 clean responses in batch testing
+  - System-first message ordering for improved adherence
+  - `max_completion_tokens=2048` to prevent Bedrock 400 validation errors
+  - Actionable error messages with remediation guidance for auth, model, and network failures
+
+- **Cognee Probe Bypass (Plan 088)**: New `cognee_probe_bypass.py` module prevents add-only ingestion failures caused by Cognee's internal LLM probe:
+  - Sets `_first_run_done=True` on Cognee's setup module to skip `test_llm_connection()`
+  - Bridge-side health check (`bedrock_health.py`) serves as authoritative connectivity validation
+  - Embedding validation deferred to first-use with clear error handling
+
 - **Cloud Readiness Service (Plan 087)**: Unified Cloud readiness state management with three-axis model (auth/vend/bridge) and throttled error display. Eliminates misleading login prompts when user is authenticated but vending fails.
   - **Structured readiness model**: `AuthReadinessState`, `VendReadinessState`, `BridgeReadinessState` with `CloudOverallStatus` (ready/login_required/degraded/error)
   - **Error throttling**: Vend failures surface via toast with 30s min interval and max 3 per 5 minutes to prevent notification spam
@@ -65,6 +77,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Walkthrough Updated (Plan 083 M6)**: Getting Started walkthrough step changed from "Set Your API Key" to "Login to Flowbaby Cloud" with updated description.
 
 ### Fixed
+
+- **Bedrock Add-Only Ingest Failures (Plan 088)**: Fixed add-only memory ingestion failures caused by Cognee's internal LLM probe using unstable Bedrock structured-output configuration. The probe used `response_model=str` which fails intermittently with `InstructorRetryException`. Now bypassed in favor of a deterministic bridge-side health check.
+
+- **Missing boto3 Dependency (Plan 088)**: Added `boto3` to bridge requirements and verification. Existing workspaces that were missing boto3 (which caused silent litellm failures) can now be detected and remediated via dependency refresh.
 
 - **Misleading Login Prompts After Vend Failures (Plan 087)**: Fixed issue where users who were authenticated but experienced credential vending failures would be repeatedly prompted to log in. The extension now correctly distinguishes between "not logged in" and "logged in but vend failing" states, showing appropriate guidance for each.
 

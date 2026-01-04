@@ -169,7 +169,21 @@ def verify_environment(workspace_path):
     required_modules = {
         "cognee": "cognee",
         "rdflib": "rdflib",
-        "dotenv": "python-dotenv" # import name is dotenv
+        "dotenv": "python-dotenv",  # import name is dotenv
+
+        # Runtime dependencies shipped in bridge/requirements.txt
+        # Required for Bedrock credential handling via litellm.
+        "botocore": "botocore",
+
+        # Plan 088: Required for Bedrock runtime calls via litellm.
+        # boto3 provides the full AWS SDK client needed by litellm's Bedrock adapter.
+        "boto3": "boto3",
+
+        # Required for Cognee cloud storage support.
+        "s3fs": "s3fs",
+
+        # Explicitly pinned to prevent import/runtime errors.
+        "lancedb": "lancedb",
     }
 
     details = {}
