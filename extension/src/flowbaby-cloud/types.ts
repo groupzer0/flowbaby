@@ -4,20 +4,20 @@
  * Re-exports API contract types for use within the extension.
  * This module provides a single import point for all Cloud-related types.
  *
- * @see api-contract/types.ts for the canonical type definitions
- * @see ./contract/types.ts for the synced copy used at compile time
+ * @see @groupzer0/flowbaby-api-contract for the canonical type definitions
+ * @since Plan 089 - migrated from repo-local contract copy to npm package
  */
 
 import * as vscode from 'vscode';
 
-// Import types from the API contract (synced copy) for use within this file
+// Import types from the canonical API contract package for use within this file
 import type {
     UserTier as UserTierType,
     ErrorCode as ErrorCodeType,
     ApiError as ApiErrorType,
-} from './contract';
+} from '@groupzer0/flowbaby-api-contract';
 
-// Re-export all types from the API contract (synced copy)
+// Re-export all types from the API contract package
 export type {
     UserTier,
     AuthRequest,
@@ -28,13 +28,26 @@ export type {
     ErrorCode,
     ApiError,
     TierConfig,
-} from './contract';
+    UserProfileResponse,
+    UsageResponse,
+    EnabledBedrockRegion,
+    AllowlistedLlmModel,
+} from '@groupzer0/flowbaby-api-contract';
 
 export {
     ERROR_HTTP_STATUS,
     TIER_LIMITS,
+    TIER_DISPLAY_NAMES,
     OPERATION_COSTS,
-} from './contract';
+    ENABLED_BEDROCK_REGIONS,
+    DEFAULT_BEDROCK_REGION,
+    ALLOWLISTED_LLM_MODELS,
+    DEFAULT_LLM_MODEL,
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_EMBEDDING_DIMENSIONS,
+    resolveBedrockRegion,
+    getModelConfiguration,
+} from '@groupzer0/flowbaby-api-contract';
 
 // Type aliases for local use (re-exports don't bring types into scope)
 type ErrorCode = ErrorCodeType;

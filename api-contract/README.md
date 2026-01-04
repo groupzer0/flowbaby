@@ -1,54 +1,39 @@
 # Flowbaby Cloud API Contract
 
-> **This directory is the single source of truth for the Flowbaby Cloud API.**
+> ⚠️ **DEPRECATED**: This directory is no longer the source of truth.
 
-## Purpose
+## Canonical Location
 
-The Flowbaby VS Code extension (this repo, public) and the Flowbaby Cloud backend (separate CDK repo, private) need to communicate reliably despite living in separate repositories with separate development workflows.
+The API contract is now maintained in the dedicated repository:
 
-This contract ensures:
-- **Shared understanding**: Extension and backend agents/developers reference the same types
-- **Early integration**: Mismatches are caught at design time, not runtime
-- **Safe evolution**: Versioning enables coordinated changes across repos
+- **Repository**: [`groupzer0/flowbaby-api-contract`](https://github.com/groupzer0/flowbaby-api-contract)
+- **Package**: `@groupzer0/flowbaby-api-contract` (GitHub Packages)
+- **Current Version**: `3.1.0`
 
-## Structure
+## Migration
 
-| File | Description |
-|------|-------------|
-| `version.ts` | Contract version, last updated date, and changelog |
-| `types.ts` | TypeScript interfaces for all request/response/error shapes |
-| `endpoints.md` | Human-readable API documentation with URLs, methods, headers, and examples |
+As of Plan 089 (v0.7.0), all consumers should import from the npm package:
 
-## Design Principles
+```typescript
+import {
+    UserTier,
+    VendRequest,
+    VendResponse,
+    // ... other types
+    ERROR_HTTP_STATUS,
+    TIER_LIMITS,
+    resolveBedrockRegion,
+    getModelConfiguration,
+} from '@groupzer0/flowbaby-api-contract';
+```
 
-### 1. TypeScript-First
-Types are defined in `.ts` files that both extension and Lambda code can directly use or reference. No translation layer required.
+## Historical Note
 
-### 2. Consistent Patterns
-All endpoints follow these conventions:
-- **Auth**: `Authorization: Bearer <flowbaby-session-token>` header
-- **Errors**: Standard error envelope with `code`, `message`, and optional `retryAfter`
-- **Responses**: Consistent casing and structure
-
-### 3. Versioned from Day One
-The `version.ts` file tracks the contract version. Breaking changes require:
-1. Version bump (semver)
-2. Migration notes in the changelog
-3. Coordinated release across extension and backend
-
-### 4. Future-Ready
-This structure supports later migration to OpenAPI if needed:
-- Add Zod schemas that mirror the TS types
-- Use `zod-to-openapi` to generate OpenAPI spec
-- Existing code continues to work unchanged
+This directory previously contained the canonical contract types that were synced to backend repositories via `.github/workflows/sync-contract.yml`. That workflow has been retired as all consumers now depend on the npm package directly.
 
 ---
 
-## Cross-Repo Synchronization
-
-### Automatic Sync Workflow
-
-Changes pushed to `api-contract/` on `main` trigger the [sync-contract workflow](../.github/workflows/sync-contract.yml), which:
+*Migrated: 2026-01-04 (Plan 089)*Changes pushed to `api-contract/` on `main` trigger the [sync-contract workflow](../.github/workflows/sync-contract.yml), which:
 
 1. Detects changes in `api-contract/**`
 2. Opens a PR in `groupzer0/flowbaby-cloud` with the updated files

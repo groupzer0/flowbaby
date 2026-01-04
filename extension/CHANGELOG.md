@@ -57,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **API Contract Package Migration (Plan 089)**: Migrated from repo-local contract copies to the canonical `@groupzer0/flowbaby-api-contract@3.1.0` npm package. Contract types, constants, and helpers are now imported from the versioned package, eliminating copy/sync drift and ensuring extension/backend stay aligned via explicit semver'd dependency. Retired `.github/workflows/sync-contract.yml` and `extension/src/flowbaby-cloud/contract/` local copy.
+
 - **Activation Prompt Gating (Plan 087)**: Post-init prompts now use `CloudReadinessService.needsLogin()` instead of legacy `llmReady` flag. Login prompts only appear when user genuinely needs to authenticate—not when already authenticated but vending is failing.
 
 - **Status Bar Driven by Cloud Readiness (Plan 087)**: Status bar icon and text now reflect the unified `CloudOverallStatus` state. When vend fails for an authenticated user, shows "degraded" state with appropriate guidance instead of misleading "login required".

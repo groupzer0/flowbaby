@@ -379,9 +379,9 @@
         },
         "Flowbaby.advancedSearch.tripletDistancePenalty": {
           "type": "number",
-          "default": 3.0,
+          "default": 3,
           "minimum": 0.1,
-          "maximum": 10.0,
+          "maximum": 10,
           "markdownDescription": "(Advanced) Penalty applied to triplet distance during graph search ranking. Lower values favor closer triplets; higher values relax distance requirements. Plan 063: Tune for better recall."
         },
         "Flowbaby.pythonPath": {
@@ -514,6 +514,7 @@
   },
   "homepage": "https://flowbaby.ai",
   "dependencies": {
+    "@groupzer0/flowbaby-api-contract": "^3.1.0",
     "@types/uuid": "^10.0.0",
     "dotenv": "^17.2.3",
     "uuid": "^13.0.0"

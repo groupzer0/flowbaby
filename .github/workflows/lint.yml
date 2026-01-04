@@ -11,6 +11,8 @@ jobs:
           node-version: '20'
       - name: Install dependencies
         run: cd extension && npm ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run ESLint
         run: cd extension && npm run lint
   
