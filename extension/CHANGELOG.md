@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Accurate Credit Consumption (Plan 090)**: Credits are now charged per successful Bedrock operation rather than at vend time, ensuring users only pay for completed operations:
+  - New `consume()` method in FlowbabyCloudClient calls `POST /usage/consume` endpoint
+  - Metering wired after successful retrieve operations (both synthesis and legacy paths)
+  - Metering wired after successful ingest operations (sync summary, sync conversation, and async cognify paths)
+  - Idempotent billing via `X-Idempotency-Key` header prevents duplicate charges on retries
+  - Fire-and-forget pattern: consume failures logged but never block user operations
+  - DIP-compliant metering abstraction (`IUsageMeter`) keeps Cloud concerns isolated from core paths
+
 - **Bedrock Health Check Module (Plan 088)**: New `bedrock_health.py` module provides deterministic Bedrock connectivity validation using configuration proven stable in Analysis 088:
   - Uses `TextOut` Pydantic response model (not `response_model=str` which is unstable)
   - Strict JSON instruction prompt achieving 20/20 clean responses in batch testing

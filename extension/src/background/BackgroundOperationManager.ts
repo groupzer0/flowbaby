@@ -12,11 +12,13 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
+import { v4 as uuidv4 } from 'uuid';
 // Plan 039 M5: Removed dotenv import - .env API key support removed for security
 // Plan 081: Import Cloud provider for Bedrock credentials
 // Plan 083: Import FlowbabyCloudError to preserve error codes end-to-end
 // Plan 087: Import getReadinessService for user-visible error surfacing
-import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError, getReadinessService } from '../flowbaby-cloud';
+// Plan 090: Import getUsageMeter for credit consumption tracking
+import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError, getReadinessService, getUsageMeter } from '../flowbaby-cloud';
 
 /**
  * Interface for daemon manager to avoid circular imports
@@ -396,6 +398,26 @@ export class BackgroundOperationManager {
                         const result = response.result as { success: boolean; elapsed_ms?: number; entity_count?: number; error?: string };
                         
                         if (result.success) {
+                            // Plan 090: Record credit consumption for successful embed operation (async cognify path)
+                            // Fire-and-forget: metering failure does NOT block operation completion
+                            const idempotencyKey = uuidv4();
+                            getUsageMeter().recordOperation('embed', idempotencyKey).then(meteringResult => {
+                                if (meteringResult.success && !meteringResult.skipped) {
+                                    this.outputChannel.appendLine(
+                                        `[BACKGROUND] ${new Date().toISOString()} - Cognify metering recorded: ` +
+                                        `usedCredits=${meteringResult.usedCredits}, remaining=${meteringResult.remaining}`
+                                    );
+                                } else if (!meteringResult.success) {
+                                    this.outputChannel.appendLine(
+                                        `[BACKGROUND] ${new Date().toISOString()} - Cognify metering failed (non-blocking): ${meteringResult.error}`
+                                    );
+                                }
+                            }).catch((err: Error) => {
+                                this.outputChannel.appendLine(
+                                    `[BACKGROUND] ${new Date().toISOString()} - Cognify metering unexpected error: ${err.message}`
+                                );
+                            });
+
                             await this.completeOperation(operationId, {
                                 elapsedMs: result.elapsed_ms || 0,
                                 entityCount: result.entity_count
@@ -675,6 +697,26 @@ export class BackgroundOperationManager {
             const stubContent = await fs.promises.readFile(stubPath, 'utf-8');
             const stub: StatusStub = JSON.parse(stubContent);
             if (stub.success) {
+                // Plan 090: Record credit consumption for successful embed operation (subprocess cognify path)
+                // Fire-and-forget: metering failure does NOT block operation completion
+                const idempotencyKey = uuidv4();
+                getUsageMeter().recordOperation('embed', idempotencyKey).then(meteringResult => {
+                    if (meteringResult.success && !meteringResult.skipped) {
+                        this.outputChannel.appendLine(
+                            `[BACKGROUND] ${new Date().toISOString()} - Cognify metering recorded (subprocess): ` +
+                            `usedCredits=${meteringResult.usedCredits}, remaining=${meteringResult.remaining}`
+                        );
+                    } else if (!meteringResult.success) {
+                        this.outputChannel.appendLine(
+                            `[BACKGROUND] ${new Date().toISOString()} - Cognify metering failed (non-blocking): ${meteringResult.error}`
+                        );
+                    }
+                }).catch((err: Error) => {
+                    this.outputChannel.appendLine(
+                        `[BACKGROUND] ${new Date().toISOString()} - Cognify metering unexpected error: ${err.message}`
+                    );
+                });
+
                 await this.completeOperation(operationId, {
                     entityCount: stub.entity_count,
                     elapsedMs: stub.elapsed_ms

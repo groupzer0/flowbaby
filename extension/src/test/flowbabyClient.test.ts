@@ -7,6 +7,7 @@ import { EventEmitter } from 'events';
 import { FlowbabyClient } from '../flowbabyClient';
 import { PythonBridgeDaemonManager } from '../bridge/PythonBridgeDaemonManager';
 import * as cloudProvider from '../flowbaby-cloud/provider';
+import * as usageMeter from '../flowbaby-cloud/usageMeter';
 
 // Helper to create directory structure
 function createTestStructure(basePath: string, structure: any) {
@@ -457,6 +458,16 @@ suite('FlowbabyClient Test Suite', () => {
             stubSharedDependencies();
             const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
+
+            const recordOperationStub = sandbox.stub().resolves({
+                success: true,
+                skipped: true,
+                reason: 'test'
+            });
+            sandbox.stub(usageMeter, 'getUsageMeter').returns({
+                recordOperation: recordOperationStub
+            } as unknown as usageMeter.IUsageMeter);
+
             sandbox.stub(client as any, 'runPythonScript').resolves({
                 success: true,
                 results: [],
@@ -466,6 +477,13 @@ suite('FlowbabyClient Test Suite', () => {
 
             const query = 'Explain migrations';
             await client.retrieve(query);
+
+            assert.ok(recordOperationStub.calledOnce, 'retrieve() should record usage metering');
+            assert.strictEqual(recordOperationStub.firstCall.args[0], 'retrieve');
+            assert.match(
+                recordOperationStub.firstCall.args[1] as string,
+                /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+            );
 
             const debugCall = logStub.getCalls().find((call) => call.args[1] === 'Retrieving context');
             assert.ok(debugCall, 'Debug log missing for short query');
@@ -509,6 +527,16 @@ suite('FlowbabyClient Test Suite', () => {
             stubSharedDependencies();
             const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
+
+            const recordOperationStub = sandbox.stub().resolves({
+                success: true,
+                skipped: true,
+                reason: 'test'
+            });
+            sandbox.stub(usageMeter, 'getUsageMeter').returns({
+                recordOperation: recordOperationStub
+            } as unknown as usageMeter.IUsageMeter);
+
             sandbox.stub(client as any, 'runPythonScript').resolves({
                 success: true,
                 ingested_chars: 120,
@@ -522,6 +550,13 @@ suite('FlowbabyClient Test Suite', () => {
             const result = await client.ingest('How do I cache?', 'Use functools.lru_cache');
 
             assert.strictEqual(result, true);
+
+            assert.ok(recordOperationStub.calledOnce, 'ingest() should record usage metering');
+            assert.strictEqual(recordOperationStub.firstCall.args[0], 'embed');
+            assert.match(
+                recordOperationStub.firstCall.args[1] as string,
+                /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+            );
             assert.ok(warningStub.notCalled, 'Warning message should not show on success');
 
             const successCall = logStub.getCalls().find((call) => call.args[1] === 'Conversation ingested');
@@ -690,6 +725,16 @@ suite('FlowbabyClient Test Suite', () => {
             stubSharedDependencies();
             const client = new FlowbabyClient(workspacePath, mockContext);
             const logStub = sandbox.stub(client as any, 'log');
+
+            const recordOperationStub = sandbox.stub().resolves({
+                success: true,
+                skipped: true,
+                reason: 'test'
+            });
+            sandbox.stub(usageMeter, 'getUsageMeter').returns({
+                recordOperation: recordOperationStub
+            } as unknown as usageMeter.IUsageMeter);
+
             sandbox.stub(client as any, 'runPythonScript').resolves({
                 success: true,
                 ingested_chars: 500,
@@ -718,6 +763,13 @@ suite('FlowbabyClient Test Suite', () => {
             };
 
             await client.ingestSummary(summary);
+
+            assert.ok(recordOperationStub.calledOnce, 'ingestSummary() should record usage metering');
+            assert.strictEqual(recordOperationStub.firstCall.args[0], 'embed');
+            assert.match(
+                recordOperationStub.firstCall.args[1] as string,
+                /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+            );
 
             const successCall = logStub.getCalls().find((call) => call.args[1] === 'Summary ingested');
             assert.ok(successCall, 'Success log missing');

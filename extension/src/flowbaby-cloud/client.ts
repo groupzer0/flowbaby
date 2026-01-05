@@ -15,6 +15,8 @@ import {
     RefreshRequest,
     VendRequest,
     VendResponse,
+    ConsumeRequest,
+    ConsumeResponse,
     ApiError,
     ErrorCode,
     FlowbabyCloudError,
@@ -114,6 +116,40 @@ export class FlowbabyCloudClient {
     }
 
     // =========================================================================
+    // Usage Endpoints (Plan 090)
+    // =========================================================================
+
+    /**
+     * Consume credits for a completed Bedrock operation.
+     *
+     * Plan 090: This endpoint is called AFTER a successful Bedrock operation
+     * to charge credits. The idempotency key ensures at-most-once charging
+     * even if the call is retried.
+     *
+     * IMPORTANT: This is fire-and-forget from the caller's perspective.
+     * Failures should be logged but MUST NOT block user operations.
+     *
+     * @param sessionToken - The Flowbaby session token (from login)
+     * @param operationType - The type of operation ('embed' or 'retrieve')
+     * @param idempotencyKey - UUID to ensure at-most-once charging; MUST be stable per operation
+     * @returns The consume response with credit usage info
+     * @throws FlowbabyCloudError on API errors or network failures
+     */
+    async consume(
+        sessionToken: string,
+        operationType: 'embed' | 'retrieve',
+        idempotencyKey: string
+    ): Promise<ConsumeResponse> {
+        const request: ConsumeRequest = { operationType };
+        return this.postWithIdempotencyKey<ConsumeRequest, ConsumeResponse>(
+            '/usage/consume',
+            request,
+            sessionToken,
+            idempotencyKey
+        );
+    }
+
+    // =========================================================================
     // HTTP Helpers
     // =========================================================================
 
@@ -168,6 +204,103 @@ export class FlowbabyCloudClient {
                     const apiError = this.parseApiError(responseData, response.status);
                     // Plan 087: Debug log HTTP status and error code (never secrets)
                     this.log(`API error: HTTP ${response.status}, code=${apiError.code}, message="${apiError.message}"${apiError.retryAfter ? `, retryAfter=${apiError.retryAfter}` : ''}`);
+                    throw FlowbabyCloudError.fromApiError(apiError);
+                }
+
+                // Validate response shape (basic check)
+                if (typeof responseData !== 'object' || responseData === null) {
+                    throw new FlowbabyCloudError(
+                        'UNEXPECTED_RESPONSE',
+                        `Unexpected response shape from ${path}`
+                    );
+                }
+
+                return responseData as TResponse;
+            } catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+
+                // Don't retry on non-retryable errors
+                if (error instanceof FlowbabyCloudError) {
+                    if (!this.isRetryableError(error.code)) {
+                        throw error;
+                    }
+                }
+
+                // Wait before retrying (exponential backoff)
+                if (attempt < this.config.maxRetries) {
+                    const delayMs = Math.min(1000 * Math.pow(2, attempt), 10000);
+                    await this.delay(delayMs);
+                }
+            }
+        }
+
+        // All retries exhausted
+        if (lastError instanceof FlowbabyCloudError) {
+            this.log(`Request to ${path} failed after ${this.config.maxRetries + 1} attempts: code=${lastError.code}`);
+            throw lastError;
+        }
+        const networkError = new FlowbabyCloudError('NETWORK_ERROR', lastError?.message || 'Request failed after retries');
+        this.log(`Network error on ${path}: ${networkError.message}`);
+        throw networkError;
+    }
+
+    /**
+     * Make a POST request with an idempotency key header.
+     *
+     * Plan 090: Used for consume endpoint to ensure at-most-once charging.
+     * The idempotency key is passed via X-Idempotency-Key header.
+     *
+     * SECURITY: Idempotency keys MUST NOT be logged at INFO/WARN/ERROR levels.
+     * They may only appear in DEBUG logs when flowbaby.debug is enabled.
+     *
+     * @param path - API endpoint path
+     * @param body - Request body
+     * @param sessionToken - Session token for authentication
+     * @param idempotencyKey - UUID for at-most-once semantics
+     * @returns Parsed response body
+     * @throws FlowbabyCloudError on errors
+     */
+    private async postWithIdempotencyKey<TRequest, TResponse>(
+        path: string,
+        body: TRequest,
+        sessionToken: string,
+        idempotencyKey: string
+    ): Promise<TResponse> {
+        const url = `${this.config.apiBaseUrl}${path}`;
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${sessionToken}`,
+            'X-Idempotency-Key': idempotencyKey,
+        };
+
+        let lastError: Error | undefined;
+
+        for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+            try {
+                const response = await this.fetchWithTimeout(url, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(body),
+                });
+
+                // Parse response body
+                const responseText = await response.text();
+                let responseData: unknown;
+                try {
+                    responseData = responseText ? JSON.parse(responseText) : {};
+                } catch {
+                    throw new FlowbabyCloudError(
+                        'UNEXPECTED_RESPONSE',
+                        `Failed to parse response from ${path}`
+                    );
+                }
+
+                // Check for error response
+                if (!response.ok) {
+                    const apiError = this.parseApiError(responseData, response.status);
+                    // Plan 090: Log error without idempotency key (security)
+                    this.log(`API error: HTTP ${response.status}, code=${apiError.code}, message="${apiError.message}"`);
                     throw FlowbabyCloudError.fromApiError(apiError);
                 }
 
@@ -264,6 +397,7 @@ export class FlowbabyCloudClient {
 
     /**
      * Check if an error code is valid per the contract.
+     * Plan 090: Added INVALID_REQUEST for consume endpoint validation errors.
      */
     private isValidErrorCode(code: string): code is ErrorCode {
         const validCodes: ErrorCode[] = [
@@ -277,6 +411,8 @@ export class FlowbabyCloudClient {
             'QUOTA_EXCEEDED',
             'TIER_INVALID',
             'INTERNAL_ERROR',
+            'INVALID_REQUEST',     // Plan 090: Consume endpoint validation errors
+            'USER_NOT_FOUND',      // Contract v3.3.0
         ];
         return validCodes.includes(code as ErrorCode);
     }

@@ -90,3 +90,14 @@ export {
     type IBridgeHealthChecker,
     type ThrottleConfig,
 } from './readiness';
+
+// Re-export usage metering module (Plan 090)
+export {
+    type IUsageMeter,
+    type MeteringResult,
+    NoOpUsageMeter,
+    CloudUsageMeter,
+    initializeUsageMeter,
+    resetUsageMeter,
+    getUsageMeter,
+} from './usageMeter';

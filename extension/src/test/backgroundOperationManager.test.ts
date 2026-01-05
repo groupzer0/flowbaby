@@ -6,6 +6,7 @@ import * as sinon from 'sinon';
 import * as vscode from 'vscode';
 import { BackgroundOperationManager, OperationEntry } from '../background/BackgroundOperationManager';
 import * as cloudProvider from '../flowbaby-cloud/provider';
+import * as usageMeter from '../flowbaby-cloud/usageMeter';
 
 suite('BackgroundOperationManager - Concurrency and Queue', () => {
     let workspacePath: string;
@@ -634,6 +635,58 @@ suite('BackgroundOperationManager - Notification Setting (Plan 043)', () => {
         assert.ok(infoStub.calledWith('✅ Flowbaby processing finished'), 'Should show correct success message');
 
         spawnStub.restore();
+    });
+
+    test('records usage metering on successful cognify completion (status stub path)', async () => {
+        configStub.withArgs('flowbaby.notifications').returns({
+            get: (_key: string, defaultValue: boolean) => defaultValue
+        });
+        configStub.withArgs('Flowbaby.llm').returns({ get: () => undefined });
+
+        const recordOperationStub = sinon.stub().resolves({
+            success: true,
+            skipped: true,
+            reason: 'test'
+        });
+        const getMeterStub = sinon.stub(usageMeter, 'getUsageMeter').returns({
+            recordOperation: recordOperationStub
+        } as unknown as usageMeter.IUsageMeter);
+
+        const spawnStub = sinon.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
+            const operationId = args[0] as string;
+            const entry = manager.getStatus(operationId) as OperationEntry;
+            entry.status = 'running';
+            entry.pid = 12345;
+            entry.lastUpdate = new Date().toISOString();
+        });
+
+        try {
+            const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'test context' } };
+            const opId = await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+
+            const stubDir = path.join(workspacePath, '.flowbaby', 'background_ops');
+            fs.mkdirSync(stubDir, { recursive: true });
+            fs.writeFileSync(
+                path.join(stubDir, `${opId}.json`),
+                JSON.stringify({
+                    success: true,
+                    entity_count: 5,
+                    elapsed_ms: 1000
+                })
+            );
+
+            await (manager as any).processStatusStub(opId, workspacePath, false);
+
+            assert.ok(recordOperationStub.calledOnce, 'background cognify completion should record usage metering');
+            assert.strictEqual(recordOperationStub.firstCall.args[0], 'embed');
+            assert.match(
+                recordOperationStub.firstCall.args[1] as string,
+                /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+            );
+        } finally {
+            spawnStub.restore();
+            getMeterStub.restore();
+        }
     });
 
     test('success notification is suppressed when showIngestionSuccess is false', async () => {

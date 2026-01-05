@@ -26,6 +26,8 @@ import {
     initializeReadinessService,
     resetReadinessService,
     getReadinessService,
+    initializeUsageMeter,
+    getCloudClient,
 } from './flowbaby-cloud';
 import {
     getActiveWorkspacePath,
@@ -265,6 +267,14 @@ export async function activate(_context: vscode.ExtensionContext) {
 
         // Initialize the provider singleton so downstream components can get Cloud env
         initializeProvider(cloudCredentials);
+
+        // Plan 090: Initialize usage metering with Cloud client and session token getter
+        // This enables accurate credit consumption tracking after Bedrock operations.
+        initializeUsageMeter(
+            getCloudClient(),
+            async () => (await cloudAuth.getSessionToken()) ?? null
+        );
+        debugLog('Plan 090: UsageMeter initialized with Cloud dependencies');
 
         // Plan 087: Initialize Cloud Readiness Service
         // This provides unified readiness state (auth/vend/bridge) and throttled error display.

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 import { spawn, ChildProcess, SpawnOptions, execFileSync, ExecFileSyncOptions } from 'child_process';
 import { getFlowbabyOutputChannel, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
@@ -11,7 +12,8 @@ import { synthesizeWithCopilot, isNoRelevantContext, SynthesisResult } from './s
 // Plan 081: Import Cloud provider for Bedrock credentials
 // Plan 083: Import FlowbabyCloudError to preserve error codes end-to-end
 // Plan 087: Import getReadinessService for user-visible error surfacing
-import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError, getReadinessService } from './flowbaby-cloud';
+// Plan 090: Import getUsageMeter for credit consumption tracking
+import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError, getReadinessService, getUsageMeter } from './flowbaby-cloud';
 
 /**
  * Interface for BackgroundOperationManager to avoid circular imports.
@@ -857,6 +859,26 @@ export class FlowbabyClient {
             const duration = Date.now() - startTime;
 
             if (result.success) {
+                // Plan 090: Record credit consumption for successful embed operation (sync path)
+                // Fire-and-forget: metering failure does NOT block ingestion
+                const idempotencyKey = uuidv4();
+                getUsageMeter().recordOperation('embed', idempotencyKey).then(meteringResult => {
+                    if (meteringResult.success && !meteringResult.skipped) {
+                        this.log('DEBUG', 'Summary ingest metering recorded', {
+                            usedCredits: meteringResult.usedCredits,
+                            remaining: meteringResult.remaining,
+                            idempotencyKey
+                        });
+                    } else if (!meteringResult.success) {
+                        this.log('WARN', 'Summary ingest metering failed (non-blocking)', {
+                            error: meteringResult.error,
+                            idempotencyKey
+                        });
+                    }
+                }).catch((err: Error) => {
+                    this.log('WARN', 'Summary ingest metering unexpected error', { error: err.message });
+                });
+
                 this.log('INFO', 'Summary ingested', {
                     topic: summary.topic,
                     topicId: summary.topicId,
@@ -1186,6 +1208,26 @@ export class FlowbabyClient {
             const duration = Date.now() - startTime;
 
             if (result.success) {
+                // Plan 090: Record credit consumption for successful embed operation (conversation sync path)
+                // Fire-and-forget: metering failure does NOT block ingestion
+                const idempotencyKey = uuidv4();
+                getUsageMeter().recordOperation('embed', idempotencyKey).then(meteringResult => {
+                    if (meteringResult.success && !meteringResult.skipped) {
+                        this.log('DEBUG', 'Conversation ingest metering recorded', {
+                            usedCredits: meteringResult.usedCredits,
+                            remaining: meteringResult.remaining,
+                            idempotencyKey
+                        });
+                    } else if (!meteringResult.success) {
+                        this.log('WARN', 'Conversation ingest metering failed (non-blocking)', {
+                            error: meteringResult.error,
+                            idempotencyKey
+                        });
+                    }
+                }).catch((err: Error) => {
+                    this.log('WARN', 'Conversation ingest metering unexpected error', { error: err.message });
+                });
+
                 this.log('INFO', 'Conversation ingested', {
                     chars: result.ingested_chars,
                     timestamp: result.timestamp,
@@ -1501,6 +1543,28 @@ export class FlowbabyClient {
             });
 
             if (result.success) {
+                // Plan 090: Record credit consumption for successful retrieve operation
+                // Fire-and-forget: metering failure does NOT block retrieval
+                const idempotencyKey = uuidv4();
+                getUsageMeter().recordOperation('retrieve', idempotencyKey).then(meteringResult => {
+                    if (meteringResult.success && !meteringResult.skipped) {
+                        this.log('DEBUG', 'Retrieve metering recorded', {
+                            usedCredits: meteringResult.usedCredits,
+                            remaining: meteringResult.remaining,
+                            idempotencyKey
+                        });
+                    } else if (!meteringResult.success) {
+                        this.log('WARN', 'Retrieve metering failed (non-blocking)', {
+                            error: meteringResult.error,
+                            idempotencyKey
+                        });
+                    }
+                    // If skipped (NoOpUsageMeter), no log needed
+                }).catch((err: Error) => {
+                    // Defensive catch - recordOperation should never throw
+                    this.log('WARN', 'Retrieve metering unexpected error', { error: err.message });
+                });
+
                 // Plan 073: Check for v2.0.0+ contract with graphContext for synthesis
                 const contractVersion = result.contractVersion as string | undefined;
                 const graphContext = result.graphContext as string | null | undefined;

@@ -32,6 +32,9 @@ export type {
     UsageResponse,
     EnabledBedrockRegion,
     AllowlistedLlmModel,
+    // Plan 090: Consume types for credit usage metering
+    ConsumeRequest,
+    ConsumeResponse,
 } from '@groupzer0/flowbaby-api-contract';
 
 export {
