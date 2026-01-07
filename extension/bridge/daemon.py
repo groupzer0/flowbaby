@@ -144,6 +144,10 @@ def initialize_cognee(workspace_path: str, logger: logging.Logger) -> None:
     Plan 074: Uses _daemon_env_config (set by setup_cognee_environment) for
     consistent directory configuration.
     
+    Plan 091 Hotfix: Applies cognee_probe_bypass BEFORE importing cognee to prevent
+    LLMAPIKeyNotSetError during cognify. Without this bypass, Cognee's internal
+    test_llm_connection() runs and fails with Bedrock (expects LLM_API_KEY).
+    
     Note: API key is NOT required at import time - it will be validated per-request.
     """
     global cognee, cognee_initialized
@@ -154,6 +158,19 @@ def initialize_cognee(workspace_path: str, logger: logging.Logger) -> None:
 
     logger.info("Initializing Cognee SDK...")
     start_time = time.time()
+
+    # Plan 091 Hotfix: Apply probe bypass BEFORE importing cognee
+    # This prevents test_llm_connection() from running during cognify,
+    # which fails with Bedrock because Cognee defaults to OpenAI provider.
+    try:
+        from cognee_probe_bypass import apply_cognee_probe_bypass
+        bypass_applied = apply_cognee_probe_bypass()
+        if bypass_applied:
+            logger.debug("Plan 091: Cognee probe bypass applied")
+        else:
+            logger.warning("Plan 091: Cognee probe bypass failed - cognify may fail with LLM errors")
+    except Exception as e:
+        logger.warning(f"Plan 091: Could not apply cognee probe bypass: {e}")
 
     # Redirect stdout to stderr during import to avoid polluting JSON-RPC channel
     old_stdout = sys.stdout
