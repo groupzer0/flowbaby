@@ -232,6 +232,14 @@ async def visualize_graph(
         logger.debug("Importing cognee SDK")
         import cognee
         
+        # Configure workspace-local storage directories
+        # CRITICAL: env vars alone are insufficient - must also call cognee.config API
+        system_root = str(workspace_dir / '.flowbaby' / 'system')
+        data_root = str(workspace_dir / '.flowbaby' / 'data')
+        cognee.config.system_root_directory(system_root)
+        cognee.config.data_root_directory(data_root)
+        logger.debug(f"Configured Cognee storage: system={system_root}, data={data_root}")
+        
         # Plan 083 M5: v0.7.0 is Cloud-only - Cognee uses AWS Bedrock via AWS_* env vars
         logger.debug("Cloud-only mode: Using AWS Bedrock via Cloud credentials")
         
