@@ -343,6 +343,26 @@ class TestEmptyGraphDetection:
         assert not output_path.exists(), "Empty graph HTML should be deleted"
 
     @pytest.mark.asyncio
+    async def test_cognee_no_data_exception_returns_empty_graph(self, temp_workspace, mock_env, mock_cognee_module):
+        """Test that Cognee 'No graph data available' exception returns EMPTY_GRAPH error code."""
+        from visualize import visualize_graph
+
+        output_path = temp_workspace / 'graph.html'
+
+        async def fake_visualize_graph_raises(*, destination_file_path: str):
+            # Simulate Cognee raising exception when no data exists
+            raise Exception("No graph data available in workspace")
+
+        import sys
+        sys.modules["cognee"].visualize_graph = fake_visualize_graph_raises
+
+        result = await visualize_graph(str(temp_workspace), str(output_path))
+
+        assert result["success"] is False
+        assert result.get("error_code") == "EMPTY_GRAPH"
+        assert "no graph data" in result.get("error", "").lower()
+
+    @pytest.mark.asyncio
     async def test_valid_graph_succeeds(self, temp_workspace, mock_env, mock_cognee_module):
         """Test that a valid graph with sufficient nodes succeeds."""
         from visualize import visualize_graph

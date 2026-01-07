@@ -256,22 +256,31 @@ async def visualize_graph(
         try:
             await cognee.visualize_graph(destination_file_path=str(output_file))
         except Exception as viz_error:
-            error_msg = str(viz_error)
+            error_msg = str(viz_error).lower()
             
-            # Check for common error conditions
-            if 'no data' in error_msg.lower() or 'empty' in error_msg.lower():
+            # Check for common error conditions - Cognee uses various phrasings
+            # e.g. "No graph data available" or "no data" or "empty"
+            is_no_data = (
+                'no data' in error_msg or 
+                'no graph data' in error_msg or 
+                'empty' in error_msg or
+                'not found' in error_msg
+            )
+            if is_no_data:
                 return {
                     'success': False,
-                    'error_code': 'NO_DATA',
-                    'error': 'No graph data available. Ingest some content first.',
-                    'user_message': 'No graph data available. Ingest some content first.'
+                    'error_code': 'EMPTY_GRAPH',
+                    'error': 'No graph data available in workspace',
+                    'user_message': 'No graph data available. Ingest some memories first using @flowbaby chat.',
+                    'node_count': 0,
+                    'has_sentinel': False
                 }
             
-            logger.error(f"Cognee visualize_graph failed: {error_msg}")
+            logger.error(f"Cognee visualize_graph failed: {viz_error}")
             return {
                 'success': False,
                 'error_code': 'VISUALIZATION_ERROR',
-                'error': f'Failed to generate graph: {error_msg}'
+                'error': f'Failed to generate graph: {viz_error}'
             }
         
         # Read the generated HTML
