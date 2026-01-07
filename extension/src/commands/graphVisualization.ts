@@ -125,9 +125,14 @@ export function registerVisualizeGraphCommand(
                                 `error: ${errorMessage}`
                             );
 
-                            if (result.error_code === 'NO_DATA') {
+                            // Plan 091 M3: Handle empty graph error codes with appropriate UX
+                            if (result.error_code === 'NO_DATA' || result.error_code === 'EMPTY_GRAPH') {
                                 vscode.window.showWarningMessage(
-                                    'Flowbaby: No graph data available. Ingest some memories first using the chat participant.'
+                                    'Flowbaby: No graph data available. Ingest some memories first using @flowbaby chat.'
+                                );
+                            } else if (result.error_code === 'EMPTY_GRAPH_WRONG_STORE') {
+                                vscode.window.showWarningMessage(
+                                    'Flowbaby: Graph visualization produced empty output. Data may exist but was not read correctly. Try re-running the command.'
                                 );
                             } else if (result.error_code === 'NOT_AUTHENTICATED') {
                                 const loginAction = 'Login to Cloud';

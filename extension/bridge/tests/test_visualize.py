@@ -235,10 +235,11 @@ class TestVisualizeGraph:
         async def fake_visualize_graph(*, destination_file_path: str):
             # Simulate Cognee output using known D3 CDN script tag.
             # visualize.py should inline vendored assets and pass offline validation.
+            # Include multiple "id" entries to pass node_count >= 2 threshold
             Path(destination_file_path).write_text(
                 """<html><head>
 <script src=\"https://d3js.org/d3.v5.min.js\"></script>
-</head><body>{\"id\":\"node1\"}</body></html>""",
+</head><body>{\"id\":\"node1\"},{\"id\":\"node2\"},{\"id\":\"node3\"}</body></html>""",
                 encoding="utf-8",
             )
 
@@ -253,6 +254,122 @@ class TestVisualizeGraph:
         assert isinstance(result.get("file_size_bytes"), int)
         assert result.get("output_path") == str(output_path)
         assert output_path.exists(), "Expected HTML output should exist on success"
+
+
+class TestEmptyGraphDetection:
+    """Tests for Plan 091 M3: Fail-closed empty graph detection."""
+
+    @pytest.mark.asyncio
+    async def test_empty_graph_sentinel_returns_failure(self, temp_workspace, mock_env, mock_cognee_module):
+        """Test that Cognee's 'No graph data available' sentinel triggers failure."""
+        from visualize import visualize_graph
+
+        output_path = temp_workspace / 'graph.html'
+
+        async def fake_visualize_graph(*, destination_file_path: str):
+            # Simulate Cognee output with the empty graph sentinel
+            Path(destination_file_path).write_text(
+                """<html><head>
+<script src=\"https://d3js.org/d3.v5.min.js\"></script>
+</head><body><div>No graph data available</div></body></html>""",
+                encoding="utf-8",
+            )
+
+        import sys
+        sys.modules["cognee"].visualize_graph = fake_visualize_graph
+
+        result = await visualize_graph(str(temp_workspace), str(output_path))
+
+        assert result["success"] is False
+        assert result.get("error_code") in ("EMPTY_GRAPH", "EMPTY_GRAPH_WRONG_STORE")
+        assert result.get("has_sentinel") is True
+        assert not output_path.exists(), "Empty graph HTML should be deleted"
+
+    @pytest.mark.asyncio
+    async def test_low_node_count_returns_failure(self, temp_workspace, mock_env, mock_cognee_module):
+        """Test that suspiciously low node count triggers failure."""
+        from visualize import visualize_graph
+
+        output_path = temp_workspace / 'graph.html'
+
+        async def fake_visualize_graph(*, destination_file_path: str):
+            # Simulate Cognee output with only one node (below threshold)
+            Path(destination_file_path).write_text(
+                """<html><head>
+<script src=\"https://d3js.org/d3.v5.min.js\"></script>
+</head><body>{\"id\":\"single_node\"}</body></html>""",
+                encoding="utf-8",
+            )
+
+        import sys
+        sys.modules["cognee"].visualize_graph = fake_visualize_graph
+
+        result = await visualize_graph(str(temp_workspace), str(output_path))
+
+        assert result["success"] is False
+        assert result.get("error_code") == "EMPTY_GRAPH"
+        assert result.get("node_count") == 1
+        assert not output_path.exists(), "Empty graph HTML should be deleted"
+
+    @pytest.mark.asyncio
+    async def test_wrong_store_detection(self, temp_workspace, mock_env, mock_cognee_module):
+        """Test that sentinel + nodes triggers EMPTY_GRAPH_WRONG_STORE error."""
+        from visualize import visualize_graph
+
+        output_path = temp_workspace / 'graph.html'
+
+        async def fake_visualize_graph(*, destination_file_path: str):
+            # Simulate pathological case: sentinel present but also some nodes
+            # This suggests visualization read from wrong store
+            Path(destination_file_path).write_text(
+                """<html><head>
+<script src=\"https://d3js.org/d3.v5.min.js\"></script>
+</head><body>
+<div>No graph data available</div>
+<div>{\"id\":\"node1\"},{\"id\":\"node2\"},{\"id\":\"node3\"}</div>
+</body></html>""",
+                encoding="utf-8",
+            )
+
+        import sys
+        sys.modules["cognee"].visualize_graph = fake_visualize_graph
+
+        result = await visualize_graph(str(temp_workspace), str(output_path))
+
+        assert result["success"] is False
+        assert result.get("error_code") == "EMPTY_GRAPH_WRONG_STORE"
+        assert result.get("has_sentinel") is True
+        assert result.get("node_count") >= 2
+        assert not output_path.exists(), "Empty graph HTML should be deleted"
+
+    @pytest.mark.asyncio
+    async def test_valid_graph_succeeds(self, temp_workspace, mock_env, mock_cognee_module):
+        """Test that a valid graph with sufficient nodes succeeds."""
+        from visualize import visualize_graph
+
+        output_path = temp_workspace / 'graph.html'
+
+        async def fake_visualize_graph(*, destination_file_path: str):
+            # Simulate valid Cognee output with multiple nodes
+            Path(destination_file_path).write_text(
+                """<html><head>
+<script src=\"https://d3js.org/d3.v5.min.js\"></script>
+</head><body>
+{\"id\":\"entity1\",\"type\":\"Decision\"},
+{\"id\":\"entity2\",\"type\":\"Problem\"},
+{\"id\":\"entity3\",\"type\":\"Solution\"}
+</body></html>""",
+                encoding="utf-8",
+            )
+
+        import sys
+        sys.modules["cognee"].visualize_graph = fake_visualize_graph
+
+        result = await visualize_graph(str(temp_workspace), str(output_path))
+
+        assert result["success"] is True
+        assert result.get("node_count") >= 2
+        assert output_path.exists(), "Valid graph HTML should be preserved"
 
 
 class TestD3AssetIntegrity:

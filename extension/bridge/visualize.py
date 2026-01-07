@@ -32,6 +32,8 @@ from pathlib import Path
 
 # Add bridge directory to path to import bridge_logger and workspace_utils
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# CRITICAL: Import bridge_env BEFORE any cognee import (Plan 074/091)
+from bridge_env import apply_workspace_env, OntologyConfigError
 import bridge_logger
 from workspace_utils import canonicalize_workspace_path, generate_dataset_name
 
@@ -206,28 +208,29 @@ async def visualize_graph(
             logger.error("Missing Cloud credentials", extra={'data': error_payload})
             return error_payload
         
-        # Configure Cognee environment variables BEFORE SDK import
-        system_root = str(workspace_dir / '.flowbaby/system')
-        data_root = str(workspace_dir / '.flowbaby/data')
-        cache_root = str(workspace_dir / '.flowbaby/cache')
+        # Plan 091 M2: Use shared bridge_env module for all environment wiring
+        # CRITICAL: This must happen BEFORE importing cognee
+        try:
+            env_config = apply_workspace_env(
+                workspace_path,
+                logger=logger,
+                fail_on_missing_ontology=False  # Visualization can proceed without ontology
+            )
+            logger.info(f"Environment configured: {env_config.to_log_string()}")
+        except OntologyConfigError as e:
+            # Non-fatal for visualization - ontology is optional here
+            logger.warning(f"Ontology configuration warning (non-fatal for visualization): {e}")
+        except ValueError as e:
+            return {
+                'success': False,
+                'error_code': 'INVALID_WORKSPACE',
+                'error': str(e),
+                'user_message': f'Invalid workspace path: {e}'
+            }
         
-        os.environ['SYSTEM_ROOT_DIRECTORY'] = system_root
-        os.environ['DATA_ROOT_DIRECTORY'] = data_root
-        os.environ['CACHE_ROOT_DIRECTORY'] = cache_root
-        
-        # Ensure directories exist
-        Path(system_root).mkdir(parents=True, exist_ok=True)
-        Path(data_root).mkdir(parents=True, exist_ok=True)
-        Path(cache_root).mkdir(parents=True, exist_ok=True)
-        
-        # Import cognee AFTER setting environment variables
+        # Import cognee AFTER environment configuration
         logger.debug("Importing cognee SDK")
         import cognee
-        
-        # Configure workspace-local storage directories
-        logger.debug("Configuring workspace storage directories")
-        cognee.config.system_root_directory(system_root)
-        cognee.config.data_root_directory(data_root)
         
         # Plan 083 M5: v0.7.0 is Cloud-only - Cognee uses AWS Bedrock via AWS_* env vars
         logger.debug("Cloud-only mode: Using AWS Bedrock via Cloud credentials")
@@ -310,12 +313,51 @@ async def visualize_graph(
         
         logger.info("Offline-first validation passed: no external script references")
         
-        # Write the post-processed HTML (safe to write now)
-        output_file.write_text(html_content, encoding='utf-8')
-        
         # Count nodes in the visualization (basic heuristic from HTML)
         # Look for node data in the D3 visualization
         node_count = html_content.count('"id":')  # Rough estimate from JSON data
+        
+        # Plan 091 M3: Fail-closed empty graph detection
+        # Check for Cognee's "No graph data available" placeholder (sentinel)
+        EMPTY_GRAPH_SENTINEL = "No graph data available"
+        has_empty_sentinel = EMPTY_GRAPH_SENTINEL.lower() in html_content.lower()
+        
+        # Secondary heuristic: node count
+        # If sentinel is present OR node count is suspiciously low, treat as empty
+        is_empty_graph = has_empty_sentinel or node_count < 2
+        
+        if is_empty_graph:
+            # FAIL-CLOSED: Don't return success for empty graphs
+            logger.warning(f"Empty graph detected: sentinel={has_empty_sentinel}, node_count={node_count}")
+            
+            # Delete the empty output file
+            if output_file.exists():
+                output_file.unlink()
+                logger.info(f"Deleted empty graph output: {output_file}")
+            
+            # Distinguish between "no data ingested" and "wrong store"
+            # If we have *any* nodes but the sentinel is present, likely wrong store
+            if has_empty_sentinel and node_count > 0:
+                return {
+                    'success': False,
+                    'error_code': 'EMPTY_GRAPH_WRONG_STORE',
+                    'error': 'Graph exists but visualization read from wrong store or produced empty output',
+                    'user_message': 'Graph visualization failed: data may exist but was not read correctly. Try re-running the command.',
+                    'node_count': node_count,
+                    'has_sentinel': has_empty_sentinel
+                }
+            else:
+                return {
+                    'success': False,
+                    'error_code': 'EMPTY_GRAPH',
+                    'error': 'No graph data available in workspace',
+                    'user_message': 'No graph data available. Ingest some memories first using @flowbaby chat.',
+                    'node_count': node_count,
+                    'has_sentinel': has_empty_sentinel
+                }
+        
+        # Write the post-processed HTML (safe to write now)
+        output_file.write_text(html_content, encoding='utf-8')
         
         logger.info("Graph visualization generated successfully", extra={'data': {
             'output_path': str(output_file),

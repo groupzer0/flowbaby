@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Preferred Region Dropdown (Plan 091)**: The `Flowbaby Cloud: Preferred Region` setting now renders as a dropdown in VS Code Settings instead of a freeform text input:
+  - Dropdown displays all supported Bedrock regions (us-east-1, us-west-2, eu-west-1, eu-central-1, ap-northeast-1, ap-northeast-2, ap-southeast-2, ap-south-1)
+  - First option "Backend default (recommended)" selects the backend's default region
+  - New `npm run check:regions` script validates enum matches API contract allowlist at build time
+
 - **Accurate Credit Consumption (Plan 090)**: Credits are now charged per successful Bedrock operation rather than at vend time, ensuring users only pay for completed operations:
   - New `consume()` method in FlowbabyCloudClient calls `POST /usage/consume` endpoint
   - Metering wired after successful retrieve operations (both synthesis and legacy paths)
@@ -87,6 +92,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Walkthrough Updated (Plan 083 M6)**: Getting Started walkthrough step changed from "Set Your API Key" to "Login to Flowbaby Cloud" with updated description.
 
 ### Fixed
+
+- **Graph Visualization "No Data" Despite Data Existing (Plan 091)**: Fixed issue where `Flowbaby: Visualize Memory Graph` would show "No graph data available" in the browser even when memories had been ingested. The visualization script now uses the shared environment wiring contract (`bridge_env.apply_workspace_env()`) to ensure it reads from the correct workspace-local database.
+  - Added fail-closed empty-graph detection: the command now returns a clear error instead of a misleading success toast when the generated graph is empty
+  - Distinguishes between "no data ingested" and "data exists but read from wrong store" scenarios
+  - TypeScript command updated to show warnings for empty-graph errors
 
 - **Bedrock Add-Only Ingest Failures (Plan 088)**: Fixed add-only memory ingestion failures caused by Cognee's internal LLM probe using unstable Bedrock structured-output configuration. The probe used `response_model=str` which fails intermittently with `InstructorRetryException`. Now bypassed in favor of a deterministic bridge-side health check.
 
