@@ -28,6 +28,7 @@ import {
     getReadinessService,
     initializeUsageMeter,
     getCloudClient,
+    createCredentialRefreshManager,
 } from './flowbaby-cloud';
 import {
     getActiveWorkspacePath,
@@ -58,6 +59,7 @@ let retrieveMemoryToolDisposable: vscode.Disposable | undefined;
 let cloudAuthDisposable: vscode.Disposable | undefined;
 let cloudCredentialsDisposable: vscode.Disposable | undefined;
 let cloudReadinessDisposable: vscode.Disposable | undefined;
+let credentialRefreshManagerDisposable: vscode.Disposable | undefined;
 
 /**
  * Plan 083 M7: One-time legacy API key migration
@@ -268,6 +270,14 @@ export async function activate(_context: vscode.ExtensionContext) {
         // Initialize the provider singleton so downstream components can get Cloud env
         initializeProvider(cloudCredentials);
 
+        // Plan 092 M1: Wire CredentialRefreshManager for daemon coordination
+        // This enables graceful daemon restart when credentials are refreshed,
+        // preventing "stale credentials" failures after token rotation.
+        const credentialRefreshManager = createCredentialRefreshManager(cloudCredentials, cloudOutputChannel);
+        _context.subscriptions.push(credentialRefreshManager);
+        credentialRefreshManagerDisposable = credentialRefreshManager;
+        debugLog('Plan 092: CredentialRefreshManager initialized');
+
         // Plan 090: Initialize usage metering with Cloud client and session token getter
         // This enables accurate credit consumption tracking after Bedrock operations.
         initializeUsageMeter(
@@ -389,7 +399,9 @@ export async function activate(_context: vscode.ExtensionContext) {
             setToolDisposables: (store, retrieve) => {
                 storeMemoryToolDisposable = store;
                 retrieveMemoryToolDisposable = retrieve;
-            }
+            },
+            // Plan 092 M1: Pass CredentialRefreshManager for daemon coordination
+            credentialRefreshManager
         };
 
         if (initResult.success) {
@@ -445,6 +457,12 @@ export async function deactivate() {
     if (cloudCredentialsDisposable) {
         cloudCredentialsDisposable.dispose();
         cloudCredentialsDisposable = undefined;
+    }
+
+    // Plan 092: Dispose CredentialRefreshManager
+    if (credentialRefreshManagerDisposable) {
+        credentialRefreshManagerDisposable.dispose();
+        credentialRefreshManagerDisposable = undefined;
     }
 
     // Plan 087: Dispose Cloud readiness service

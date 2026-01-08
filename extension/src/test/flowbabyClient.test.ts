@@ -2125,7 +2125,8 @@ suite('FlowbabyClient Test Suite', () => {
             assert.ok(daemonParams.summary_json, 'Should include summary_json');
         });
 
-        test('ingestSummaryAsync should fall back to spawn when daemon add-only fails', async () => {
+        test('ingestSummaryAsync should retry on retryable daemon error and succeed', async () => {
+            // Plan 092 M4: Removed subprocess fallback, now retries on daemon path
             // Arrange
             stubDaemonConfigs('daemon');
             sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
@@ -2135,12 +2136,19 @@ suite('FlowbabyClient Test Suite', () => {
             anyClient.pythonPath = '/usr/bin/python3';
             anyClient.isInitialized = true;
 
-            const mockIngestViaDaemon = sandbox.stub(anyClient, 'ingestViaDaemon').rejects(new Error('Daemon connection failed'));
-            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
-                success: true,
-                staged: true,
-                ingested_chars: 123,
-                timestamp: '2025-12-20T10:00:00.000Z'
+            // First call fails with retryable error, second succeeds
+            let callCount = 0;
+            const mockIngestViaDaemon = sandbox.stub(anyClient, 'ingestViaDaemon').callsFake(async () => {
+                callCount++;
+                if (callCount === 1) {
+                    throw new Error('EBUSY: database is locked');
+                }
+                return {
+                    success: true,
+                    staged: true,
+                    ingested_chars: 123,
+                    timestamp: '2025-12-20T10:00:00.000Z'
+                };
             });
 
             const startOperationStub = sandbox.stub().resolves('op-456');
@@ -2173,9 +2181,79 @@ suite('FlowbabyClient Test Suite', () => {
             assert.strictEqual(result.success, true);
             assert.strictEqual(result.staged, true);
             assert.strictEqual(result.operationId, 'op-456');
-            assert.ok(mockIngestViaDaemon.calledOnce, 'Should try daemon first');
-            assert.ok(mockRunPythonScript.calledOnce, 'Should fall back to spawn-per-request');
-            assert.ok(startOperationStub.calledOnce, 'Should enqueue background cognify op after fallback');
+            assert.strictEqual(mockIngestViaDaemon.callCount, 2, 'Should retry daemon call');
+            assert.ok(startOperationStub.calledOnce, 'Should enqueue background cognify op after successful retry');
+        });
+    });
+
+    // Plan 092 M4: Tests for isRetryableError and staging retry logic
+    suite('Staging Retry Logic (Plan 092)', () => {
+        test('isRetryableError recognizes EBUSY error code', () => {
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
+            const anyClient = client as any;
+            
+            const result = anyClient.isRetryableError('EBUSY: resource busy');
+            
+            assert.strictEqual(result.isRetryable, true);
+            assert.ok(result.reason.includes('EBUSY'));
+        });
+
+        test('isRetryableError recognizes LOCK_ERROR error code', () => {
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
+            const anyClient = client as any;
+            
+            const result = anyClient.isRetryableError('LOCK_ERROR: database is busy');
+            
+            assert.strictEqual(result.isRetryable, true);
+            assert.ok(result.reason.includes('LOCK_ERROR'));
+        });
+
+        test('isRetryableError recognizes database locked pattern', () => {
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
+            const anyClient = client as any;
+            
+            const result = anyClient.isRetryableError('SQLite error: database is locked');
+            
+            assert.strictEqual(result.isRetryable, true);
+            assert.ok(result.reason.includes('database is locked'));
+        });
+
+        test('isRetryableError rejects non-retryable errors', () => {
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
+            const anyClient = client as any;
+            
+            const result = anyClient.isRetryableError('Invalid payload: missing topic field');
+            
+            assert.strictEqual(result.isRetryable, false);
+            assert.strictEqual(result.reason, 'not_matched');
+        });
+
+        test('isRetryableError recognizes timeout pattern', () => {
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
+            const anyClient = client as any;
+            
+            const result = anyClient.isRetryableError('Request timeout exceeded after 30s');
+            
+            assert.strictEqual(result.isRetryable, true);
+            assert.ok(result.reason.includes('timeout'));
+        });
+
+        test('STAGING_MAX_RETRIES constant is defined', () => {
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
+            const anyClient = client as any;
+            
+            assert.strictEqual(typeof anyClient.STAGING_MAX_RETRIES, 'number');
+            assert.ok(anyClient.STAGING_MAX_RETRIES >= 1, 'Should have at least 1 retry');
+            assert.ok(anyClient.STAGING_MAX_RETRIES <= 5, 'Should not have more than 5 retries');
+        });
+
+        test('STAGING_RETRY_DELAY_MS constant is defined', () => {
+            const client = new FlowbabyClient(testWorkspacePath, mockContext);
+            const anyClient = client as any;
+            
+            assert.strictEqual(typeof anyClient.STAGING_RETRY_DELAY_MS, 'number');
+            assert.ok(anyClient.STAGING_RETRY_DELAY_MS >= 500, 'Delay should be at least 500ms');
+            assert.ok(anyClient.STAGING_RETRY_DELAY_MS <= 5000, 'Delay should not exceed 5s');
         });
     });
 });

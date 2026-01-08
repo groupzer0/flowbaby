@@ -229,6 +229,115 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     }
 
     /**
+     * Plan 092 M1: Get the number of pending requests.
+     * Required by IDaemonController interface for drain monitoring
+     * during credential refresh coordination.
+     */
+    public getPendingRequestCount(): number {
+        return this.pendingRequests.size;
+    }
+
+    /**
+     * Plan 092 M1: Check if the daemon is currently running.
+     * Required by IDaemonController interface for restart coordination
+     * during credential refresh.
+     */
+    public isRunning(): boolean {
+        return this.state === 'running' && this.daemonProcess !== null;
+    }
+
+    // ==========================================================================
+    // Plan 092 M2: Exclusive Daemon Locking
+    // ==========================================================================
+
+    /** Tracks whether this manager holds the workspace lock */
+    private lockHeld: boolean = false;
+
+    /**
+     * Plan 092 M2: Get the path to the lock directory.
+     * Lock is placed in the workspace's .flowbaby directory to ensure
+     * workspace-scoped exclusivity.
+     */
+    public getLockPath(): string {
+        return path.join(this.workspacePath, '.flowbaby', 'daemon.lock');
+    }
+
+    /**
+     * Plan 092 M2: Check if this manager holds the lock.
+     */
+    public isLockHeld(): boolean {
+        return this.lockHeld;
+    }
+
+    /**
+     * Plan 092 M2: Acquire exclusive lock for daemon management.
+     * Uses atomic directory creation (mkdir) which is a POSIX-guaranteed
+     * atomic operation - only one process can successfully create a directory.
+     * 
+     * @returns true if lock acquired, false if lock already held by another process
+     */
+    public async acquireLock(): Promise<boolean> {
+        if (this.lockHeld) {
+            this.log('DEBUG', 'Lock already held by this manager');
+            return true;
+        }
+
+        const lockPath = this.getLockPath();
+        
+        try {
+            // Ensure .flowbaby directory exists
+            const flowbabyDir = path.dirname(lockPath);
+            await fs.promises.mkdir(flowbabyDir, { recursive: true });
+
+            // Try to create lock directory atomically
+            // mkdir without recursive option will fail with EEXIST if directory exists
+            await fs.promises.mkdir(lockPath);
+            
+            this.lockHeld = true;
+            this.log('INFO', 'Lock acquired', { lockPath });
+            return true;
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+                this.log('WARN', 'Lock already held by another process', { lockPath });
+                return false;
+            }
+            // Unexpected error - log and rethrow
+            this.log('ERROR', 'Failed to acquire lock', { 
+                lockPath, 
+                error: error instanceof Error ? error.message : String(error) 
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Plan 092 M2: Release the exclusive lock.
+     * Only releases if this manager holds the lock.
+     */
+    public async releaseLock(): Promise<void> {
+        if (!this.lockHeld) {
+            this.log('DEBUG', 'Lock not held, nothing to release');
+            return;
+        }
+
+        const lockPath = this.getLockPath();
+        
+        try {
+            await fs.promises.rmdir(lockPath);
+            this.lockHeld = false;
+            this.log('INFO', 'Lock released', { lockPath });
+        } catch (error) {
+            // Log but don't throw - lock release is best-effort cleanup
+            this.log('WARN', 'Failed to release lock', {
+                lockPath,
+                error: error instanceof Error ? error.message : String(error)
+            });
+            // Still mark as not held since we can't be sure of lock state
+            this.lockHeld = false;
+        }
+    }
+
+    /**
      * Start the daemon if not already running
      */
     public async start(): Promise<void> {
@@ -263,6 +372,16 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         const startTime = Date.now();
 
         try {
+            // Plan 092 M2.4: Acquire exclusive lock before starting daemon
+            const lockAcquired = await this.acquireLock();
+            if (!lockAcquired) {
+                this.state = 'stopped';
+                throw new Error(
+                    'Another VS Code window is already managing this workspace daemon. ' +
+                    'Close other windows with this workspace to use daemon mode, or disable daemon mode in settings.'
+                );
+            }
+
             // Plan 061: Startup hygiene - check for orphan/stale daemons
             await this.cleanupStaleDaemon();
 
@@ -759,6 +878,9 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             this.daemonProcess = null;
             this.deletePidFile();
             
+            // Plan 092 M2.4: Release lock after daemon stops
+            await this.releaseLock();
+            
             this.log('INFO', 'Daemon stopped', { 
                 reason, 
                 outcome: shutdownOutcome,
@@ -797,11 +919,35 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
 
     /**
      * Restart the daemon (stop then start)
+     * 
+     * Plan 092 M3: Ensures old process fully exits before spawning new one.
+     * - Calls stop() and waits for it to complete
+     * - doStop() already handles graceful shutdown with SIGTERM/SIGKILL escalation
+     * - Logs restart timing for observability
      */
     public async restart(): Promise<void> {
-        this.log('INFO', 'Restarting daemon');
+        const restartStart = Date.now();
+        const oldPid = this.daemonProcess?.pid;
+        
+        this.log('INFO', 'Restarting daemon', { oldPid });
+        
+        // Stop and wait for completion - doStop() handles graceful + escalated shutdown
         await this.stop('restart');
+        
+        const stopDuration = Date.now() - restartStart;
+        this.log('INFO', 'Restart: old process stopped', { 
+            stopDuration_ms: stopDuration,
+            oldPid 
+        });
+        
+        // Start new daemon
         await this.start();
+        
+        const totalDuration = Date.now() - restartStart;
+        this.log('INFO', 'Restart completed', {
+            totalDuration_ms: totalDuration,
+            newPid: this.daemonProcess?.pid
+        });
     }
 
     /**

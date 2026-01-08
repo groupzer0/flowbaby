@@ -214,6 +214,10 @@ export class FlowbabyClient {
     private daemonManager?: PythonBridgeDaemonManager; // Plan 054: Bridge daemon manager
     private readonly daemonModeEnabled: boolean; // Plan 054: Feature flag for daemon mode
 
+    // Plan 092 M4: Auto-retry configuration for staging failures
+    private readonly STAGING_MAX_RETRIES = 2; // Total attempts = MAX_RETRIES + 1
+    private readonly STAGING_RETRY_DELAY_MS = 1000; // Base delay, doubles each retry
+
     /**
      * Constructor - Load configuration and initialize output channel
      * 
@@ -1014,38 +1018,91 @@ export class FlowbabyClient {
                 throw new Error(`Payload too large (${summaryJson.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
             }
             
-            // Plan 062: Route add-only through daemon to avoid KuzuDB lock conflicts
-            // The daemon holds the single connection to KuzuDB, so all DB operations must go through it
-            let result: FlowbabyResult;
-            if (this.daemonManager && this.daemonModeEnabled) {
-                try {
-                    const daemonParams: Record<string, unknown> = {
-                        mode: 'add-only',
-                        summary_json: summaryJson,
-                        workspace_path: this.workspacePath
-                    };
-                    result = await this.ingestViaDaemon(daemonParams);
-                } catch (daemonError) {
-                    const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
-                    this.log('WARN', 'Daemon add-only failed, falling back to spawn-per-request', {
-                        error: errorMsg
+            // Plan 092 M4: Wrap staging in retry loop with exponential backoff
+            // Retries transient failures (lock contention, timeouts) automatically
+            let result: FlowbabyResult | undefined;
+            let lastError: string | undefined;
+            
+            for (let attempt = 0; attempt <= this.STAGING_MAX_RETRIES; attempt++) {
+                const isRetry = attempt > 0;
+                
+                if (isRetry) {
+                    // Exponential backoff: delay * 2^(attempt-1)
+                    const delay = this.STAGING_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+                    this.log('INFO', 'Plan 092: Retrying staging after transient failure', {
+                        attempt: attempt + 1,
+                        maxAttempts: this.STAGING_MAX_RETRIES + 1,
+                        delay_ms: delay,
+                        lastError
                     });
-                    // Fall back to subprocess (will likely fail with lock error if daemon is running)
-                    result = await this.runPythonScript('ingest.py', [
-                        '--mode', 'add-only',
-                        '--summary',
-                        '--summary-json',
-                        summaryJson
-                    ], 30000);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                 }
-            } else {
-                // No daemon - use subprocess directly
-                result = await this.runPythonScript('ingest.py', [
-                    '--mode', 'add-only',
-                    '--summary',
-                    '--summary-json',
-                    summaryJson
-                ], 30000);
+                
+                try {
+                    // Plan 062: Route add-only through daemon to avoid KuzuDB lock conflicts
+                    // Plan 092: Removed subprocess fallback - it would fail with same lock error
+                    if (this.daemonManager && this.daemonModeEnabled) {
+                        const daemonParams: Record<string, unknown> = {
+                            mode: 'add-only',
+                            summary_json: summaryJson,
+                            workspace_path: this.workspacePath
+                        };
+                        result = await this.ingestViaDaemon(daemonParams);
+                    } else {
+                        // No daemon - use subprocess directly
+                        result = await this.runPythonScript('ingest.py', [
+                            '--mode', 'add-only',
+                            '--summary',
+                            '--summary-json',
+                            summaryJson
+                        ], 30000);
+                    }
+                    
+                    // Check if operation succeeded
+                    if (result.success && result.staged) {
+                        // Success - exit retry loop
+                        break;
+                    }
+                    
+                    // Operation completed but failed - check if retryable
+                    lastError = result.error || 'Unknown error';
+                    const retryCheck = this.isRetryableError(lastError);
+                    
+                    if (!retryCheck.isRetryable || attempt >= this.STAGING_MAX_RETRIES) {
+                        // Non-retryable or exhausted retries
+                        break;
+                    }
+                    
+                    this.log('DEBUG', 'Plan 092: Staging failed with retryable error', {
+                        error: lastError,
+                        retryReason: retryCheck.reason
+                    });
+                    
+                } catch (daemonError) {
+                    lastError = daemonError instanceof Error ? daemonError.message : String(daemonError);
+                    const retryCheck = this.isRetryableError(lastError);
+                    
+                    if (!retryCheck.isRetryable || attempt >= this.STAGING_MAX_RETRIES) {
+                        // Non-retryable exception or exhausted retries
+                        this.log('ERROR', 'Plan 092: Staging failed with non-retryable error', {
+                            error: lastError,
+                            retryReason: retryCheck.reason,
+                            attempt: attempt + 1
+                        });
+                        result = { success: false, error: lastError };
+                        break;
+                    }
+                    
+                    this.log('DEBUG', 'Plan 092: Staging exception is retryable', {
+                        error: lastError,
+                        retryReason: retryCheck.reason
+                    });
+                }
+            }
+            
+            // Ensure result is defined
+            if (!result) {
+                result = { success: false, error: lastError || 'Unknown error after retries' };
             }
 
             const duration = Date.now() - startTime;
@@ -2607,5 +2664,52 @@ export class FlowbabyClient {
             return 7;
         }
         return Math.min(Math.max(value, 0.5), 90);
+    }
+
+    /**
+     * Plan 092 M4: Check if an error is retryable (transient failure).
+     * 
+     * Uses a conservative allow-list approach to avoid retrying non-transient errors.
+     * Prefers structured error codes when available, falls back to narrow pattern matching.
+     * 
+     * @param error Error message or error code
+     * @returns Object with isRetryable flag and reason for logging
+     */
+    private isRetryableError(error: string): { isRetryable: boolean; reason: string } {
+        // Structured error codes (preferred)
+        const retryableErrorCodes = [
+            'EBUSY',           // Resource busy (file locked)
+            'EAGAIN',          // Resource temporarily unavailable
+            'ETIMEDOUT',       // Connection timed out
+            'ECONNRESET',      // Connection reset by peer
+            'LOCK_ERROR',      // Custom lock contention code
+            'TEMPORARY_FAILURE', // Generic transient failure
+        ];
+
+        // Check for structured error codes first
+        for (const code of retryableErrorCodes) {
+            if (error.includes(code)) {
+                return { isRetryable: true, reason: `error_code:${code}` };
+            }
+        }
+
+        // Narrow pattern matching for known transient signatures
+        // These are kept conservative to avoid retrying permanent failures
+        const retryablePatterns = [
+            /database is locked/i,
+            /lock.*already.*held/i,
+            /resource.*busy/i,
+            /connection.*reset/i,
+            /timeout.*exceeded/i,
+            /temporarily unavailable/i,
+        ];
+
+        for (const pattern of retryablePatterns) {
+            if (pattern.test(error)) {
+                return { isRetryable: true, reason: `pattern:${pattern.source}` };
+            }
+        }
+
+        return { isRetryable: false, reason: 'not_matched' };
     }
 }

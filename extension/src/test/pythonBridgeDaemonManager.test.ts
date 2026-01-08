@@ -920,4 +920,346 @@ suite('PythonBridgeDaemonManager', () => {
             manager.dispose();
         });
     });
+
+    // Plan 092 M1: Test for getPendingRequestCount() method
+    suite('Pending Request Count (Plan 092)', () => {
+        test('should return 0 when no requests are pending', () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // New method required by IDaemonController interface
+            assert.strictEqual(manager.getPendingRequestCount(), 0);
+
+            manager.dispose();
+        });
+
+        test('should return correct count when requests are in flight', async () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Simulate adding pending requests via internal state
+            // Access private pendingRequests map for test setup
+            const pendingRequests = (manager as any).pendingRequests as Map<string, unknown>;
+            pendingRequests.set('req-1', { resolve: () => {}, reject: () => {}, timer: null, method: 'test', startTime: Date.now() });
+            pendingRequests.set('req-2', { resolve: () => {}, reject: () => {}, timer: null, method: 'test', startTime: Date.now() });
+
+            assert.strictEqual(manager.getPendingRequestCount(), 2);
+
+            pendingRequests.clear();
+            assert.strictEqual(manager.getPendingRequestCount(), 0);
+
+            manager.dispose();
+        });
+    });
+
+    // Plan 092 M1: Test for isRunning() method (IDaemonController interface)
+    suite('Is Running (Plan 092)', () => {
+        test('should return false when daemon process is not started', () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Before starting, daemon should not be running
+            assert.strictEqual(manager.isRunning(), false);
+
+            manager.dispose();
+        });
+
+        test('should return true when daemon process is active', () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Simulate daemon running by setting internal state
+            (manager as any).state = 'running';
+            (manager as any).daemonProcess = new MockChildProcess();
+            
+            // Daemon should be running
+            assert.strictEqual(manager.isRunning(), true);
+
+            manager.dispose();
+        });
+
+        test('should return false after daemon process is stopped', () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Simulate daemon running then stopped
+            (manager as any).state = 'running';
+            (manager as any).daemonProcess = new MockChildProcess();
+            assert.strictEqual(manager.isRunning(), true);
+            
+            // Simulate stop
+            (manager as any).state = 'stopped';
+            (manager as any).daemonProcess = null;
+            
+            // Daemon should not be running after stop
+            assert.strictEqual(manager.isRunning(), false);
+
+            manager.dispose();
+        });
+
+        test('should return false when state is running but process is null', () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Edge case: state says running but process is null (crashed/killed)
+            (manager as any).state = 'running';
+            (manager as any).daemonProcess = null;
+            
+            assert.strictEqual(manager.isRunning(), false);
+
+            manager.dispose();
+        });
+    });
+
+    // Plan 092 M2: Tests for exclusive daemon locking
+    suite('Exclusive Daemon Locking (Plan 092)', () => {
+        let tempWorkspacePath: string;
+        let tempManager: PythonBridgeDaemonManager;
+
+        setup(() => {
+            // Create a unique temp directory for each test
+            const os = require('os');
+            const crypto = require('crypto');
+            tempWorkspacePath = path.join(
+                os.tmpdir(),
+                `flowbaby-test-${crypto.randomBytes(8).toString('hex')}`
+            );
+            
+            // Create the workspace directory
+            require('fs').mkdirSync(tempWorkspacePath, { recursive: true });
+            
+            tempManager = new PythonBridgeDaemonManager(
+                tempWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+        });
+
+        teardown(async () => {
+            // Release lock if held
+            await tempManager.releaseLock();
+            tempManager.dispose();
+            
+            // Clean up temp directory
+            const fs = require('fs');
+            try {
+                fs.rmSync(tempWorkspacePath, { recursive: true, force: true });
+            } catch {
+                // Ignore cleanup errors
+            }
+        });
+
+        test('getLockPath returns path under .flowbaby directory', () => {
+            const lockPath = tempManager.getLockPath();
+            
+            // Lock should be under workspace's .flowbaby directory
+            assert.ok(lockPath.startsWith(path.join(tempWorkspacePath, '.flowbaby')),
+                'Lock path should be under .flowbaby directory');
+            assert.ok(lockPath.includes('daemon.lock'),
+                'Lock path should include daemon.lock');
+        });
+
+        test('acquireLock succeeds when no lock exists', async () => {
+            const result = await tempManager.acquireLock();
+            
+            assert.strictEqual(result, true, 'Should acquire lock successfully');
+            assert.strictEqual(tempManager.isLockHeld(), true, 'Lock should be held');
+            
+            // Verify lock directory was created
+            const fs = require('fs');
+            assert.ok(fs.existsSync(tempManager.getLockPath()), 'Lock directory should exist');
+        });
+
+        test('acquireLock fails when lock already exists', async () => {
+            // First acquire the lock
+            const firstResult = await tempManager.acquireLock();
+            assert.strictEqual(firstResult, true, 'First lock should succeed');
+            
+            // Create second manager for same workspace
+            const secondManager = new PythonBridgeDaemonManager(
+                tempWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+            
+            // Second acquire should fail
+            const secondResult = await secondManager.acquireLock();
+            assert.strictEqual(secondResult, false, 'Second lock should fail');
+            assert.strictEqual(secondManager.isLockHeld(), false, 'Second manager should not hold lock');
+            
+            secondManager.dispose();
+        });
+
+        test('acquireLock is idempotent when already held', async () => {
+            // Acquire lock twice from same manager
+            const firstResult = await tempManager.acquireLock();
+            const secondResult = await tempManager.acquireLock();
+            
+            assert.strictEqual(firstResult, true, 'First acquire should succeed');
+            assert.strictEqual(secondResult, true, 'Second acquire from same manager should succeed');
+            assert.strictEqual(tempManager.isLockHeld(), true, 'Lock should be held');
+        });
+
+        test('releaseLock succeeds when lock is held', async () => {
+            // Acquire then release
+            await tempManager.acquireLock();
+            assert.strictEqual(tempManager.isLockHeld(), true, 'Lock should be held before release');
+            
+            await tempManager.releaseLock();
+            
+            assert.strictEqual(tempManager.isLockHeld(), false, 'Lock should not be held after release');
+            
+            // Verify lock directory was removed
+            const fs = require('fs');
+            assert.strictEqual(fs.existsSync(tempManager.getLockPath()), false, 'Lock directory should not exist');
+        });
+
+        test('releaseLock is idempotent when lock not held', async () => {
+            // Release without acquiring - should not throw
+            assert.strictEqual(tempManager.isLockHeld(), false, 'Lock should not be held initially');
+            
+            await tempManager.releaseLock();
+            
+            assert.strictEqual(tempManager.isLockHeld(), false, 'Lock should still not be held');
+        });
+
+        test('isLockHeld returns correct state', async () => {
+            assert.strictEqual(tempManager.isLockHeld(), false, 'Lock should not be held initially');
+
+            await tempManager.acquireLock();
+            assert.strictEqual(tempManager.isLockHeld(), true, 'Lock should be held after acquire');
+
+            await tempManager.releaseLock();
+            assert.strictEqual(tempManager.isLockHeld(), false, 'Lock should not be held after release');
+        });
+
+        test('lock can be acquired after release', async () => {
+            // Acquire, release, acquire again
+            const firstResult = await tempManager.acquireLock();
+            assert.strictEqual(firstResult, true, 'First acquire should succeed');
+            
+            await tempManager.releaseLock();
+            
+            const secondResult = await tempManager.acquireLock();
+            assert.strictEqual(secondResult, true, 'Second acquire after release should succeed');
+        });
+    });
+
+    // Plan 092 M3: Tests for restart with process exit verification
+    suite('Restart Process Exit Verification (Plan 092)', () => {
+        test('restart waits for stop to complete before starting', async () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Track method call order
+            const callOrder: string[] = [];
+            const originalStop = (manager as any).doStop.bind(manager);
+            const originalStart = (manager as any).doStart.bind(manager);
+
+            // Simulate daemon running
+            (manager as any).state = 'running';
+            (manager as any).daemonProcess = new MockChildProcess();
+
+            // Mock stop to track timing
+            (manager as any).doStop = async (reason: string) => {
+                callOrder.push('stop-start');
+                await new Promise(resolve => setTimeout(resolve, 50)); // Simulate stop delay
+                (manager as any).state = 'stopped';
+                (manager as any).daemonProcess = null;
+                callOrder.push('stop-end');
+            };
+
+            // Mock start to track timing and prevent actual spawn
+            (manager as any).startupPromise = null;
+            (manager as any).doStart = async () => {
+                callOrder.push('start-start');
+                // Should only be called after stop completes
+                assert.ok(callOrder.includes('stop-end'), 'Start should only be called after stop completes');
+                callOrder.push('start-end');
+            };
+
+            await manager.restart();
+
+            assert.deepStrictEqual(callOrder, ['stop-start', 'stop-end', 'start-start', 'start-end'],
+                'Stop should complete before start begins');
+
+            manager.dispose();
+        });
+
+        test('restart logs timing information', async () => {
+            const manager = new PythonBridgeDaemonManager(
+                mockWorkspacePath,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Simulate daemon running
+            (manager as any).state = 'running';
+            (manager as any).daemonProcess = new MockChildProcess();
+
+            // Mock stop to simulate quick exit
+            (manager as any).doStop = async () => {
+                (manager as any).state = 'stopped';
+                (manager as any).daemonProcess = null;
+            };
+
+            // Mock start to prevent actual spawn
+            (manager as any).startupPromise = null;
+            (manager as any).doStart = async () => {
+                // Do nothing - we just want to test the restart logs
+            };
+
+            await manager.restart();
+
+            // Verify restart was logged
+            const logCalls = (mockOutputChannel.appendLine as sinon.SinonStub).getCalls();
+            const restartLogs = logCalls.filter((call: sinon.SinonSpyCall) => 
+                call.args[0]?.includes('Restart'));
+            
+            assert.ok(restartLogs.length > 0, 'Should log restart information');
+
+            manager.dispose();
+        });
+    });
 });

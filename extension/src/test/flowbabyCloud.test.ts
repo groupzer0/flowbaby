@@ -1292,5 +1292,105 @@ suite('Flowbaby Cloud Module Tests', () => {
             assert.strictEqual(getReadinessService(), undefined);
         });
     });
+
+    // Plan 092 M1: CredentialRefreshManager and daemon controller wiring tests
+    suite('CredentialRefreshManager (Plan 092)', () => {
+        let auth: FlowbabyCloudAuth;
+        let credentials: FlowbabyCloudCredentials;
+        let mockAuthClient: MockAuthClient;
+        let mockCredentialClient: MockCredentialClient;
+
+        setup(async () => {
+            mockAuthClient = new MockAuthClient();
+            mockCredentialClient = new MockCredentialClient();
+            auth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
+            credentials = new FlowbabyCloudCredentials(auth, mockCredentialClient, mockOutputChannel);
+
+            // Store valid session for authenticated state
+            const futureDate = new Date(Date.now() + 3600000).toISOString();
+            storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+            storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+        });
+
+        teardown(() => {
+            auth.dispose();
+            credentials.dispose();
+        });
+
+        test('createCredentialRefreshManager returns disposable instance', async () => {
+            const { createCredentialRefreshManager } = await import('../flowbaby-cloud/refresh');
+            const refreshManager = createCredentialRefreshManager(credentials, mockOutputChannel);
+
+            assert.ok(refreshManager, 'Should create refresh manager');
+            assert.strictEqual(typeof refreshManager.dispose, 'function', 'Should be disposable');
+
+            refreshManager.dispose();
+        });
+
+        test('registerDaemonController accepts IDaemonController interface', async () => {
+            const { createCredentialRefreshManager } = await import('../flowbaby-cloud/refresh');
+            const refreshManager = createCredentialRefreshManager(credentials, mockOutputChannel);
+
+            // Mock daemon controller implementing IDaemonController
+            const mockDaemonController = {
+                restart: sandbox.stub().resolves(),
+                isRunning: sandbox.stub().returns(true),
+                getPendingRequestCount: sandbox.stub().returns(0),
+            };
+
+            // Should not throw
+            refreshManager.registerDaemonController(mockDaemonController);
+            
+            // Verify output channel was logged to
+            assert.ok((mockOutputChannel.appendLine as sinon.SinonStub).calledWith(
+                sinon.match(/Daemon controller registered/)
+            ), 'Should log daemon controller registration');
+
+            refreshManager.dispose();
+        });
+
+        test('unregisterDaemonController clears controller reference', async () => {
+            const { createCredentialRefreshManager } = await import('../flowbaby-cloud/refresh');
+            const refreshManager = createCredentialRefreshManager(credentials, mockOutputChannel);
+
+            const mockDaemonController = {
+                restart: sandbox.stub().resolves(),
+                isRunning: sandbox.stub().returns(true),
+                getPendingRequestCount: sandbox.stub().returns(0),
+            };
+
+            refreshManager.registerDaemonController(mockDaemonController);
+            refreshManager.unregisterDaemonController();
+
+            // Verify unregister was logged
+            assert.ok((mockOutputChannel.appendLine as sinon.SinonStub).calledWith(
+                sinon.match(/Daemon controller unregistered/)
+            ), 'Should log daemon controller unregistration');
+
+            refreshManager.dispose();
+        });
+
+        test('isRefreshInProgress returns false initially', async () => {
+            const { createCredentialRefreshManager } = await import('../flowbaby-cloud/refresh');
+            const refreshManager = createCredentialRefreshManager(credentials, mockOutputChannel);
+
+            assert.strictEqual(refreshManager.isRefreshInProgress(), false);
+
+            refreshManager.dispose();
+        });
+
+        test('getState returns initial state correctly', async () => {
+            const { createCredentialRefreshManager } = await import('../flowbaby-cloud/refresh');
+            const refreshManager = createCredentialRefreshManager(credentials, mockOutputChannel);
+
+            const state = refreshManager.getState();
+            assert.strictEqual(state.refreshInProgress, false);
+            assert.strictEqual(state.consecutiveFailures, 0);
+            assert.strictEqual(state.credentialExpiresAt, undefined);
+            assert.strictEqual(state.lastRefreshAt, undefined);
+
+            refreshManager.dispose();
+        });
+    });
 });
 

@@ -63,6 +63,8 @@ export interface OperationEntry {
     errorMessage?: string;
     payloadPath?: string;
     payloadType?: OperationRetryPayload['type'];
+    // Plan 092 M5: Track auto-retry count for daemon failures
+    retryCount?: number;
 }
 
 export interface StatusStub {
@@ -96,6 +98,10 @@ export class BackgroundOperationManager {
     private readonly maxQueued = 3;
     private readonly throttleWindowMs = 5 * 60 * 1000; // 5 minutes
     private readonly stubPollIntervalMs = 5000; // 5 seconds
+    
+    // Plan 092 M5: Auto-retry constants for daemon cognify failures
+    private readonly AUTO_RETRY_COUNT = 1;
+    private readonly AUTO_RETRY_DELAY_MS = 2000;
     
     private context: vscode.ExtensionContext;
     private outputChannel: vscode.OutputChannel;
@@ -310,7 +316,9 @@ export class BackgroundOperationManager {
             status: runningCount < this.maxConcurrent ? 'running' : 'pending',
             queueIndex: runningCount < this.maxConcurrent ? undefined : queuedCount,
             payloadPath,
-            payloadType: payload.type
+            payloadType: payload.type,
+            // Plan 092 M5: Initialize retry count for auto-retry tracking
+            retryCount: 0
         };
         this.defaultPythonPath = pythonPath;
         this.defaultBridgeScriptPath = bridgeScriptPath;
@@ -355,7 +363,8 @@ export class BackgroundOperationManager {
         operationId: string,
         datasetPathOverride?: string,
         pythonPathOverride?: string,
-        bridgeScriptPathOverride?: string
+        bridgeScriptPathOverride?: string,
+        forceSubprocess?: boolean  // Plan 092 M5: Force subprocess path, bypassing daemon
     ): Promise<void> {
         const entry = this.operations.get(operationId);
         if (!entry) {
@@ -374,7 +383,8 @@ export class BackgroundOperationManager {
         // Plan 061 Hotfix: Try routing through daemon first to avoid KuzuDB lock contention
         // Plan 069 Hotfix: Fire-and-forget pattern - don't block on cognify completion
         // This was causing agents to hang waiting for tool response while cognify ran (30-90s)
-        if (this.daemonManager && this.daemonManager.isDaemonEnabled() && this.daemonManager.isHealthy()) {
+        // Plan 092 M5: Skip daemon if forceSubprocess is true (used for auto-retry after daemon failure)
+        if (!forceSubprocess && this.daemonManager && this.daemonManager.isDaemonEnabled() && this.daemonManager.isHealthy()) {
             this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Routing cognify through daemon (operationId=${operationId})`);
             
             entry.status = 'running';
@@ -436,11 +446,42 @@ export class BackgroundOperationManager {
                 .catch(async (daemonError) => {
                     const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
                     this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Daemon cognify failed: ${errorMsg}`);
-                    await this.failOperation(operationId, {
-                        code: 'DAEMON_ERROR',
-                        message: errorMsg,
-                        remediation: 'Check daemon logs. Try running Flowbaby: Refresh Environment.'
-                    });
+                    
+                    // Plan 092 M5: Auto-retry via subprocess if retries available
+                    const entry = this.operations.get(operationId);
+                    const currentRetryCount = entry?.retryCount ?? 0;
+                    
+                    if (currentRetryCount < this.AUTO_RETRY_COUNT) {
+                        // Increment retry count
+                        if (entry) {
+                            entry.retryCount = currentRetryCount + 1;
+                            entry.lastUpdate = new Date().toISOString();
+                        }
+                        
+                        this.outputChannel.appendLine(
+                            `[BACKGROUND] ${new Date().toISOString()} - Auto-retrying with subprocess (attempt ${currentRetryCount + 1}) after ${this.AUTO_RETRY_DELAY_MS}ms`
+                        );
+                        
+                        // Wait before retry
+                        await new Promise(resolve => setTimeout(resolve, this.AUTO_RETRY_DELAY_MS));
+                        
+                        // Retry via explicit subprocess path (not daemon)
+                        // This bypasses the daemon check and goes directly to subprocess
+                        await this.spawnCognifyProcess(
+                            operationId,
+                            entry?.datasetPath || workspacePath,
+                            entry?.pythonPath || undefined,
+                            entry?.bridgeScriptPath || undefined,
+                            true // forceSubprocess flag
+                        );
+                    } else {
+                        // Retries exhausted - fail the operation
+                        await this.failOperation(operationId, {
+                            code: 'DAEMON_ERROR',
+                            message: errorMsg,
+                            remediation: 'Check daemon logs. Try running Flowbaby: Refresh Environment.'
+                        });
+                    }
                     await this.dequeueNext();
                 });
             

@@ -792,3 +792,245 @@ suite('BackgroundOperationManager - Notification Setting (Plan 043)', () => {
         spawnStub.restore();
     });
 });
+
+/**
+ * Plan 092 M5 - Auto-Retry for Cognify Daemon Failures
+ * 
+ * Tests for automatic retry of cognify operations when daemon fails,
+ * using explicit subprocess path instead of daemon.
+ */
+suite('BackgroundOperationManager - Cognify Daemon Auto-Retry (Plan 092)', () => {
+    let workspacePath: string;
+    let context: vscode.ExtensionContext;
+    let output: vscode.OutputChannel;
+    let manager: BackgroundOperationManager;
+    let sandbox: sinon.SinonSandbox;
+    let outputLines: string[];
+    let cloudProviderStub: sinon.SinonStub;
+    let cloudEnvStub: sinon.SinonStub;
+    let meteringStub: sinon.SinonStub;
+    let warnStub: sinon.SinonStub;
+
+    const resetSingleton = () => {
+        (BackgroundOperationManager as unknown as { instance?: BackgroundOperationManager }).instance = undefined;
+    };
+
+    setup(async () => {
+        sandbox = sinon.createSandbox();
+        outputLines = [];
+        workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-retry-'));
+        
+        // Stub Cloud provider
+        cloudProviderStub = sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
+        cloudEnvStub = sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
+            AWS_ACCESS_KEY_ID: 'test-access-key',
+            AWS_SECRET_ACCESS_KEY: 'test-secret-key',
+            AWS_SESSION_TOKEN: 'test-session-token',
+            AWS_REGION: 'us-east-1',
+            FLOWBABY_CLOUD_MODE: 'true'
+        });
+        
+        // Stub usage meter
+        meteringStub = sandbox.stub(usageMeter, 'getUsageMeter').returns({
+            recordOperation: sandbox.stub().resolves({ success: true, skipped: false, usedCredits: 1, remaining: 99 })
+        } as unknown as ReturnType<typeof usageMeter.getUsageMeter>);
+        
+        warnStub = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined as any);
+        sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined as any);
+        
+        context = {
+            subscriptions: [],
+            globalState: {
+                get: sandbox.stub().returns(undefined),
+                update: sandbox.stub().resolves()
+            }
+        } as unknown as vscode.ExtensionContext;
+        
+        output = {
+            appendLine: (line: string) => outputLines.push(line)
+        } as unknown as vscode.OutputChannel;
+
+        resetSingleton();
+        manager = BackgroundOperationManager.initialize(context, output);
+        await manager.initializeForWorkspace(workspacePath);
+    });
+
+    teardown(async () => {
+        sandbox.restore();
+        await manager.shutdown();
+        resetSingleton();
+        if (fs.existsSync(workspacePath)) {
+            fs.rmSync(workspacePath, { recursive: true, force: true });
+        }
+    });
+
+    test('AUTO_RETRY_COUNT constant is defined', () => {
+        // The constant should be accessible as a private field
+        const anyManager = manager as any;
+        assert.strictEqual(typeof anyManager.AUTO_RETRY_COUNT, 'number', 'AUTO_RETRY_COUNT should be defined');
+        assert.strictEqual(anyManager.AUTO_RETRY_COUNT, 1, 'AUTO_RETRY_COUNT should be 1');
+    });
+
+    test('AUTO_RETRY_DELAY_MS constant is defined', () => {
+        const anyManager = manager as any;
+        assert.strictEqual(typeof anyManager.AUTO_RETRY_DELAY_MS, 'number', 'AUTO_RETRY_DELAY_MS should be defined');
+        assert.ok(anyManager.AUTO_RETRY_DELAY_MS >= 1000, 'AUTO_RETRY_DELAY_MS should be at least 1000ms');
+        assert.ok(anyManager.AUTO_RETRY_DELAY_MS <= 5000, 'AUTO_RETRY_DELAY_MS should not exceed 5000ms');
+    });
+
+    test('OperationEntry has retryCount field', async () => {
+        const spawnStub = sandbox.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
+            const operationId = args[0] as string;
+            const entry = manager.getStatus(operationId) as OperationEntry;
+            entry.status = 'running';
+            entry.pid = 12345;
+        });
+
+        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
+        const opId = await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+        
+        const entry = manager.getStatus(opId) as OperationEntry;
+        assert.strictEqual(typeof (entry as any).retryCount, 'number', 'Entry should have retryCount field');
+        assert.strictEqual((entry as any).retryCount, 0, 'Initial retryCount should be 0');
+        
+        spawnStub.restore();
+    });
+
+    test('daemon failure triggers auto-retry via subprocess', async () => {
+        // Set up a fake daemon manager that will fail
+        const fakeDaemonManager = {
+            isDaemonEnabled: () => true,
+            isHealthy: () => true,
+            sendRequest: sandbox.stub().rejects(new Error('Daemon connection lost'))
+        };
+        manager.setDaemonManager(fakeDaemonManager as any);
+
+        // Stub the spawnCognifyProcess but let it call through for the initial call
+        // then track when it's called with forceSubprocess=true
+        let retryCallCount = 0;
+        const originalSpawnCognify = (manager as any).spawnCognifyProcess.bind(manager);
+        const spawnStub = sandbox.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
+            const operationId = args[0] as string;
+            const forceSubprocess = args[4] as boolean;
+            
+            if (forceSubprocess) {
+                // This is the retry call - mark it
+                retryCallCount++;
+                const entry = manager.getStatus(operationId) as OperationEntry;
+                entry.status = 'completed';
+                entry.lastUpdate = new Date().toISOString();
+                return;
+            }
+            
+            // Let original run for daemon path
+            return originalSpawnCognify(...args);
+        });
+
+        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
+        await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+
+        // Wait for async daemon call to complete and trigger retry
+        await new Promise(resolve => setTimeout(resolve, 4000));
+
+        // Verify daemon was attempted first
+        assert.ok(fakeDaemonManager.sendRequest.calledOnce, 'Daemon should be attempted first');
+        
+        // Verify subprocess was called as retry (with forceSubprocess=true)
+        assert.strictEqual(retryCallCount, 1, 'Subprocess should be spawned after daemon failure with forceSubprocess=true');
+        
+        // Verify log contains auto-retry message
+        const retryLog = outputLines.find(line => line.includes('Auto-retrying with subprocess'));
+        assert.ok(retryLog, 'Should log auto-retry message');
+    });
+
+    test('auto-retry logs include attempt number', async () => {
+        const fakeDaemonManager = {
+            isDaemonEnabled: () => true,
+            isHealthy: () => true,
+            sendRequest: sandbox.stub().rejects(new Error('Daemon timeout'))
+        };
+        manager.setDaemonManager(fakeDaemonManager as any);
+
+        const originalSpawnCognify = (manager as any).spawnCognifyProcess.bind(manager);
+        const spawnStub = sandbox.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
+            const operationId = args[0] as string;
+            const forceSubprocess = args[4] as boolean;
+            
+            if (forceSubprocess) {
+                const entry = manager.getStatus(operationId) as OperationEntry;
+                entry.status = 'completed';
+                return;
+            }
+            return originalSpawnCognify(...args);
+        });
+
+        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
+        await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+
+        await new Promise(resolve => setTimeout(resolve, 4000));
+
+        // Verify log includes attempt number
+        const retryLog = outputLines.find(line => line.includes('attempt 1'));
+        assert.ok(retryLog, 'Auto-retry log should include attempt number');
+    });
+
+    test('auto-retry exhausted shows failure notification', async () => {
+        const fakeDaemonManager = {
+            isDaemonEnabled: () => true,
+            isHealthy: () => true,
+            sendRequest: sandbox.stub().rejects(new Error('Daemon crashed'))
+        };
+        manager.setDaemonManager(fakeDaemonManager as any);
+
+        // Make subprocess also fail
+        const spawnStub = sandbox.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
+            const operationId = args[0] as string;
+            await manager.failOperation(operationId, {
+                code: 'COGNEE_INTERNAL_ERROR',
+                message: 'Subprocess also failed',
+                remediation: 'Check logs'
+            });
+        });
+
+        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
+        await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        // Verify warning notification was shown (failure after retry exhausted)
+        assert.ok(warnStub.called, 'Warning should be shown when auto-retry fails');
+    });
+
+    test('retryCount is incremented on auto-retry', async () => {
+        const fakeDaemonManager = {
+            isDaemonEnabled: () => true,
+            isHealthy: () => true,
+            sendRequest: sandbox.stub().rejects(new Error('Daemon error'))
+        };
+        manager.setDaemonManager(fakeDaemonManager as any);
+
+        let capturedEntry: OperationEntry | null = null;
+        const originalSpawnCognify = (manager as any).spawnCognifyProcess.bind(manager);
+        const spawnStub = sandbox.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
+            const operationId = args[0] as string;
+            const forceSubprocess = args[4] as boolean;
+            
+            if (forceSubprocess) {
+                // Capture the entry when retry is called
+                capturedEntry = manager.getStatus(operationId) as OperationEntry;
+                capturedEntry.status = 'completed';
+                return;
+            }
+            return originalSpawnCognify(...args);
+        });
+
+        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
+        await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+
+        await new Promise(resolve => setTimeout(resolve, 4000));
+
+        // Verify retryCount was incremented
+        assert.ok(capturedEntry, 'Entry should be captured');
+        assert.strictEqual((capturedEntry as any).retryCount, 1, 'retryCount should be 1 after auto-retry');
+    });
+});

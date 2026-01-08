@@ -69,6 +69,8 @@ export interface WorkspaceInitDeps {
     setFlowbabyClient: (client: FlowbabyClient | undefined) => void;
     setFlowbabyContextProvider: (provider: FlowbabyContextProvider | undefined) => void;
     setToolDisposables: (store?: vscode.Disposable, retrieve?: vscode.Disposable) => void;
+    /** Plan 092 M1: Optional CredentialRefreshManager for daemon coordination */
+    credentialRefreshManager?: { registerDaemonController(controller: { restart(): Promise<void>; isRunning(): boolean; getPendingRequestCount(): number }): void };
 }
 
 // ============================================================================
@@ -319,6 +321,13 @@ export async function handleInitSuccess(
         const daemonManager = client.getDaemonManager();
         if (daemonManager) {
             manager.setDaemonManager(daemonManager);
+            
+            // Plan 092 M1.4: Register daemon manager with CredentialRefreshManager
+            // This enables coordinated restart when credentials are refreshed.
+            if (deps.credentialRefreshManager) {
+                deps.credentialRefreshManager.registerDaemonController(daemonManager);
+                debugLog('Plan 092: Daemon controller registered with CredentialRefreshManager');
+            }
         }
         
         console.log('BackgroundOperationManager initialized successfully');

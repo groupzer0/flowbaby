@@ -13,6 +13,7 @@ This module is the authoritative source for Bedrock health validation.
 The extension should use this instead of relying on Cognee's internal probe.
 """
 
+import os
 from pydantic import BaseModel
 
 
@@ -20,8 +21,9 @@ from pydantic import BaseModel
 # Constants - Proven Stable Configuration from Analysis 088
 # =============================================================================
 
-# Model to use for health probe
-BEDROCK_PROBE_MODEL = "amazon.nova-micro-v1:0"
+# Model to use for health probe - read from environment (set by VendResponse),
+# with fallback to nova-lite for cross-region inference compatibility
+BEDROCK_PROBE_MODEL = os.getenv("LLM_MODEL", "amazon.nova-lite-v1:0")
 
 # Max tokens cap - proven stable in Analysis 088 (Bedrock rejects 16384 default)
 BEDROCK_PROBE_MAX_TOKENS = 2048
