@@ -82,6 +82,21 @@ interface PendingRequest {
 }
 
 /**
+ * Plan 095: Lock owner metadata for stale lock detection
+ * Written to owner.json inside the daemon.lock directory
+ */
+interface LockOwnerMetadata {
+    /** Timestamp when lock was acquired (ms since epoch) */
+    createdAt: number;
+    /** PID of the VS Code extension host process that holds the lock */
+    extensionHostPid: number;
+    /** Random UUID generated per lock acquisition attempt (for log correlation) */
+    instanceId: string;
+    /** Workspace identifier (hashed or relative path marker) */
+    workspaceIdentifier: string;
+}
+
+/**
  * Default configuration values
  */
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 30; // Plan 061: Increased from 5 to 30 minutes
@@ -101,6 +116,15 @@ const RESTART_BACKOFF_MAX_MS = 30000;
 const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 5000;  // Wait for graceful exit after shutdown RPC
 const SIGTERM_TIMEOUT_MS = 3000;            // Wait after SIGTERM before SIGKILL
 const CONSECUTIVE_FORCED_KILLS_THRESHOLD = 3; // Fallback to spawn-per-request after this many forced kills
+
+/**
+ * Plan 095: Stale lock recovery constants
+ * 
+ * Conservative threshold for determining lock staleness when owner metadata
+ * is missing or corrupt. Only locks older than this threshold (and with no
+ * alive daemon process) are considered stale.
+ */
+const STALE_LOCK_AGE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
  * PythonBridgeDaemonManager
@@ -166,9 +190,6 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         });
 
         this.log('INFO', 'DaemonManager created', {
-            workspace: workspacePath,
-            pythonPath,
-            bridgePath,
             daemonEnabled: this.daemonEnabled,
             idleTimeoutMinutes: this.idleTimeoutMinutes
         });
@@ -270,19 +291,162 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     }
 
     /**
-     * Plan 092 M2: Acquire exclusive lock for daemon management.
+     * Plan 095: Get the path to the owner metadata file inside the lock directory.
+     */
+    private getOwnerMetadataPath(): string {
+        return path.join(this.getLockPath(), 'owner.json');
+    }
+
+    /**
+     * Plan 095: Write owner metadata to the lock directory.
+     * Called immediately after successful lock acquisition.
+     */
+    private async writeLockOwnerMetadata(instanceId: string): Promise<void> {
+        const ownerPath = this.getOwnerMetadataPath();
+        const metadata: LockOwnerMetadata = {
+            createdAt: Date.now(),
+            extensionHostPid: process.pid,
+            instanceId,
+            workspaceIdentifier: path.basename(this.workspacePath) // Use basename to avoid absolute paths in metadata
+        };
+
+        try {
+            await fs.promises.writeFile(ownerPath, JSON.stringify(metadata, null, 2), 'utf8');
+            this.log('INFO', '[lock] owner metadata written', {
+                instanceId,
+                pid: process.pid
+            });
+        } catch (error) {
+            this.log('WARN', '[lock] failed to write owner metadata', {
+                error: error instanceof Error ? error.message : String(error)
+            });
+            // Don't throw - lock is still valid, just missing metadata
+        }
+    }
+
+    /**
+     * Plan 095: Read owner metadata from an existing lock directory.
+     * Returns null if metadata doesn't exist or is corrupt.
+     */
+    private async readLockOwnerMetadata(): Promise<LockOwnerMetadata | null> {
+        const ownerPath = this.getOwnerMetadataPath();
+        try {
+            const content = await fs.promises.readFile(ownerPath, 'utf8');
+            const metadata = JSON.parse(content) as LockOwnerMetadata;
+            // Validate required fields
+            if (typeof metadata.createdAt !== 'number' ||
+                typeof metadata.extensionHostPid !== 'number' ||
+                typeof metadata.instanceId !== 'string') {
+                return null;
+            }
+            return metadata;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Plan 095: Determine if a lock is stale and can be recovered.
+     * 
+     * A lock is stale if:
+     * 1. The daemon PID (from daemon.pid) is not alive, AND
+     * 2. Either:
+     *    a. Owner metadata exists and extensionHostPid is not alive, OR
+     *    b. Owner metadata is missing/corrupt AND lock age exceeds threshold
+     * 
+     * Returns { stale: boolean, reason: string } for observability.
+     */
+    private async isLockStale(): Promise<{ stale: boolean; reason: string }> {
+        const pidPath = this.getPidFilePath();
+        const lockPath = this.getLockPath();
+
+        // First check: is the daemon process alive?
+        try {
+            const pidContent = await fs.promises.readFile(pidPath, 'utf8');
+            const daemonPid = parseInt(pidContent.trim(), 10);
+            if (!isNaN(daemonPid) && this.isProcessAlive(daemonPid)) {
+                return { stale: false, reason: 'daemon_pid_alive' };
+            }
+        } catch {
+            // PID file doesn't exist - continue to owner check
+        }
+
+        // Second check: owner metadata
+        const metadata = await this.readLockOwnerMetadata();
+        if (metadata) {
+            if (this.isProcessAlive(metadata.extensionHostPid)) {
+                return { stale: false, reason: 'owner_pid_alive' };
+            }
+            return { stale: true, reason: 'owner_pid_dead' };
+        }
+
+        // Third check: no metadata - use age threshold (fail-safe policy)
+        try {
+            const stat = await fs.promises.stat(lockPath);
+            const lockAge = Date.now() - stat.mtimeMs;
+            if (lockAge > STALE_LOCK_AGE_THRESHOLD_MS) {
+                return { stale: true, reason: 'lock_age_exceeded' };
+            }
+            // Fresh lock without metadata - could be a race condition
+            return { stale: false, reason: 'fresh_lock_no_metadata' };
+        } catch {
+            // Can't stat lock - treat as stale (lock may have been removed)
+            return { stale: true, reason: 'lock_stat_failed' };
+        }
+    }
+
+    /**
+     * Plan 095: Attempt to recover a stale lock.
+     * Removes the lock directory and returns true if recovery succeeded.
+     */
+    private async recoverStaleLock(reason: string): Promise<boolean> {
+        const lockPath = this.getLockPath();
+        this.log('INFO', '[lock] attempting stale lock recovery', { reason });
+
+        try {
+            // Remove owner.json first if it exists
+            const ownerPath = this.getOwnerMetadataPath();
+            try {
+                await fs.promises.unlink(ownerPath);
+            } catch {
+                // Ignore - may not exist
+            }
+
+            // Remove lock directory
+            await fs.promises.rmdir(lockPath);
+            this.log('INFO', '[lock] stale lock recovered successfully', { reason });
+            return true;
+        } catch (error) {
+            this.log('WARN', '[lock] stale lock recovery failed', {
+                reason,
+                error: error instanceof Error ? error.message : String(error)
+            });
+            return false;
+        }
+    }
+
+    /**
+     * Plan 092 M2 + Plan 095: Acquire exclusive lock for daemon management.
      * Uses atomic directory creation (mkdir) which is a POSIX-guaranteed
      * atomic operation - only one process can successfully create a directory.
+     * 
+     * Plan 095 enhancements:
+     * - Writes owner metadata immediately after acquisition
+     * - On EEXIST, attempts bounded stale lock recovery
+     * - Emits structured breadcrumbs for observability
      * 
      * @returns true if lock acquired, false if lock already held by another process
      */
     public async acquireLock(): Promise<boolean> {
         if (this.lockHeld) {
-            this.log('DEBUG', 'Lock already held by this manager');
+            this.log('DEBUG', '[lock] already held by this manager');
             return true;
         }
 
         const lockPath = this.getLockPath();
+        const instanceId = uuidv4(); // Generate per-acquisition for log correlation
+
+        this.log('INFO', '[lock] acquire start', { instanceId });
 
         try {
             // Ensure .flowbaby directory exists
@@ -294,16 +458,57 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             await fs.promises.mkdir(lockPath);
 
             this.lockHeld = true;
-            this.log('INFO', 'Lock acquired', { lockPath });
+
+            // Write owner metadata immediately after acquisition
+            await this.writeLockOwnerMetadata(instanceId);
+
+            this.log('INFO', '[lock] acquire success', { instanceId, pid: process.pid });
             return true;
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-                this.log('WARN', 'Lock already held by another process', { lockPath });
-                return false;
+                // Plan 095: EEXIST recovery - check if lock is stale
+                this.log('INFO', '[lock] EEXIST - checking staleness', { instanceId });
+
+                const { stale, reason } = await this.isLockStale();
+
+                if (!stale) {
+                    this.log('WARN', '[lock] acquire failed - lock held by another process', {
+                        instanceId,
+                        reason
+                    });
+                    return false;
+                }
+
+                // Attempt bounded recovery (exactly once)
+                const recovered = await this.recoverStaleLock(reason);
+                if (!recovered) {
+                    this.log('WARN', '[lock] acquire failed - recovery unsuccessful', { instanceId });
+                    return false;
+                }
+
+                // Retry acquisition after recovery
+                try {
+                    await fs.promises.mkdir(lockPath);
+                    this.lockHeld = true;
+                    await this.writeLockOwnerMetadata(instanceId);
+                    this.log('INFO', '[lock] acquire success after recovery', {
+                        instanceId,
+                        pid: process.pid,
+                        recoveryReason: reason
+                    });
+                    return true;
+                } catch (retryError) {
+                    this.log('WARN', '[lock] acquire failed after recovery', {
+                        instanceId,
+                        error: retryError instanceof Error ? retryError.message : String(retryError)
+                    });
+                    return false;
+                }
             }
+
             // Unexpected error - log and rethrow
-            this.log('ERROR', 'Failed to acquire lock', {
-                lockPath,
+            this.log('ERROR', '[lock] acquire failed - unexpected error', {
+                instanceId,
                 error: error instanceof Error ? error.message : String(error)
             });
             throw error;
@@ -311,25 +516,34 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     }
 
     /**
-     * Plan 092 M2: Release the exclusive lock.
+     * Plan 092 M2 + Plan 095: Release the exclusive lock.
      * Only releases if this manager holds the lock.
+     * Removes owner.json before removing lock directory.
      */
     public async releaseLock(): Promise<void> {
         if (!this.lockHeld) {
-            this.log('DEBUG', 'Lock not held, nothing to release');
+            this.log('DEBUG', '[lock] not held, nothing to release');
             return;
         }
 
-        const lockPath = this.getLockPath();
+        this.log('INFO', '[lock] release start');
 
         try {
-            await fs.promises.rmdir(lockPath);
+            // Remove owner.json first
+            const ownerPath = this.getOwnerMetadataPath();
+            try {
+                await fs.promises.unlink(ownerPath);
+            } catch {
+                // Ignore - may not exist
+            }
+
+            // Remove lock directory
+            await fs.promises.rmdir(this.getLockPath());
             this.lockHeld = false;
-            this.log('INFO', 'Lock released', { lockPath });
+            this.log('INFO', '[lock] release success');
         } catch (error) {
             // Log but don't throw - lock release is best-effort cleanup
-            this.log('WARN', 'Failed to release lock', {
-                lockPath,
+            this.log('WARN', '[lock] release failed', {
                 error: error instanceof Error ? error.message : String(error)
             });
             // Still mark as not held since we can't be sure of lock state
@@ -366,10 +580,12 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
 
     /**
      * Internal daemon start logic (Plan 061: Includes startup hygiene)
+     * Plan 095: Ensures lock is released if startup fails after acquisition
      */
     private async doStart(): Promise<void> {
         this.state = 'starting';
         const startTime = Date.now();
+        let lockWasAcquired = false;
 
         try {
             // Plan 092 M2.4: Acquire exclusive lock before starting daemon
@@ -381,6 +597,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
                     'Close other windows with this workspace to use daemon mode, or disable daemon mode in settings.'
                 );
             }
+            lockWasAcquired = true;
 
             // Plan 061: Startup hygiene - check for orphan/stale daemons
             await this.cleanupStaleDaemon();
@@ -393,9 +610,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             }
 
             this.log('INFO', 'Starting bridge daemon', {
-                script: daemonScript,
-                pythonPath: this.pythonPath,
-                workspace: this.workspacePath
+                script: 'bridge/daemon.py'
             });
 
             // Get LLM environment variables
@@ -444,6 +659,13 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             this.state = 'crashed';
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.log('ERROR', 'Failed to start bridge daemon', { error: errorMessage });
+
+            // Plan 095: Release lock if we acquired it but failed to start
+            if (lockWasAcquired && this.lockHeld) {
+                this.log('INFO', '[lock] releasing lock after startup failure');
+                await this.releaseLock();
+            }
+
             throw error;
         }
     }
@@ -1136,14 +1358,23 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     /**
      * Clean up stale lock directory left behind by a crashed daemon.
      * 
+     * Plan 095: Added guard to prevent self-delete when this manager holds the lock.
+     * 
      * A lock is considered stale if:
      * - The lock directory exists, AND
+     * - This manager does NOT hold the lock (lockHeld === false), AND
      * - Either no PID file exists, OR
      * - The PID file exists but the process is not alive
      * 
      * This handles cases where VS Code or the daemon crashed without proper cleanup.
      */
     private async cleanupStaleLock(): Promise<void> {
+        // Plan 095: Guard against self-delete - never clean up our own lock
+        if (this.lockHeld) {
+            this.log('DEBUG', '[lock] cleanupStaleLock skipped - lock held by this manager');
+            return;
+        }
+
         const lockPath = this.getLockPath();
         const pidPath = this.getPidFilePath();
 
@@ -1164,7 +1395,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
                 // Lock is held by a running process - this is legitimate
                 // (This shouldn't happen since we check before acquiring lock,
                 // but leaving as a safety check)
-                this.log('DEBUG', 'Lock held by running process', { pid, lockPath });
+                this.log('DEBUG', '[lock] cleanup skipped - held by running process', { pid });
                 return;
             }
         } catch {
@@ -1172,13 +1403,20 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         }
 
         // Lock is stale - clean it up
-        this.log('INFO', 'Cleaning up stale lock directory', { lockPath });
+        this.log('INFO', '[lock] cleaning up stale lock directory');
         try {
+            // Remove owner.json first if it exists
+            const ownerPath = this.getOwnerMetadataPath();
+            try {
+                await fs.promises.unlink(ownerPath);
+            } catch {
+                // Ignore - may not exist
+            }
+
             await fs.promises.rmdir(lockPath);
-            this.log('INFO', 'Stale lock cleaned up successfully', { lockPath });
+            this.log('INFO', '[lock] stale lock cleaned up successfully');
         } catch (error) {
-            this.log('WARN', 'Failed to clean up stale lock', {
-                lockPath,
+            this.log('WARN', '[lock] failed to clean up stale lock', {
                 error: error instanceof Error ? error.message : String(error)
             });
         }

@@ -1262,4 +1262,460 @@ suite('PythonBridgeDaemonManager', () => {
             manager.dispose();
         });
     });
+
+    // Plan 095: Lock Recovery & Observability Tests
+    suite('Plan 095: Lock Owner Metadata', () => {
+        let tempDir: string;
+        let tempManager: PythonBridgeDaemonManager;
+
+        setup(async () => {
+            // Create a real temporary directory for lock tests
+            const os = require('os');
+            const fs = require('fs').promises;
+            tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'flowbaby-test-095-'));
+
+            tempManager = new PythonBridgeDaemonManager(
+                tempDir,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+        });
+
+        teardown(async () => {
+            // Clean up
+            await tempManager.releaseLock();
+            tempManager.dispose();
+
+            // Remove temp directory
+            const fs = require('fs').promises;
+            try {
+                await fs.rm(tempDir, { recursive: true, force: true });
+            } catch {
+                // Ignore cleanup errors
+            }
+        });
+
+        test('acquireLock writes owner.json with required metadata', async () => {
+            const fs = require('fs').promises;
+            const result = await tempManager.acquireLock();
+            assert.strictEqual(result, true, 'Lock should be acquired');
+
+            // Verify owner.json exists and contains required fields
+            const ownerPath = path.join(tempManager.getLockPath(), 'owner.json');
+            const ownerContent = await fs.readFile(ownerPath, 'utf8');
+            const owner = JSON.parse(ownerContent);
+
+            assert.ok(owner.createdAt, 'owner.json should have createdAt');
+            assert.ok(typeof owner.createdAt === 'number', 'createdAt should be a number (timestamp)');
+            assert.ok(owner.extensionHostPid, 'owner.json should have extensionHostPid');
+            assert.strictEqual(owner.extensionHostPid, process.pid, 'extensionHostPid should match current process');
+            assert.ok(owner.instanceId, 'owner.json should have instanceId');
+            assert.ok(typeof owner.instanceId === 'string' && owner.instanceId.length > 0, 'instanceId should be a non-empty string');
+            assert.ok(owner.workspaceIdentifier, 'owner.json should have workspaceIdentifier');
+        });
+
+        test('owner.json instanceId changes on each lock acquisition', async () => {
+            const fs = require('fs').promises;
+            
+            // First acquisition
+            await tempManager.acquireLock();
+            const ownerPath = path.join(tempManager.getLockPath(), 'owner.json');
+            const owner1 = JSON.parse(await fs.readFile(ownerPath, 'utf8'));
+            await tempManager.releaseLock();
+
+            // Second acquisition
+            await tempManager.acquireLock();
+            const owner2 = JSON.parse(await fs.readFile(ownerPath, 'utf8'));
+
+            assert.notStrictEqual(owner1.instanceId, owner2.instanceId, 
+                'instanceId should be different per lock acquisition');
+        });
+
+        test('getOwnerMetadataPath returns correct path', () => {
+            const ownerPath = (tempManager as any).getOwnerMetadataPath();
+            assert.ok(ownerPath.endsWith('owner.json'), 'Should end with owner.json');
+            assert.ok(ownerPath.includes('daemon.lock'), 'Should be inside daemon.lock directory');
+        });
+    });
+
+    suite('Plan 095: Stale Lock Recovery on EEXIST', () => {
+        let tempDir: string;
+        let tempManager: PythonBridgeDaemonManager;
+
+        setup(async () => {
+            const os = require('os');
+            const fs = require('fs').promises;
+            tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'flowbaby-test-095-stale-'));
+
+            tempManager = new PythonBridgeDaemonManager(
+                tempDir,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+        });
+
+        teardown(async () => {
+            await tempManager.releaseLock();
+            tempManager.dispose();
+
+            const fs = require('fs').promises;
+            try {
+                await fs.rm(tempDir, { recursive: true, force: true });
+            } catch {
+                // Ignore cleanup errors
+            }
+        });
+
+        test('recovers stale lock when owner pid is dead', async () => {
+            const fs = require('fs').promises;
+            const lockPath = tempManager.getLockPath();
+            const flowbabyDir = path.dirname(lockPath);
+
+            // Create stale lock with dead PID owner metadata
+            await fs.mkdir(flowbabyDir, { recursive: true });
+            await fs.mkdir(lockPath);
+            const staleOwner = {
+                createdAt: Date.now() - (15 * 60 * 1000), // 15 minutes ago
+                extensionHostPid: 99999999, // Non-existent PID
+                instanceId: 'stale-instance',
+                workspaceIdentifier: tempDir
+            };
+            await fs.writeFile(path.join(lockPath, 'owner.json'), JSON.stringify(staleOwner), 'utf8');
+
+            // Acquire should succeed by recovering the stale lock
+            const result = await tempManager.acquireLock();
+            assert.strictEqual(result, true, 'Should recover stale lock and acquire successfully');
+            assert.strictEqual(tempManager.isLockHeld(), true, 'Lock should be held after recovery');
+        });
+
+        test('does not delete lock when owner pid is alive', async () => {
+            const fs = require('fs').promises;
+            const lockPath = tempManager.getLockPath();
+            const flowbabyDir = path.dirname(lockPath);
+
+            // Create a lock with current process as owner (simulates another window)
+            await fs.mkdir(flowbabyDir, { recursive: true });
+            await fs.mkdir(lockPath);
+            const liveOwner = {
+                createdAt: Date.now(),
+                extensionHostPid: process.pid, // Current process - definitely alive
+                instanceId: 'live-instance',
+                workspaceIdentifier: tempDir
+            };
+            await fs.writeFile(path.join(lockPath, 'owner.json'), JSON.stringify(liveOwner), 'utf8');
+
+            // Acquire should fail because owner is alive
+            const result = await tempManager.acquireLock();
+            assert.strictEqual(result, false, 'Should not acquire lock when owner is alive');
+        });
+
+        test('does not delete fresh lock without metadata (race protection)', async () => {
+            const fs = require('fs').promises;
+            const lockPath = tempManager.getLockPath();
+            const flowbabyDir = path.dirname(lockPath);
+
+            // Create fresh lock directory without owner.json (simulates race condition)
+            await fs.mkdir(flowbabyDir, { recursive: true });
+            await fs.mkdir(lockPath);
+            // Intentionally no owner.json - lock is "fresh" (just created)
+
+            // Acquire should fail because we can't determine staleness of fresh lock
+            const result = await tempManager.acquireLock();
+            assert.strictEqual(result, false, 'Should not acquire fresh lock without metadata');
+        });
+
+        test('recovers old lock without metadata when age exceeds threshold', async () => {
+            const fs = require('fs').promises;
+            const lockPath = tempManager.getLockPath();
+            const flowbabyDir = path.dirname(lockPath);
+
+            // Create old lock directory without owner.json
+            await fs.mkdir(flowbabyDir, { recursive: true });
+            await fs.mkdir(lockPath);
+            
+            // Manually set mtime to > 10 minutes ago using utimes
+            const oldTime = new Date(Date.now() - (15 * 60 * 1000));
+            await fs.utimes(lockPath, oldTime, oldTime);
+
+            // Acquire should succeed because lock is old enough
+            const result = await tempManager.acquireLock();
+            assert.strictEqual(result, true, 'Should recover old lock without metadata');
+        });
+
+        test('checks daemon.pid before deleting lock even with dead owner', async () => {
+            const fs = require('fs').promises;
+            const lockPath = tempManager.getLockPath();
+            const flowbabyDir = path.dirname(lockPath);
+            const pidPath = path.join(flowbabyDir, 'daemon.pid');
+
+            // Create lock with dead owner
+            await fs.mkdir(flowbabyDir, { recursive: true });
+            await fs.mkdir(lockPath);
+            const staleOwner = {
+                createdAt: Date.now() - (15 * 60 * 1000),
+                extensionHostPid: 99999999, // Dead PID
+                instanceId: 'stale-instance',
+                workspaceIdentifier: tempDir
+            };
+            await fs.writeFile(path.join(lockPath, 'owner.json'), JSON.stringify(staleOwner), 'utf8');
+
+            // But create a PID file with current process (daemon still alive)
+            await fs.writeFile(pidPath, String(process.pid), 'utf8');
+
+            // Acquire should fail because daemon PID is alive
+            const result = await tempManager.acquireLock();
+            assert.strictEqual(result, false, 'Should not delete lock when daemon PID is alive');
+
+            // Cleanup
+            await fs.unlink(pidPath);
+        });
+    });
+
+    suite('Plan 095: Fresh Lock Self-Delete Guard', () => {
+        let tempDir: string;
+        let tempManager: PythonBridgeDaemonManager;
+
+        setup(async () => {
+            const os = require('os');
+            const fs = require('fs').promises;
+            tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'flowbaby-test-095-guard-'));
+
+            tempManager = new PythonBridgeDaemonManager(
+                tempDir,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+        });
+
+        teardown(async () => {
+            await tempManager.releaseLock();
+            tempManager.dispose();
+
+            const fs = require('fs').promises;
+            try {
+                await fs.rm(tempDir, { recursive: true, force: true });
+            } catch {
+                // Ignore
+            }
+        });
+
+        test('cleanupStaleLock does not delete lock when lockHeld is true', async () => {
+            const fs = require('fs').promises;
+
+            // Acquire lock
+            await tempManager.acquireLock();
+            assert.strictEqual(tempManager.isLockHeld(), true);
+
+            // Call cleanupStaleLock - should NOT delete our own lock
+            await (tempManager as any).cleanupStaleLock();
+
+            // Verify lock still exists
+            const lockPath = tempManager.getLockPath();
+            try {
+                await fs.access(lockPath);
+            } catch {
+                assert.fail('Lock should still exist after cleanupStaleLock when lockHeld is true');
+            }
+        });
+
+        test('lock exists after successful daemon start', async () => {
+            const fs = require('fs').promises;
+            
+            // Mock doStart to simulate successful acquisition
+            const originalDoStart = (tempManager as any).doStart.bind(tempManager);
+            let lockExistsAfterAcquire = false;
+            let lockExistsAfterCleanup = false;
+            
+            (tempManager as any).doStart = async function() {
+                const lockPath = this.getLockPath();
+                
+                // Acquire lock
+                const acquired = await this.acquireLock();
+                assert.strictEqual(acquired, true);
+                
+                // Check lock exists after acquire
+                try {
+                    await fs.access(lockPath);
+                    lockExistsAfterAcquire = true;
+                } catch { /* ignore */ }
+
+                // Call cleanupStaleDaemon (which calls cleanupStaleLock)
+                await this.cleanupStaleDaemon();
+
+                // Check lock still exists after cleanup
+                try {
+                    await fs.access(lockPath);
+                    lockExistsAfterCleanup = true;
+                } catch { /* ignore */ }
+
+                // Don't actually spawn daemon
+                this.state = 'running';
+            };
+
+            await tempManager.start();
+
+            assert.strictEqual(lockExistsAfterAcquire, true, 'Lock should exist after acquire');
+            assert.strictEqual(lockExistsAfterCleanup, true, 'Lock should exist after cleanup');
+        });
+    });
+
+    suite('Plan 095: Lock Release on Failure', () => {
+        let tempDir: string;
+        let tempManager: PythonBridgeDaemonManager;
+
+        setup(async () => {
+            const os = require('os');
+            const fs = require('fs').promises;
+            tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'flowbaby-test-095-release-'));
+
+            tempManager = new PythonBridgeDaemonManager(
+                tempDir,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+        });
+
+        teardown(async () => {
+            await tempManager.releaseLock();
+            tempManager.dispose();
+
+            const fs = require('fs').promises;
+            try {
+                await fs.rm(tempDir, { recursive: true, force: true });
+            } catch {
+                // Ignore
+            }
+        });
+
+        test('lock is released when doStart fails after acquisition', async () => {
+            const fs = require('fs').promises;
+            const lockPath = tempManager.getLockPath();
+
+            // Attempt to start - should fail (daemon.py missing in test harness)
+            try {
+                await tempManager.start();
+                assert.fail('Start should have thrown');
+            } catch (e) {
+                // Expected
+            }
+
+            // Verify lock was released
+            assert.strictEqual(tempManager.isLockHeld(), false, 'Lock should be released after failure');
+            
+            // Verify lock directory was removed
+            try {
+                await fs.access(lockPath);
+                assert.fail('Lock directory should be removed after failure');
+            } catch {
+                // Expected - lock should not exist
+            }
+        });
+    });
+
+    suite('Plan 095: Lock Lifecycle Observability', () => {
+        test('logs lock acquisition start and success', async () => {
+            const os = require('os');
+            const fs = require('fs').promises;
+            const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'flowbaby-test-095-log-'));
+
+            const manager = new PythonBridgeDaemonManager(
+                tempDir,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            await manager.acquireLock();
+
+            const logCalls = (mockOutputChannel.appendLine as sinon.SinonStub).getCalls();
+            const lockLogs = logCalls.filter((call: sinon.SinonSpyCall) =>
+                call.args[0]?.includes('[lock]') || call.args[0]?.includes('Lock')
+            );
+
+            assert.ok(lockLogs.some((call: sinon.SinonSpyCall) => 
+                call.args[0].includes('acquire') || call.args[0].includes('acquired')
+            ), 'Should log lock acquisition');
+
+            await manager.releaseLock();
+            manager.dispose();
+            await fs.rm(tempDir, { recursive: true, force: true });
+        });
+
+        test('logs stale lock recovery decision with reason', async () => {
+            const os = require('os');
+            const fs = require('fs').promises;
+            const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'flowbaby-test-095-recovery-'));
+            const flowbabyDir = path.join(tempDir, '.flowbaby');
+            const lockPath = path.join(flowbabyDir, 'daemon.lock');
+
+            // Create stale lock
+            await fs.mkdir(flowbabyDir, { recursive: true });
+            await fs.mkdir(lockPath);
+            const staleOwner = {
+                createdAt: Date.now() - (15 * 60 * 1000),
+                extensionHostPid: 99999999,
+                instanceId: 'stale-instance',
+                workspaceIdentifier: tempDir
+            };
+            await fs.writeFile(path.join(lockPath, 'owner.json'), JSON.stringify(staleOwner), 'utf8');
+
+            const manager = new PythonBridgeDaemonManager(
+                tempDir,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            await manager.acquireLock();
+
+            const logCalls = (mockOutputChannel.appendLine as sinon.SinonStub).getCalls();
+            const recoveryLogs = logCalls.filter((call: sinon.SinonSpyCall) =>
+                call.args[0]?.includes('stale') || call.args[0]?.includes('recovery') ||
+                call.args[0]?.includes('owner_pid_dead')
+            );
+
+            assert.ok(recoveryLogs.length > 0, 'Should log stale lock recovery with decision reason');
+
+            await manager.releaseLock();
+            manager.dispose();
+            await fs.rm(tempDir, { recursive: true, force: true });
+        });
+
+        test('does not log secrets or absolute workspace paths', async () => {
+            const os = require('os');
+            const fs = require('fs').promises;
+            const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'flowbaby-test-095-secrets-'));
+
+            const manager = new PythonBridgeDaemonManager(
+                tempDir,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            await manager.acquireLock();
+            await manager.releaseLock();
+
+            const logCalls = (mockOutputChannel.appendLine as sinon.SinonStub).getCalls();
+            const allLogs = logCalls.map((call: sinon.SinonSpyCall) => call.args[0]).join('\n');
+
+            // Should not contain absolute temp path (uses relative markers instead)
+            assert.ok(!allLogs.includes(tempDir),
+                'Logs should use relative markers like .flowbaby/, not absolute workspace paths');
+
+            manager.dispose();
+            await fs.rm(tempDir, { recursive: true, force: true });
+        });
+    });
 });

@@ -24,6 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Daemon Lock Recovery & Observability (Plan 095)**: Automatic recovery from stale workspace daemon locks with improved diagnostics:
+  - **Stale Lock Recovery**: When daemon startup encounters an existing lock, automatically recovers if the lock owner process is dead or lock age exceeds 10 minutes (conservative threshold)
+  - **Lock Owner Metadata**: Writes `owner.json` inside `daemon.lock/` with `createdAt`, `extensionHostPid`, `instanceId`, and `workspaceIdentifier` for safe staleness detection
+  - **Fresh Lock Guard**: Prevents race condition where `cleanupStaleLock()` could delete a freshly acquired lock before daemon PID file exists
+  - **Failure Path Cleanup**: Lock is properly released if daemon startup fails after acquisition
+  - **Lock Lifecycle Logging**: Structured `[lock]` breadcrumbs for acquire/release/recovery with decision reasons (e.g., `owner_pid_dead`, `lock_age_exceeded`) for postmortem diagnostics
+  - **Security**: Logs avoid absolute workspace paths and secrets; uses relative markers and PIDs only
+
 - **Geographic Zone Selection (Plan 094)**: New `flowbaby.cloud.preferredZone` setting for zone-based region selection:
   - Three zones: `us` (Americas), `eu` (Europe), `apac` (Asia-Pacific)
   - Dropdown in VS Code Settings with "Backend default (recommended)" option
