@@ -280,3 +280,36 @@ def sample_ontology() -> dict:
             {'source': 'Question', 'target': 'Answer', 'type': 'hasAnswer'}
         ]
     }
+
+
+@pytest.fixture
+def mock_user_context():
+    """
+    Mock the ensure_user_context helper (Plan 093) for tests that don't need real DB.
+
+    This fixture mocks the user context helper to return a successful result
+    without actually hitting the database. Use this for tests that focus on
+    other functionality and just need user context to not fail.
+
+    Yields:
+        The mock function for assertions
+    """
+    from unittest.mock import patch
+    from user_context import UserContextResult
+
+    mock_result = UserContextResult(
+        success=True,
+        user_id='test-user-id',
+        is_cached=False,
+        error=None
+    )
+
+    with patch('ingest.ensure_user_context', new_callable=AsyncMock, return_value=mock_result) as mock_ingest:
+        with patch('retrieve.ensure_user_context', new_callable=AsyncMock, return_value=mock_result) as mock_retrieve:
+            with patch('visualize.ensure_user_context', new_callable=AsyncMock, return_value=mock_result) as mock_visualize:
+                yield {
+                    'ingest': mock_ingest,
+                    'retrieve': mock_retrieve,
+                    'visualize': mock_visualize,
+                    'result': mock_result
+                }

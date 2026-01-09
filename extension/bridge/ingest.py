@@ -33,6 +33,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from bridge_env import apply_workspace_env, OntologyConfigError
 import bridge_logger
 from workspace_utils import canonicalize_workspace_path, generate_dataset_name
+# Plan 093: Import shared user context helper for multi-user correctness
+from user_context import ensure_user_context, UserContextError
 
 
 def setup_environment(workspace_path: str):
@@ -281,6 +283,14 @@ async def run_add_only(
         # Plan 083 M5: Cloud-only mode uses AWS credentials via Bedrock, no LLM API key needed
         metrics['init_cognee_sec'] = perf_counter() - step_start
 
+        # Plan 093: Ensure multi-user context is established after env wiring
+        # This sets the session_user ContextVar for consistent data isolation
+        logger.debug("Plan 093: Ensuring user context for multi-user correctness")
+        step_start = perf_counter()
+        user_context_result = await ensure_user_context(logger=logger)
+        metrics['ensure_user_context_sec'] = perf_counter() - step_start
+        logger.debug(f"Plan 093: User context established for user {user_context_result.user_id}")
+
         # Step 3: Create enriched summary text
         step_start = perf_counter()
         if payload_type == 'summary':
@@ -325,6 +335,14 @@ async def run_add_only(
         }
         if logger:
             logger.error("Missing Cloud credentials", extra={'data': error_payload})
+        else:
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
+    except UserContextError as e:
+        # Plan 093: Return structured error envelope for user context failures
+        error_payload = e.to_envelope()
+        if logger:
+            logger.error(f"Plan 093: User context error: {e.error_code}", extra={'data': error_payload})
         else:
             print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload
@@ -429,6 +447,12 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
         cognee.config.data_root_directory(cognee_config['data_root'])
         # Plan 083 M5: Cloud-only mode uses AWS credentials via Bedrock, no LLM API key needed
 
+        # Plan 093: Ensure multi-user context is established after env wiring
+        # This sets the session_user ContextVar for consistent data isolation
+        logger.debug("Plan 093: Ensuring user context for multi-user correctness")
+        user_context_result = await ensure_user_context(logger=logger)
+        logger.debug(f"Plan 093: User context established for user {user_context_result.user_id}")
+
         # Step 3: Run cognify on dataset
         logger.info("Cognify started (this may take 30-90s)")
         start_time = perf_counter()
@@ -487,6 +511,24 @@ async def run_cognify_only(workspace_path: str, operation_id: str) -> dict:
             'error': error_message
         }
         logger.error("Missing API key", extra={'data': error_payload})
+        return error_payload
+
+    except UserContextError as e:
+        # Plan 093: Return structured error envelope for user context failures
+        elapsed_ms = int((perf_counter() - overall_start) * 1000)
+
+        write_status_stub(
+            operation_id=operation_id,
+            workspace_dir=workspace_dir,
+            success=False,
+            error_code=e.error_code,
+            error_message=e.user_message,
+            remediation=e.remediation,
+            elapsed_ms=elapsed_ms
+        )
+
+        error_payload = e.to_envelope()
+        logger.error(f"Plan 093: User context error: {e.error_code}", extra={'data': error_payload})
         return error_payload
 
     except ImportError as e:
@@ -609,6 +651,14 @@ async def run_sync(summary_json: dict = None, workspace_path: str = None,
         # Plan 083 M5: Cloud-only mode uses AWS credentials via Bedrock, no LLM API key needed
         metrics['init_cognee_sec'] = perf_counter() - step_start
 
+        # Plan 093: Ensure multi-user context is established after env wiring
+        # This sets the session_user ContextVar for consistent data isolation
+        if logger: logger.debug("Plan 093: Ensuring user context for multi-user correctness")
+        step_start = perf_counter()
+        user_context_result = await ensure_user_context(logger=logger)
+        metrics['ensure_user_context_sec'] = perf_counter() - step_start
+        if logger: logger.debug(f"Plan 093: User context established for user {user_context_result.user_id}")
+
         # Step 3: Create text content
         step_start = perf_counter()
         if summary_json:
@@ -690,6 +740,14 @@ Metadata: timestamp={timestamp}, importance={importance}"""
         }
         if logger:
             logger.error("Missing Cloud credentials", extra={'data': error_payload})
+        else:
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
+    except UserContextError as e:
+        # Plan 093: Return structured error envelope for user context failures
+        error_payload = e.to_envelope()
+        if logger:
+            logger.error(f"Plan 093: User context error: {e.error_code}", extra={'data': error_payload})
         else:
             print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
         return error_payload

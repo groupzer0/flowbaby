@@ -36,6 +36,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from bridge_env import apply_workspace_env, OntologyConfigError
 import bridge_logger
 from workspace_utils import canonicalize_workspace_path, generate_dataset_name
+# Plan 093: Import shared user context helper for multi-user correctness
+from user_context import ensure_user_context, UserContextError
 
 
 # Path to vendored D3 assets relative to this script
@@ -243,6 +245,13 @@ async def visualize_graph(
         # Plan 083 M5: v0.7.0 is Cloud-only - Cognee uses AWS Bedrock via AWS_* env vars
         logger.debug("Cloud-only mode: Using AWS Bedrock via Cloud credentials")
         
+        # Plan 093: Ensure multi-user context is established after env wiring
+        # This sets the session_user ContextVar for consistent data isolation
+        # and may be required for correct graph data scoping under multi-user mode
+        logger.debug("Plan 093: Ensuring user context for multi-user correctness")
+        user_context_result = await ensure_user_context(logger=logger)
+        logger.debug(f"Plan 093: User context established for user {user_context_result.user_id}")
+        
         # Generate dataset name for this workspace
         dataset_name, _ = generate_dataset_name(workspace_path)
         
@@ -390,6 +399,11 @@ async def visualize_graph(
             'offline_safe': True  # Guaranteed: external scripts would have failed above
         }
         
+    except UserContextError as e:
+        # Plan 093: Return structured error envelope for user context failures
+        error_payload = e.to_envelope()
+        logger.error(f"Plan 093: User context error: {e.error_code}", extra={'data': error_payload})
+        return error_payload
     except ImportError as e:
         logger.error(f"Failed to import required module: {e}")
         return {

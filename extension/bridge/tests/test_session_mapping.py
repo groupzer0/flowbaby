@@ -98,7 +98,13 @@ async def test_ingest_does_not_pass_session_id(mock_cognee_session, mock_env, te
 
 @pytest.mark.asyncio
 async def test_retrieve_passes_session_id(mock_cognee_session, mock_env, temp_workspace):
-    """Test that retrieve passes session_id to cognee.search."""
+    """Test that retrieve passes session_id to cognee.search.
+    
+    Plan 093: User context is now handled by shared ensure_user_context() helper
+    which is called earlier in the retrieve flow. This test verifies that:
+    1. The shared helper is called (via mock)
+    2. session_id is still passed to cognee.search
+    """
     _, mock_retrieve, mock_get_default_user, mock_set_session_user = mock_cognee_session
 
     session_id = "test-session-456"
@@ -109,20 +115,23 @@ async def test_retrieve_passes_session_id(mock_cognee_session, mock_env, temp_wo
         MagicMock(text="Result 2", id="2")
     ]
 
-    # Mock user return
+    # Mock user return (still needed for the shared helper's internal call)
     mock_get_default_user.return_value = MagicMock(id="user-123")
 
-    await retrieve_context(
-        str(temp_workspace),
-        "test query",
-        session_id=session_id
-    )
+    # Plan 093: Mock ensure_user_context at module level
+    with patch('retrieve.ensure_user_context', new_callable=AsyncMock) as mock_ensure_user:
+        mock_ensure_user.return_value = MagicMock(success=True, user_id='user-123')
+        
+        await retrieve_context(
+            str(temp_workspace),
+            "test query",
+            session_id=session_id
+        )
 
-    # Verify session context was initialized
-    mock_get_default_user.assert_called_once()
-    mock_set_session_user.assert_called_once()
+        # Plan 093: Verify shared user context helper was called
+        mock_ensure_user.assert_called_once()
 
-    # Verify search was called with session_id
-    mock_retrieve.search.assert_called_once()
-    call_kwargs = mock_retrieve.search.call_args.kwargs
-    assert call_kwargs.get('session_id') == session_id
+        # Verify search was called with session_id
+        mock_retrieve.search.assert_called_once()
+        call_kwargs = mock_retrieve.search.call_args.kwargs
+        assert call_kwargs.get('session_id') == session_id

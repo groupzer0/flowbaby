@@ -60,6 +60,8 @@ class _CogneePatchFinder(importlib.abc.MetaPathFinder):
 
 @pytest.mark.asyncio
 async def test_retrieve_real_cognee_produces_no_redis_failures_in_logs(tmp_path: Path, monkeypatch, capfd):
+    from unittest.mock import AsyncMock, MagicMock, patch
+
     workspace = tmp_path / "ws"
     workspace.mkdir(parents=True)
 
@@ -81,32 +83,35 @@ async def test_retrieve_real_cognee_produces_no_redis_failures_in_logs(tmp_path:
     finder = _CogneePatchFinder()
     sys.meta_path.insert(0, finder)
     try:
-        from retrieve import retrieve_context
+        # Plan 093: Mock user context helper since we don't have a real DB in this test
+        mock_user_ctx_result = MagicMock(success=True, user_id='test-user')
+        with patch('retrieve.ensure_user_context', new_callable=AsyncMock, return_value=mock_user_ctx_result):
+            from retrieve import retrieve_context
 
-        result = await retrieve_context(str(workspace), "hello", max_results=3)
-        assert result.get("success") is True
+            result = await retrieve_context(str(workspace), "hello", max_results=3)
+            assert result.get("success") is True
 
-        assert os.environ.get("CACHING") == "true"
-        assert os.environ.get("CACHE_BACKEND") == "fs"
+            assert os.environ.get("CACHING") == "true"
+            assert os.environ.get("CACHE_BACKEND") == "fs"
 
-        log_file = workspace / ".flowbaby/logs/flowbaby.log"
-        assert log_file.exists(), "Expected bridge log file to be created"
+            log_file = workspace / ".flowbaby/logs/flowbaby.log"
+            assert log_file.exists(), "Expected bridge log file to be created"
 
-        log_text = log_file.read_text(encoding="utf-8", errors="replace")
-        captured = capfd.readouterr()
-        combined_text = log_text + "\n" + (captured.err or "")
+            log_text = log_file.read_text(encoding="utf-8", errors="replace")
+            captured = capfd.readouterr()
+            combined_text = log_text + "\n" + (captured.err or "")
 
-        bad_patterns = [
-            r"ModuleNotFoundError:.*redis",
-            r"No module named ['\"]redis['\"]",
-            r"redis.*(ECONNREFUSED|Connection refused|ConnectionError|TimeoutError|timed out)",
-            r"(ECONNREFUSED|Connection refused|ConnectionError|TimeoutError|timed out).*redis",
-        ]
+            bad_patterns = [
+                r"ModuleNotFoundError:.*redis",
+                r"No module named ['\"]redis['\"]",
+                r"redis.*(ECONNREFUSED|Connection refused|ConnectionError|TimeoutError|timed out)",
+                r"(ECONNREFUSED|Connection refused|ConnectionError|TimeoutError|timed out).*redis",
+            ]
 
-        for pattern in bad_patterns:
-            assert re.search(pattern, combined_text, flags=re.IGNORECASE) is None, (
-                f"Found Redis-related failure pattern in logs/stderr: {pattern}"
-            )
+            for pattern in bad_patterns:
+                assert re.search(pattern, combined_text, flags=re.IGNORECASE) is None, (
+                    f"Found Redis-related failure pattern in logs/stderr: {pattern}"
+                )
     finally:
         if sys.meta_path and sys.meta_path[0] is finder:
             sys.meta_path.pop(0)

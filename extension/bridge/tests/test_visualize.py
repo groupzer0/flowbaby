@@ -432,3 +432,66 @@ class TestD3AssetIntegrity:
         
         # d3-contour minified is smaller (~6KB)
         assert d3_contour.stat().st_size > 5000, "D3 contour should be >5KB"
+
+
+# ============================================================================
+# Plan 093: User Context Integration Tests
+# ============================================================================
+
+
+class TestVisualizeUserContextIntegration:
+    """Test that visualize operations call ensure_user_context() - Plan 093."""
+
+    @pytest.mark.asyncio
+    async def test_visualize_graph_calls_ensure_user_context(self, temp_workspace, mock_env):
+        """TDD: visualize_graph should call ensure_user_context after env wiring."""
+        output_path = temp_workspace / 'test_graph.html'
+
+        with patch('visualize.apply_workspace_env') as mock_apply_env:
+            mock_apply_env.return_value = MagicMock(
+                system_root=str(temp_workspace / '.flowbaby/system'),
+                data_root=str(temp_workspace / '.flowbaby/data')
+            )
+
+            with patch('visualize.ensure_user_context', new_callable=AsyncMock) as mock_ensure_user:
+                mock_ensure_user.return_value = MagicMock(success=True, user_id='test-user')
+
+                with patch.dict('sys.modules', {'cognee': MagicMock()}):
+                    sys.modules['cognee'].visualize_graph = AsyncMock(return_value='<html></html>')
+
+                    from visualize import visualize_graph
+
+                    await visualize_graph(str(temp_workspace), str(output_path))
+
+                    # Verify ensure_user_context was called
+                    mock_ensure_user.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_visualize_user_context_error_returns_structured_error(self, temp_workspace, mock_env):
+        """TDD: User context errors should return structured error envelope."""
+        output_path = temp_workspace / 'test_graph.html'
+
+        from user_context import UserContextError
+
+        with patch('visualize.apply_workspace_env') as mock_apply_env:
+            mock_apply_env.return_value = MagicMock(
+                system_root=str(temp_workspace / '.flowbaby/system'),
+                data_root=str(temp_workspace / '.flowbaby/data')
+            )
+
+            with patch('visualize.ensure_user_context', new_callable=AsyncMock) as mock_ensure_user:
+                mock_ensure_user.side_effect = UserContextError(
+                    error_code='COGNEE_RELATIONAL_DB_NOT_CREATED',
+                    user_message='Database not initialized',
+                    remediation='Run cognify first',
+                    details={}
+                )
+
+                from visualize import visualize_graph
+
+                result = await visualize_graph(str(temp_workspace), str(output_path))
+
+                # Verify structured error is returned
+                assert result['success'] is False
+                assert result['error_code'] == 'COGNEE_RELATIONAL_DB_NOT_CREATED'
+                assert 'remediation' in result

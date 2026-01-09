@@ -40,6 +40,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from bridge_env import apply_workspace_env, OntologyConfigError
 import bridge_logger
 from workspace_utils import canonicalize_workspace_path, generate_dataset_name
+# Plan 093: Import shared user context helper for multi-user correctness
+from user_context import ensure_user_context, UserContextError
 
 # Plan 073: Contract version for retrieval response evolution
 # v2.0.0: Switch to only_context=True, adds graphContext field for TS synthesis
@@ -313,10 +315,9 @@ async def retrieve_context(
         # Import cognee AFTER setting environment variables
         logger.debug("Importing cognee SDK")
         import cognee
-        from cognee.context_global_variables import set_session_user_context_variable
         from cognee.modules.search.types import SearchType
-        from cognee.modules.users.methods import get_default_user
-        # Plan 049: Import session management utilities
+        # Plan 093: Removed direct imports of get_default_user, set_session_user_context_variable
+        # These are now handled by the shared user_context helper
 
         # Configure workspace-local storage directories (redundant but explicit for clarity)
         logger.debug("Configuring workspace storage directories")
@@ -325,6 +326,15 @@ async def retrieve_context(
 
         # Plan 083 M5: v0.7.0 is Cloud-only - Cognee uses AWS Bedrock via AWS_* env vars
         logger.debug("Cloud-only mode: Using AWS Bedrock via Cloud credentials")
+
+        # Plan 093: Ensure multi-user context is established after env wiring
+        # This uses the shared helper which caches the default user (≤1 DB hit per process)
+        # and sets the ContextVar for each operation. Even though Cognee search internally
+        # seeds the default user, using the shared helper ensures consistency across all
+        # bridge entrypoints and avoids redundant DB lookups via caching.
+        logger.debug("Plan 093: Ensuring user context for multi-user correctness")
+        user_context_result = await ensure_user_context(logger=logger)
+        logger.debug(f"Plan 093: User context established for user {user_context_result.user_id}")
 
         # 1. Generate same unique dataset name as init.py and ingest.py (using canonical path)
         dataset_name, _ = generate_dataset_name(workspace_path)
@@ -345,14 +355,9 @@ async def retrieve_context(
         }})
 
         try:
-            # Plan 049: Initialize user context if session ID is present
-            if session_id:
-                try:
-                    default_user = await get_default_user()
-                    await set_session_user_context_variable(default_user)
-                    logger.debug(f"Initialized session context for user {default_user.id}", extra={'data': {'session_id': session_id}})
-                except Exception as session_error:
-                    logger.warning(f"Failed to initialize session context: {session_error}", extra={'data': {'session_id': session_id}})
+            # Plan 093: User context is now established earlier via ensure_user_context()
+            # The shared helper caches the default user and sets the ContextVar.
+            # We no longer need to call get_default_user/set_session_user_context_variable inline.
 
             # Plan 073: Use only_context=True to skip LLM completion call (17-32s savings)
             # This returns raw graph context for TypeScript-side synthesis via Copilot
@@ -734,6 +739,15 @@ async def retrieve_context(
             'include_superseded': include_superseded
         }
 
+    except UserContextError as e:
+        # Plan 093: Return structured error envelope for user context failures
+        error_payload = e.to_envelope()
+        error_payload['contractVersion'] = RETRIEVE_CONTRACT_VERSION
+        try:
+            logger.error(f"Plan 093: User context error: {e.error_code}", extra={'data': error_payload})
+        except Exception:
+            print(f"[ERROR] {json.dumps(error_payload)}", file=sys.stderr)
+        return error_payload
     except ImportError as e:
         error_payload = {
             'success': False,

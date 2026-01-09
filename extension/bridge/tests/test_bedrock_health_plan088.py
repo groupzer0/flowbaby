@@ -97,28 +97,29 @@ class TestBedrockHealthProbe:
         # Mock the BedrockAdapter to return a valid TextOut response
         mock_result = TextOut(content="test")
         
-        with patch('bedrock_health.check_bedrock_health.__globals__["BedrockAdapter"]', create=True) as MockAdapter:
-            mock_adapter = MagicMock()
-            mock_adapter.max_completion_tokens = 2048
-            mock_adapter._create_bedrock_request = MagicMock(return_value={
-                'messages': [],
-                'model': 'amazon.nova-micro-v1:0'
-            })
-            mock_adapter.aclient = MagicMock()
-            mock_adapter.aclient.chat = MagicMock()
-            mock_adapter.aclient.chat.completions = MagicMock()
-            mock_adapter.aclient.chat.completions.create = AsyncMock(return_value=mock_result)
-            MockAdapter.return_value = mock_adapter
-            
-            # Actually test with real import mocking
-            with patch(
-                'cognee.infrastructure.llm.structured_output_framework.litellm_instructor.llm.bedrock.adapter.BedrockAdapter'
-            ) as RealMockAdapter:
-                RealMockAdapter.return_value = mock_adapter
-                result = await check_bedrock_health()
-            
-                assert result['success'] is True
-                assert result['error'] is None
+        mock_adapter = MagicMock()
+        mock_adapter.max_completion_tokens = 2048
+        mock_adapter._create_bedrock_request = MagicMock(return_value={
+            'messages': [],
+            'model': 'amazon.nova-micro-v1:0'
+        })
+        mock_adapter.aclient = MagicMock()
+        mock_adapter.aclient.chat = MagicMock()
+        mock_adapter.aclient.chat.completions = MagicMock()
+        mock_adapter.aclient.chat.completions.create = AsyncMock(return_value=mock_result)
+        
+        # Create mock module with BedrockAdapter
+        mock_adapter_module = MagicMock()
+        mock_adapter_module.BedrockAdapter = MagicMock(return_value=mock_adapter)
+        
+        # Patch the import inside check_bedrock_health
+        with patch.dict('sys.modules', {
+            'cognee.infrastructure.llm.structured_output_framework.litellm_instructor.llm.bedrock.adapter': mock_adapter_module
+        }):
+            result = await check_bedrock_health()
+        
+            assert result['success'] is True
+            assert result['error'] is None
 
     @pytest.mark.asyncio
     async def test_health_check_returns_actionable_error_on_auth_failure(self):
@@ -139,11 +140,14 @@ class TestBedrockHealthProbe:
             side_effect=Exception("ExpiredTokenException: The security token included in the request is expired")
         )
         
-        with patch(
-            'cognee.infrastructure.llm.structured_output_framework.litellm_instructor.llm.bedrock.adapter.BedrockAdapter'
-        ) as MockAdapter:
-            MockAdapter.return_value = mock_adapter
-            
+        # Create mock module with BedrockAdapter
+        mock_adapter_module = MagicMock()
+        mock_adapter_module.BedrockAdapter = MagicMock(return_value=mock_adapter)
+        
+        # Patch the import inside check_bedrock_health
+        with patch.dict('sys.modules', {
+            'cognee.infrastructure.llm.structured_output_framework.litellm_instructor.llm.bedrock.adapter': mock_adapter_module
+        }):
             result = await check_bedrock_health()
             
             assert result['success'] is False
@@ -177,11 +181,14 @@ class TestBedrockHealthProbe:
         mock_adapter.aclient.chat.completions = MagicMock()
         mock_adapter.aclient.chat.completions.create = capture_request
         
-        with patch(
-            'cognee.infrastructure.llm.structured_output_framework.litellm_instructor.llm.bedrock.adapter.BedrockAdapter'
-        ) as MockAdapter:
-            MockAdapter.return_value = mock_adapter
-            
+        # Create mock module with BedrockAdapter
+        mock_adapter_module = MagicMock()
+        mock_adapter_module.BedrockAdapter = MagicMock(return_value=mock_adapter)
+        
+        # Patch the import inside check_bedrock_health
+        with patch.dict('sys.modules', {
+            'cognee.infrastructure.llm.structured_output_framework.litellm_instructor.llm.bedrock.adapter': mock_adapter_module
+        }):
             await check_bedrock_health()
             
             # Messages should be reordered to system-first
