@@ -583,9 +583,16 @@ We welcome contributions! See [discussions](https://github.com/groupzer0/flowbab
 
 ## License
 
-This extension is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+This extension is source-available under the [MIT License](LICENSE) with the [Commons Clause](https://commonsclause.com/) condition.
 
-This extension uses [Cognee](https://github.com/topoteretes/cognee) under the Apache 2.0 license. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
+**What this means:**
+
+- ✅ **Use freely** — Personal, internal, and commercial use of the extension is allowed
+- ✅ **Modify and fork** — You can adapt the code for your own purposes
+- ✅ **Distribute** — Share the unmodified or modified code
+- ❌ **Sell** — You may not sell the software or offer it as a paid hosted service
+
+This extension uses [Cognee](https://github.com/topoteretes/cognee) under the Apache 2.0 license. See [THIRD_PARTY_NOTICES.md](extension/THIRD_PARTY_NOTICES.md) for details.
 
 ## Support
 
