@@ -255,6 +255,18 @@ async def visualize_graph(
         # Generate dataset name for this workspace
         dataset_name, _ = generate_dataset_name(workspace_path)
         
+        # CRITICAL FIX: Set database context for multi-user mode graph access
+        # Without this, get_graph_engine() returns the default graph (empty)
+        # instead of the user's per-dataset graph where nodes were written.
+        # This bug was causing "No graph data available" errors despite 
+        # successful cognify operations that populated the correct database.
+        from cognee.context_global_variables import set_database_global_context_variables
+        from uuid import UUID
+        user_uuid = UUID(user_context_result.user_id)
+        logger.debug(f"Setting database context for user={user_uuid}, dataset={dataset_name}")
+        await set_database_global_context_variables(dataset_name, user_uuid)
+        logger.debug("Database context established - graph queries will use user-specific database")
+        
         logger.info("Generating graph visualization", extra={'data': {
             'workspace_path': workspace_path,
             'output_path': str(output_file),
@@ -339,48 +351,46 @@ async def visualize_graph(
         
         logger.info("Offline-first validation passed: no external script references")
         
-        # Count nodes in the visualization (basic heuristic from HTML)
+        # Count nodes in the visualization (improved heuristic)
         # Look for node data in the D3 visualization
-        node_count = html_content.count('"id":')  # Rough estimate from JSON data
+        # Each node has a unique "id" field - count occurrences between "var nodes" and "var links"
+        import re
+        
+        # Find the section between "var nodes" and "var links" (or end of script)
+        nodes_section_match = re.search(r'var nodes = \[(.*?)\];\s*var links', html_content, re.DOTALL)
+        if nodes_section_match:
+            nodes_section = nodes_section_match.group(1)
+            # Count node objects by their "id" field (each node has exactly one)
+            node_count = nodes_section.count('"id":')
+        else:
+            # Fallback: count all "id": occurrences after "var nodes"
+            nodes_start = html_content.find('var nodes = [')
+            if nodes_start > 0:
+                # Count ids in the rest of the content (rough but better than 0)
+                node_count = html_content[nodes_start:].count('"id":')
+            else:
+                node_count = 0
         
         # Plan 091 M3: Fail-closed empty graph detection
-        # Check for Cognee's "No graph data available" placeholder (sentinel)
-        EMPTY_GRAPH_SENTINEL = "No graph data available"
-        has_empty_sentinel = EMPTY_GRAPH_SENTINEL.lower() in html_content.lower()
-        
-        # Secondary heuristic: node count
-        # If sentinel is present OR node count is suspiciously low, treat as empty
-        is_empty_graph = has_empty_sentinel or node_count < 2
+        # An empty graph has node_count == 0
+        is_empty_graph = node_count < 2
         
         if is_empty_graph:
             # FAIL-CLOSED: Don't return success for empty graphs
-            logger.warning(f"Empty graph detected: sentinel={has_empty_sentinel}, node_count={node_count}")
+            logger.warning(f"Empty graph detected: node_count={node_count}")
             
             # Delete the empty output file
             if output_file.exists():
                 output_file.unlink()
                 logger.info(f"Deleted empty graph output: {output_file}")
             
-            # Distinguish between "no data ingested" and "wrong store"
-            # If we have *any* nodes but the sentinel is present, likely wrong store
-            if has_empty_sentinel and node_count > 0:
-                return {
-                    'success': False,
-                    'error_code': 'EMPTY_GRAPH_WRONG_STORE',
-                    'error': 'Graph exists but visualization read from wrong store or produced empty output',
-                    'user_message': 'Graph visualization failed: data may exist but was not read correctly. Try re-running the command.',
-                    'node_count': node_count,
-                    'has_sentinel': has_empty_sentinel
-                }
-            else:
-                return {
-                    'success': False,
-                    'error_code': 'EMPTY_GRAPH',
-                    'error': 'No graph data available in workspace',
-                    'user_message': 'No graph data available. Ingest some memories first using @flowbaby chat.',
-                    'node_count': node_count,
-                    'has_sentinel': has_empty_sentinel
-                }
+            return {
+                'success': False,
+                'error_code': 'EMPTY_GRAPH',
+                'error': 'No graph data available in workspace',
+                'user_message': 'No graph data available. Ingest some memories first using @flowbaby chat.',
+                'node_count': node_count
+            }
         
         # Write the post-processed HTML (safe to write now)
         output_file.write_text(html_content, encoding='utf-8')
