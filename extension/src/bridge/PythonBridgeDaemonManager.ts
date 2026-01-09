@@ -283,7 +283,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         }
 
         const lockPath = this.getLockPath();
-        
+
         try {
             // Ensure .flowbaby directory exists
             const flowbabyDir = path.dirname(lockPath);
@@ -292,7 +292,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             // Try to create lock directory atomically
             // mkdir without recursive option will fail with EEXIST if directory exists
             await fs.promises.mkdir(lockPath);
-            
+
             this.lockHeld = true;
             this.log('INFO', 'Lock acquired', { lockPath });
             return true;
@@ -302,9 +302,9 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
                 return false;
             }
             // Unexpected error - log and rethrow
-            this.log('ERROR', 'Failed to acquire lock', { 
-                lockPath, 
-                error: error instanceof Error ? error.message : String(error) 
+            this.log('ERROR', 'Failed to acquire lock', {
+                lockPath,
+                error: error instanceof Error ? error.message : String(error)
             });
             throw error;
         }
@@ -321,7 +321,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         }
 
         const lockPath = this.getLockPath();
-        
+
         try {
             await fs.promises.rmdir(lockPath);
             this.lockHeld = false;
@@ -386,7 +386,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             await this.cleanupStaleDaemon();
 
             const daemonScript = path.join(this.bridgePath, 'daemon.py');
-            
+
             // Verify daemon script exists
             if (!fs.existsSync(daemonScript)) {
                 throw new Error(`Daemon script not found: ${daemonScript}`);
@@ -567,8 +567,14 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             state: this.state
         });
 
-        // Clean up PID file
+        // Clean up PID file and release lock
         this.deletePidFile();
+
+        // Release lock on unexpected exit (crash/signal) to prevent stale locks
+        // This is async but we don't await - best effort cleanup
+        this.releaseLock().catch(err => {
+            this.log('WARN', 'Failed to release lock on process exit', { error: String(err) });
+        });
 
         // If it crashed while running, consider auto-restart
         if (wasRunning && this.state === 'crashed') {
@@ -779,12 +785,12 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             try {
                 // Send shutdown request (don't await the response, just the write)
                 const shutdownSent = this.sendShutdownRequest();
-                
+
                 // Wait for either: process exit OR graceful timeout
                 const gracefulResult = await Promise.race([
                     processExitPromise.then(() => 'exited' as const),
-                    shutdownSent.then(() => 
-                        new Promise<'timeout'>((resolve) => 
+                    shutdownSent.then(() =>
+                        new Promise<'timeout'>((resolve) =>
                             setTimeout(() => resolve('timeout'), GRACEFUL_SHUTDOWN_TIMEOUT_MS)
                         )
                     )
@@ -797,8 +803,8 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
                     return;
                 }
             } catch (error) {
-                this.log('DEBUG', 'Shutdown RPC failed, proceeding to SIGTERM', { 
-                    error: String(error) 
+                this.log('DEBUG', 'Shutdown RPC failed, proceeding to SIGTERM', {
+                    error: String(error)
                 });
             }
 
@@ -826,7 +832,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
                 // Wait for exit after SIGTERM
                 const sigtermResult = await Promise.race([
                     processExitPromise.then(() => 'exited' as const),
-                    new Promise<'timeout'>((resolve) => 
+                    new Promise<'timeout'>((resolve) =>
                         setTimeout(() => resolve('timeout'), SIGTERM_TIMEOUT_MS)
                     )
                 ]);
@@ -842,7 +848,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             if (this.daemonProcess && !this.daemonProcess.killed) {
                 shutdownOutcome = 'forced';
                 this.consecutiveForcedKills++;
-                
+
                 this.log('ERROR', 'Phase 3: SIGTERM timeout, sending SIGKILL (forced termination)', {
                     pid,
                     consecutiveForcedKills: this.consecutiveForcedKills,
@@ -877,14 +883,14 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             this.state = 'stopped';
             this.daemonProcess = null;
             this.deletePidFile();
-            
+
             // Plan 092 M2.4: Release lock after daemon stops
             await this.releaseLock();
-            
-            this.log('INFO', 'Daemon stopped', { 
-                reason, 
+
+            this.log('INFO', 'Daemon stopped', {
+                reason,
                 outcome: shutdownOutcome,
-                pid 
+                pid
             });
         }
     }
@@ -928,21 +934,21 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     public async restart(): Promise<void> {
         const restartStart = Date.now();
         const oldPid = this.daemonProcess?.pid;
-        
+
         this.log('INFO', 'Restarting daemon', { oldPid });
-        
+
         // Stop and wait for completion - doStop() handles graceful + escalated shutdown
         await this.stop('restart');
-        
+
         const stopDuration = Date.now() - restartStart;
-        this.log('INFO', 'Restart: old process stopped', { 
+        this.log('INFO', 'Restart: old process stopped', {
             stopDuration_ms: stopDuration,
-            oldPid 
+            oldPid
         });
-        
+
         // Start new daemon
         await this.start();
-        
+
         const totalDuration = Date.now() - restartStart;
         this.log('INFO', 'Restart completed', {
             totalDuration_ms: totalDuration,
@@ -963,7 +969,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
      */
     private resetIdleTimer(): void {
         this.clearIdleTimer();
-        
+
         if (this.idleTimeoutMinutes > 0 && this.state === 'running') {
             this.idleTimer = setTimeout(() => {
                 // Plan 061: Check for in-flight requests before triggering idle shutdown
@@ -1109,6 +1115,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
      * 2. If PID exists and process is alive, reuse or stop it
      * 3. If PID exists but process is dead (stale), clean up
      * 4. Check and migrate legacy PID locations
+     * 5. Clean up stale lock directories (orphaned from crashes)
      */
     private async cleanupStaleDaemon(): Promise<void> {
         const primaryPidPath = this.getPidFilePath();
@@ -1120,6 +1127,60 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         // Check and clean legacy locations
         for (const legacyPath of legacyPaths) {
             await this.checkAndCleanPidFile(legacyPath, 'legacy');
+        }
+
+        // Clean up stale lock directory if it exists but no valid daemon is running
+        await this.cleanupStaleLock();
+    }
+
+    /**
+     * Clean up stale lock directory left behind by a crashed daemon.
+     * 
+     * A lock is considered stale if:
+     * - The lock directory exists, AND
+     * - Either no PID file exists, OR
+     * - The PID file exists but the process is not alive
+     * 
+     * This handles cases where VS Code or the daemon crashed without proper cleanup.
+     */
+    private async cleanupStaleLock(): Promise<void> {
+        const lockPath = this.getLockPath();
+        const pidPath = this.getPidFilePath();
+
+        try {
+            // Check if lock directory exists
+            await fs.promises.access(lockPath);
+        } catch {
+            // Lock doesn't exist - nothing to clean up
+            return;
+        }
+
+        // Lock exists - check if the associated daemon is still alive
+        try {
+            const pidContent = await fs.promises.readFile(pidPath, 'utf8');
+            const pid = parseInt(pidContent.trim(), 10);
+
+            if (!isNaN(pid) && this.isProcessAlive(pid)) {
+                // Lock is held by a running process - this is legitimate
+                // (This shouldn't happen since we check before acquiring lock,
+                // but leaving as a safety check)
+                this.log('DEBUG', 'Lock held by running process', { pid, lockPath });
+                return;
+            }
+        } catch {
+            // PID file doesn't exist or can't be read - lock is definitely stale
+        }
+
+        // Lock is stale - clean it up
+        this.log('INFO', 'Cleaning up stale lock directory', { lockPath });
+        try {
+            await fs.promises.rmdir(lockPath);
+            this.log('INFO', 'Stale lock cleaned up successfully', { lockPath });
+        } catch (error) {
+            this.log('WARN', 'Failed to clean up stale lock', {
+                lockPath,
+                error: error instanceof Error ? error.message : String(error)
+            });
         }
     }
 
@@ -1142,8 +1203,8 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
                 // 1. A legitimate daemon from this workspace (should reuse)
                 // 2. An orphaned daemon that didn't clean up
                 // 3. PID reuse (different process using same PID)
-                this.log('WARN', `Found running process from ${location} PID file`, { 
-                    pid, 
+                this.log('WARN', `Found running process from ${location} PID file`, {
+                    pid,
                     pidPath,
                     action: 'Attempting to stop before starting new daemon'
                 });
@@ -1172,9 +1233,9 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         } catch (error) {
             // PID file doesn't exist or can't be read - that's fine
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-                this.log('DEBUG', `Error checking ${location} PID file`, { 
-                    pidPath, 
-                    error: String(error) 
+                this.log('DEBUG', `Error checking ${location} PID file`, {
+                    pidPath,
+                    error: String(error)
                 });
             }
         }
@@ -1241,7 +1302,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             // In tests or during VS Code shutdown the underlying channel may be closed.
             // Swallow logging errors to avoid breaking workflows on teardown.
         }
-        
+
         if (level === 'DEBUG') {
             debugLog(message, data);
         }

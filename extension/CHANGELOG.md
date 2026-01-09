@@ -17,7 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed env var injection: `LLM_API_KEY`, `LLM_PROVIDER`, `LLM_MODEL` no longer injected into Python bridge
   - Legacy API keys stored in SecretStorage are automatically migrated with a one-time info message
 
+- **Zone-Based Region Selection (Plan 094)**: The `flowbaby.cloud.preferredRegion` setting has been replaced by `flowbaby.cloud.preferredZone`:
+  - New zones: `us` (Americas), `eu` (Europe), `apac` (Asia-Pacific)
+  - If you had `preferredRegion` set, you must reconfigure with the new `preferredZone` setting
+  - Backend selects the optimal AWS region within the chosen zone
+
 ### Added
+
+- **Geographic Zone Selection (Plan 094)**: New `flowbaby.cloud.preferredZone` setting for zone-based region selection:
+  - Three zones: `us` (Americas), `eu` (Europe), `apac` (Asia-Pacific)
+  - Dropdown in VS Code Settings with "Backend default (recommended)" option
+  - Backend authoritative for actual AWS region within zone
+  - `INVALID_ZONE` errors surface as user-facing configuration problems with remediation guidance
+  - CI drift guard (`npm run check:zones`) validates enum matches contract at build time
+  - Supersedes Plan 091's `preferredRegion` dropdown with simpler zone abstraction
 
 - **Preferred Region Dropdown (Plan 091)**: The `Flowbaby Cloud: Preferred Region` setting now renders as a dropdown in VS Code Settings instead of a freeform text input:
   - Dropdown displays all supported Bedrock regions (us-east-1, us-west-2, eu-west-1, eu-central-1, ap-northeast-1, ap-northeast-2, ap-southeast-2, ap-south-1)

@@ -451,32 +451,22 @@
           "default": "gpt-5-mini",
           "markdownDescription": "**Copilot synthesis model** used for Plan 073 memory retrieval. This setting controls which VS Code LM API (Copilot) model synthesizes answers from retrieved graph context.\n\nSynthesis fails with a clear error if the selected model is unavailable (no silent fallback).\n\n**Note**: This curated list is reviewed each release as Copilot model availability evolves."
         },
-        "flowbaby.cloud.preferredRegion": {
+        "flowbaby.cloud.preferredZone": {
           "type": "string",
           "enum": [
             "",
-            "us-east-1",
-            "us-west-2",
-            "eu-west-1",
-            "eu-central-1",
-            "ap-northeast-1",
-            "ap-northeast-2",
-            "ap-southeast-2",
-            "ap-south-1"
+            "us",
+            "eu",
+            "apac"
           ],
           "enumDescriptions": [
             "Backend default (recommended)",
-            "US East (N. Virginia)",
-            "US West (Oregon)",
-            "EU West (Ireland)",
-            "EU Central (Frankfurt)",
-            "Asia Pacific (Tokyo)",
-            "Asia Pacific (Seoul)",
-            "Asia Pacific (Sydney)",
-            "Asia Pacific (Mumbai)"
+            "United States",
+            "Europe",
+            "Asia Pacific"
           ],
           "default": "",
-          "markdownDescription": "**Flowbaby Cloud: Preferred AWS region** for Bedrock LLM calls.\n\nLeave empty to use the backend default (recommended). The backend validates your preference and may fall back to default if the selected region is unavailable.\n\n**Note**: This curated list is reviewed each release and must match the `ENABLED_BEDROCK_REGIONS` allowlist in `@groupzer0/flowbaby-api-contract`."
+          "markdownDescription": "**Flowbaby Cloud: Preferred geographic zone** for Bedrock LLM calls.\n\nLeave empty to use the backend default (recommended). The backend validates your preference and returns the authoritative zone and region.\n\n**Note**: This setting replaces `preferredRegion`. Values: `us`, `eu`, `apac`."
         },
         "flowbaby.cloud.apiEndpoint": {
           "type": "string",
@@ -496,11 +486,11 @@
     "lint:python": "node -e \"const cp=require('child_process'); const fs=require('fs'); const path=require('path'); const extensionDir=__dirname; const bridgeDir=path.join(extensionDir,'bridge'); const rootDir=path.resolve(extensionDir,'..'); const candidates=process.platform==='win32' ? [path.join(rootDir,'.flowbaby','venv','Scripts','python.exe'),'python','py'] : [path.join(rootDir,'.flowbaby','venv','bin','python'),'python3','python']; const canUse=(cmd)=>!cmd.includes(path.sep)||fs.existsSync(cmd); const probe=(cmd)=>{ const r=cp.spawnSync(cmd,['-m','ruff','--version'],{cwd:bridgeDir,stdio:'ignore'}); return r.status===0; }; const run=(cmd)=>{ const r=cp.spawnSync(cmd,['-m','ruff','check','.'],{cwd:bridgeDir,stdio:'inherit'}); process.exit(typeof r.status==='number'?r.status:1); }; for (const cmd of candidates){ if (!canUse(cmd)) continue; if (probe(cmd)) run(cmd); } console.error('ruff is not available. Install it (e.g. pip install ruff) or initialize Flowbaby to create .flowbaby/venv.'); process.exit(1);\"",
     "lint:markdown": "markdownlint -c .markdownlint.json README.md CHANGELOG.md AGENT_INTEGRATION.md SETUP.md DISTRIBUTION.md",
     "lint:all": "npm run lint && npm run lint:python && npm run lint:markdown",
-    "check:regions": "node scripts/check-region-allowlist.js",
+    "check:zones": "node scripts/check-zone-allowlist.js",
     "test": "node ./out/test/runTest.js",
     "test:bridge": "cd bridge && pytest tests/ -v",
     "test:agent": "npm run compile:tests && node ./out/test/run-test-agent.js",
-    "test:all": "npm test && npm run test:bridge && npm run check:regions",
+    "test:all": "npm test && npm run test:bridge && npm run check:zones",
     "package": "vsce package",
     "verify:vsix": "node scripts/verify-vsix.js *.vsix"
   },
@@ -537,7 +527,7 @@
   },
   "homepage": "https://flowbaby.ai",
   "dependencies": {
-    "@groupzer0/flowbaby-api-contract": "^3.3.1",
+    "@groupzer0/flowbaby-api-contract": "^3.4.0",
     "@types/uuid": "^10.0.0",
     "dotenv": "^17.2.3",
     "uuid": "^13.0.0"

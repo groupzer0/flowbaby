@@ -26,19 +26,28 @@ import {
 } from './types';
 
 /**
+ * Singleton output channel for Cloud client operations.
+ * Lazily initialized to avoid creating channel if never used.
+ */
+let cloudClientOutputChannel: vscode.OutputChannel | undefined;
+
+/**
  * Debug logger for Cloud client operations.
  *
  * Plan 087: Captures HTTP status code and Cloud error code/message for diagnosability.
  * NEVER logs secrets (Authorization headers, tokens, AWS keys).
  */
 function createDebugLogger(name: string): (msg: string) => void {
-    const outputChannel = vscode.window.createOutputChannel('Flowbaby Cloud', { log: true });
     return (msg: string) => {
         // Only log when debug mode is enabled
         const config = vscode.workspace.getConfiguration('flowbaby');
         const debug = config.get<boolean>('debug', false);
         if (debug) {
-            outputChannel.appendLine(`[${name}] ${msg}`);
+            // Lazily create singleton output channel
+            if (!cloudClientOutputChannel) {
+                cloudClientOutputChannel = vscode.window.createOutputChannel('Flowbaby Cloud Debug', { log: true });
+            }
+            cloudClientOutputChannel.appendLine(`[${name}] ${msg}`);
         }
     };
 }

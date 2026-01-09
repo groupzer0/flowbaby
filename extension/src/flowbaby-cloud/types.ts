@@ -35,6 +35,8 @@ export type {
     // Plan 090: Consume types for credit usage metering
     ConsumeRequest,
     ConsumeResponse,
+    // Plan 094: Geographic zone types for cross-region support
+    GeographicZone,
 } from '@groupzer0/flowbaby-api-contract';
 
 export {
@@ -50,6 +52,9 @@ export {
     DEFAULT_EMBEDDING_DIMENSIONS,
     resolveBedrockRegion,
     getModelConfiguration,
+    // Plan 094: Geographic zone constants
+    GEOGRAPHIC_ZONES,
+    DEFAULT_GEOGRAPHIC_ZONE,
 } from '@groupzer0/flowbaby-api-contract';
 
 // Type aliases for local use (re-exports don't bring types into scope)
@@ -107,6 +112,12 @@ export interface CachedCredentials {
     secretAccessKey: string;
     /** AWS Session Token */
     sessionToken: string;
+    /**
+     * Geographic zone for this credential set.
+     * Backend-authoritative: client MUST use this value.
+     * @see Plan 094 - Cross-Region Nova Lite
+     */
+    zone: import('@groupzer0/flowbaby-api-contract').GeographicZone;
     /** AWS region for Bedrock calls */
     region: string;
     /** When the credentials expire (Date object for easy comparison) */

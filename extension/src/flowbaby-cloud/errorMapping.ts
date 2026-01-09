@@ -164,6 +164,20 @@ function mapFlowbabyCloudError(error: FlowbabyCloudError, contextSuffix: string)
                 },
             };
 
+        // Plan 094: Invalid zone configuration error
+        case 'INVALID_ZONE':
+            return {
+                message: `Invalid Flowbaby Cloud zone${contextSuffix}. Allowed values: us, eu, apac. Update \`flowbaby.cloud.preferredZone\` in settings.`,
+                severity: 'error',
+                actions: [
+                    { label: 'Open Settings', commandId: 'workbench.action.openSettings', args: ['flowbaby.cloud.preferredZone'] },
+                ],
+                logMetadata: {
+                    errorCode: error.code,
+                    category: 'configuration',
+                },
+            };
+
         // Network errors - user should check connection
         case 'NETWORK_ERROR':
             return {

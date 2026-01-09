@@ -6,6 +6,7 @@
  *
  * @see Plan 077 M6 - Mock Integration Tests
  * @see Plan 085 - Command Wiring and Status Consistency Tests
+ * @see Plan 094 - Cross-Region Nova Lite (Zones) Tests
  */
 
 import * as assert from 'assert';
@@ -24,6 +25,7 @@ import {
     type AuthResponse,
     type ApiError,
     type VendResponse,
+    type VendRequest,
 } from '../flowbaby-cloud';
 import { ICredentialClient } from '../flowbaby-cloud/credentials';
 import { FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
@@ -1392,5 +1394,374 @@ suite('Flowbaby Cloud Module Tests', () => {
             refreshManager.dispose();
         });
     });
-});
 
+    // =========================================================================
+    // Plan 094: Cross-Region Nova Lite (Zones) Tests
+    // =========================================================================
+    suite('Plan 094: Geographic Zone Support', () => {
+        let sandbox: sinon.SinonSandbox;
+        let mockSecretStorage: vscode.SecretStorage;
+        let mockOutputChannel: vscode.OutputChannel;
+        let storedSecrets: Map<string, string>;
+
+        setup(() => {
+            sandbox = sinon.createSandbox();
+            storedSecrets = new Map();
+
+            mockSecretStorage = {
+                get: sandbox.stub().callsFake((key: string) => Promise.resolve(storedSecrets.get(key))),
+                store: sandbox.stub().callsFake((key: string, value: string) => {
+                    storedSecrets.set(key, value);
+                    return Promise.resolve();
+                }),
+                delete: sandbox.stub().callsFake((key: string) => {
+                    storedSecrets.delete(key);
+                    return Promise.resolve();
+                }),
+                keys: sandbox.stub().callsFake(() => Promise.resolve([...storedSecrets.keys()])),
+                onDidChange: new vscode.EventEmitter<vscode.SecretStorageChangeEvent>().event,
+            };
+
+            mockOutputChannel = {
+                appendLine: sandbox.stub(),
+                append: sandbox.stub(),
+                clear: sandbox.stub(),
+                dispose: sandbox.stub(),
+                hide: sandbox.stub(),
+                show: sandbox.stub() as unknown as vscode.OutputChannel['show'],
+                replace: sandbox.stub(),
+                name: 'Flowbaby Cloud Zone Test',
+            };
+        });
+
+        teardown(() => {
+            sandbox.restore();
+        });
+
+        suite('MockCredentialClient with zone support', () => {
+            test('returns zone field in response (Plan 094)', async () => {
+                // Plan 094: VendResponse now includes required 'zone' field
+                const mockClient = new MockCredentialClient({
+                    zone: 'us',
+                });
+                const response = await mockClient.vendCredentials('test-token');
+
+                assert.strictEqual(response.zone, 'us', 'Should return zone field');
+            });
+
+            test('accepts all valid GeographicZone values', async () => {
+                // Plan 094: GeographicZone = 'us' | 'eu' | 'apac'
+                for (const zone of ['us', 'eu', 'apac'] as const) {
+                    const mockClient = new MockCredentialClient({ zone });
+                    const response = await mockClient.vendCredentials('test-token');
+                    assert.strictEqual(response.zone, zone, `Should accept zone '${zone}'`);
+                }
+            });
+        });
+
+        suite('Vend request with preferredZone', () => {
+            test('sends preferredZone when configured (Plan 094)', async () => {
+                // This test validates Deliverable #4: Extension request sends preferredZone
+                // TDD: This will fail until credentials.ts is updated to use preferredZone
+                
+                let capturedRequest: VendRequest | undefined;
+                const capturingClient: ICredentialClient = {
+                    async vendCredentials(_sessionToken: string, request?: VendRequest): Promise<VendResponse> {
+                        capturedRequest = request;
+                        return {
+                            accessKeyId: 'AKIATEST',
+                            secretAccessKey: 'secret',
+                            sessionToken: 'session',
+                            region: 'eu-west-1',
+                            zone: 'eu',
+                            expiration: new Date(Date.now() + 3600000).toISOString(),
+                            llmModel: 'anthropic.claude-3-haiku-20240307-v1:0',
+                            embeddingModel: 'bedrock/amazon.titan-embed-text-v2:0',
+                            embeddingDimensions: 1024,
+                        };
+                    }
+                };
+
+                // Mock the VS Code configuration to return preferredZone = 'eu'
+                const getConfigStub = sandbox.stub(vscode.workspace, 'getConfiguration');
+                getConfigStub.returns({
+                    get: (key: string) => {
+                        if (key === 'preferredZone') return 'eu';
+                        return undefined;
+                    },
+                } as unknown as vscode.WorkspaceConfiguration);
+
+                const mockAuthClient = new MockAuthClient();
+                const mockAuth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
+                const futureDate = new Date(Date.now() + 3600000).toISOString();
+                storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+                storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+                const credentials = new FlowbabyCloudCredentials(mockAuth, capturingClient, mockOutputChannel);
+
+                try {
+                    await credentials.ensureCredentials();
+
+                    // Plan 094 Deliverable #4: preferredZone must be sent, never preferredRegion
+                    assert.ok(capturedRequest, 'Request should be captured');
+                    assert.strictEqual(capturedRequest?.preferredZone, 'eu', 'Should send preferredZone');
+                    // Check that preferredRegion is not sent (cast to Record to avoid type error)
+                    assert.strictEqual(
+                        (capturedRequest as unknown as Record<string, unknown>)?.preferredRegion,
+                        undefined,
+                        'Should never send preferredRegion'
+                    );
+                } finally {
+                    credentials.dispose();
+                    mockAuth.dispose();
+                }
+            });
+
+            test('omits preferredZone when not configured (Plan 094)', async () => {
+                // Deliverable #4: If user has not selected a zone, omit preferredZone
+                let capturedRequest: VendRequest | undefined;
+                const capturingClient: ICredentialClient = {
+                    async vendCredentials(_sessionToken: string, request?: VendRequest): Promise<VendResponse> {
+                        capturedRequest = request;
+                        return {
+                            accessKeyId: 'AKIATEST',
+                            secretAccessKey: 'secret',
+                            sessionToken: 'session',
+                            region: 'us-east-1',
+                            zone: 'us',
+                            expiration: new Date(Date.now() + 3600000).toISOString(),
+                            llmModel: 'anthropic.claude-3-haiku-20240307-v1:0',
+                            embeddingModel: 'bedrock/amazon.titan-embed-text-v2:0',
+                            embeddingDimensions: 1024,
+                        };
+                    }
+                };
+
+                // Mock config returning empty/undefined preferredZone
+                const getConfigStub = sandbox.stub(vscode.workspace, 'getConfiguration');
+                getConfigStub.returns({
+                    get: (key: string) => {
+                        if (key === 'preferredZone') return '';
+                        return undefined;
+                    },
+                } as unknown as vscode.WorkspaceConfiguration);
+
+                const mockAuthClient = new MockAuthClient();
+                const mockAuth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
+                const futureDate = new Date(Date.now() + 3600000).toISOString();
+                storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+                storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+                const credentials = new FlowbabyCloudCredentials(mockAuth, capturingClient, mockOutputChannel);
+
+                try {
+                    await credentials.ensureCredentials();
+
+                    // Should not include preferredZone in request
+                    assert.ok(capturedRequest, 'Request should be captured');
+                    assert.strictEqual(capturedRequest?.preferredZone, undefined, 'Should omit preferredZone when empty');
+                    // Check that preferredRegion is not sent (cast to Record to avoid type error)
+                    assert.strictEqual(
+                        (capturedRequest as unknown as Record<string, unknown>)?.preferredRegion,
+                        undefined,
+                        'Should never send preferredRegion'
+                    );
+                } finally {
+                    credentials.dispose();
+                    mockAuth.dispose();
+                }
+            });
+
+            test('ignores legacy preferredRegion setting (Plan 094)', async () => {
+                // Deliverable #4: preferredRegion is not read; if present it is ignored
+                let capturedRequest: VendRequest | undefined;
+                const capturingClient: ICredentialClient = {
+                    async vendCredentials(_sessionToken: string, request?: VendRequest): Promise<VendResponse> {
+                        capturedRequest = request;
+                        return {
+                            accessKeyId: 'AKIATEST',
+                            secretAccessKey: 'secret',
+                            sessionToken: 'session',
+                            region: 'us-east-1',
+                            zone: 'us',
+                            expiration: new Date(Date.now() + 3600000).toISOString(),
+                            llmModel: 'anthropic.claude-3-haiku-20240307-v1:0',
+                            embeddingModel: 'bedrock/amazon.titan-embed-text-v2:0',
+                            embeddingDimensions: 1024,
+                        };
+                    }
+                };
+
+                // Mock config: preferredRegion is set, preferredZone is NOT set
+                const getConfigStub = sandbox.stub(vscode.workspace, 'getConfiguration');
+                getConfigStub.returns({
+                    get: (key: string) => {
+                        if (key === 'preferredRegion') return 'eu-west-1'; // Legacy setting
+                        if (key === 'preferredZone') return ''; // New setting empty
+                        return undefined;
+                    },
+                } as unknown as vscode.WorkspaceConfiguration);
+
+                const mockAuthClient = new MockAuthClient();
+                const mockAuth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
+                const futureDate = new Date(Date.now() + 3600000).toISOString();
+                storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+                storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+                const credentials = new FlowbabyCloudCredentials(mockAuth, capturingClient, mockOutputChannel);
+
+                try {
+                    await credentials.ensureCredentials();
+
+                    // Even though preferredRegion is set in config, it should be ignored
+                    assert.ok(capturedRequest, 'Request should be captured');
+                    // Check that preferredRegion is not sent (cast to Record to avoid type error)
+                    assert.strictEqual(
+                        (capturedRequest as unknown as Record<string, unknown>)?.preferredRegion,
+                        undefined,
+                        'Should never send preferredRegion even if set'
+                    );
+                } finally {
+                    credentials.dispose();
+                    mockAuth.dispose();
+                }
+            });
+        });
+
+        suite('Vend response handling with zone', () => {
+            test('caches zone from response (Plan 094)', async () => {
+                // Deliverable #5: Extension accepts and records VendResponse.zone
+                const mockClient = new MockCredentialClient({
+                    zone: 'apac',
+                    region: 'ap-southeast-2',
+                });
+
+                const mockAuthClient = new MockAuthClient();
+                const mockAuth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
+                const futureDate = new Date(Date.now() + 3600000).toISOString();
+                storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+                storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+                const credentials = new FlowbabyCloudCredentials(mockAuth, mockClient, mockOutputChannel);
+
+                try {
+                    const creds = await credentials.ensureCredentials();
+
+                    // Plan 094: zone should be mapped to CachedCredentials
+                    assert.strictEqual(creds.zone, 'apac', 'Zone should be cached from response');
+                    assert.strictEqual(creds.region, 'ap-southeast-2', 'Region should be cached from response');
+                } finally {
+                    credentials.dispose();
+                    mockAuth.dispose();
+                }
+            });
+
+            test('fails loudly when zone field is missing (Plan 094 - backend incompatibility)', async () => {
+                // Deliverable #3: If response is missing zone field, fail loudly
+                const incompatibleClient: ICredentialClient = {
+                    async vendCredentials(): Promise<VendResponse> {
+                        // Simulate old backend that doesn't return zone
+                        return {
+                            accessKeyId: 'AKIATEST',
+                            secretAccessKey: 'secret',
+                            sessionToken: 'session',
+                            region: 'us-east-1',
+                            expiration: new Date(Date.now() + 3600000).toISOString(),
+                            llmModel: 'anthropic.claude-3-haiku-20240307-v1:0',
+                            embeddingModel: 'bedrock/amazon.titan-embed-text-v2:0',
+                            embeddingDimensions: 1024,
+                            // zone is MISSING - old backend
+                        } as VendResponse;
+                    }
+                };
+
+                const mockAuthClient = new MockAuthClient();
+                const mockAuth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
+                const futureDate = new Date(Date.now() + 3600000).toISOString();
+                storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+                storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+                const credentials = new FlowbabyCloudCredentials(mockAuth, incompatibleClient, mockOutputChannel);
+
+                try {
+                    await credentials.ensureCredentials();
+                    assert.fail('Should throw error for missing zone field');
+                } catch (error) {
+                    // Plan 094 Deliverable #3: Fail loudly with remediation message
+                    assert.ok(error instanceof FlowbabyCloudError, 'Should throw FlowbabyCloudError');
+                    assert.strictEqual((error as FlowbabyCloudError).code, 'UNEXPECTED_RESPONSE', 
+                        'Should use UNEXPECTED_RESPONSE code for incompatible backend');
+                } finally {
+                    credentials.dispose();
+                    mockAuth.dispose();
+                }
+            });
+        });
+
+        suite('INVALID_ZONE error handling (Plan 094 Deliverable #9)', () => {
+            test('maps INVALID_ZONE to user-friendly configuration error', async () => {
+                // Use FlowbabyCloudError for the mapping function
+                const ux = mapCloudErrorToUX(
+                    new FlowbabyCloudError('INVALID_ZONE', 'Invalid zone: xyz')
+                );
+
+                // Plan 094: INVALID_ZONE should point user to zone setting
+                assert.ok(
+                    ux.message.includes('zone') || ux.message.includes('Zone'),
+                    'Error message should mention zone'
+                );
+                assert.ok(
+                    ux.message.includes('us') && ux.message.includes('eu') && ux.message.includes('apac'),
+                    'Error message should list allowed zone values'
+                );
+            });
+
+            test('INVALID_ZONE requires re-configuration, not re-authentication', () => {
+                // INVALID_ZONE is a config error, not an auth error
+                // Use FlowbabyCloudError since that's what requiresReAuthentication checks
+                const result = requiresReAuthentication(
+                    new FlowbabyCloudError('INVALID_ZONE', 'Invalid zone')
+                );
+
+                assert.strictEqual(result, false, 'INVALID_ZONE should not require re-authentication');
+            });
+
+            test('INVALID_ZONE is not recoverable by retry', () => {
+                // User must fix their config - retry won't help
+                // Use FlowbabyCloudError since that's what isRecoverableCloudError checks
+                const result = isRecoverableCloudError(
+                    new FlowbabyCloudError('INVALID_ZONE', 'Invalid zone')
+                );
+
+                assert.strictEqual(result, false, 'INVALID_ZONE is not recoverable by retry');
+            });
+        });
+
+        suite('Daemon restart triggers with zone (Plan 094 Deliverable #6)', () => {
+            test('zone change should be included in restart trigger fields', async () => {
+                // This test documents the expected behavior from Deliverable #6
+                // The actual implementation is in CachedCredentials and refresh.ts
+                
+                // CachedCredentials should have a zone field
+                const mockClient = new MockCredentialClient({ zone: 'us' });
+                const mockAuthClient = new MockAuthClient();
+                const mockAuth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
+                const futureDate = new Date(Date.now() + 3600000).toISOString();
+                storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
+                storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
+
+                const credentials = new FlowbabyCloudCredentials(mockAuth, mockClient, mockOutputChannel);
+
+                try {
+                    const creds = await credentials.ensureCredentials();
+                    
+                    // Verify zone is part of cached credentials (needed for comparison)
+                    assert.ok('zone' in creds, 'CachedCredentials should include zone field');
+                } finally {
+                    credentials.dispose();
+                    mockAuth.dispose();
+                }
+            });
+        });
+    });
+});

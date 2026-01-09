@@ -26,16 +26,16 @@ import { SessionManager } from './sessionManager';
 interface QueuedRequest {
     /** Unique identifier for this request */
     id: string;
-    
+
     /** Request parameters */
     request: FlowbabyContextRequest;
-    
+
     /** Timestamp when request was queued */
     queuedAt: Date;
-    
+
     /** Promise resolve function */
     resolve: (response: FlowbabyContextResponse | AgentErrorResponse) => void;
-    
+
     /** Promise reject function */
     reject: (error: Error) => void;
 }
@@ -48,10 +48,10 @@ import { FlowbabySetupService } from './setup/FlowbabySetupService';
 export interface ProviderConfig {
     /** Maximum concurrent requests (default: 2, max: 5) */
     maxConcurrentRequests: number;
-    
+
     /** Maximum request queue size before rejecting (default: 5) */
     maxQueueSize: number;
-    
+
     /** Maximum requests per minute (default: 10, max: 30) */
     rateLimitPerMinute: number;
 }
@@ -74,22 +74,22 @@ export class FlowbabyContextProvider {
     private readonly setupService: FlowbabySetupService;
     private readonly config: ProviderConfig;
     private readonly sessionManager?: SessionManager; // Plan 001
-    
+
     /** Currently in-flight requests */
     private inFlightRequests: Set<string> = new Set();
-    
+
     /** Queued requests waiting for slot */
     private requestQueue: QueuedRequest[] = [];
-    
+
     /** Request timestamps for rate limiting (last 60 seconds) */
     private requestTimestamps: Date[] = [];
-    
+
     /** Next request ID counter */
     private nextRequestId = 0;
-    
+
     /** Timestamp of last toast shown for dedupe guard (Plan 067) */
     private lastToastTime = 0;
-    
+
     /** Dedupe window in milliseconds - suppress duplicate toasts within this window (Plan 067) */
     private readonly TOAST_DEDUPE_MS = 5000;
     /**
@@ -101,8 +101,8 @@ export class FlowbabyContextProvider {
      * @param sessionManager - Optional SessionManager instance (Plan 001)
      */
     constructor(
-        client: FlowbabyClient, 
-        outputChannel: vscode.OutputChannel, 
+        client: FlowbabyClient,
+        outputChannel: vscode.OutputChannel,
         setupService: FlowbabySetupService,
         sessionManager?: SessionManager
     ) {
@@ -110,18 +110,18 @@ export class FlowbabyContextProvider {
         this.outputChannel = outputChannel;
         this.setupService = setupService;
         this.sessionManager = sessionManager;
-        
+
         // Load configuration with safe upper bounds
         const vsConfig = vscode.workspace.getConfiguration('Flowbaby.agentAccess');
         const maxConcurrent = vsConfig.get<number>('maxConcurrentRequests', 2);
         const rateLimit = vsConfig.get<number>('rateLimitPerMinute', 10);
-        
+
         this.config = {
             maxConcurrentRequests: Math.min(maxConcurrent, 5), // Clamp to max 5
             maxQueueSize: 5,
             rateLimitPerMinute: Math.min(rateLimit, 30) // Clamp to max 30
         };
-        
+
         // Log configuration with warnings if clamped
         if (maxConcurrent > 5) {
             this.outputChannel.appendLine(
@@ -133,13 +133,13 @@ export class FlowbabyContextProvider {
                 `[WARNING] rateLimitPerMinute clamped from ${rateLimit} to 30 (architectural limit)`
             );
         }
-        
+
         this.outputChannel.appendLine(
             `[FlowbabyContextProvider] Initialized with concurrency=${this.config.maxConcurrentRequests}, ` +
             `rate limit=${this.config.rateLimitPerMinute}/min`
         );
     }
-    
+
     /**
      * Retrieve context from Flowbaby with concurrency and rate limiting
      * 
@@ -172,25 +172,25 @@ export class FlowbabyContextProvider {
             this.outputChannel.appendLine(
                 `[FlowbabyContextProvider] ${new Date().toISOString()} - Cloud login required`
             );
-            
+
             // Surface actionable prompt to user
             const action = await vscode.window.showWarningMessage(
                 'Flowbaby Cloud login required for memory operations.',
                 'Login to Cloud',
                 'Cancel'
             );
-            
+
             if (action === 'Login to Cloud') {
                 await vscode.commands.executeCommand('flowbaby.cloud.login');
             }
-            
+
             return {
                 error: AgentErrorCode.INVALID_REQUEST,
                 message: 'Cloud login required. Use "Flowbaby: Login to Cloud" command.',
                 details: 'Memory operations require Flowbaby Cloud authentication (v0.7.0+)'
             };
         }
-        
+
         // Validate request
         if (!req.query || req.query.trim().length === 0) {
             return {
@@ -199,7 +199,7 @@ export class FlowbabyContextProvider {
                 details: 'request.query must be a non-empty string'
             };
         }
-        
+
         // Check rate limit
         if (!this.checkRateLimit()) {
             return {
@@ -208,7 +208,7 @@ export class FlowbabyContextProvider {
                 details: `Current window: ${this.requestTimestamps.length} requests in last 60s`
             };
         }
-        
+
         // Check queue capacity
         if (this.requestQueue.length >= this.config.maxQueueSize) {
             return {
@@ -217,10 +217,10 @@ export class FlowbabyContextProvider {
                 details: `Currently in-flight: ${this.inFlightRequests.size}, queued: ${this.requestQueue.length}`
             };
         }
-        
+
         // Generate unique request ID
         const requestId = `req-${this.nextRequestId++}`;
-        
+
         // Create queued request
         return new Promise((resolve, reject) => {
             const queuedRequest: QueuedRequest = {
@@ -230,12 +230,12 @@ export class FlowbabyContextProvider {
                 resolve,
                 reject
             };
-            
+
             this.requestQueue.push(queuedRequest);
             this.processQueue();
         });
     }
-    
+
     /**
      * Check if request is within rate limit window
      * 
@@ -248,11 +248,11 @@ export class FlowbabyContextProvider {
         this.requestTimestamps = this.requestTimestamps.filter(
             ts => ts > oneMinuteAgo
         );
-        
+
         // Check if under limit
         return this.requestTimestamps.length < this.config.rateLimitPerMinute;
     }
-    
+
     /**
      * Process queued requests up to concurrency limit
      * 
@@ -272,13 +272,13 @@ export class FlowbabyContextProvider {
             if (!queuedRequest) {
                 break;
             }
-            
+
             // Mark as in-flight
             this.inFlightRequests.add(queuedRequest.id);
-            
+
             // Record timestamp for rate limiting
             this.requestTimestamps.push(new Date());
-            
+
             // Execute request
             this.executeRequest(queuedRequest)
                 .then(response => {
@@ -294,7 +294,7 @@ export class FlowbabyContextProvider {
                 });
         }
     }
-    
+
     /**
      * Execute a single retrieval request
      * 
@@ -307,12 +307,12 @@ export class FlowbabyContextProvider {
         const { id, request, queuedAt } = queuedRequest;
         const startTime = Date.now();
         const queueWaitMs = startTime - queuedAt.getTime();
-        
+
         this.outputChannel.appendLine(
             `[FlowbabyContextProvider] Executing request ${id} ` +
             `(queue wait: ${queueWaitMs}ms, query: "${request.query.substring(0, 50)}...")`
         );
-        
+
         try {
             // Call FlowbabyClient.retrieve with query
             // Note: maxResults and maxTokens are handled by FlowbabyClient configuration
@@ -344,7 +344,7 @@ export class FlowbabyContextProvider {
                     `[FlowbabyContextProvider] Included ${synthesizedCount} synthesized answers (score 0.0)`
                 );
             }
-            
+
             // Convert RetrievalResult[] to FlowbabyContextEntry[]
             const entries: FlowbabyContextEntry[] = validResults.map(result => ({
                 summaryText: result.summaryText || result.text || '',
@@ -366,10 +366,10 @@ export class FlowbabyContextProvider {
                 confidenceLabel: result.confidenceLabel,
                 tokens: result.tokens
             }));
-            
+
             // Calculate total tokens
             const tokensUsed = validResults.reduce((sum, r) => sum + (r.tokens || 0), 0);
-            
+
             const duration = Date.now() - startTime;
             this.outputChannel.appendLine(
                 `[FlowbabyContextProvider] Request ${id} completed ` +
@@ -380,17 +380,17 @@ export class FlowbabyContextProvider {
             if (entries.length > 0) {
                 const showNotifications = vscode.workspace.getConfiguration('flowbaby')
                     .get<boolean>('showRetrievalNotifications', true);
-                
+
                 if (showNotifications) {
                     // Dedupe guard: suppress rapid successive toasts (Plan 067)
                     const now = Date.now();
                     if (now - this.lastToastTime >= this.TOAST_DEDUPE_MS) {
                         this.lastToastTime = now;
-                        
+
                         // 2-second delay to avoid interrupting user mid-thought (Plan 067)
                         setTimeout(() => {
                             vscode.window.showInformationMessage(
-                                `✨ Flowbaby found ${entries.length} relevant ${entries.length === 1 ? 'memory' : 'memories'}`,
+                                `✨ Flowbaby retrieved and provided context`,
                                 'View Graph',
                                 'Turn Off'
                             ).then(action => {
@@ -408,28 +408,28 @@ export class FlowbabyContextProvider {
                     }
                 }
             }
-            
+
             return {
                 entries,
                 totalResults: validResults.length,
                 tokensUsed
             };
-            
+
         } catch (error) {
             const duration = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : String(error);
-            
+
             this.outputChannel.appendLine(
                 `[FlowbabyContextProvider] Request ${id} failed ` +
                 `(duration: ${duration}ms, error: ${errorMessage})`
             );
-            
+
             // Determine error code based on error type
             const isTimeout = errorMessage.toLowerCase().includes('timeout');
-            const errorCode = isTimeout 
-                ? AgentErrorCode.BRIDGE_TIMEOUT 
+            const errorCode = isTimeout
+                ? AgentErrorCode.BRIDGE_TIMEOUT
                 : AgentErrorCode.INVALID_REQUEST;
-            
+
             return {
                 error: errorCode,
                 message: `Retrieval failed: ${errorMessage}`,
@@ -437,7 +437,7 @@ export class FlowbabyContextProvider {
             };
         }
     }
-    
+
     /**
      * Get current provider status for debugging/transparency
      * 
@@ -454,7 +454,7 @@ export class FlowbabyContextProvider {
         const now = new Date();
         const oneMinuteAgo = new Date(now.getTime() - 60000);
         const recentRequests = this.requestTimestamps.filter(ts => ts > oneMinuteAgo).length;
-        
+
         return {
             inFlight: this.inFlightRequests.size,
             queued: this.requestQueue.length,

@@ -38,6 +38,7 @@ export interface ICredentialClient {
 /**
  * Mock credential client for testing without network calls.
  * Plan 086: Now includes backend-controlled model configuration fields.
+ * Plan 094: Now includes geographic zone field.
  */
 export class MockCredentialClient implements ICredentialClient {
     private mockResponse: VendResponse;
@@ -50,6 +51,8 @@ export class MockCredentialClient implements ICredentialClient {
             accessKeyId: 'MOCK_ACCESS_KEY_ID',
             secretAccessKey: 'MOCK_SECRET_ACCESS_KEY',
             sessionToken: 'MOCK_SESSION_TOKEN',
+            // Plan 094: Include zone field with default value
+            zone: 'us',
             region: 'us-east-1',
             expiration,
             // Plan 086: Backend-controlled model configuration
@@ -86,7 +89,7 @@ export class MockCredentialClient implements ICredentialClient {
  * Adapter that wraps FlowbabyCloudClient to implement ICredentialClient.
  */
 class CredentialClientAdapter implements ICredentialClient {
-    constructor(private readonly client: FlowbabyCloudClient) {}
+    constructor(private readonly client: FlowbabyCloudClient) { }
 
     async vendCredentials(sessionToken: string, request?: VendRequest): Promise<VendResponse> {
         return this.client.vendCredentials(sessionToken, request);
@@ -275,26 +278,36 @@ export class FlowbabyCloudCredentials implements vscode.Disposable {
             throw new FlowbabyCloudError('NOT_AUTHENTICATED', 'Session token not available');
         }
 
-        // Read user's preferred region from settings (Plan 081)
+        // Plan 094: Read user's preferred zone from settings (replaces preferredRegion)
         const config = vscode.workspace.getConfiguration('flowbaby.cloud');
-        const preferredRegion = config.get<string>('preferredRegion');
+        const preferredZone = config.get<string>('preferredZone');
 
-        this.log(`Fetching new credentials (preferredRegion: ${preferredRegion || 'default'})`);
+        this.log(`Fetching new credentials (preferredZone: ${preferredZone || 'default'})`);
 
         try {
-            // Pass preferredRegion to backend; backend validates and returns resolved region
+            // Plan 094: Pass preferredZone to backend; backend validates and returns authoritative zone/region
+            // Never send preferredRegion - it's a legacy setting that is ignored
             const request: VendRequest = {};
-            if (preferredRegion) {
-                request.preferredRegion = preferredRegion as VendRequest['preferredRegion'];
+            if (preferredZone) {
+                request.preferredZone = preferredZone as VendRequest['preferredZone'];
             }
 
             const response = await this.credentialClient.vendCredentials(sessionToken, request);
 
-            // Plan 086: Map model configuration fields from VendResponse to CachedCredentials
+            // Plan 094 Deliverable #3: Fail loudly if zone/region fields are missing (backend incompatibility)
+            if (!response.zone || !response.region) {
+                throw new FlowbabyCloudError(
+                    'UNEXPECTED_RESPONSE',
+                    'Flowbaby Cloud is temporarily unavailable (backend update in progress). Please retry in a few minutes.'
+                );
+            }
+
+            // Plan 094: Map zone and model configuration fields from VendResponse to CachedCredentials
             const credentials: CachedCredentials = {
                 accessKeyId: response.accessKeyId,
                 secretAccessKey: response.secretAccessKey,
                 sessionToken: response.sessionToken,
+                zone: response.zone,
                 region: response.region,
                 expiresAt: new Date(response.expiration),
                 fetchedAt: new Date(),
@@ -311,6 +324,8 @@ export class FlowbabyCloudCredentials implements vscode.Disposable {
                 // Note: We continue with credentials since they're still usable for auth,
                 // but the bridge will fail loudly when model config is missing.
             } else {
+                this.log(`Zone: preferred=${preferredZone || 'default'}, resolved=${response.zone}`);
+                this.log(`Region: resolved=${response.region}`);
                 this.log(`Model config: llm=${response.llmModel}, embedding=${response.embeddingModel}, dims=${response.embeddingDimensions}`);
             }
 
