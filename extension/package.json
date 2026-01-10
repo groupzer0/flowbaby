@@ -53,6 +53,24 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "flowbaby",
+          "title": "Flowbaby",
+          "icon": "media/flowbaby-icon-mono.svg"
+        }
+      ]
+    },
+    "views": {
+      "flowbaby": [
+        {
+          "type": "webview",
+          "id": "flowbaby.dashboardView",
+          "name": "Dashboard"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "Flowbaby.captureMessage",
@@ -144,6 +162,11 @@
       {
         "command": "flowbaby.cloud.status",
         "title": "Flowbaby Cloud: Show Status",
+        "category": "Flowbaby Cloud"
+      },
+      {
+        "command": "flowbaby.cloud.dashboard",
+        "title": "Flowbaby Cloud: Open Dashboard",
         "category": "Flowbaby Cloud"
       }
     ],

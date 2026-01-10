@@ -1,0 +1,19 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simplified baby with sunglasses icon for activity bar -->
+  <!-- Face outline -->
+  <ellipse cx="12" cy="14" rx="9" ry="8" stroke="currentColor" stroke-width="1.5" fill="none"/>
+  <!-- Left ear -->
+  <ellipse cx="3.5" cy="13" rx="1.5" ry="2" stroke="currentColor" stroke-width="1.2" fill="none"/>
+  <!-- Hair tuft -->
+  <path d="M10 6 Q12 3.5 14 6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- Sunglasses band -->
+  <path d="M5 12 L19 12" stroke="currentColor" stroke-width="1"/>
+  <!-- Left lens -->
+  <rect x="5" y="10" width="6" height="4" rx="1.5" fill="currentColor"/>
+  <!-- Right lens -->
+  <rect x="13" y="10" width="6" height="4" rx="1.5" fill="currentColor"/>
+  <!-- Nose hint -->
+  <path d="M12 14 L12 15" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+  <!-- Smile -->
+  <path d="M9 17 Q12 19 15 17" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+</svg>

@@ -9,6 +9,7 @@
 
 import * as vscode from 'vscode';
 import { FlowbabyCloudAuth } from './auth';
+import { FlowbabyCloudClient } from './client';
 import { showCloudError } from './errorMapping';
 
 /**
@@ -18,6 +19,7 @@ export const CLOUD_COMMANDS = {
     LOGIN: 'flowbaby.cloud.login',
     LOGOUT: 'flowbaby.cloud.logout',
     STATUS: 'flowbaby.cloud.status',
+    DASHBOARD: 'flowbaby.cloud.dashboard',
 } as const;
 
 /**
@@ -25,12 +27,14 @@ export const CLOUD_COMMANDS = {
  *
  * @param context - Extension context for registering disposables
  * @param auth - Authentication manager instance
+ * @param client - Cloud client for API calls
  * @param outputChannel - Optional output channel for command observability (Plan 085)
  * @returns Array of disposables for the registered commands
  */
 export function registerCloudCommands(
     context: vscode.ExtensionContext,
     auth: FlowbabyCloudAuth,
+    client: FlowbabyCloudClient,
     outputChannel?: vscode.OutputChannel
 ): vscode.Disposable[] {
     const disposables: vscode.Disposable[] = [];
@@ -154,6 +158,44 @@ export function registerCloudCommands(
         })
     );
 
+    // Dashboard command (Plan 097)
+    disposables.push(
+        vscode.commands.registerCommand(CLOUD_COMMANDS.DASHBOARD, async () => {
+            logCommand(CLOUD_COMMANDS.DASHBOARD, 'opening dashboard');
+            try {
+                // Check if authenticated
+                if (!(await auth.isAuthenticated())) {
+                    logCommand(CLOUD_COMMANDS.DASHBOARD, 'not authenticated, prompting login');
+                    const action = await vscode.window.showInformationMessage(
+                        'Login to view your Flowbaby dashboard',
+                        'Login'
+                    );
+                    if (action === 'Login') {
+                        await vscode.commands.executeCommand(CLOUD_COMMANDS.LOGIN);
+                        // Check again after login attempt
+                        if (!(await auth.isAuthenticated())) {
+                            return;
+                        }
+                    } else {
+                        return;
+                    }
+                }
+
+                // Dynamic import to avoid circular dependencies
+                const { DashboardPanel } = await import('./dashboard/DashboardPanel');
+                await DashboardPanel.createOrShow(
+                    context.extensionUri,
+                    auth,
+                    client
+                );
+                logCommand(CLOUD_COMMANDS.DASHBOARD, 'dashboard opened');
+            } catch (error) {
+                logCommand(CLOUD_COMMANDS.DASHBOARD, `failed to open dashboard: ${error instanceof Error ? error.message : 'unknown error'}`);
+                await showCloudError(error, 'opening dashboard');
+            }
+        })
+    );
+
     // Register all disposables with the context
     disposables.forEach(d => context.subscriptions.push(d));
 
@@ -161,4 +203,3 @@ export function registerCloudCommands(
 }
 
 // Plan 083 M3: Removed handleCloudError - now using centralized showCloudError from errorMapping.ts
-

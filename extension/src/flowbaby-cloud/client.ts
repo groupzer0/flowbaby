@@ -23,6 +23,8 @@ import {
     FlowbabyCloudConfig,
     DEFAULT_CONFIG,
     getApiBaseUrl,
+    UserProfileResponse,
+    UsageResponse,
 } from './types';
 
 /**
@@ -156,6 +158,32 @@ export class FlowbabyCloudClient {
             sessionToken,
             idempotencyKey
         );
+    }
+
+    // =========================================================================
+    // User Endpoints (Dashboard)
+    // =========================================================================
+
+    /**
+     * Get the authenticated user's profile.
+     *
+     * @param sessionToken - The Flowbaby session token (from login)
+     * @returns The user's profile with GitHub info and tier
+     * @throws FlowbabyCloudError on API errors or network failures
+     */
+    async getUserProfile(sessionToken: string): Promise<UserProfileResponse> {
+        return this.get<UserProfileResponse>('/user/profile', sessionToken);
+    }
+
+    /**
+     * Get the authenticated user's current usage.
+     *
+     * @param sessionToken - The Flowbaby session token (from login)
+     * @returns Credit usage for current billing period
+     * @throws FlowbabyCloudError on API errors or network failures
+     */
+    async getUserUsage(sessionToken: string): Promise<UsageResponse> {
+        return this.get<UsageResponse>('/user/usage', sessionToken);
     }
 
     // =========================================================================
@@ -309,6 +337,89 @@ export class FlowbabyCloudClient {
                 if (!response.ok) {
                     const apiError = this.parseApiError(responseData, response.status);
                     // Plan 090: Log error without idempotency key (security)
+                    this.log(`API error: HTTP ${response.status}, code=${apiError.code}, message="${apiError.message}"`);
+                    throw FlowbabyCloudError.fromApiError(apiError);
+                }
+
+                // Validate response shape (basic check)
+                if (typeof responseData !== 'object' || responseData === null) {
+                    throw new FlowbabyCloudError(
+                        'UNEXPECTED_RESPONSE',
+                        `Unexpected response shape from ${path}`
+                    );
+                }
+
+                return responseData as TResponse;
+            } catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+
+                // Don't retry on non-retryable errors
+                if (error instanceof FlowbabyCloudError) {
+                    if (!this.isRetryableError(error.code)) {
+                        throw error;
+                    }
+                }
+
+                // Wait before retrying (exponential backoff)
+                if (attempt < this.config.maxRetries) {
+                    const delayMs = Math.min(1000 * Math.pow(2, attempt), 10000);
+                    await this.delay(delayMs);
+                }
+            }
+        }
+
+        // All retries exhausted
+        if (lastError instanceof FlowbabyCloudError) {
+            this.log(`Request to ${path} failed after ${this.config.maxRetries + 1} attempts: code=${lastError.code}`);
+            throw lastError;
+        }
+        const networkError = new FlowbabyCloudError('NETWORK_ERROR', lastError?.message || 'Request failed after retries');
+        this.log(`Network error on ${path}: ${networkError.message}`);
+        throw networkError;
+    }
+
+    /**
+     * Make a GET request to the API.
+     *
+     * @param path - API endpoint path (e.g., '/user/profile')
+     * @param sessionToken - Session token for authenticated requests
+     * @returns Parsed response body
+     * @throws FlowbabyCloudError on errors
+     */
+    private async get<TResponse>(
+        path: string,
+        sessionToken: string
+    ): Promise<TResponse> {
+        const url = `${this.config.apiBaseUrl}${path}`;
+        const headers: Record<string, string> = {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${sessionToken}`,
+        };
+
+        let lastError: Error | undefined;
+
+        for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+            try {
+                const response = await this.fetchWithTimeout(url, {
+                    method: 'GET',
+                    headers,
+                });
+
+                // Parse response body
+                const responseText = await response.text();
+                let responseData: unknown;
+                try {
+                    responseData = responseText ? JSON.parse(responseText) : {};
+                } catch {
+                    throw new FlowbabyCloudError(
+                        'UNEXPECTED_RESPONSE',
+                        `Failed to parse response from ${path}`
+                    );
+                }
+
+                // Check for error response
+                if (!response.ok) {
+                    const apiError = this.parseApiError(responseData, response.status);
                     this.log(`API error: HTTP ${response.status}, code=${apiError.code}, message="${apiError.message}"`);
                     throw FlowbabyCloudError.fromApiError(apiError);
                 }

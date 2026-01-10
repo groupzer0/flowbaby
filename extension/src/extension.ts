@@ -71,14 +71,14 @@ let credentialRefreshManagerDisposable: vscode.Disposable | undefined;
 async function checkLegacyApiKeyMigration(context: vscode.ExtensionContext): Promise<void> {
     try {
         const legacyApiKey = await context.secrets.get('flowbaby.llmApiKey');
-        
+
         if (!legacyApiKey) {
             debugLog('No legacy API key found, migration not needed');
             return;
         }
 
         debugLog('Legacy API key detected, showing migration message');
-        
+
         // Show one-time migration info message
         const action = await vscode.window.showInformationMessage(
             'Flowbaby v0.7.0+ uses Flowbaby Cloud for LLM access. Your previously stored API key is no longer used and will be removed. Login to Flowbaby Cloud to continue using memory features.',
@@ -94,7 +94,7 @@ async function checkLegacyApiKeyMigration(context: vscode.ExtensionContext): Pro
         // Delete the legacy secret regardless of user action
         await context.secrets.delete('flowbaby.llmApiKey');
         debugLog('Legacy API key deleted after migration message');
-        
+
         // Log the migration for audit trail
         getAuditLogger().logApiKeyClear(true);
     } catch (error) {
@@ -200,7 +200,7 @@ export async function activate(_context: vscode.ExtensionContext) {
 
         // Plan 073: POC-2 commands removed - synthesis is now production (copilotSynthesis.ts)
         // POC evaluation complete, synthesis integrated into retrieve() method
-        
+
         // Plan 083 M4: Legacy API key commands removed (Cloud-only in v0.7.0)
         // registerApiKeyCommands(_context, workspacePath, statusBar);
         registerSetupCommands(
@@ -226,8 +226,24 @@ export async function activate(_context: vscode.ExtensionContext) {
         const cloudAuth = createFlowbabyCloudAuth(_context.secrets, cloudOutputChannel);
         _context.subscriptions.push(cloudOutputChannel, cloudAuth);
         // Plan 085: Pass output channel for command observability
-        registerCloudCommands(_context, cloudAuth, cloudOutputChannel);
+        // Plan 097: Pass cloud client for dashboard API calls
+        registerCloudCommands(_context, cloudAuth, getCloudClient(), cloudOutputChannel);
         cloudAuthDisposable = cloudAuth;
+
+        // Plan 097: Register sidebar dashboard view provider
+        const { DashboardViewProvider } = await import('./flowbaby-cloud/dashboard/DashboardViewProvider');
+        const dashboardProvider = new DashboardViewProvider(
+            _context.extensionUri,
+            cloudAuth,
+            getCloudClient()
+        );
+        _context.subscriptions.push(
+            vscode.window.registerWebviewViewProvider(
+                DashboardViewProvider.viewType,
+                dashboardProvider,
+                { webviewOptions: { retainContextWhenHidden: true } }
+            )
+        );
 
         // Plan 085: Wire status bar to auth state changes
         // When user logs in/out, update status bar without requiring reload
@@ -325,14 +341,14 @@ export async function activate(_context: vscode.ExtensionContext) {
                             break;
                         case 'degraded':
                         case 'error':
-                            statusBar.setStatus(FlowbabyStatus.Error, 
+                            statusBar.setStatus(FlowbabyStatus.Error,
                                 state.lastError?.message || 'Cloud service issue');
                             break;
                     }
                 }
             })
         );
-        
+
         // Plan 084: Log effective Cloud endpoint for diagnosability
         const { getApiBaseUrl } = await import('./flowbaby-cloud/types');
         const effectiveEndpoint = getApiBaseUrl();

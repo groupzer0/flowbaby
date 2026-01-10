@@ -138,10 +138,10 @@ suite('Flowbaby Cloud Module Tests', () => {
             const mockClient = new MockCredentialClient();
 
             assert.strictEqual(mockClient.getCallCount(), 0);
-            
+
             await mockClient.vendCredentials('token');
             assert.strictEqual(mockClient.getCallCount(), 1);
-            
+
             await mockClient.vendCredentials('token');
             assert.strictEqual(mockClient.getCallCount(), 2);
 
@@ -176,7 +176,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
             const result = await auth.isAuthenticated();
             assert.strictEqual(result, false);
-            
+
             // Should have cleared the expired token
             assert.strictEqual(storedSecrets.has('flowbaby.cloud.sessionToken'), false);
         });
@@ -202,7 +202,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('onDidChangeAuthState fires on logout', async () => {
             storedSecrets.set('flowbaby.cloud.sessionToken', 'test-token');
-            
+
             let eventFired = false;
             const disposable = auth.onDidChangeAuthState(event => {
                 eventFired = true;
@@ -223,11 +223,11 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         setup(() => {
             mockCredentialClient = new MockCredentialClient();
-            
+
             // Create a mock auth that appears authenticated
             const mockAuthClient = new MockAuthClient();
             mockAuth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
-            
+
             // Set up valid session
             const futureDate = new Date(Date.now() + 3600000).toISOString();
             storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
@@ -366,9 +366,9 @@ suite('Flowbaby Cloud Module Tests', () => {
 
             try {
                 await noModelCredentials.ensureCredentials();
-                
+
                 // Verify warning was logged (Plan 086 requirement: "fail loudly")
-                const warningLogged = loggedMessages.some(msg => 
+                const warningLogged = loggedMessages.some(msg =>
                     msg.includes('WARNING') && msg.includes('model configuration')
                 );
                 assert.ok(warningLogged, 'Should log WARNING about missing model config fields');
@@ -381,7 +381,7 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('Plan 086: includes model config in credentials when present', async () => {
             // Default MockCredentialClient includes model config
             const creds = await credentials.ensureCredentials();
-            
+
             assert.strictEqual(creds.llmModel, 'anthropic.claude-3-haiku-20240307-v1:0', 'llmModel should be mapped');
             assert.strictEqual(creds.embeddingModel, 'bedrock/amazon.titan-embed-text-v2:0', 'embeddingModel should be mapped');
             assert.strictEqual(creds.embeddingDimensions, 1024, 'embeddingDimensions should be mapped');
@@ -401,10 +401,10 @@ suite('Flowbaby Cloud Module Tests', () => {
                 sessionToken: 'sessiontokentest',
                 region: 'us-east-1',
             });
-            
+
             const mockAuthClient = new MockAuthClient();
             mockAuth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
-            
+
             const futureDate = new Date(Date.now() + 3600000).toISOString();
             storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
             storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
@@ -472,7 +472,7 @@ suite('Flowbaby Cloud Module Tests', () => {
             });
             const mockAuthClient = new MockAuthClient();
             const noModelAuth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
-            
+
             const futureDate = new Date(Date.now() + 3600000).toISOString();
             storedSecrets.set('flowbaby.cloud.sessionToken', 'valid-token');
             storedSecrets.set('flowbaby.cloud.sessionExpiresAt', futureDate);
@@ -500,7 +500,7 @@ suite('Flowbaby Cloud Module Tests', () => {
     suite('FlowbabyCloudError', () => {
         test('creates error with code and message', () => {
             const error = new FlowbabyCloudError('NOT_AUTHENTICATED', 'Please log in');
-            
+
             assert.strictEqual(error.code, 'NOT_AUTHENTICATED');
             assert.strictEqual(error.message, 'Please log in');
             assert.strictEqual(error.name, 'FlowbabyCloudError');
@@ -508,7 +508,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('includes retryAfter when provided', () => {
             const error = new FlowbabyCloudError('RATE_LIMITED', 'Too many requests', 60);
-            
+
             assert.strictEqual(error.retryAfter, 60);
         });
 
@@ -518,9 +518,9 @@ suite('Flowbaby Cloud Module Tests', () => {
                 code: 'QUOTA_EXCEEDED',
                 message: 'Monthly quota exceeded',
             };
-            
+
             const error = FlowbabyCloudError.fromApiError(apiError);
-            
+
             assert.strictEqual(error.code, 'QUOTA_EXCEEDED');
             assert.strictEqual(error.message, 'Monthly quota exceeded');
         });
@@ -530,7 +530,7 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('mapCloudErrorToUX handles NOT_AUTHENTICATED', () => {
             const error = new FlowbabyCloudError('NOT_AUTHENTICATED', 'Please log in');
             const ux = mapCloudErrorToUX(error);
-            
+
             assert.strictEqual(ux.severity, 'warning');
             assert.ok(ux.message.includes('login required'));
             assert.strictEqual(ux.actions.length, 1);
@@ -541,7 +541,7 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('mapCloudErrorToUX handles RATE_LIMITED with retryAfter', () => {
             const error = new FlowbabyCloudError('RATE_LIMITED', 'Too many requests', 30);
             const ux = mapCloudErrorToUX(error);
-            
+
             assert.strictEqual(ux.severity, 'warning');
             assert.ok(ux.message.includes('30 seconds'));
             assert.strictEqual(ux.logMetadata.retryAfter, 30);
@@ -550,7 +550,7 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('mapCloudErrorToUX handles QUOTA_EXCEEDED', () => {
             const error = new FlowbabyCloudError('QUOTA_EXCEEDED', 'Quota exceeded');
             const ux = mapCloudErrorToUX(error);
-            
+
             assert.strictEqual(ux.severity, 'error');
             assert.ok(ux.message.includes('quota'));
             assert.strictEqual(ux.actions.length, 1);
@@ -560,7 +560,7 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('mapCloudErrorToUX handles generic Error', () => {
             const error = new Error('Something went wrong');
             const ux = mapCloudErrorToUX(error);
-            
+
             assert.strictEqual(ux.severity, 'error');
             assert.ok(ux.message.includes('Something went wrong'));
             assert.strictEqual(ux.actions.length, 0);
@@ -569,7 +569,7 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('mapCloudErrorToUX includes context suffix', () => {
             const error = new FlowbabyCloudError('NETWORK_ERROR', 'Failed to connect');
             const ux = mapCloudErrorToUX(error, 'during retrieval');
-            
+
             assert.ok(ux.message.includes('during retrieval'));
         });
 
@@ -601,7 +601,7 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('mapCloudErrorToUX handles SESSION_INVALID same as SESSION_EXPIRED (Plan 086)', () => {
             const error = new FlowbabyCloudError('SESSION_INVALID', 'Session invalid');
             const ux = mapCloudErrorToUX(error);
-            
+
             assert.strictEqual(ux.severity, 'warning');
             assert.ok(ux.message.includes('login required'), 'Should suggest login');
             assert.strictEqual(ux.actions.length, 1);
@@ -611,7 +611,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('RATE_LIMITED is recoverable but does not require re-auth (Plan 086)', () => {
             const error = new FlowbabyCloudError('RATE_LIMITED', 'Infrastructure throttle');
-            
+
             // Should be retryable
             assert.strictEqual(isRecoverableCloudError(error), true, 'RATE_LIMITED should be recoverable');
             // Should NOT require re-authentication (Plan 086 clarification)
@@ -641,9 +641,9 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('STAGING_API_BASE_URL is correct staging domain', async () => {
             // Import the constant directly
             const types = await import('../flowbaby-cloud/types');
-            
+
             assert.strictEqual(
-                types.STAGING_API_BASE_URL, 
+                types.STAGING_API_BASE_URL,
                 'https://api-staging.flowbaby.ai',
                 'Staging URL should be api-staging.flowbaby.ai (Plan 084 fix)'
             );
@@ -657,7 +657,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('PRODUCTION_API_BASE_URL is correct production domain', async () => {
             const types = await import('../flowbaby-cloud/types');
-            
+
             assert.strictEqual(
                 types.PRODUCTION_API_BASE_URL,
                 'https://api.flowbaby.ai',
@@ -667,7 +667,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('EXECUTE_API_FALLBACK_URL is the raw API Gateway URL', async () => {
             const types = await import('../flowbaby-cloud/types');
-            
+
             assert.ok(
                 types.EXECUTE_API_FALLBACK_URL.includes('execute-api.us-east-1.amazonaws.com'),
                 'Fallback URL should be the execute-api gateway URL'
@@ -676,7 +676,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('DEFAULT_CONFIG.apiBaseUrl defaults to staging (not api.flowbaby.dev)', async () => {
             const types = await import('../flowbaby-cloud/types');
-            
+
             assert.strictEqual(
                 types.DEFAULT_CONFIG.apiBaseUrl,
                 types.STAGING_API_BASE_URL,
@@ -691,10 +691,10 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('getApiBaseUrl returns default when no setting or env var', async () => {
             const types = await import('../flowbaby-cloud/types');
-            
+
             // Clear environment to ensure no override
             delete process.env.FLOWBABY_CLOUD_API_URL;
-            
+
             // Stub VS Code config to return undefined
             configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
                 get: sandbox.stub().returns(undefined),
@@ -702,9 +702,9 @@ suite('Flowbaby Cloud Module Tests', () => {
                 inspect: sandbox.stub().returns(undefined),
                 update: sandbox.stub().resolves(),
             } as any);
-            
+
             const result = types.getApiBaseUrl();
-            
+
             assert.strictEqual(
                 result,
                 types.STAGING_API_BASE_URL,
@@ -715,10 +715,10 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('getApiBaseUrl returns env var when set (precedence level 2)', async () => {
             const types = await import('../flowbaby-cloud/types');
             const customUrl = 'https://custom-api.example.com';
-            
+
             // Set environment variable
             process.env.FLOWBABY_CLOUD_API_URL = customUrl;
-            
+
             // Stub VS Code config to return undefined (no setting override)
             configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
                 get: sandbox.stub().returns(undefined),
@@ -726,9 +726,9 @@ suite('Flowbaby Cloud Module Tests', () => {
                 inspect: sandbox.stub().returns(undefined),
                 update: sandbox.stub().resolves(),
             } as any);
-            
+
             const result = types.getApiBaseUrl();
-            
+
             assert.strictEqual(
                 result,
                 customUrl,
@@ -740,10 +740,10 @@ suite('Flowbaby Cloud Module Tests', () => {
             const types = await import('../flowbaby-cloud/types');
             const settingUrl = 'https://setting-api.example.com';
             const envUrl = 'https://env-api.example.com';
-            
+
             // Set both env var and VS Code setting
             process.env.FLOWBABY_CLOUD_API_URL = envUrl;
-            
+
             // Stub VS Code config to return the setting value
             configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
                 get: sandbox.stub().callsFake((key: string) => {
@@ -756,9 +756,9 @@ suite('Flowbaby Cloud Module Tests', () => {
                 inspect: sandbox.stub().returns(undefined),
                 update: sandbox.stub().resolves(),
             } as any);
-            
+
             const result = types.getApiBaseUrl();
-            
+
             assert.strictEqual(
                 result,
                 settingUrl,
@@ -769,9 +769,9 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('getApiBaseUrl ignores empty/whitespace-only setting', async () => {
             const types = await import('../flowbaby-cloud/types');
             const envUrl = 'https://env-api.example.com';
-            
+
             process.env.FLOWBABY_CLOUD_API_URL = envUrl;
-            
+
             // Stub VS Code config to return whitespace-only value
             configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
                 get: sandbox.stub().callsFake((key: string) => {
@@ -784,9 +784,9 @@ suite('Flowbaby Cloud Module Tests', () => {
                 inspect: sandbox.stub().returns(undefined),
                 update: sandbox.stub().resolves(),
             } as any);
-            
+
             const result = types.getApiBaseUrl();
-            
+
             assert.strictEqual(
                 result,
                 envUrl,
@@ -797,7 +797,7 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('getApiBaseUrl trims whitespace from valid setting', async () => {
             const types = await import('../flowbaby-cloud/types');
             const settingUrl = 'https://trimmed-api.example.com';
-            
+
             // Stub VS Code config with whitespace-padded URL
             configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
                 get: sandbox.stub().callsFake((key: string) => {
@@ -810,9 +810,9 @@ suite('Flowbaby Cloud Module Tests', () => {
                 inspect: sandbox.stub().returns(undefined),
                 update: sandbox.stub().resolves(),
             } as any);
-            
+
             const result = types.getApiBaseUrl();
-            
+
             assert.strictEqual(
                 result,
                 settingUrl,
@@ -822,10 +822,10 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('getApiBaseUrl uses execute-api fallback when env var set to it', async () => {
             const types = await import('../flowbaby-cloud/types');
-            
+
             // Set env var to the fallback URL (common during CDK transition)
             process.env.FLOWBABY_CLOUD_API_URL = types.EXECUTE_API_FALLBACK_URL;
-            
+
             // No VS Code setting
             configGetStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
                 get: sandbox.stub().returns(undefined),
@@ -833,9 +833,9 @@ suite('Flowbaby Cloud Module Tests', () => {
                 inspect: sandbox.stub().returns(undefined),
                 update: sandbox.stub().resolves(),
             } as any);
-            
+
             const result = types.getApiBaseUrl();
-            
+
             assert.strictEqual(
                 result,
                 types.EXECUTE_API_FALLBACK_URL,
@@ -845,10 +845,10 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('endpoint constants are all valid HTTPS URLs', async () => {
             const types = await import('../flowbaby-cloud/types');
-            
+
             // Verify all endpoint constants are valid URLs
             const urlPattern = /^https:\/\/[a-z0-9][a-z0-9.-]*[a-z0-9]\.[a-z]{2,}(\/.*)?$/i;
-            
+
             assert.ok(
                 urlPattern.test(types.STAGING_API_BASE_URL),
                 `STAGING_API_BASE_URL should be valid HTTPS URL: ${types.STAGING_API_BASE_URL}`
@@ -865,7 +865,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('endpoint constants have no trailing slashes', async () => {
             const types = await import('../flowbaby-cloud/types');
-            
+
             assert.ok(
                 !types.STAGING_API_BASE_URL.endsWith('/'),
                 'STAGING_API_BASE_URL should not end with /'
@@ -885,7 +885,7 @@ suite('Flowbaby Cloud Module Tests', () => {
     suite('Plan 085: Command Wiring and Status Transitions', () => {
         test('CLOUD_COMMANDS uses canonical flowbaby.cloud.* namespace', async () => {
             const { CLOUD_COMMANDS } = await import('../flowbaby-cloud/commands');
-            
+
             // Verify all command IDs use canonical namespace
             assert.strictEqual(
                 CLOUD_COMMANDS.LOGIN,
@@ -906,7 +906,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('CLOUD_ERROR_COMMANDS uses canonical flowbaby.cloud.* namespace', async () => {
             const { CLOUD_ERROR_COMMANDS } = await import('../flowbaby-cloud/errorMapping');
-            
+
             // Plan 085: Error action buttons must use canonical command IDs
             assert.strictEqual(
                 CLOUD_ERROR_COMMANDS.LOGIN,
@@ -922,7 +922,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('No FlowbabyCloud.* command IDs in CLOUD_COMMANDS', async () => {
             const { CLOUD_COMMANDS } = await import('../flowbaby-cloud/commands');
-            
+
             // Verify none of the commands use the legacy namespace
             const commandValues = Object.values(CLOUD_COMMANDS);
             for (const cmd of commandValues) {
@@ -935,7 +935,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('No FlowbabyCloud.* command IDs in CLOUD_ERROR_COMMANDS', async () => {
             const { CLOUD_ERROR_COMMANDS } = await import('../flowbaby-cloud/errorMapping');
-            
+
             const commandValues = Object.values(CLOUD_ERROR_COMMANDS);
             for (const cmd of commandValues) {
                 assert.ok(
@@ -948,11 +948,11 @@ suite('Flowbaby Cloud Module Tests', () => {
         test('onDidChangeAuthState fires with correct payload on logout', async () => {
             const mockAuthClient = new MockAuthClient();
             const auth = new FlowbabyCloudAuth(mockSecretStorage, mockAuthClient, mockOutputChannel);
-            
+
             // Set up valid session
             storedSecrets.set('flowbaby.cloud.sessionToken', 'test-token');
             storedSecrets.set('flowbaby.cloud.sessionExpiresAt', new Date(Date.now() + 3600000).toISOString());
-            
+
             let authEvent: { isAuthenticated: boolean; tier?: string } | undefined;
             const disposable = auth.onDidChangeAuthState(event => {
                 authEvent = event;
@@ -968,18 +968,19 @@ suite('Flowbaby Cloud Module Tests', () => {
 
         test('registerCloudCommands function signature supports optional outputChannel', async () => {
             const { registerCloudCommands } = await import('../flowbaby-cloud/commands');
-            
+
             // Verify function exists and has expected signature
             // We cannot actually call registerCloudCommands in tests because the commands
             // are already registered by the extension activation. Instead, we verify:
             // 1. Function exists
-            // 2. Function has 3 parameters (context, auth, outputChannel?)
+            // 2. Function has 4 parameters (context, auth, client, outputChannel?)
             // Note: Function.length counts all formal parameters regardless of defaults
             assert.ok(typeof registerCloudCommands === 'function', 'registerCloudCommands should be a function');
-            assert.strictEqual(registerCloudCommands.length, 3, 'Function should have 3 parameters (context, auth, outputChannel)');
-            
-            // The third parameter (outputChannel) is optional, verified by TypeScript compilation
+            assert.strictEqual(registerCloudCommands.length, 4, 'Function should have 4 parameters (context, auth, client, outputChannel)');
+
+            // The fourth parameter (outputChannel) is optional, verified by TypeScript compilation
             // Plan 085: This signature change enables observability logging without breaking existing calls
+            // Plan 097: Added client parameter for dashboard API calls
         });
 
         test('Status bar enum has NeedsCloudLogin state', () => {
@@ -1269,10 +1270,10 @@ suite('Flowbaby Cloud Module Tests', () => {
         });
 
         test('singleton management works correctly', async () => {
-            const { 
-                initializeReadinessService, 
-                getReadinessService, 
-                resetReadinessService 
+            const {
+                initializeReadinessService,
+                getReadinessService,
+                resetReadinessService
             } = await import('../flowbaby-cloud/readiness');
 
             // Initially undefined
@@ -1342,7 +1343,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
             // Should not throw
             refreshManager.registerDaemonController(mockDaemonController);
-            
+
             // Verify output channel was logged to
             assert.ok((mockOutputChannel.appendLine as sinon.SinonStub).calledWith(
                 sinon.match(/Daemon controller registered/)
@@ -1463,7 +1464,7 @@ suite('Flowbaby Cloud Module Tests', () => {
             test('sends preferredZone when configured (Plan 094)', async () => {
                 // This test validates Deliverable #4: Extension request sends preferredZone
                 // TDD: This will fail until credentials.ts is updated to use preferredZone
-                
+
                 let capturedRequest: VendRequest | undefined;
                 const capturingClient: ICredentialClient = {
                     async vendCredentials(_sessionToken: string, request?: VendRequest): Promise<VendResponse> {
@@ -1689,7 +1690,7 @@ suite('Flowbaby Cloud Module Tests', () => {
                 } catch (error) {
                     // Plan 094 Deliverable #3: Fail loudly with remediation message
                     assert.ok(error instanceof FlowbabyCloudError, 'Should throw FlowbabyCloudError');
-                    assert.strictEqual((error as FlowbabyCloudError).code, 'UNEXPECTED_RESPONSE', 
+                    assert.strictEqual((error as FlowbabyCloudError).code, 'UNEXPECTED_RESPONSE',
                         'Should use UNEXPECTED_RESPONSE code for incompatible backend');
                 } finally {
                     credentials.dispose();
@@ -1741,7 +1742,7 @@ suite('Flowbaby Cloud Module Tests', () => {
             test('zone change should be included in restart trigger fields', async () => {
                 // This test documents the expected behavior from Deliverable #6
                 // The actual implementation is in CachedCredentials and refresh.ts
-                
+
                 // CachedCredentials should have a zone field
                 const mockClient = new MockCredentialClient({ zone: 'us' });
                 const mockAuthClient = new MockAuthClient();
@@ -1754,7 +1755,7 @@ suite('Flowbaby Cloud Module Tests', () => {
 
                 try {
                     const creds = await credentials.ensureCredentials();
-                    
+
                     // Verify zone is part of cached credentials (needed for comparison)
                     assert.ok('zone' in creds, 'CachedCredentials should include zone field');
                 } finally {
