@@ -158,7 +158,7 @@ export function registerCloudCommands(
         })
     );
 
-    // Dashboard command (Plan 097)
+    // Dashboard command (Plan 097: reveals sidebar view, legacy panel removed)
     disposables.push(
         vscode.commands.registerCommand(CLOUD_COMMANDS.DASHBOARD, async () => {
             logCommand(CLOUD_COMMANDS.DASHBOARD, 'opening dashboard');
@@ -181,13 +181,8 @@ export function registerCloudCommands(
                     }
                 }
 
-                // Dynamic import to avoid circular dependencies
-                const { DashboardPanel } = await import('./dashboard/DashboardPanel');
-                await DashboardPanel.createOrShow(
-                    context.extensionUri,
-                    auth,
-                    client
-                );
+                // Plan 097: Single dashboard surface - reveal sidebar view
+                await vscode.commands.executeCommand('flowbaby.dashboardView.focus');
                 logCommand(CLOUD_COMMANDS.DASHBOARD, 'dashboard opened');
             } catch (error) {
                 logCommand(CLOUD_COMMANDS.DASHBOARD, `failed to open dashboard: ${error instanceof Error ? error.message : 'unknown error'}`);

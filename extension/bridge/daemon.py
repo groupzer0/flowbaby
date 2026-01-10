@@ -241,6 +241,36 @@ NOT_AUTHENTICATED = -32001
 OPERATION_FAILED = -32002
 
 
+# ============================================================================
+# Plan 097: Stdout protection for JSON-RPC integrity
+# ============================================================================
+
+from contextlib import contextmanager
+
+@contextmanager
+def stdout_to_stderr():
+    """
+    Context manager that redirects stdout to stderr (Plan 097).
+    
+    This protects JSON-RPC framing from corruption by third-party code
+    that might call print() during handler execution. All such output
+    is redirected to stderr, preserving stdout for JSON-RPC responses only.
+    
+    Usage:
+        with stdout_to_stderr():
+            # Any print() calls here go to stderr
+            some_function_that_might_print()
+    
+    Safe for nested usage - each context restores its captured stdout.
+    """
+    old_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        yield
+    finally:
+        sys.stdout = old_stdout
+
+
 def create_success_response(request_id: str, result: dict) -> dict:
     """Create a JSON-RPC success response."""
     return {
@@ -433,6 +463,54 @@ async def handle_cognify(params: dict, workspace_path: str, dataset_name: str, l
         })
 
 
+async def handle_visualize(params: dict, workspace_path: str, dataset_name: str, logger: logging.Logger) -> dict:
+    """
+    Handle visualize request (Plan 097: Daemon-only visualization).
+    
+    Routes graph visualization through the daemon's in-process execution,
+    avoiding cross-process Kuzu lock contention on Windows.
+    
+    Args:
+        params: Request parameters containing:
+            - output_path: Absolute path where HTML should be written (required)
+        workspace_path: Absolute path to VS Code workspace root
+        dataset_name: Cognee dataset name for this workspace
+        logger: Logger instance
+    
+    Returns:
+        Dictionary matching VisualizeResult contract:
+        - success: True/False
+        - output_path: Path to generated HTML file
+        - node_count: Number of nodes in graph (if available)
+        - offline_safe: True if no external scripts
+        - error_code, error, user_message: On failure
+    """
+    if not cognee_initialized:
+        raise JsonRpcError(COGNEE_NOT_INITIALIZED, 'Cognee SDK not initialized')
+    
+    # Plan 083 M5: v0.7.0 is Cloud-only - AWS credentials required
+    has_credentials = os.getenv('AWS_ACCESS_KEY_ID')
+    if not has_credentials:
+        raise JsonRpcError(NOT_AUTHENTICATED, 'Cloud login required - use "Flowbaby Cloud: Login with GitHub" command')
+    
+    output_path = params.get('output_path')
+    if not output_path:
+        raise JsonRpcError(INVALID_PARAMS, 'Missing required parameter: output_path')
+    
+    logger.info(f"Visualize: workspace={workspace_path}, output={output_path}")
+    
+    # Import the visualization function from visualize.py
+    # This reuses the existing implementation but runs in-process
+    from visualize import visualize_graph
+    
+    # Plan 097: Protect JSON-RPC stdout during visualization
+    # Third-party code (cognee, networkx, etc.) might print() during execution
+    with stdout_to_stderr():
+        result = await visualize_graph(workspace_path, output_path)
+    
+    return result
+
+
 async def handle_shutdown(params: dict, logger: logging.Logger) -> dict:
     """
     Handle shutdown request (Plan 061: Cleanup-friendly shutdown).
@@ -469,6 +547,9 @@ async def process_request(request: dict, workspace_path: str, dataset_name: str,
             result = await handle_ingest(params, workspace_path, dataset_name, logger)
         elif method == 'cognify':
             result = await handle_cognify(params, workspace_path, dataset_name, logger)
+        elif method == 'visualize':
+            # Plan 097: Route visualization through daemon (lock-safe, in-process)
+            result = await handle_visualize(params, workspace_path, dataset_name, logger)
         elif method == 'shutdown':
             result = await handle_shutdown(params, logger)
             # Plan 061: Don't use os._exit(0) here - return result and let main loop exit gracefully

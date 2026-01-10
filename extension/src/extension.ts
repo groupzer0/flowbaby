@@ -231,19 +231,31 @@ export async function activate(_context: vscode.ExtensionContext) {
         cloudAuthDisposable = cloudAuth;
 
         // Plan 097: Register sidebar dashboard view provider
-        const { DashboardViewProvider } = await import('./flowbaby-cloud/dashboard/DashboardViewProvider');
-        const dashboardProvider = new DashboardViewProvider(
-            _context.extensionUri,
-            cloudAuth,
-            getCloudClient()
-        );
-        _context.subscriptions.push(
-            vscode.window.registerWebviewViewProvider(
-                DashboardViewProvider.viewType,
-                dashboardProvider,
-                { webviewOptions: { retainContextWhenHidden: true } }
-            )
-        );
+        // Wrapped in try-catch to handle "already registered" scenario in test harness reuse
+        try {
+            const { DashboardViewProvider } = await import('./flowbaby-cloud/dashboard/DashboardViewProvider');
+            const dashboardProvider = new DashboardViewProvider(
+                _context.extensionUri,
+                cloudAuth,
+                getCloudClient()
+            );
+            _context.subscriptions.push(
+                vscode.window.registerWebviewViewProvider(
+                    DashboardViewProvider.viewType,
+                    dashboardProvider,
+                    { webviewOptions: { retainContextWhenHidden: true } }
+                )
+            );
+        } catch (dashboardRegError) {
+            // Plan 097: Tolerate "already registered" in test harness or window reuse
+            const errMsg = dashboardRegError instanceof Error ? dashboardRegError.message : String(dashboardRegError);
+            if (errMsg.includes('already registered')) {
+                debugLog('DashboardViewProvider already registered (harmless in test harness)', { error: errMsg });
+            } else {
+                // Re-throw unexpected errors
+                throw dashboardRegError;
+            }
+        }
 
         // Plan 085: Wire status bar to auth state changes
         // When user logs in/out, update status bar without requiring reload

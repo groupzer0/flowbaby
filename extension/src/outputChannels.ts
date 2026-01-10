@@ -95,6 +95,46 @@ export function debugLog(message: string, data?: Record<string, unknown>): void 
 }
 
 /**
+ * Check if debug logging is enabled.
+ * Useful for callers that want to conditionally include debug output.
+ * 
+ * @returns true if debug logging is enabled
+ */
+export function isDebugLoggingEnabled(): boolean {
+    try {
+        const config = vscode.workspace?.getConfiguration?.('Flowbaby');
+        const configFlag = config?.get<boolean>('debugLogging', false) ?? false;
+        return configFlag
+            || process.env.FLOWBABY_DEBUG_LOGGING === 'true'
+            || process.env.NODE_ENV === 'test';
+    } catch {
+        // In tests or early activation, workspace configuration may not be available.
+        return process.env.FLOWBABY_DEBUG_LOGGING === 'true'
+            || process.env.NODE_ENV === 'test';
+    }
+}
+
+/**
+ * Strip ANSI escape codes from a string.
+ * These codes are used for terminal colors/formatting and should be
+ * removed when logging to VS Code output channels.
+ * 
+ * Handles:
+ * - SGR sequences: ESC[...m (colors, bold, etc.)
+ * - CSI sequences: ESC[...X (cursor movement, etc.)
+ * - OSC sequences: ESC]...BEL or ESC]...ESC\ (terminal titles, etc.)
+ * 
+ * @param text The string potentially containing ANSI codes
+ * @returns The string with all ANSI codes removed
+ */
+export function stripAnsiCodes(text: string): string {
+    // eslint-disable-next-line no-control-regex
+    return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+               .replace(/\x1b\][^\x07]*\x07/g, '')      // OSC with BEL
+               .replace(/\x1b\][^\x1b]*\x1b\\/g, '');   // OSC with ST
+}
+
+/**
  * Dispose all output channels.
  * Should be called during extension deactivation.
  */

@@ -771,6 +771,217 @@ class TestMain:
 
 
 # ============================================================================
+# handle_visualize tests (Plan 097)
+# ============================================================================
+
+class TestHandleVisualize:
+    """Tests for handle_visualize function (Plan 097: daemon-only visualization)."""
+
+    @pytest.mark.asyncio
+    async def test_returns_error_when_cognee_not_initialized(self, workspace, logger, reset_daemon_state):
+        """Verify COGNEE_NOT_INITIALIZED error when SDK not ready."""
+        import daemon
+        from daemon import handle_visualize, JsonRpcError, COGNEE_NOT_INITIALIZED
+        
+        daemon.cognee_initialized = False
+        
+        with pytest.raises(JsonRpcError) as exc_info:
+            await handle_visualize(
+                params={'output_path': '/tmp/graph.html'},
+                workspace_path=str(workspace),
+                dataset_name='test_dataset',
+                logger=logger
+            )
+        
+        assert exc_info.value.code == COGNEE_NOT_INITIALIZED
+
+    @pytest.mark.asyncio
+    async def test_returns_error_without_cloud_credentials(self, workspace, logger, monkeypatch, reset_daemon_state):
+        """Verify NOT_AUTHENTICATED error when AWS_ACCESS_KEY_ID not set."""
+        import daemon
+        from daemon import handle_visualize, JsonRpcError, NOT_AUTHENTICATED
+        
+        daemon.cognee_initialized = True
+        monkeypatch.delenv('AWS_ACCESS_KEY_ID', raising=False)
+        
+        with pytest.raises(JsonRpcError) as exc_info:
+            await handle_visualize(
+                params={'output_path': '/tmp/graph.html'},
+                workspace_path=str(workspace),
+                dataset_name='test_dataset',
+                logger=logger
+            )
+        
+        assert exc_info.value.code == NOT_AUTHENTICATED
+
+    @pytest.mark.asyncio
+    async def test_returns_error_without_output_path(self, workspace, logger, monkeypatch, reset_daemon_state):
+        """Verify INVALID_PARAMS error when output_path not provided."""
+        import daemon
+        from daemon import handle_visualize, JsonRpcError, INVALID_PARAMS
+        
+        daemon.cognee_initialized = True
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
+        
+        with pytest.raises(JsonRpcError) as exc_info:
+            await handle_visualize(
+                params={},  # Missing output_path
+                workspace_path=str(workspace),
+                dataset_name='test_dataset',
+                logger=logger
+            )
+        
+        assert exc_info.value.code == INVALID_PARAMS
+
+    @pytest.mark.asyncio
+    async def test_calls_visualize_graph_with_correct_args(self, workspace, logger, monkeypatch, reset_daemon_state):
+        """Verify visualize_graph is called with workspace and output path."""
+        import daemon
+        from daemon import handle_visualize
+        
+        daemon.cognee_initialized = True
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
+        
+        output_path = str(workspace / 'graph.html')
+        
+        with patch('visualize.visualize_graph', new_callable=AsyncMock) as mock_viz:
+            mock_viz.return_value = {
+                'success': True,
+                'output_path': output_path,
+                'node_count': 42,
+                'offline_safe': True
+            }
+            
+            result = await handle_visualize(
+                params={'output_path': output_path},
+                workspace_path=str(workspace),
+                dataset_name='test_dataset',
+                logger=logger
+            )
+        
+        mock_viz.assert_called_once_with(str(workspace), output_path)
+        assert result['success'] is True
+        assert result['output_path'] == output_path
+
+    @pytest.mark.asyncio
+    async def test_preserves_error_contract_from_visualize_graph(self, workspace, logger, monkeypatch, reset_daemon_state):
+        """Verify error response contract is preserved from visualize_graph."""
+        import daemon
+        from daemon import handle_visualize
+        
+        daemon.cognee_initialized = True
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
+        
+        with patch('visualize.visualize_graph', new_callable=AsyncMock) as mock_viz:
+            mock_viz.return_value = {
+                'success': False,
+                'error_code': 'NO_DATA',
+                'error': 'No graph data available',
+                'user_message': 'Capture some memories first.'
+            }
+            
+            result = await handle_visualize(
+                params={'output_path': '/tmp/graph.html'},
+                workspace_path=str(workspace),
+                dataset_name='test_dataset',
+                logger=logger
+            )
+        
+        assert result['success'] is False
+        assert result['error_code'] == 'NO_DATA'
+        assert 'user_message' in result
+
+
+# ============================================================================
+# Stdout protection tests (Plan 097: JSON-RPC hardening)
+# ============================================================================
+
+class TestStdoutProtection:
+    """Tests for daemon-wide stdout protection (Plan 097)."""
+
+    def test_stdout_redirect_context_manager_exists(self):
+        """Verify stdout_to_stderr context manager is defined."""
+        from daemon import stdout_to_stderr
+        
+        import contextlib
+        assert hasattr(stdout_to_stderr, '__enter__') or callable(stdout_to_stderr)
+
+    def test_stdout_redirect_captures_print_to_stderr(self, capsys):
+        """Verify print() output is redirected to stderr during handler execution."""
+        from daemon import stdout_to_stderr
+        
+        with stdout_to_stderr():
+            print("This should go to stderr")
+        
+        captured = capsys.readouterr()
+        assert captured.out == ""  # stdout should be empty
+        assert "This should go to stderr" in captured.err
+
+    def test_stdout_redirect_restores_original_stdout(self, capsys):
+        """Verify stdout is restored after context manager exits."""
+        from daemon import stdout_to_stderr
+        
+        original_stdout = sys.stdout
+        
+        with stdout_to_stderr():
+            pass
+        
+        print("This should go to stdout")
+        captured = capsys.readouterr()
+        assert "This should go to stdout" in captured.out
+        assert sys.stdout is original_stdout
+
+    def test_stdout_redirect_handles_nested_usage(self, capsys):
+        """Verify nested context managers work correctly."""
+        from daemon import stdout_to_stderr
+        
+        with stdout_to_stderr():
+            print("outer")
+            with stdout_to_stderr():
+                print("inner")
+            print("outer again")
+        
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "outer" in captured.err
+        assert "inner" in captured.err
+
+
+# ============================================================================
+# process_request visualize routing tests (Plan 097)
+# ============================================================================
+
+class TestProcessRequestVisualize:
+    """Tests for visualize method routing in process_request."""
+
+    @pytest.mark.asyncio
+    async def test_routes_visualize_method(self, workspace, logger, monkeypatch, reset_daemon_state):
+        """Verify process_request routes 'visualize' to handle_visualize."""
+        import daemon
+        from daemon import process_request
+        
+        daemon.cognee_initialized = True
+        monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')
+        
+        with patch('daemon.handle_visualize', new_callable=AsyncMock) as mock_handler:
+            mock_handler.return_value = {'success': True, 'output_path': '/tmp/graph.html'}
+            
+            request = {
+                'jsonrpc': '2.0',
+                'id': 'test-123',
+                'method': 'visualize',
+                'params': {'output_path': '/tmp/graph.html'}
+            }
+            
+            response = await process_request(request, str(workspace), 'test_dataset', logger)
+        
+        mock_handler.assert_called_once()
+        assert response['id'] == 'test-123'
+        assert 'result' in response
+        assert response['result']['success'] is True
+
+
+# ============================================================================
 # Error code constants tests
 # ============================================================================
 

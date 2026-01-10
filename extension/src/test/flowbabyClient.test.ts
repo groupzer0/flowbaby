@@ -2184,6 +2184,157 @@ suite('FlowbabyClient Test Suite', () => {
             assert.strictEqual(mockIngestViaDaemon.callCount, 2, 'Should retry daemon call');
             assert.ok(startOperationStub.calledOnce, 'Should enqueue background cognify op after successful retry');
         });
+
+        // Plan 097: Tests for daemon-first visualization
+        test('visualize should use daemon when daemon mode enabled and daemon available', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock visualizeViaDaemon to track calls
+            const mockVisualizeViaDaemon = sandbox.stub(anyClient, 'visualizeViaDaemon').resolves({
+                success: true,
+                output_path: '/tmp/graph.html',
+                node_count: 10,
+                offline_safe: true
+            });
+
+            // Mock runPythonScript to ensure it's NOT called
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                output_path: '/tmp/graph.html'
+            });
+
+            // Act
+            const result = await client.visualize('/tmp/graph.html');
+
+            // Assert
+            assert.ok(result.success, 'Should return success');
+            assert.ok(mockVisualizeViaDaemon.calledOnce, 'Should use daemon for visualization');
+            assert.ok(!mockRunPythonScript.called, 'Should NOT fall back to spawn-per-request');
+        });
+
+        test('visualize should fall back to spawn when daemon fails', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock visualizeViaDaemon to throw an error
+            const mockVisualizeViaDaemon = sandbox.stub(anyClient, 'visualizeViaDaemon').rejects(new Error('Daemon connection failed'));
+
+            // Mock runPythonScript to return success
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                output_path: '/tmp/graph.html',
+                node_count: 5,
+                offline_safe: true
+            });
+
+            // Act
+            const result = await client.visualize('/tmp/graph.html');
+
+            // Assert
+            assert.ok(result.success, 'Should return success from fallback');
+            assert.ok(mockVisualizeViaDaemon.calledOnce, 'Should try daemon first');
+            assert.ok(mockRunPythonScript.calledOnce, 'Should fall back to spawn-per-request on daemon error');
+        });
+
+        test('visualize should use spawn directly when daemon mode disabled', async () => {
+            // Arrange
+            stubDaemonConfigs('spawn');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock runPythonScript to track calls
+            const mockRunPythonScript = sandbox.stub(anyClient, 'runPythonScript').resolves({
+                success: true,
+                output_path: '/tmp/graph.html',
+                node_count: 8,
+                offline_safe: true
+            });
+
+            // Act
+            const result = await client.visualize('/tmp/graph.html');
+
+            // Assert
+            assert.ok(result.success, 'Should return success');
+            assert.ok(mockRunPythonScript.calledOnce, 'Should use spawn-per-request directly when daemon disabled');
+        });
+
+        test('visualizeViaDaemon sends correct request to daemon', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Directly stub daemonManager.sendRequest
+            const mockSendRequest = sandbox.stub(anyClient.daemonManager, 'sendRequest').resolves({
+                result: {
+                    success: true,
+                    output_path: '/tmp/graph.html',
+                    node_count: 15,
+                    offline_safe: true
+                }
+            });
+
+            // Act
+            const result = await anyClient.visualizeViaDaemon('/tmp/graph.html');
+
+            // Assert
+            assert.ok(mockSendRequest.calledOnce, 'Should call daemon sendRequest');
+            assert.strictEqual(mockSendRequest.firstCall.args[0], 'visualize', 'Should use visualize method');
+            assert.deepStrictEqual(mockSendRequest.firstCall.args[1], { output_path: '/tmp/graph.html' }, 'Should pass output_path');
+            assert.ok(result.success, 'Should return success from daemon result');
+        });
+
+        test('visualizeViaDaemon maps daemon error to FlowbabyResult', async () => {
+            // Arrange
+            stubDaemonConfigs('daemon');
+            sandbox.stub(FlowbabyClient.prototype as any, 'execFileSync').returns('Python 3.11.0');
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const anyClient = client as any;
+            anyClient.pythonPath = '/usr/bin/python3';
+            anyClient.isInitialized = true;
+
+            // Mock daemon error response
+            sandbox.stub(anyClient.daemonManager, 'sendRequest').resolves({
+                error: {
+                    code: -32001,
+                    message: 'Not authenticated',
+                    data: {
+                        error_code: 'NOT_AUTHENTICATED',
+                        user_message: 'Cloud login required'
+                    }
+                }
+            });
+
+            // Act
+            const result = await anyClient.visualizeViaDaemon('/tmp/graph.html');
+
+            // Assert
+            assert.strictEqual(result.success, false, 'Should return failure');
+            assert.strictEqual(result.error_code, 'NOT_AUTHENTICATED', 'Should preserve error_code from daemon');
+            assert.ok(result.user_message.includes('Cloud'), 'Should preserve user_message');
+        });
     });
 
     // Plan 092 M4: Tests for isRetryableError and staging retry logic

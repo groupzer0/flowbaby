@@ -1908,14 +1908,15 @@ export class FlowbabyClient {
     }
 
     /**
-     * Generate graph visualization HTML (Plan 067)
+     * Generate graph visualization HTML (Plan 067, Plan 097)
      * 
      * Calls visualize.py to generate a standalone HTML visualization of the
      * knowledge graph. The output is offline-first with all D3 dependencies
      * bundled inline.
      * 
-     * This method is lock-safe - it uses the same concurrency controls as
-     * other bridge operations to avoid Kuzu lock contention.
+     * Plan 097: Routes through daemon when daemon mode is enabled to avoid
+     * cross-process Kuzu lock contention on Windows. Falls back to spawn
+     * when daemon mode is disabled or daemon is unhealthy.
      * 
      * @param outputPath Path where the HTML file should be written
      * @returns Promise<VisualizeResult> - Result with output path and metadata
@@ -1924,15 +1925,37 @@ export class FlowbabyClient {
         const startTime = Date.now();
         this.log('INFO', 'Generating graph visualization', { 
             workspace: this.workspacePath,
-            outputPath 
+            outputPath,
+            daemonEnabled: this.daemonModeEnabled,
+            daemonHealthy: this.daemonManager?.isHealthy() ?? false
         });
 
         try {
-            // Use 60 second timeout - visualization can take time for large graphs
-            const result = await this.runPythonScript('visualize.py', [
-                this.workspacePath,
-                outputPath
-            ], 60000);
+            let result: FlowbabyResult;
+            
+            // Plan 097: Use daemon when enabled (lock-safe, in-process)
+            // Falls back to spawn-per-request when daemon unavailable
+            if (this.daemonManager && this.daemonModeEnabled) {
+                try {
+                    result = await this.visualizeViaDaemon(outputPath);
+                } catch (daemonError) {
+                    const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
+                    this.log('WARN', 'Daemon visualization failed, falling back to spawn-per-request', {
+                        error: errorMsg
+                    });
+                    // Fallback to spawn mode
+                    result = await this.runPythonScript('visualize.py', [
+                        this.workspacePath,
+                        outputPath
+                    ], 60000);
+                }
+            } else {
+                // Spawn mode: visualization continues unchanged when daemon disabled
+                result = await this.runPythonScript('visualize.py', [
+                    this.workspacePath,
+                    outputPath
+                ], 60000);
+            }
 
             const duration = Date.now() - startTime;
 
@@ -1965,6 +1988,40 @@ export class FlowbabyClient {
                 error_code: 'UNEXPECTED_ERROR'
             };
         }
+    }
+
+    /**
+     * Visualize graph via daemon (Plan 097)
+     * 
+     * Routes visualization through the daemon's in-process handler to avoid
+     * cross-process Kuzu lock contention on Windows.
+     * 
+     * @param outputPath Path where the HTML file should be written
+     * @returns Promise<FlowbabyResult> - Raw result from daemon
+     */
+    private async visualizeViaDaemon(outputPath: string): Promise<FlowbabyResult> {
+        if (!this.daemonManager) {
+            throw new Error('Daemon manager not initialized');
+        }
+
+        this.log('DEBUG', 'Sending visualize request to daemon', { outputPath });
+
+        const response = await this.daemonManager.sendRequest('visualize', {
+            output_path: outputPath
+        });
+
+        if ('error' in response) {
+            // Map daemon JSON-RPC errors to FlowbabyResult format
+            const error = response.error;
+            return {
+                success: false,
+                error: error.message,
+                error_code: error.data?.error_code as string || 'DAEMON_ERROR',
+                user_message: error.data?.user_message as string || error.message
+            };
+        }
+
+        return response.result as unknown as FlowbabyResult;
     }
 
     /**

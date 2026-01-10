@@ -235,11 +235,14 @@ class TestVisualizeGraph:
         async def fake_visualize_graph(*, destination_file_path: str):
             # Simulate Cognee output using known D3 CDN script tag.
             # visualize.py should inline vendored assets and pass offline validation.
-            # Include multiple "id" entries to pass node_count >= 2 threshold
+            # Include "var nodes = [...] var links" format with multiple nodes to pass node_count >= 2
             Path(destination_file_path).write_text(
                 """<html><head>
 <script src=\"https://d3js.org/d3.v5.min.js\"></script>
-</head><body>{\"id\":\"node1\"},{\"id\":\"node2\"},{\"id\":\"node3\"}</body></html>""",
+</head><body><script>
+var nodes = [{"id":"node1","label":"Test 1"},{"id":"node2","label":"Test 2"},{"id":"node3","label":"Test 3"}];
+var links = [];
+</script></body></html>""",
                 encoding="utf-8",
             )
 
@@ -261,17 +264,20 @@ class TestEmptyGraphDetection:
 
     @pytest.mark.asyncio
     async def test_empty_graph_sentinel_returns_failure(self, temp_workspace, mock_env, mock_cognee_module):
-        """Test that Cognee's 'No graph data available' sentinel triggers failure."""
+        """Test that empty nodes array triggers failure."""
         from visualize import visualize_graph
 
         output_path = temp_workspace / 'graph.html'
 
         async def fake_visualize_graph(*, destination_file_path: str):
-            # Simulate Cognee output with the empty graph sentinel
+            # Simulate Cognee output with empty nodes array
             Path(destination_file_path).write_text(
                 """<html><head>
 <script src=\"https://d3js.org/d3.v5.min.js\"></script>
-</head><body><div>No graph data available</div></body></html>""",
+</head><body><script>
+var nodes = [];
+var links = [];
+</script><div>No graph data available</div></body></html>""",
                 encoding="utf-8",
             )
 
@@ -281,8 +287,8 @@ class TestEmptyGraphDetection:
         result = await visualize_graph(str(temp_workspace), str(output_path))
 
         assert result["success"] is False
-        assert result.get("error_code") in ("EMPTY_GRAPH", "EMPTY_GRAPH_WRONG_STORE")
-        assert result.get("has_sentinel") is True
+        assert result.get("error_code") == "EMPTY_GRAPH"
+        assert result.get("node_count") == 0
         assert not output_path.exists(), "Empty graph HTML should be deleted"
 
     @pytest.mark.asyncio
@@ -297,7 +303,10 @@ class TestEmptyGraphDetection:
             Path(destination_file_path).write_text(
                 """<html><head>
 <script src=\"https://d3js.org/d3.v5.min.js\"></script>
-</head><body>{\"id\":\"single_node\"}</body></html>""",
+</head><body><script>
+var nodes = [{"id":"single_node","label":"Only One"}];
+var links = [];
+</script></body></html>""",
                 encoding="utf-8",
             )
 
@@ -312,21 +321,22 @@ class TestEmptyGraphDetection:
         assert not output_path.exists(), "Empty graph HTML should be deleted"
 
     @pytest.mark.asyncio
-    async def test_wrong_store_detection(self, temp_workspace, mock_env, mock_cognee_module):
-        """Test that sentinel + nodes triggers EMPTY_GRAPH_WRONG_STORE error."""
+    async def test_graph_with_sentinel_but_nodes_still_fails(self, temp_workspace, mock_env, mock_cognee_module):
+        """Test that having nodes but still < 2 triggers failure."""
         from visualize import visualize_graph
 
         output_path = temp_workspace / 'graph.html'
 
         async def fake_visualize_graph(*, destination_file_path: str):
-            # Simulate pathological case: sentinel present but also some nodes
-            # This suggests visualization read from wrong store
+            # Simulate edge case: sentinel present but still only 1 node (< 2 threshold)
             Path(destination_file_path).write_text(
                 """<html><head>
 <script src=\"https://d3js.org/d3.v5.min.js\"></script>
-</head><body>
+</head><body><script>
+var nodes = [{"id":"node1"}];
+var links = [];
+</script>
 <div>No graph data available</div>
-<div>{\"id\":\"node1\"},{\"id\":\"node2\"},{\"id\":\"node3\"}</div>
 </body></html>""",
                 encoding="utf-8",
             )
@@ -337,9 +347,8 @@ class TestEmptyGraphDetection:
         result = await visualize_graph(str(temp_workspace), str(output_path))
 
         assert result["success"] is False
-        assert result.get("error_code") == "EMPTY_GRAPH_WRONG_STORE"
-        assert result.get("has_sentinel") is True
-        assert result.get("node_count") >= 2
+        assert result.get("error_code") == "EMPTY_GRAPH"
+        assert result.get("node_count") == 1
         assert not output_path.exists(), "Empty graph HTML should be deleted"
 
     @pytest.mark.asyncio
@@ -374,11 +383,10 @@ class TestEmptyGraphDetection:
             Path(destination_file_path).write_text(
                 """<html><head>
 <script src=\"https://d3js.org/d3.v5.min.js\"></script>
-</head><body>
-{\"id\":\"entity1\",\"type\":\"Decision\"},
-{\"id\":\"entity2\",\"type\":\"Problem\"},
-{\"id\":\"entity3\",\"type\":\"Solution\"}
-</body></html>""",
+</head><body><script>
+var nodes = [{"id":"entity1","type":"Decision"},{"id":"entity2","type":"Problem"},{"id":"entity3","type":"Solution"}];
+var links = [];
+</script></body></html>""",
                 encoding="utf-8",
             )
 

@@ -8,7 +8,7 @@ import tempfile
 import types
 from pathlib import Path
 from typing import Generator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -191,6 +191,12 @@ def mock_cognee_module(mock_cognee, temp_workspace):
         databases=mock_databases_module
     )
 
+    # Plan 093: Mock context_global_variables module for multi-user context
+    mock_set_db_context = AsyncMock(return_value=None)
+    mock_context_global_vars_module = types.SimpleNamespace(
+        set_database_global_context_variables=mock_set_db_context
+    )
+
     # Create main cognee module
     mock_module = types.SimpleNamespace(
         config=mock_cognee.config,
@@ -198,6 +204,7 @@ def mock_cognee_module(mock_cognee, temp_workspace):
         cognify=mock_cognee.cognify,
         prune=mock_cognee.prune,  # This includes prune.prune_system as AsyncMock
         infrastructure=mock_infrastructure_module,
+        context_global_variables=mock_context_global_vars_module,
     )
 
     # Install into sys.modules
@@ -206,11 +213,17 @@ def mock_cognee_module(mock_cognee, temp_workspace):
     sys.modules['cognee.infrastructure.databases'] = mock_databases_module
     sys.modules['cognee.infrastructure.databases.relational'] = mock_relational_module
     sys.modules['cognee.infrastructure.databases.graph'] = mock_graph_module
+    sys.modules['cognee.context_global_variables'] = mock_context_global_vars_module
 
-    yield mock_cognee  # Return original fixture for assertions
+    # Plan 093/097: Mock user context for visualize tests - ensure_user_context must succeed
+    # so that tests can proceed to exercise the code under test (offline validation, empty graph, etc.)
+    with patch('visualize.ensure_user_context', new_callable=AsyncMock) as mock_user_ctx:
+        mock_user_ctx.return_value = MagicMock(success=True, user_id='00000000-0000-0000-0000-000000000001')
+        yield mock_cognee  # Return original fixture for assertions
 
     # Cleanup
     for module_name in [
+        'cognee.context_global_variables',
         'cognee.infrastructure.databases.graph',
         'cognee.infrastructure.databases.relational',
         'cognee.infrastructure.databases',

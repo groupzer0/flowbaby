@@ -13,7 +13,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { spawn, ChildProcess, SpawnOptions } from 'child_process';
-import { debugLog } from '../outputChannels';
+import { debugLog, isDebugLoggingEnabled, stripAnsiCodes } from '../outputChannels';
 import { v4 as uuidv4 } from 'uuid';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 // Plan 081: Import Cloud provider for Bedrock credentials
@@ -27,7 +27,7 @@ import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnab
 interface DaemonRequest {
     jsonrpc: '2.0';
     id: string;
-    method: 'health' | 'ingest' | 'retrieve' | 'shutdown' | 'cognify';
+    method: 'health' | 'ingest' | 'retrieve' | 'shutdown' | 'cognify' | 'visualize';
     params: Record<string, unknown>;
 }
 
@@ -759,9 +759,11 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     private handleStderr(data: string): void {
         const lines = data.split('\n');
         for (const line of lines) {
-            if (line.trim()) {
-                // Forward daemon logs to output channel
-                this.log('DEBUG', `[daemon] ${line.trim()}`);
+            const trimmed = line.trim();
+            if (trimmed) {
+                // Strip ANSI escape codes and forward daemon logs to output channel
+                const cleanLine = stripAnsiCodes(trimmed);
+                this.log('DEBUG', `[daemon] ${cleanLine}`);
             }
         }
     }
@@ -865,7 +867,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
      * Send a request to the daemon
      */
     public async sendRequest(
-        method: 'health' | 'ingest' | 'retrieve' | 'shutdown',
+        method: 'health' | 'ingest' | 'retrieve' | 'shutdown' | 'cognify' | 'visualize',
         params: Record<string, unknown>,
         timeoutMs?: number
     ): Promise<DaemonResponse> {
@@ -1529,8 +1531,16 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
 
     /**
      * Log helper
+     * 
+     * DEBUG level messages are only written when debug logging is enabled.
+     * This prevents verbose daemon output from cluttering the main output channel.
      */
     private log(level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR', message: string, data?: Record<string, unknown>): void {
+        // Skip DEBUG messages entirely when debug logging is disabled
+        if (level === 'DEBUG' && !isDebugLoggingEnabled()) {
+            return;
+        }
+
         const timestamp = new Date().toISOString();
         const dataStr = data ? ` ${JSON.stringify(data)}` : '';
         const logLine = `[${timestamp}] [${level}] [DaemonManager] ${message}${dataStr}`;

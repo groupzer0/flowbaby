@@ -32,6 +32,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Lock Lifecycle Logging**: Structured `[lock]` breadcrumbs for acquire/release/recovery with decision reasons (e.g., `owner_pid_dead`, `lock_age_exceeded`) for postmortem diagnostics
   - **Security**: Logs avoid absolute workspace paths and secrets; uses relative markers and PIDs only
 
+- **Daemonized Graph Visualization (Plan 097)**: Graph visualization now runs in-process via daemon mode when enabled, eliminating visualize.py subprocess spawns:
+  - **In-Process Visualization**: New `handle_visualize()` daemon handler calls `visualize.visualize_graph()` directly, avoiding subprocess spawn overhead
+  - **Daemon-Wide Stdout Protection**: New `stdout_to_stderr()` context manager redirects all stdout to stderr during daemon handler execution, preventing third-party library prints from corrupting JSON-RPC framing
+  - **Spawn Fallback**: When daemon mode is disabled, visualization falls back to subprocess spawn with identical result contract
+  - **Windows File-Lock Fix**: Running visualization in-process eliminates file descriptor inheritance issues that caused "file in use" errors on Windows
+
+- **Dashboard View Provider Tests (Plan 097)**: Comprehensive test coverage for the sidebar dashboard:
+  - Tests validate view type registration (`flowbaby.dashboardView`), WebviewViewProvider interface compliance, and refresh command resilience
+  - Single dashboard surface: Legacy `DashboardPanel` (editor tab) removed; sidebar view is now canonical
+
 - **Geographic Zone Selection (Plan 094)**: New `flowbaby.cloud.preferredZone` setting for zone-based region selection:
   - Three zones: `us` (Americas), `eu` (Europe), `apac` (Asia-Pacific)
   - Dropdown in VS Code Settings with "Backend default (recommended)" option
