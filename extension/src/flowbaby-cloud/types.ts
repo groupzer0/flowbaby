@@ -37,6 +37,16 @@ export type {
     ConsumeResponse,
     // Plan 094: Geographic zone types for cross-region support
     GeographicZone,
+    // Plan 098: v4.0.0 surface-specific auth types
+    ClientType,
+    ExtensionAuthResponse,
+    WebAuthResponse,
+    ExtensionRefreshRequest,
+    WebRefreshRequest,
+    RefreshResponse,
+    ExtensionRefreshResponse,
+    WebRefreshResponse,
+    JwtAudience,
 } from '@groupzer0/flowbaby-api-contract';
 
 export {
@@ -55,6 +65,18 @@ export {
     // Plan 094: Geographic zone constants
     GEOGRAPHIC_ZONES,
     DEFAULT_GEOGRAPHIC_ZONE,
+    // Plan 098: v4.0.0 surface-specific type guards and constants
+    isExtensionAuthResponse,
+    isWebAuthResponse,
+    isExtensionRefreshRequest,
+    isWebRefreshRequest,
+    isExtensionRefreshResponse,
+    isWebRefreshResponse,
+    JWT_AUDIENCES,
+    getAudienceForClientType,
+    CLIENT_TYPES,
+    DEFAULT_CLIENT_TYPE,
+    ERROR_DESCRIPTIONS,
 } from '@groupzer0/flowbaby-api-contract';
 
 // Type aliases for local use (re-exports don't bring types into scope)

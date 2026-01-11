@@ -121,6 +121,49 @@ function mapFlowbabyCloudError(error: FlowbabyCloudError, contextSuffix: string)
                 },
             };
 
+        // Plan 098: v4.0.0 surface-specific auth errors - force re-auth
+        case 'INVALID_AUDIENCE':
+        case 'AUDIENCE_MISMATCH':
+            return {
+                message: `Authentication token has invalid audience${contextSuffix}. Please log in again.`,
+                severity: 'error',
+                actions: [
+                    { label: 'Login to Cloud', commandId: CLOUD_ERROR_COMMANDS.LOGIN },
+                ],
+                logMetadata: {
+                    errorCode: error.code,
+                    category: 'authentication_v4',
+                },
+            };
+
+        // Plan 098: v4.0.0 refresh transport mismatch - client/server incompatibility
+        case 'REFRESH_TRANSPORT_INVALID':
+            return {
+                message: `Refresh token transport mismatch${contextSuffix}. Extension update may be required. Please log in again.`,
+                severity: 'error',
+                actions: [
+                    { label: 'Login to Cloud', commandId: CLOUD_ERROR_COMMANDS.LOGIN },
+                ],
+                logMetadata: {
+                    errorCode: error.code,
+                    category: 'authentication_v4',
+                },
+            };
+
+        // Plan 098: v4.0.0 refresh token reuse - session chain revoked
+        case 'REFRESH_REUSED':
+            return {
+                message: `Session refresh token was already used${contextSuffix}. Your session has been revoked for security. Please log in again.`,
+                severity: 'error',
+                actions: [
+                    { label: 'Login to Cloud', commandId: CLOUD_ERROR_COMMANDS.LOGIN },
+                ],
+                logMetadata: {
+                    errorCode: error.code,
+                    category: 'authentication_v4',
+                },
+            };
+
         // Rate limiting - temporary, ask user to wait
         case 'RATE_LIMITED':
             return {
@@ -309,6 +352,7 @@ export function isRecoverableCloudError(error: unknown): boolean {
 
 /**
  * Check if an error requires re-authentication.
+ * Plan 098: Added v4.0.0 surface-specific auth error codes.
  */
 export function requiresReAuthentication(error: unknown): boolean {
     if (!(error instanceof FlowbabyCloudError)) {
@@ -319,5 +363,10 @@ export function requiresReAuthentication(error: unknown): boolean {
         'SESSION_EXPIRED',
         'SESSION_INVALID',
         'INVALID_REFRESH',
+        // Plan 098: v4.0.0 surface-specific auth errors
+        'INVALID_AUDIENCE',
+        'AUDIENCE_MISMATCH',
+        'REFRESH_TRANSPORT_INVALID',
+        'REFRESH_REUSED',
     ].includes(error.code);
 }

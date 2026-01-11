@@ -16,8 +16,8 @@
  */
 
 import * as vscode from 'vscode';
-import type { AuthResponse } from './types';
-import { FlowbabyCloudError, SECRET_KEYS, OAUTH_CALLBACK_URI, FLOWBABY_CLOUD_CONFIG, SESSION_REFRESH } from './types';
+import type { AuthResponse, RefreshResponse, ExtensionAuthResponse, ExtensionRefreshResponse } from './types';
+import { FlowbabyCloudError, SECRET_KEYS, OAUTH_CALLBACK_URI, FLOWBABY_CLOUD_CONFIG, SESSION_REFRESH, isExtensionAuthResponse, isExtensionRefreshResponse } from './types';
 import { FlowbabyCloudClient } from './client';
 
 /**
@@ -27,28 +27,34 @@ import { FlowbabyCloudClient } from './client';
 export interface IAuthClient {
     /**
      * Exchange a Flowbaby one-time exchange code for session and refresh tokens.
+     * Always sends clientType: 'extension' per contract v4.0.0.
      */
     exchangeOAuthCode(code: string): Promise<AuthResponse>;
 
     /**
      * Refresh a session using a refresh token.
+     * Returns RefreshResponse (NOT AuthResponse) per contract v4.0.0.
      * Returns new session token and new refresh token (rotation).
      */
-    refreshSession(refreshToken: string): Promise<AuthResponse>;
+    refreshSession(refreshToken: string): Promise<RefreshResponse>;
 }
 
 /**
  * Adapter that wraps FlowbabyCloudClient to implement IAuthClient.
  * Converts the string code to the AuthRequest format expected by the client.
+ * 
+ * Plan 098: Always sends clientType: 'extension' per v4.0.0 contract.
  */
 class AuthClientAdapter implements IAuthClient {
     constructor(private readonly client: FlowbabyCloudClient) {}
 
     async exchangeOAuthCode(code: string): Promise<AuthResponse> {
-        return this.client.exchangeOAuthCode({ code });
+        // Plan 098: v4.0.0 requires clientType in AuthRequest
+        return this.client.exchangeOAuthCode({ code, clientType: 'extension' });
     }
 
-    async refreshSession(refreshToken: string): Promise<AuthResponse> {
+    async refreshSession(refreshToken: string): Promise<RefreshResponse> {
+        // Plan 098: v4.0.0 refresh returns RefreshResponse (not AuthResponse)
         return this.client.refreshSession(refreshToken);
     }
 }
@@ -63,11 +69,12 @@ export interface AuthStateChangeEvent {
 
 /**
  * Mock auth client for testing without network calls.
+ * Plan 098: Updated to return v4.0.0 compliant responses.
  */
 export class MockAuthClient implements IAuthClient {
-    private mockResponse: AuthResponse;
+    private mockResponse: ExtensionAuthResponse;
 
-    constructor(mockResponse?: Partial<AuthResponse>) {
+    constructor(mockResponse?: Partial<ExtensionAuthResponse>) {
         this.mockResponse = {
             sessionToken: 'mock-session-token-' + Date.now(),
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
@@ -84,16 +91,18 @@ export class MockAuthClient implements IAuthClient {
         return this.mockResponse;
     }
 
-    async refreshSession(_refreshToken: string): Promise<AuthResponse> {
+    async refreshSession(_refreshToken: string): Promise<RefreshResponse> {
         // Simulate network delay
         await new Promise(resolve => setTimeout(resolve, 100));
-        // Return new tokens (simulating rotation)
-        return {
-            ...this.mockResponse,
+        // Return new tokens (simulating rotation) - v4.0.0 RefreshResponse
+        const refreshResponse: ExtensionRefreshResponse = {
             sessionToken: 'mock-refreshed-session-' + Date.now(),
             refreshToken: 'mock-rotated-refresh-' + Date.now(),
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            tier: this.mockResponse.tier,
+            githubId: this.mockResponse.githubId,
         };
+        return refreshResponse;
     }
 }
 
@@ -211,7 +220,18 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
         this.log('Exchanging OAuth code for session token');
         try {
             const response = await this.authClient.exchangeOAuthCode(code);
-            await this.storeSession(response);
+            
+            // Plan 098: Fail closed if response is not extension variant
+            if (!isExtensionAuthResponse(response)) {
+                this.log('FAIL CLOSED: Received web auth response instead of extension response. Forcing logout.');
+                await this.logout();
+                throw new FlowbabyCloudError(
+                    'UNEXPECTED_RESPONSE',
+                    'Server returned an incompatible response format. Please try logging in again.'
+                );
+            }
+            
+            await this.storeExtensionSession(response);
             this.log('Login successful');
             this._onDidChangeAuthState.fire({ isAuthenticated: true, tier: response.tier });
         } catch (error) {
@@ -318,9 +338,10 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
     }
 
     /**
-     * Store session data securely.
+     * Store extension session data securely.
+     * Plan 098: Takes ExtensionAuthResponse or ExtensionRefreshResponse, both guaranteed to have refreshToken.
      */
-    private async storeSession(response: AuthResponse): Promise<void> {
+    private async storeExtensionSession(response: ExtensionAuthResponse | ExtensionRefreshResponse): Promise<void> {
         await Promise.all([
             this.secretStorage.store(SECRET_KEYS.SESSION_TOKEN, response.sessionToken),
             this.secretStorage.store(SECRET_KEYS.SESSION_EXPIRES_AT, response.expiresAt),
@@ -402,7 +423,15 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
 
         try {
             const response = await this.authClient.refreshSession(refreshToken);
-            await this.storeSession(response);
+            
+            // Plan 098: Fail closed if response is not extension variant
+            if (!isExtensionRefreshResponse(response)) {
+                this.log('FAIL CLOSED: Received web refresh response instead of extension response. Forcing logout.');
+                await this.logout();
+                return false;
+            }
+            
+            await this.storeExtensionSession(response);
             this.log('Session refreshed successfully');
             this._onDidChangeAuthState.fire({ isAuthenticated: true, tier: response.tier });
             return true;

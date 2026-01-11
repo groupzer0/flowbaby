@@ -26,6 +26,7 @@ import {
     type ApiError,
     type VendResponse,
     type VendRequest,
+    type FlowbabyCloudErrorCode,
 } from '../flowbaby-cloud';
 import { ICredentialClient } from '../flowbaby-cloud/credentials';
 import { FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
@@ -616,6 +617,64 @@ suite('Flowbaby Cloud Module Tests', () => {
             assert.strictEqual(isRecoverableCloudError(error), true, 'RATE_LIMITED should be recoverable');
             // Should NOT require re-authentication (Plan 086 clarification)
             assert.strictEqual(requiresReAuthentication(error), false, 'RATE_LIMITED should NOT require re-auth');
+        });
+
+        // Plan 098: v4.0.0 Surface-Specific Auth Error Tests
+        test('mapCloudErrorToUX handles INVALID_AUDIENCE (Plan 098 v4.0.0)', () => {
+            const error = new FlowbabyCloudError('INVALID_AUDIENCE', 'Token audience invalid');
+            const ux = mapCloudErrorToUX(error);
+
+            assert.strictEqual(ux.severity, 'error');
+            assert.ok(ux.message.includes('invalid audience'), 'Should mention invalid audience');
+            assert.strictEqual(ux.actions.length, 1);
+            assert.strictEqual(ux.actions[0].label, 'Login to Cloud');
+            assert.strictEqual(ux.logMetadata.category, 'authentication_v4');
+        });
+
+        test('mapCloudErrorToUX handles AUDIENCE_MISMATCH (Plan 098 v4.0.0)', () => {
+            const error = new FlowbabyCloudError('AUDIENCE_MISMATCH', 'Token audience mismatch');
+            const ux = mapCloudErrorToUX(error);
+
+            assert.strictEqual(ux.severity, 'error');
+            assert.ok(ux.message.includes('invalid audience'), 'Should mention invalid audience');
+            assert.strictEqual(ux.actions.length, 1);
+            assert.strictEqual(ux.actions[0].label, 'Login to Cloud');
+            assert.strictEqual(ux.logMetadata.category, 'authentication_v4');
+        });
+
+        test('mapCloudErrorToUX handles REFRESH_TRANSPORT_INVALID (Plan 098 v4.0.0)', () => {
+            const error = new FlowbabyCloudError('REFRESH_TRANSPORT_INVALID', 'Refresh transport mismatch');
+            const ux = mapCloudErrorToUX(error);
+
+            assert.strictEqual(ux.severity, 'error');
+            assert.ok(ux.message.includes('transport mismatch'), 'Should mention transport mismatch');
+            assert.strictEqual(ux.actions.length, 1);
+            assert.strictEqual(ux.actions[0].label, 'Login to Cloud');
+            assert.strictEqual(ux.logMetadata.category, 'authentication_v4');
+        });
+
+        test('mapCloudErrorToUX handles REFRESH_REUSED (Plan 098 v4.0.0)', () => {
+            const error = new FlowbabyCloudError('REFRESH_REUSED', 'Refresh token reused');
+            const ux = mapCloudErrorToUX(error);
+
+            assert.strictEqual(ux.severity, 'error');
+            assert.ok(ux.message.includes('already used'), 'Should mention token reuse');
+            assert.ok(ux.message.includes('revoked'), 'Should mention session revoked');
+            assert.strictEqual(ux.actions.length, 1);
+            assert.strictEqual(ux.actions[0].label, 'Login to Cloud');
+            assert.strictEqual(ux.logMetadata.category, 'authentication_v4');
+        });
+
+        test('requiresReAuthentication returns true for v4.0.0 auth errors (Plan 098)', () => {
+            const v4AuthErrors = ['INVALID_AUDIENCE', 'AUDIENCE_MISMATCH', 'REFRESH_TRANSPORT_INVALID', 'REFRESH_REUSED'];
+            for (const code of v4AuthErrors) {
+                const error = new FlowbabyCloudError(code as FlowbabyCloudErrorCode, `${code} error`);
+                assert.strictEqual(
+                    requiresReAuthentication(error), 
+                    true, 
+                    `${code} should require re-authentication`
+                );
+            }
         });
     });
 

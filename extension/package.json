@@ -550,7 +550,7 @@
   },
   "homepage": "https://flowbaby.ai",
   "dependencies": {
-    "@groupzer0/flowbaby-api-contract": "^3.4.0",
+    "@groupzer0/flowbaby-api-contract": "^4.0.0",
     "@types/uuid": "^10.0.0",
     "dotenv": "^17.2.3",
     "uuid": "^13.0.0"

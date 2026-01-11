@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ⚠️ Breaking Changes
 
+- **API Contract v4.0.0 Cutover (Plan 098)**: This release requires `@groupzer0/flowbaby-api-contract` v4.0.0 or later. The Cloud backend must be running contract v4.0.0 for authentication to work.
+  - Auth requests now include `clientType: 'extension'` to identify the extension surface
+  - Refresh endpoint returns `RefreshResponse` (not `AuthResponse`) with surface-specific union typing
+  - New fail-closed behavior: if server returns unexpected surface variant (e.g., web response to extension client), extension forces logout and prompts re-auth
+  - New v4 error codes handled: `INVALID_AUDIENCE`, `AUDIENCE_MISMATCH`, `REFRESH_TRANSPORT_INVALID`, `REFRESH_REUSED`
+
 - **Cloud-Only Mode (Plan 083)**: Flowbaby v0.7.0 is Cloud-only. Local API key configuration (`Flowbaby: Set API Key`) has been removed. Users must login to Flowbaby Cloud for LLM-powered memory operations.
   - Removed commands: `Flowbaby.configureApiKey`, `Flowbaby.setApiKey`, `Flowbaby.clearApiKey`
   - Removed settings: `Flowbaby.llm.provider`, `Flowbaby.llm.model`, `Flowbaby.llm.endpoint`

@@ -13,6 +13,8 @@ import {
     AuthRequest,
     AuthResponse,
     RefreshRequest,
+    RefreshResponse,
+    ExtensionRefreshRequest,
     VendRequest,
     VendResponse,
     ConsumeRequest,
@@ -101,13 +103,17 @@ export class FlowbabyCloudClient {
      * After calling this method, the old refresh token is invalidated and
      * the new one from the response must be stored.
      *
+     * Plan 098: v4.0.0 returns RefreshResponse (not AuthResponse).
+     * Extension uses ExtensionRefreshRequest with JSON body transport.
+     *
      * @param refreshToken - The refresh token from a previous AuthResponse
-     * @returns New AuthResponse with new session token and new refresh token
+     * @returns RefreshResponse with new session token and new refresh token
      * @throws FlowbabyCloudError with code INVALID_REFRESH if token is invalid/expired/used
      */
-    async refreshSession(refreshToken: string): Promise<AuthResponse> {
-        const request: RefreshRequest = { refreshToken };
-        return this.post<RefreshRequest, AuthResponse>('/auth/refresh', request);
+    async refreshSession(refreshToken: string): Promise<RefreshResponse> {
+        // Plan 098: Use ExtensionRefreshRequest for JSON body transport
+        const request: ExtensionRefreshRequest = { refreshToken };
+        return this.post<ExtensionRefreshRequest, RefreshResponse>('/auth/refresh', request);
     }
 
     // =========================================================================
