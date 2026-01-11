@@ -144,6 +144,12 @@ export function generateDashboardHtml(
             margin-bottom: 12px;
         }
 
+        .section-subtitle {
+            font-size: 0.9em;
+            color: var(--fg-muted);
+            margin-bottom: 12px;
+        }
+
         /* Usage Bar - using HTML5 progress element */
         .usage-bar-container {
             margin-bottom: 8px;
@@ -304,10 +310,15 @@ function buildDashboardContent(
             <img src="${iconUri}" alt="Flowbaby" class="header-icon">
             <span class="header-tier">${escapeHtml(profile.tierDisplayName)}</span>
         </div>
+        
+        <!-- Welcome Message -->
+        <div class="section">
+            <div class="welcome-text">Thanks for using Flowbaby, <strong>${escapeHtml(profile.githubUsername)}</strong>!</div>
+        </div>
 
         <!-- Usage Section -->
         <div class="section">
-            <div class="section-title">Usage</div>
+            <div class="section-title">Monthly Credits</div>
             <div class="usage-text">${usage.credits.used} / ${usage.credits.limit} credits used (${percentUsed}%)</div>
             <div class="usage-bar-container">
                 <progress class="usage-bar" value="${percentUsed}" max="100"></progress>
@@ -317,6 +328,7 @@ function buildDashboardContent(
 
         <!-- Social Links -->
         <div class="section">
+            <div class="section-subtitle">Stars and reviews help others find Flowbaby!</div>
             <div class="button-row">
                 <button class="btn btn-primary" data-command="openUrl" data-url="https://github.com/groupzer0/flowbaby">
                     ⭐ Star on GitHub
