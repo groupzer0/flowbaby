@@ -121,7 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Staging Auto-Retry**: `ingestSummaryAsync()` now automatically retries on transient errors (ECONNRESET, ETIMEDOUT, EPIPE, network errors) with configurable retry count and delay
   - **Cognify Auto-Retry**: Background cognify operations automatically retry via subprocess path when daemon fails, with retry count tracking and delay
 
-- **Cloud API Endpoint Resolution (Plan 084)**: Updated default Cloud API endpoint from placeholder `api.flowbaby.dev` to correct staging endpoint `api-staging.flowbaby.ai`. Endpoint resolution now follows clear precedence: VS Code setting > `FLOWBABY_CLOUD_API_URL` environment variable > built-in default. This enables reliable Cloud connectivity for v0.7.0 launch.
+- **Cloud API Endpoint Resolution (Plans 084, 099)**: Default Cloud API endpoint is now production (`api.flowbaby.ai`). Endpoint resolution follows clear precedence: VS Code setting > `FLOWBABY_CLOUD_API_URL` environment variable > built-in default. Staging endpoint (`api-staging.flowbaby.ai`) available via override setting for development/testing. This enables reliable Cloud connectivity for v0.7.0 launch.
 
 - **Bootstrap Decoupled from Cloud Credentials (Plan 084)**: Python bridge initialization (`init.py`) no longer requires Cloud credentials to succeed. Extension bootstrap (environment creation, workspace indexing) now completes without Cloud authentication, with only LLM-powered operations (memory ingestion, retrieval synthesis) gated on Cloud login. This fixes activation failures where users saw "Cloud login required" before they could even log in.
 

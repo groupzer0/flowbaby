@@ -733,13 +733,13 @@ suite('Flowbaby Cloud Module Tests', () => {
             );
         });
 
-        test('DEFAULT_CONFIG.apiBaseUrl defaults to staging (not api.flowbaby.dev)', async () => {
+        test('DEFAULT_CONFIG.apiBaseUrl defaults to production (Plan 099)', async () => {
             const types = await import('../flowbaby-cloud/types');
 
             assert.strictEqual(
                 types.DEFAULT_CONFIG.apiBaseUrl,
-                types.STAGING_API_BASE_URL,
-                'Default config should use staging URL'
+                types.PRODUCTION_API_BASE_URL,
+                'Default config should use production URL (Plan 099)'
             );
             assert.notStrictEqual(
                 types.DEFAULT_CONFIG.apiBaseUrl,
@@ -766,8 +766,8 @@ suite('Flowbaby Cloud Module Tests', () => {
 
             assert.strictEqual(
                 result,
-                types.STAGING_API_BASE_URL,
-                'Should return staging URL as default'
+                types.PRODUCTION_API_BASE_URL,
+                'Should return production URL as default (Plan 099)'
             );
         });
 

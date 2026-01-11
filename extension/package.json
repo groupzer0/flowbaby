@@ -494,7 +494,7 @@
         "flowbaby.cloud.apiEndpoint": {
           "type": "string",
           "default": "",
-          "markdownDescription": "**Flowbaby Cloud: API endpoint override** (developer/testing only). Leave empty for the built-in default (`api-staging.flowbaby.ai` for staging, `api.flowbaby.ai` for production). Set an explicit URL to override endpoint resolution."
+          "markdownDescription": "**Flowbaby Cloud: API endpoint override** (developer/testing only). Leave empty for the built-in default (`api.flowbaby.ai`). Use `api-staging.flowbaby.ai` for staging environment."
         }
       }
     }

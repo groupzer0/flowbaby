@@ -193,19 +193,17 @@ export interface FlowbabyCloudConfig {
 }
 
 /**
- * Staging base URL - use until production is provisioned.
+ * Staging base URL - for development and testing only.
  * 
  * Plan 084: Changed from non-existent api.flowbaby.dev to the staging custom domain.
- * Once api-staging.flowbaby.ai is provisioned, this is the preferred URL.
- * During transition, FLOWBABY_CLOUD_API_URL can be set to the execute-api fallback.
+ * Plan 099: Production is now the default; use staging only via explicit override.
  */
 export const STAGING_API_BASE_URL = 'https://api-staging.flowbaby.ai';
 
 /**
- * Production base URL - use for marketplace-facing releases.
+ * Production base URL - default for marketplace-facing releases.
  * 
- * Plan 084: api.flowbaby.ai is planned but not yet provisioned.
- * Marketplace-facing builds should use this once it's live.
+ * Plan 099: api.flowbaby.ai is now provisioned and is the built-in default.
  */
 export const PRODUCTION_API_BASE_URL = 'https://api.flowbaby.ai';
 
@@ -220,10 +218,10 @@ export const EXECUTE_API_FALLBACK_URL = 'https://0h552crqta.execute-api.us-east-
 /**
  * Default configuration values.
  * 
- * Plan 084: Changed default from non-existent api.flowbaby.dev to staging URL.
+ * Plan 099: Default is production (api.flowbaby.ai). Use overrides for staging/testing.
  */
 export const DEFAULT_CONFIG: FlowbabyCloudConfig = {
-    apiBaseUrl: STAGING_API_BASE_URL,
+    apiBaseUrl: PRODUCTION_API_BASE_URL,
     timeoutMs: 30000,
     maxRetries: 3,
 };
@@ -231,10 +229,10 @@ export const DEFAULT_CONFIG: FlowbabyCloudConfig = {
 /**
  * Get the configured API base URL.
  * 
- * Resolution precedence (Plan 084):
+ * Resolution precedence (Plan 084/099):
  * 1. VS Code setting: flowbaby.cloud.apiEndpoint
  * 2. Environment variable: FLOWBABY_CLOUD_API_URL
- * 3. Built-in default (STAGING_API_BASE_URL for now; PRODUCTION once provisioned)
+ * 3. Built-in default (PRODUCTION_API_BASE_URL)
  * 
  * @returns The resolved API base URL
  */
