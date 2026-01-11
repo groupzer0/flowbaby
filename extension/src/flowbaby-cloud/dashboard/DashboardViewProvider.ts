@@ -130,7 +130,7 @@ export class DashboardViewProvider implements vscode.WebviewViewProvider {
 
         // Get icon URI for webview (using mono SVG)
         const iconUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'flowbaby-icon-mono.svg')
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'flowbaby-icon-tightcrop.png')
         );
 
         // Set HTML content

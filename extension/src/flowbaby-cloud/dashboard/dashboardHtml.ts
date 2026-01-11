@@ -130,17 +130,6 @@ export function generateDashboardHtml(
             color: var(--badge-fg);
         }
 
-        /* Welcome text */
-        .welcome-text {
-            font-size: 1.1em;
-            margin-bottom: 8px;
-        }
-
-        .membership-text {
-            font-size: 0.95em;
-            color: var(--fg-muted);
-        }
-
         /* Sections */
         .section {
             margin-bottom: 24px;
@@ -313,17 +302,12 @@ function buildDashboardContent(
         <!-- Header -->
         <div class="header">
             <img src="${iconUri}" alt="Flowbaby" class="header-icon">
-        </div>
-        
-        <!-- Welcome Message -->
-        <div class="section">
-            <div class="welcome-text">Thanks for using Flowbaby, <strong>${escapeHtml(profile.githubUsername)}</strong>!</div>
-            <div class="membership-text">Membership: <span class="header-tier">${escapeHtml(profile.tierDisplayName)}</span></div>
+            <span class="header-tier">${escapeHtml(profile.tierDisplayName)}</span>
         </div>
 
-        <!-- Monthly Credits Section -->
+        <!-- Usage Section -->
         <div class="section">
-            <div class="section-title">Monthly Credits</div>
+            <div class="section-title">Usage</div>
             <div class="usage-text">${usage.credits.used} / ${usage.credits.limit} credits used (${percentUsed}%)</div>
             <div class="usage-bar-container">
                 <progress class="usage-bar" value="${percentUsed}" max="100"></progress>
@@ -341,14 +325,6 @@ function buildDashboardContent(
                     ⭐ Rate on Marketplace
                 </button>
             </div>
-        </div>
-        
-        <!-- Feedback -->
-        <div class="section">
-            <div class="section-title">Feedback</div>
-            <button class="btn btn-outline btn-full" data-command="openUrl" data-url="https://github.com/groupzer0/flowbaby/issues">
-                💬 Submit Feedback on GitHub
-            </button>
         </div>
 
         <!-- Quick Actions -->
