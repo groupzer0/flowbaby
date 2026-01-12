@@ -2,7 +2,7 @@
 
 > A persistent memory layer for AI coding in VS Code — no drift, no drama.  
 > Not chat history. Not bigger prompts. Real memory across Copilot sessions.
-> Best experienced with the Flowbaby Agent Team.
+> *(Best experienced with the Flowbaby Agent Team.)*
 
 Flowbaby solves a specific problem: Copilot forgets what you've discussed. Across sessions, developers repeatedly re-explain context, architecture decisions, and constraints. Flowbaby captures, summarizes, and resurfaces relevant prior work automatically—bridging context between sessions and maintaining continuity within long-running conversations.
 
