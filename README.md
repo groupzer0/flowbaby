@@ -2,6 +2,7 @@
 
 > A persistent memory layer for AI coding in VS Code — no drift, no drama.  
 > Not chat history. Not bigger prompts. Real memory across Copilot sessions.
+> Best experienced with the Flowbaby Agent Team.
 
 Flowbaby solves a specific problem: Copilot forgets what you've discussed. Across sessions, developers repeatedly re-explain context, architecture decisions, and constraints. Flowbaby captures, summarizes, and resurfaces relevant prior work automatically—bridging context between sessions and maintaining continuity within long-running conversations.
 
@@ -14,15 +15,30 @@ Without persistent memory:
 - Copilot interactions feel repetitive instead of collaborative
 - Tool differentiation collapses as model quality converges
 
-Flowbaby addresses this by adding **statefulness** to Copilot—without changing models or workflows.  
+Flowbaby addresses this by adding **statefulness** to Copilot—without changing models or workflows.
 This is an infrastructure problem, not a prompt or UX problem.
 
 ## Evaluation Summary
 
-Flowbaby is a VS Code extension that adds persistent, workspace-scoped memory to GitHub Copilot. 
-It is production-usable today, stores all context locally, and integrates without requiring changes to Copilot itself.
+Flowbaby is a VS Code extension that adds persistent, workspace-scoped memory to GitHub Copilot. It is production-usable today, stores all context locally, and integrates without requiring changes to Copilot itself.
 
 Most users can validate its value within minutes by continuing a prior conversation across sessions and observing preserved decisions and constraints.
+
+Flowbaby currently offers a free tier for evaluation and light usage, with an optional low-cost subscription for higher-volume usage.
+
+## Optimal Results
+
+Flowbaby provides persistent memory as infrastructure. To experience its full impact, it is designed to work alongside agents that actively take advantage of long-term memory.
+
+The Flowbaby Agent Team is the reference implementation built specifically to do this well.
+
+While Flowbaby can be used with other agents, evaluators should note:
+- Agents not designed for persistent memory may underutilize Flowbaby
+- This can make the impact of memory appear limited
+
+For the intended evaluation experience, we recommend using Flowbaby together with the [Flowbaby Agent Team](https://github.com/groupzer0/vs-code-agents).
+
+Advanced users may want to add this [Memory Contract](https://github.com/groupzer0/vs-code-agents/blob/main/vs-code-agents/reference/memory-contract-example.md) to their own agent so that it makes use of Flowbaby, but this is not an officially supported option.
 
 ## What It Does
 
@@ -202,6 +218,14 @@ Full settings available in VS Code under Extensions → Flowbaby.
 MIT License + Commons Clause. See [LICENSE](LICENSE) for details.
 
 Uses [Cognee](https://github.com/topoteretes/cognee) (Apache 2.0) for knowledge graph operations.
+
+---
+
+## Reference Implementation
+
+- **Flowbaby Agent Team**  
+  A set of Copilot agents and skills designed to fully leverage Flowbaby’s persistent memory model.  
+  This is the recommended reference implementation for evaluating Flowbaby’s impact. [Flowbaby Agent Team](https://github.com/groupzer0/vs-code-agents)
 
 ---
 
