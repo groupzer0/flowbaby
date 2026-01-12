@@ -13,6 +13,18 @@ import type { UserProfileResponse, UsageResponse } from '../types';
 // Plan 097: Removed brand colors - using only VS Code theme variables
 
 /**
+ * Map backend tier display names to user-facing display names.
+ * Backend uses "basic" internally, but we display "Pro" to users.
+ */
+function getTierDisplayName(backendTierName: string): string {
+    // Case-insensitive match for "basic" -> "Pro"
+    if (backendTierName.toLowerCase() === 'basic') {
+        return 'Pro';
+    }
+    return backendTierName;
+}
+
+/**
  * Generate a cryptographically random nonce for CSP.
  */
 function getNonce(): string {
@@ -308,7 +320,7 @@ function buildDashboardContent(
         <!-- Header -->
         <div class="header">
             <img src="${iconUri}" alt="Flowbaby" class="header-icon">
-            <span class="header-tier">${escapeHtml(profile.tierDisplayName)}</span>
+            <span class="header-tier">${escapeHtml(getTierDisplayName(profile.tierDisplayName))}</span>
         </div>
         
         <!-- Welcome Message -->

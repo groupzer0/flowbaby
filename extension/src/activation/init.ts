@@ -477,6 +477,10 @@ async function showPostInitPrompts(
                 });
             });
         }
+
+        // Show Agent Team recommendation even when login is required
+        // Users can see the recommendation and dismiss it independently of login flow
+        await showAgentTeamRecommendation(context);
     } else {
         // Already authenticated - check if we should show degraded state message
         const isFullyReady = readinessService?.isFullyReady() ?? initResult.apiKeyState.llmReady;
@@ -497,6 +501,9 @@ async function showPostInitPrompts(
                     vscode.commands.executeCommand('flowbaby.cloud.status');
                 }
             });
+
+            // Show Agent Team recommendation in degraded state too
+            await showAgentTeamRecommendation(context);
         } else {
             // Offer walkthrough for users who are fully set up
             const hasGlobalState = !!context.globalState;
@@ -528,7 +535,59 @@ async function showPostInitPrompts(
                     });
                 }
             }
+
+            // Show Agent Team recommendation (separate from walkthrough, has own dismiss state)
+            await showAgentTeamRecommendation(context);
         }
+    }
+}
+
+/**
+ * Show a recommendation to use Flowbaby with the Agent Team.
+ * 
+ * This prompt appears after successful initialization for new users or
+ * users who upgraded to 0.7.0. It can be permanently dismissed.
+ * 
+ * The recommendation is shown independently of the walkthrough prompt
+ * to ensure users see it even if they dismissed the walkthrough.
+ * 
+ * Can be called from handleInitSuccess or other activation paths where
+ * the extension is operational (even if login is required).
+ */
+export async function showAgentTeamRecommendation(
+    context: vscode.ExtensionContext
+): Promise<void> {
+    const hasGlobalState = !!context.globalState;
+    const canReadGlobalState = hasGlobalState && typeof context.globalState.get === 'function';
+    const canWriteGlobalState = hasGlobalState && typeof context.globalState.update === 'function';
+
+    const agentTeamPromptDismissed = canReadGlobalState
+        ? context.globalState.get<boolean>('flowbaby.agentTeamPromptDismissed', false)
+        : false;
+
+    if (agentTeamPromptDismissed) {
+        debugLog('Agent Team recommendation already dismissed');
+        return;
+    }
+
+    try {
+        const action = await vscode.window.showInformationMessage(
+            'For the intended experience, we recommend using Flowbaby together with the Flowbaby Agent Team.',
+            'View Agent Team',
+            'Don\'t Show Again'
+        );
+
+        if (action === 'View Agent Team') {
+            // Open the Agent Team repository in browser
+            vscode.env.openExternal(vscode.Uri.parse('https://github.com/groupzer0/vs-code-agents'));
+        } else if (action === 'Don\'t Show Again' && canWriteGlobalState) {
+            await context.globalState.update('flowbaby.agentTeamPromptDismissed', true);
+            debugLog('Agent Team recommendation dismissed permanently');
+        }
+    } catch (error) {
+        debugLog('Agent Team recommendation prompt suppressed', {
+            error: error instanceof Error ? error.message : String(error)
+        });
     }
 }
 

@@ -156,30 +156,15 @@ export class FlowbabySetupService {
                 this.log('Found managed environment.');
                 const verified = await this.verifyEnvironment();
                 if (verified) {
-                    // Check hash
+                    // Check hash - if mismatch, set unverified but don't prompt here.
+                    // Activation-time handleRequirementsMismatch in init.ts handles user notification.
                     const currentHash = await this.computeRequirementsHash();
                     if (bridgeEnv.requirementsHash !== currentHash) {
-                        // Plan 049: Strict enforcement for managed envs
                         await this.setVerified(false);
                         if (this.statusBar) {
                             this.statusBar.setStatus(FlowbabyStatus.SetupRequired, 'Update Required');
                         }
-                        
-                        const selection = await vscode.window.showWarningMessage(
-                            'Flowbaby dependencies need to be updated for this version.',
-                            {
-                                modal: true,
-                                detail: 'The extension has been updated and requires new Python packages.'
-                            },
-                            'Update Now',
-                            'Later'
-                        );
-
-                        if (selection === 'Update Now') {
-                            await this.refreshDependencies();
-                            // refreshDependencies handles verification and setting verified status
-                        }
-                        // If 'Later', remains unverified
+                        // No modal prompt here - activation handles it
                     } else {
                         await this.setVerified(true);
                     }
@@ -200,30 +185,15 @@ export class FlowbabySetupService {
                 const verified = await this.verifyEnvironment();
                 
                 if (verified) {
+                    // Check hash - if mismatch, set unverified but don't prompt here.
+                    // Activation-time handleRequirementsMismatch in init.ts handles user notification.
                     const currentHash = await this.computeRequirementsHash();
                     if (bridgeEnv.requirementsHash !== currentHash) {
-                        // Plan 049: Strict enforcement for external envs
                         await this.setVerified(false);
                         if (this.statusBar) {
                             this.statusBar.setStatus(FlowbabyStatus.SetupRequired, 'External env out of date');
                         }
-
-                        const selection = await vscode.window.showWarningMessage(
-                            'External Flowbaby environment requires dependency updates.',
-                            {
-                                modal: true,
-                                detail: 'The extension has been upgraded and the external Python environment must be updated to match requirements.txt.'
-                            },
-                            'Copy pip Command',
-                            'Dismiss'
-                        );
-
-                        if (selection === 'Copy pip Command') {
-                            const requirementsPath = path.join(this.bridgePath, 'requirements.txt');
-                            const pipCommand = `pip install -r "${requirementsPath}"`;
-                            await vscode.env.clipboard.writeText(pipCommand);
-                            vscode.window.showInformationMessage('Pip command copied to clipboard.');
-                        }
+                        // No modal prompt here - activation handles it
                     } else {
                         await this.setVerified(true);
                     }
