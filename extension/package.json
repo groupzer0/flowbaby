@@ -511,7 +511,7 @@
     "lint:all": "npm run lint && npm run lint:python && npm run lint:markdown",
     "check:zones": "node scripts/check-zone-allowlist.js",
     "test": "node ./out/test/runTest.js",
-    "test:bridge": "cd bridge && pytest tests/ -v",
+    "test:bridge": "cd bridge && .venv/bin/python -m pytest tests/ -v",
     "test:agent": "npm run compile:tests && node ./out/test/run-test-agent.js",
     "test:all": "npm test && npm run test:bridge && npm run check:zones",
     "package": "vsce package",

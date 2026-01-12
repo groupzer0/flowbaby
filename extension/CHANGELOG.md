@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Spawn Fallback**: When daemon mode is disabled, visualization falls back to subprocess spawn with identical result contract
   - **Windows File-Lock Fix**: Running visualization in-process eliminates file descriptor inheritance issues that caused "file in use" errors on Windows
 
+- **Automatic Backup of Incompatible `.flowbaby/` on Upgrade (Plan 101)**: Users upgrading from v0.6.2 to v0.7.0 no longer encounter confusing embedding dimension errors. The extension automatically detects pre-0.7.0 workspaces and backs up existing data:
+  - **Automatic Detection**: On activation, checks for pre-0.7.0 `.flowbaby/` directories (missing `system/EMBEDDING_SCHEMA_VERSION` marker)
+  - **Safe Backup**: Renames `.flowbaby` to `.flowbaby-pre-0.7.0-backup-{timestamp}` with Windows-safe naming (no colons) and collision resistance
+  - **Daemon Lock Safety**: Stops daemon before rename to prevent Windows file lock failures
+  - **Clear User Guidance**: Info toast explains what happened, where backup is, and prompts reinitialization
+  - **Fail-Closed Fallback**: If backup fails (permissions/locks), shows manual remediation instructions instead of proceeding with incompatible storage
+  - **Schema Marker**: New v0.7.0 workspaces write `EMBEDDING_SCHEMA_VERSION=2` marker to prevent repeated backup on subsequent activations
+
 - **Dashboard View Provider Tests (Plan 097)**: Comprehensive test coverage for the sidebar dashboard:
   - Tests validate view type registration (`flowbaby.dashboardView`), WebviewViewProvider interface compliance, and refresh command resilience
   - Single dashboard surface: Legacy `DashboardPanel` (editor tab) removed; sidebar view is now canonical

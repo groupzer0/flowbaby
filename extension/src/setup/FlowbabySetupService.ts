@@ -9,6 +9,41 @@ import { debugLog } from '../outputChannels';
 
 export type WorkspaceHealthStatus = 'FRESH' | 'BROKEN' | 'VALID';
 
+/**
+ * Plan 101: Embedding schema marker file path (relative to .flowbaby/)
+ * Located under system/ to group control-plane artifacts
+ */
+export const EMBEDDING_SCHEMA_VERSION = 'system/EMBEDDING_SCHEMA_VERSION';
+
+/**
+ * Plan 101: Current embedding schema version for v0.7.0+
+ * Increment this when embedding model/dimensions change in a breaking way
+ */
+export const CURRENT_EMBEDDING_SCHEMA = 2;
+
+/**
+ * Plan 101: Result of pre-upgrade migration check
+ */
+export interface PreUpgradeMigrationResult {
+    /** Action taken: 'none' (no migration needed), 'backup-success', 'backup-failed' */
+    action: 'none' | 'backup-success' | 'backup-failed';
+    /** Whether workspace needs fresh initialization after this check */
+    requiresFreshInit: boolean;
+    /** Path to backup folder if backup was created */
+    backupPath?: string;
+    /** Error message if backup failed */
+    error?: string;
+}
+
+/**
+ * Plan 101: Result of backup operation
+ */
+export interface BackupResult {
+    success: boolean;
+    backupPath?: string;
+    error?: string;
+}
+
 export interface BridgeEnvMetadata {
     pythonPath: string;
     ownership: 'managed' | 'external';
@@ -383,6 +418,10 @@ export class FlowbabySetupService {
 
                 await this.setVerified(true);
 
+                // Plan 101: Write embedding schema marker on successful initialization
+                // This prevents repeated backup prompts on subsequent activations
+                await this.writeEmbeddingSchemaMarker();
+
                 vscode.window.showInformationMessage('Flowbaby environment setup complete!');
                 debugLog('Environment creation successful', { venvPath });
                 return true;
@@ -466,6 +505,9 @@ export class FlowbabySetupService {
                 });
 
                 await this.setVerified(true);
+
+                // Plan 101: Write embedding schema marker on successful initialization
+                await this.writeEmbeddingSchemaMarker();
 
                 vscode.window.showInformationMessage('Flowbaby installed into existing .venv');
                 debugLog('Environment setup completed using existing .venv', { venvPath });
@@ -612,6 +654,185 @@ export class FlowbabySetupService {
         // All checks passed → VALID
         debugLog('Workspace health check: VALID');
         return 'VALID';
+    }
+
+    /**
+     * Plan 101: Check if this workspace was created by a pre-0.7.0 version
+     * 
+     * Detection logic (ordered):
+     * 1. If .flowbaby doesn't exist → not pre-upgrade (fresh workspace)
+     * 2. If bridge-env.json doesn't exist → not pre-upgrade (fresh workspace)
+     * 3. If EMBEDDING_SCHEMA_VERSION marker exists with current version → not pre-upgrade
+     * 4. If EMBEDDING_SCHEMA_VERSION marker exists with older version → pre-upgrade
+     * 5. If marker is missing but bridge-env.json exists → pre-upgrade (v0.6.x)
+     * 
+     * @returns true if workspace needs migration backup, false otherwise
+     */
+    async isPreUpgradeWorkspace(): Promise<boolean> {
+        const flowbabyDir = path.join(this.workspacePath, '.flowbaby');
+        
+        // No .flowbaby directory → fresh workspace, not pre-upgrade
+        if (!this.fs.existsSync(flowbabyDir)) {
+            debugLog('isPreUpgradeWorkspace: false (no .flowbaby directory)');
+            return false;
+        }
+        
+        // No bridge-env.json → fresh workspace, not pre-upgrade
+        const bridgeEnv = await this.readBridgeEnv();
+        if (!bridgeEnv) {
+            debugLog('isPreUpgradeWorkspace: false (no bridge-env.json)');
+            return false;
+        }
+        
+        // Check schema marker
+        const markerPath = path.join(flowbabyDir, EMBEDDING_SCHEMA_VERSION);
+        if (this.fs.existsSync(markerPath)) {
+            try {
+                const content = await fs.promises.readFile(markerPath, 'utf8');
+                const version = parseInt(content.trim(), 10);
+                if (version >= CURRENT_EMBEDDING_SCHEMA) {
+                    debugLog('isPreUpgradeWorkspace: false (current schema version)', { version });
+                    return false;
+                }
+                debugLog('isPreUpgradeWorkspace: true (older schema version)', { version, current: CURRENT_EMBEDDING_SCHEMA });
+                return true;
+            } catch (error) {
+                debugLog('isPreUpgradeWorkspace: true (failed to read marker, assuming old)', { error: String(error) });
+                return true;
+            }
+        }
+        
+        // bridge-env.json exists but no marker → pre-0.7.0 workspace
+        debugLog('isPreUpgradeWorkspace: true (bridge-env.json exists but no schema marker)');
+        return true;
+    }
+
+    /**
+     * Plan 101: Generate a Windows-safe, collision-resistant backup folder name
+     * Format: .flowbaby-pre-0.7.0-backup-{YYYYMMDD}T{HHMMSS}-{suffix}
+     * 
+     * Windows-safe: No colons (ISO timestamps use colons)
+     * Collision-resistant: Adds numeric suffix if folder already exists
+     */
+    private generateBackupFolderName(): string {
+        const now = new Date();
+        // Format: YYYYMMDDTHHMMSS (no colons, Windows-safe)
+        const timestamp = now.toISOString()
+            .replace(/[-:]/g, '')
+            .replace(/\.\d{3}Z$/, '')
+            .replace('T', 'T'); // Keep T separator for readability
+        
+        const baseName = `.flowbaby-pre-0.7.0-backup-${timestamp}`;
+        let candidate = baseName;
+        let suffix = 0;
+        
+        // Check for collision and add suffix if needed
+        while (this.fs.existsSync(path.join(this.workspacePath, candidate))) {
+            suffix++;
+            candidate = `${baseName}-${suffix}`;
+        }
+        
+        return candidate;
+    }
+
+    /**
+     * Plan 101: Backup the pre-upgrade .flowbaby folder
+     * 
+     * Steps:
+     * 1. Stop daemon to release file locks (especially important on Windows)
+     * 2. Generate Windows-safe backup folder name
+     * 3. Rename .flowbaby → backup folder
+     * 
+     * @returns BackupResult with success status and backup path or error
+     */
+    async backupPreUpgradeWorkspace(): Promise<BackupResult> {
+        const flowbabyDir = path.join(this.workspacePath, '.flowbaby');
+        
+        // Step 1: Stop daemon before rename (reduce Windows lock failures)
+        if (this.stopDaemonFn) {
+            try {
+                debugLog('backupPreUpgradeWorkspace: stopping daemon before rename');
+                await this.stopDaemonFn();
+                // Give Windows a moment to release file locks
+                await new Promise(resolve => setTimeout(resolve, 300));
+            } catch (error) {
+                debugLog('backupPreUpgradeWorkspace: daemon stop failed (continuing)', { error: String(error) });
+                // Continue anyway - rename might still work
+            }
+        }
+        
+        // Step 2: Generate backup folder name
+        const backupFolderName = this.generateBackupFolderName();
+        const backupPath = path.join(this.workspacePath, backupFolderName);
+        
+        // Step 3: Attempt rename with retries (uses existing renameWithRetries for Windows robustness)
+        try {
+            debugLog('backupPreUpgradeWorkspace: renaming .flowbaby to backup', { backupPath });
+            await this.renameWithRetries(flowbabyDir, backupPath);
+            debugLog('backupPreUpgradeWorkspace: backup successful', { backupPath });
+            return { success: true, backupPath };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            debugLog('backupPreUpgradeWorkspace: rename failed', { error: errorMessage });
+            return { success: false, error: errorMessage };
+        }
+    }
+
+    /**
+     * Plan 101: Check for pre-upgrade workspace and perform migration if needed
+     * 
+     * This is the main orchestration method that should be called from activation.
+     * It combines detection, backup, and user notification.
+     * 
+     * @returns PreUpgradeMigrationResult indicating what happened and what to do next
+     */
+    async checkPreUpgradeMigration(): Promise<PreUpgradeMigrationResult> {
+        // Check if migration is needed
+        const isPreUpgrade = await this.isPreUpgradeWorkspace();
+        
+        if (!isPreUpgrade) {
+            return { action: 'none', requiresFreshInit: false };
+        }
+        
+        // Attempt backup
+        debugLog('checkPreUpgradeMigration: pre-0.7.0 workspace detected, attempting backup');
+        const backupResult = await this.backupPreUpgradeWorkspace();
+        
+        if (backupResult.success) {
+            return {
+                action: 'backup-success',
+                requiresFreshInit: true,
+                backupPath: backupResult.backupPath
+            };
+        }
+        
+        // Backup failed - return failure but still require fresh init
+        // (fail-closed: don't proceed with incompatible storage)
+        return {
+            action: 'backup-failed',
+            requiresFreshInit: true,
+            error: backupResult.error
+        };
+    }
+
+    /**
+     * Plan 101: Write the embedding schema marker file
+     * 
+     * Called after successful initialization to prevent repeated migration attempts.
+     * Creates the system/ directory if it doesn't exist.
+     */
+    async writeEmbeddingSchemaMarker(): Promise<void> {
+        const systemDir = path.join(this.workspacePath, '.flowbaby', 'system');
+        const markerPath = path.join(systemDir, 'EMBEDDING_SCHEMA_VERSION');
+        
+        // Ensure system directory exists
+        if (!this.fs.existsSync(systemDir)) {
+            await fs.promises.mkdir(systemDir, { recursive: true });
+        }
+        
+        // Write current schema version
+        await fs.promises.writeFile(markerPath, String(CURRENT_EMBEDDING_SCHEMA), 'utf8');
+        debugLog('writeEmbeddingSchemaMarker: marker written', { version: CURRENT_EMBEDDING_SCHEMA });
     }
 
     /**

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { FlowbabyClient } from './flowbabyClient';
 import { FlowbabyContextProvider } from './flowbabyContextProvider';
 import { FlowbabySetupService } from './setup/FlowbabySetupService';
@@ -396,6 +397,43 @@ export async function activate(_context: vscode.ExtensionContext) {
         // Handle BROKEN workspace (corrupted environment)
         if (healthStatus === 'BROKEN') {
             handleBrokenWorkspace(workspacePath, statusBar, healthStatus);
+            setExtensionActive(false);
+            return;
+        }
+
+        // Plan 101: Check for pre-0.7.0 workspace that needs migration backup
+        // This runs after health check (VALID) but before client initialization
+        // to prevent embedding dimension mismatch errors
+        const migrationResult = await setupService.checkPreUpgradeMigration();
+        debugLog('Pre-upgrade migration check result', { action: migrationResult.action });
+
+        if (migrationResult.requiresFreshInit) {
+            if (migrationResult.action === 'backup-success') {
+                // Show success toast with backup location
+                vscode.window.showInformationMessage(
+                    `Flowbaby 0.7.0 uses a new embedding format. Your previous data has been backed up to "${path.basename(migrationResult.backupPath!)}". Please initialize workspace to continue.`,
+                    'Initialize Workspace'
+                ).then(selection => {
+                    if (selection === 'Initialize Workspace') {
+                        vscode.commands.executeCommand('Flowbaby.initializeWorkspace');
+                    }
+                });
+                debugLog('Plan 101: Pre-0.7.0 workspace backed up successfully', { 
+                    backupPath: migrationResult.backupPath 
+                });
+            } else {
+                // Fail-closed: backup failed, show manual instructions
+                vscode.window.showErrorMessage(
+                    'Flowbaby 0.7.0 requires a fresh workspace but could not back up the existing one. ' +
+                    'Please close VS Code, rename ".flowbaby" to ".flowbaby-backup", reopen, and run "Flowbaby: Initialize Workspace".',
+                    'OK'
+                );
+                debugLog('Plan 101: Pre-0.7.0 workspace backup FAILED', { 
+                    error: migrationResult.error 
+                });
+            }
+            // Treat as FRESH workspace - force reinitialization
+            handleFreshWorkspace(workspacePath, statusBar, 'FRESH');
             setExtensionActive(false);
             return;
         }
