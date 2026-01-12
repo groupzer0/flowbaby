@@ -126,6 +126,9 @@ const CONSECUTIVE_FORCED_KILLS_THRESHOLD = 3; // Fallback to spawn-per-request a
  */
 const STALE_LOCK_AGE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
+const PYTHON_SPAWN_WAIT_FOR_REFRESH_MS = 15000;
+const PYTHON_SPAWN_POLL_INTERVAL_MS = 250;
+
 /**
  * PythonBridgeDaemonManager
  * 
@@ -203,6 +206,76 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         this.daemonEnabled = config.get<string>('bridgeMode', 'daemon') === 'daemon';
         this.idleTimeoutMinutes = config.get<number>('daemonIdleTimeoutMinutes', DEFAULT_IDLE_TIMEOUT_MINUTES);
         this.requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS;
+    }
+
+    private async pathExists(candidatePath: string): Promise<boolean> {
+        try {
+            await fs.promises.access(candidatePath);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    private async resolvePythonPathForSpawn(): Promise<string> {
+        // If user provided a command on PATH (e.g., python3), we can't reliably preflight existence.
+        if (!path.isAbsolute(this.pythonPath)) {
+            return this.pythonPath;
+        }
+
+        if (await this.pathExists(this.pythonPath)) {
+            return this.pythonPath;
+        }
+
+        // The managed environment refresh flow temporarily renames venv -> venv.backup
+        // while recreating it. If we see that backup, wait briefly for venv to return.
+        const flowbabyVenvBackup = path.join(this.workspacePath, '.flowbaby', 'venv.backup');
+        const legacyVenvBackup = path.join(this.workspacePath, '.venv.backup');
+        const refreshInProgress = (await this.pathExists(flowbabyVenvBackup)) || (await this.pathExists(legacyVenvBackup));
+
+        if (refreshInProgress) {
+            const deadline = Date.now() + PYTHON_SPAWN_WAIT_FOR_REFRESH_MS;
+            while (Date.now() < deadline) {
+                if (await this.pathExists(this.pythonPath)) {
+                    this.log('INFO', 'Python executable became available after waiting for refresh', {
+                        pythonPath: this.pythonPath
+                    });
+                    return this.pythonPath;
+                }
+                await new Promise(resolve => setTimeout(resolve, PYTHON_SPAWN_POLL_INTERVAL_MS));
+            }
+        }
+
+        // Fall back to common managed locations if the stored path is stale.
+        const candidates: string[] = [];
+        if (process.platform === 'win32') {
+            candidates.push(
+                path.join(this.workspacePath, '.flowbaby', 'venv', 'Scripts', 'python.exe'),
+                path.join(this.workspacePath, '.venv', 'Scripts', 'python.exe')
+            );
+        } else {
+            candidates.push(
+                path.join(this.workspacePath, '.flowbaby', 'venv', 'bin', 'python'),
+                path.join(this.workspacePath, '.venv', 'bin', 'python')
+            );
+        }
+
+        for (const candidate of candidates) {
+            if (await this.pathExists(candidate)) {
+                this.log('WARN', 'Configured Python path missing; falling back to discovered interpreter', {
+                    configured: this.pythonPath,
+                    fallback: candidate
+                });
+                return candidate;
+            }
+        }
+
+        throw new Error(
+            `Python executable not found: ${this.pythonPath}. ` +
+            `If Flowbaby is refreshing dependencies, wait a moment and retry. ` +
+            `Otherwise, run “Flowbaby: Refresh Dependencies” (or re-initialize the workspace environment) ` +
+            `or set Flowbaby.pythonPath to a valid interpreter.`
+        );
     }
 
     /**
@@ -413,7 +486,13 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             }
 
             // Remove lock directory
-            await fs.promises.rmdir(lockPath);
+            try {
+                await fs.promises.rmdir(lockPath);
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+                    throw error;
+                }
+            }
             this.log('INFO', '[lock] stale lock recovered successfully', { reason });
             return true;
         } catch (error) {
@@ -538,7 +617,13 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             }
 
             // Remove lock directory
-            await fs.promises.rmdir(this.getLockPath());
+            try {
+                await fs.promises.rmdir(this.getLockPath());
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+                    throw error;
+                }
+            }
             this.lockHeld = false;
             this.log('INFO', '[lock] release success');
         } catch (error) {
@@ -616,6 +701,8 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             // Get LLM environment variables
             const llmEnv = await this.getLLMEnvironment();
 
+            const pythonForSpawn = await this.resolvePythonPathForSpawn();
+
             // Spawn daemon process
             const spawnOptions: SpawnOptions = {
                 cwd: this.workspacePath,
@@ -630,7 +717,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
                 stdio: ['pipe', 'pipe', 'pipe']
             };
 
-            this.daemonProcess = spawn(this.pythonPath, [daemonScript], spawnOptions);
+            this.daemonProcess = spawn(pythonForSpawn, [daemonScript], spawnOptions);
 
             if (!this.daemonProcess.stdout || !this.daemonProcess.stderr || !this.daemonProcess.stdin) {
                 throw new Error('Failed to spawn daemon: stdio not available');
@@ -1415,7 +1502,13 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
                 // Ignore - may not exist
             }
 
-            await fs.promises.rmdir(lockPath);
+            try {
+                await fs.promises.rmdir(lockPath);
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+                    throw error;
+                }
+            }
             this.log('INFO', '[lock] stale lock cleaned up successfully');
         } catch (error) {
             this.log('WARN', '[lock] failed to clean up stale lock', {
