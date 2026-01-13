@@ -16,7 +16,10 @@ import type { UserProfileResponse, UsageResponse } from '../types';
  * Map backend tier display names to user-facing display names.
  * Backend uses "basic" internally, but we display "Pro" to users.
  */
-function getTierDisplayName(backendTierName: string): string {
+function getTierDisplayName(backendTierName: string | undefined): string {
+    if (!backendTierName) {
+        return 'Pro'; // Default to Pro for missing tier
+    }
     // Case-insensitive match for "basic" -> "Pro"
     if (backendTierName.toLowerCase() === 'basic') {
         return 'Pro';
