@@ -1,19 +1,41 @@
-# Flowbaby Chat Memory
+# Flowbaby
 
-> Most "memory" systems flood context windows with everything. Flowbaby does the opposite.
+> No drift, no drama.
 
-Persistent memory for GitHub Copilot in VS Code — captures summaries at natural breakpoints, stores them efficiently, and reconstructs only what's relevant (~1000 tokens of high-signal context).
+A memory system infrastructure for AI coding agents. Solves context collapse by managing context — not expanding it.
 
-This is retrieval and synthesis — not accumulation. It's not flashy. It's architected correctly. And it works.
+AI coding agents operate inside finite context windows. As conversations grow, files load, and instructions accumulate, agents are forced to compact and discard information — leading to forgotten goals, inconsistent behavior, and repeated explanations.
+
+Most solutions attempt to solve this by injecting large amounts of memory directly into the context window. This worsens the problem.
+
+Flowbaby solves memory drift by managing context, not expanding it. It injects a small amount of highly targeted context (~800–1000 tokens) based on what matters right now — keeping agents coherent across days, weeks, and months without bloating the context window.
 
 *(Best experienced with the [Flowbaby Agent Team](https://github.com/groupzer0/vs-code-agents).)*
 
 ## Why This Matters
 
+Context is a scarce, high-value resource. Instead of dumping memory into the agent's working window, Flowbaby:
+
+- Automatically creates compact summaries of conversations and decisions
+- Stores them across the lifetime of a workspace
+- Injects only a small, relevant slice when needed
+
+The result:
+
 - **Agents stay sharply focused** — no context window bloat
 - **Reasoning quality goes up** — relevant signals, not noise
 - **Less latency, less confusion** — lean context, faster inference
 - **Long-running projects stay coherent** — across days and weeks
+
+## How Flowbaby Is Different
+
+Flowbaby occupies a new layer in the AI developer tooling stack:
+
+- It is not another agent
+- It is not another memory plugin
+- It is a **context governance system** for agents — primed for integration
+
+This infrastructure keeps agents oriented without the developer managing documents, writing memory files, or manually recording state.
 
 ## Evaluation Summary
 
@@ -80,29 +102,29 @@ This release simplifies the operational model. Previously, users managed their o
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                     VS Code Extension                        │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────┐ │
-│  │ Chat Participant│  │  LM Tools       │  │ Status Bar   │ │
-│  │   @flowbaby     │  │  store/retrieve │  │ Cloud Status │ │
-│  └────────┬────────┘  └────────┬────────┘  └──────────────┘ │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────┐  │
+│  │ Chat Participant│  │  LM Tools       │  │ Status Bar   │  │
+│  │   @flowbaby     │  │  store/retrieve │  │ Cloud Status │  │
+│  └────────┬────────┘  └────────┬────────┘  └──────────────┘  │
 │           │                    │                             │
 │           └────────────┬───────┘                             │
 │                        ▼                                     │
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │              Python Bridge (daemon mode)                 │ │
-│  │  ┌───────────┐  ┌───────────┐  ┌───────────────────┐   │ │
-│  │  │  Cognee   │  │  LanceDB  │  │     Kuzu Graph    │   │ │
-│  │  │  (SDK)    │  │ (vectors) │  │   (relationships) │   │ │
-│  │  └───────────┘  └───────────┘  └───────────────────┘   │ │
+│  │              Python Bridge (daemon mode)                │ │
+│  │  ┌───────────┐  ┌───────────┐  ┌───────────────────┐    │ │
+│  │  │  Cognee   │  │  LanceDB  │  │     Kuzu Graph    │    │ │
+│  │  │  (SDK)    │  │ (vectors) │  │   (relationships) │    │ │
+│  │  └───────────┘  └───────────┘  └───────────────────┘    │ │
 │  └─────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                    Flowbaby Cloud                            │
-│  ┌────────────────┐  ┌────────────────┐  ┌───────────────┐  │
-│  │  GitHub OAuth  │  │  STS Vending   │  │  AWS Bedrock  │  │
-│  │  (auth only)   │  │  (credentials) │  │  (inference)  │  │
-│  └────────────────┘  └────────────────┘  └───────────────┘  │
+│  ┌────────────────┐  ┌────────────────┐  ┌───────────────┐   │
+│  │  GitHub OAuth  │  │  STS Vending   │  │  AWS Bedrock  │   │
+│  │  (auth only)   │  │  (credentials) │  │  (inference)  │   │
+│  └────────────────┘  └────────────────┘  └───────────────┘   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -122,7 +144,7 @@ Persistent memory unlocks capabilities that are difficult or impossible with sta
 - More reliable multi-step reasoning with preserved decisions
 - Reduced repetition and correction overhead
 
-Flowbaby provides the substrate for these behaviors without requiring changes to existing AI tools.
+Flowbaby doesn't make AI remember everything. It makes AI stay oriented — across minutes, days, and months. That's what developers actually want.
 
 ## Scope and Limits
 
