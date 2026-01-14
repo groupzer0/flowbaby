@@ -12,13 +12,108 @@
  * 5. Extension exchanges code for session token via backend
  * 6. Session token stored in SecretStorage
  *
+ * Plan 104 Enhancements:
+ * - Side-effect-free auth state queries (getAuthState)
+ * - Refresh coordinator with singleflight + throttling (requestRefresh)
+ * - Bounded activation-time refresh (activationRefresh)
+ * - TTL-aware refresh scheduling
+ *
  * @see Plan 077 M2 - Authentication Module
+ * @see Plan 104 - Prevent Unexpected Cloud Logouts After VS Code Restart
  */
 
 import * as vscode from 'vscode';
 import type { AuthResponse, RefreshResponse, ExtensionAuthResponse, ExtensionRefreshResponse } from './types';
 import { FlowbabyCloudError, SECRET_KEYS, OAUTH_CALLBACK_URI, FLOWBABY_CLOUD_CONFIG, SESSION_REFRESH, isExtensionAuthResponse, isExtensionRefreshResponse } from './types';
 import { FlowbabyCloudClient } from './client';
+
+// =============================================================================
+// Plan 104: Auth State Types (Side-Effect-Free)
+// =============================================================================
+
+/**
+ * Auth state enum for side-effect-free state queries.
+ * These states MUST NOT trigger side effects when read.
+ *
+ * @see Plan 104 Milestone 5 - Auth State Model
+ */
+export type AuthState =
+    | 'logged_out'          // No refresh credential present
+    | 'valid'               // Access token unexpired
+    | 'expired_refreshable' // Access token expired (or near expiry) and refresh credential exists
+    | 'refresh_in_progress' // Coordinator refresh attempt currently in flight
+    | 'login_required';     // Refresh credential missing/invalid OR coordinator classified refresh as non-recoverable
+
+/**
+ * Detailed auth state info returned by getAuthState().
+ * All fields are read-only observations - no side effects.
+ */
+export interface AuthStateInfo {
+    /** Current auth state */
+    state: AuthState;
+    /** Whether a refresh token is present in storage */
+    refreshTokenPresent: boolean;
+    /** Remaining TTL in milliseconds (undefined if no session) */
+    remainingTtlMs?: number;
+    /** Session expiry timestamp (undefined if no session) */
+    expiresAt?: string;
+}
+
+/**
+ * Result of a refresh request via the coordinator.
+ */
+export interface RefreshResult {
+    /** Whether refresh succeeded */
+    success: boolean;
+    /** Whether the request was throttled (not attempted) */
+    throttled?: boolean;
+    /** Error if refresh failed */
+    error?: Error;
+}
+
+/**
+ * Result of activation-time refresh.
+ */
+export interface ActivationRefreshResult {
+    /** Whether refresh was attempted */
+    attempted: boolean;
+    /** Whether refresh succeeded */
+    success?: boolean;
+    /** Whether the attempt timed out */
+    timedOut?: boolean;
+    /** Whether secrets were cleared (only on INVALID_REFRESH) */
+    secretsCleared?: boolean;
+    /** Reason for not attempting (if applicable) */
+    reason?: string;
+}
+
+/**
+ * Info about the current refresh schedule.
+ */
+export interface RefreshScheduleInfo {
+    /** Whether a refresh is scheduled */
+    scheduled: boolean;
+    /** Time until next refresh in milliseconds */
+    nextRefreshInMs?: number;
+}
+
+/**
+ * Plan 104: Near-expiry threshold in milliseconds.
+ * Sessions within this window are treated as "expired_refreshable" and
+ * should trigger proactive refresh on activation.
+ */
+const NEAR_EXPIRY_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+
+/**
+ * Plan 104: Activation refresh time budget in milliseconds.
+ * Refresh attempts during activation must complete within this budget.
+ */
+const ACTIVATION_REFRESH_BUDGET_MS = 2000; // 2 seconds
+
+/**
+ * Plan 104: Minimum interval between refresh attempts after failure (throttling).
+ */
+const REFRESH_THROTTLE_INTERVAL_MS = 30 * 1000; // 30 seconds
 
 /**
  * Interface for auth client operations.
@@ -110,6 +205,11 @@ export class MockAuthClient implements IAuthClient {
  * Authentication manager for Flowbaby Cloud.
  *
  * Handles OAuth flow, token storage, and session state.
+ *
+ * Plan 104 Enhancements:
+ * - getAuthState(): Side-effect-free auth state query
+ * - requestRefresh(): Coordinator-based refresh with singleflight + throttling
+ * - activationRefresh(): Bounded activation-time refresh (2s budget)
  */
 export class FlowbabyCloudAuth implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
@@ -129,6 +229,12 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
     /** Flag to prevent concurrent refresh attempts */
     private isRefreshing = false;
 
+    // Plan 104: Refresh coordinator state
+    /** Promise for the currently in-flight refresh (singleflight) */
+    private inFlightRefresh?: Promise<RefreshResult>;
+    /** Timestamp of last failed refresh attempt (for throttling) */
+    private lastRefreshFailureAt?: number;
+
     constructor(
         private readonly secretStorage: vscode.SecretStorage,
         private readonly authClient: IAuthClient,
@@ -144,6 +250,11 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
 
     /**
      * Check if the user is currently authenticated.
+     * 
+     * ⚠️ WARNING: This method has side effects (calls logout on expiry).
+     * For side-effect-free state queries, use getAuthState() instead.
+     * 
+     * @deprecated Use getAuthState() for readiness checks (Plan 104).
      */
     async isAuthenticated(): Promise<boolean> {
         const token = await this.getSessionToken();
@@ -163,6 +274,282 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
         }
 
         return true;
+    }
+
+    // =========================================================================
+    // Plan 104: Side-Effect-Free Auth State Query
+    // =========================================================================
+
+    /**
+     * Get the current auth state WITHOUT any side effects.
+     * 
+     * This method is safe to call from readiness polling - it will NEVER:
+     * - Clear secrets
+     * - Log the user out
+     * - Trigger a refresh attempt
+     * 
+     * @returns AuthStateInfo with state and metadata
+     * @see Plan 104 Milestone 1
+     */
+    async getAuthState(): Promise<AuthStateInfo> {
+        // Defensive check for test environments where secretStorage may be undefined
+        if (!this.secretStorage) {
+            return {
+                state: 'logged_out',
+                refreshTokenPresent: false,
+            };
+        }
+
+        const refreshToken = await this.secretStorage.get(SECRET_KEYS.REFRESH_TOKEN);
+        const sessionToken = await this.secretStorage.get(SECRET_KEYS.SESSION_TOKEN);
+        const expiresAtStr = await this.secretStorage.get(SECRET_KEYS.SESSION_EXPIRES_AT);
+        const hasRefreshToken = !!refreshToken;
+
+        // Check if refresh is in progress
+        if (this.inFlightRefresh) {
+            return {
+                state: 'refresh_in_progress',
+                refreshTokenPresent: hasRefreshToken,
+                expiresAt: expiresAtStr,
+            };
+        }
+
+        // No session token at all
+        if (!sessionToken || !expiresAtStr) {
+            // Have refresh token = can refresh to get new session
+            if (hasRefreshToken) {
+                return {
+                    state: 'expired_refreshable',
+                    refreshTokenPresent: true,
+                };
+            }
+            // No tokens at all = logged out
+            return {
+                state: 'logged_out',
+                refreshTokenPresent: false,
+            };
+        }
+
+        // Have session token - check if expired
+        const expiryDate = new Date(expiresAtStr);
+        const now = new Date();
+        const remainingTtlMs = expiryDate.getTime() - now.getTime();
+
+        // Already expired or within near-expiry window
+        if (remainingTtlMs <= NEAR_EXPIRY_THRESHOLD_MS) {
+            // Can refresh if we have refresh token
+            if (hasRefreshToken) {
+                return {
+                    state: 'expired_refreshable',
+                    refreshTokenPresent: true,
+                    remainingTtlMs: Math.max(0, remainingTtlMs),
+                    expiresAt: expiresAtStr,
+                };
+            }
+            // Expired and can't refresh = need login
+            return {
+                state: 'login_required',
+                refreshTokenPresent: false,
+                remainingTtlMs: Math.max(0, remainingTtlMs),
+                expiresAt: expiresAtStr,
+            };
+        }
+
+        // Valid session (not expired, not near expiry)
+        return {
+            state: 'valid',
+            refreshTokenPresent: hasRefreshToken,
+            remainingTtlMs,
+            expiresAt: expiresAtStr,
+        };
+    }
+
+    // =========================================================================
+    // Plan 104: Refresh Coordinator (Singleflight + Throttling)
+    // =========================================================================
+
+    /**
+     * Request a session refresh via the coordinator.
+     * 
+     * This method enforces:
+     * - Singleflight: Only one refresh attempt at a time
+     * - Throttling: Minimum interval between failed attempts
+     * 
+     * @returns RefreshResult indicating success/failure/throttled
+     * @see Plan 104 Milestone 2
+     */
+    async requestRefresh(): Promise<RefreshResult> {
+        // If already refreshing, return the existing promise (singleflight)
+        if (this.inFlightRefresh) {
+            this.log('Refresh already in progress, joining existing request (singleflight)');
+            return this.inFlightRefresh;
+        }
+
+        // Check throttling
+        if (this.lastRefreshFailureAt) {
+            const timeSinceFailure = Date.now() - this.lastRefreshFailureAt;
+            if (timeSinceFailure < REFRESH_THROTTLE_INTERVAL_MS) {
+                this.log(`Refresh throttled: ${Math.round((REFRESH_THROTTLE_INTERVAL_MS - timeSinceFailure) / 1000)}s until next attempt`);
+                return { success: false, throttled: true };
+            }
+        }
+
+        // Start the refresh
+        this.inFlightRefresh = this.executeRefresh();
+
+        try {
+            return await this.inFlightRefresh;
+        } finally {
+            this.inFlightRefresh = undefined;
+        }
+    }
+
+    /**
+     * Execute the actual refresh operation.
+     * This is called by requestRefresh() and handles the network call.
+     */
+    private async executeRefresh(): Promise<RefreshResult> {
+        const refreshToken = await this.secretStorage.get(SECRET_KEYS.REFRESH_TOKEN);
+        if (!refreshToken) {
+            this.log('No refresh token available for refresh');
+            return { success: false, error: new Error('No refresh token') };
+        }
+
+        this.isRefreshing = true;
+        this.log('Executing session refresh via coordinator');
+
+        try {
+            const response = await this.authClient.refreshSession(refreshToken);
+
+            // Plan 098: Fail closed if response is not extension variant
+            if (!isExtensionRefreshResponse(response)) {
+                this.log('FAIL CLOSED: Received web refresh response instead of extension response.');
+                await this.logout();
+                return { success: false, error: new Error('Invalid response format') };
+            }
+
+            await this.storeExtensionSession(response);
+            this.log('Session refreshed successfully via coordinator');
+            this._onDidChangeAuthState.fire({ isAuthenticated: true, tier: response.tier });
+
+            // Clear failure timestamp on success
+            this.lastRefreshFailureAt = undefined;
+
+            return { success: true };
+        } catch (error) {
+            this.log(`Session refresh failed: ${error}`);
+            this.lastRefreshFailureAt = Date.now();
+
+            // Check if refresh token is invalid (non-recoverable)
+            const isInvalidRefresh = error instanceof FlowbabyCloudError && error.code === 'INVALID_REFRESH';
+            const errorWithCode = error as { code?: string };
+            const isInvalidRefreshCode = errorWithCode.code === 'INVALID_REFRESH';
+
+            if (isInvalidRefresh || isInvalidRefreshCode) {
+                this.log('Refresh token is invalid, clearing stored credentials (fail-closed)');
+                await this.logout();
+                return { success: false, error: error instanceof Error ? error : new Error(String(error)) };
+            }
+
+            // Transient error - do NOT clear secrets
+            return { success: false, error: error instanceof Error ? error : new Error(String(error)) };
+        } finally {
+            this.isRefreshing = false;
+        }
+    }
+
+    // =========================================================================
+    // Plan 104: Bounded Activation-Time Refresh
+    // =========================================================================
+
+    /**
+     * Attempt activation-time refresh with a strict time budget.
+     * 
+     * This method is designed to be called during extension activation to:
+     * - Restore refresh scheduling for existing sessions
+     * - Attempt refresh if session is expired or near-expiry
+     * - Never block activation beyond the time budget
+     * 
+     * @returns ActivationRefreshResult with attempt outcome
+     * @see Plan 104 Milestone 3
+     */
+    async activationRefresh(): Promise<ActivationRefreshResult> {
+        const authState = await this.getAuthState();
+
+        // No-op if logged out
+        if (authState.state === 'logged_out') {
+            return { attempted: false, reason: 'User is logged out' };
+        }
+
+        // If session is valid, just ensure refresh is scheduled
+        if (authState.state === 'valid') {
+            // Defensive check for test environments where secretStorage may be undefined
+            if (this.secretStorage) {
+                const expiresAt = await this.secretStorage.get(SECRET_KEYS.SESSION_EXPIRES_AT);
+                if (expiresAt) {
+                    this.scheduleRefresh(expiresAt);
+                }
+            }
+            return { attempted: false, reason: 'Session is valid, scheduled refresh' };
+        }
+
+        // If already refreshing, don't start another
+        if (authState.state === 'refresh_in_progress') {
+            return { attempted: false, reason: 'Refresh already in progress' };
+        }
+
+        // If login_required (no refresh token), nothing to do
+        if (authState.state === 'login_required') {
+            return { attempted: false, reason: 'No refresh token available' };
+        }
+
+        // Session is expired_refreshable - attempt bounded refresh
+        this.log(`Activation refresh: session ${authState.remainingTtlMs !== undefined ? `expires in ${Math.round(authState.remainingTtlMs / 1000)}s` : 'is expired'}`);
+
+        // Create a promise that resolves after the timeout
+        const timeoutPromise = new Promise<RefreshResult>(resolve => {
+            setTimeout(() => {
+                resolve({ success: false, error: new Error('Timeout') });
+            }, ACTIVATION_REFRESH_BUDGET_MS);
+        });
+
+        // Race the refresh against the timeout
+        const refreshPromise = this.requestRefresh();
+        const result = await Promise.race([refreshPromise, timeoutPromise]);
+
+        if (result.error?.message === 'Timeout') {
+            this.log('Activation refresh timed out (2s budget exceeded), continuing activation');
+            return {
+                attempted: true,
+                success: false,
+                timedOut: true,
+                secretsCleared: false,
+            };
+        }
+
+        return {
+            attempted: true,
+            success: result.success,
+            timedOut: false,
+            secretsCleared: !result.success && !(await this.secretStorage.get(SECRET_KEYS.REFRESH_TOKEN)),
+        };
+    }
+
+    /**
+     * Get information about the current refresh schedule.
+     * 
+     * @returns RefreshScheduleInfo with schedule details
+     * @see Plan 104 Milestone 4
+     */
+    getRefreshScheduleInfo(): RefreshScheduleInfo {
+        if (!this.refreshTimer) {
+            return { scheduled: false };
+        }
+
+        // Note: We can't easily get the remaining time from a setTimeout,
+        // so we return scheduled: true but no exact time.
+        // The actual scheduling logic uses stored expiresAt.
+        return { scheduled: true };
     }
 
     /**
@@ -462,6 +849,9 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
      * Check if session needs refresh and attempt it if so.
      * Call this on extension activation to handle sessions that may have
      * expired or be close to expiry while VS Code was closed.
+     * 
+     * Plan 104: Updated to use actual stored expiry instead of hardcoded 24h TTL.
+     * Uses NEAR_EXPIRY_THRESHOLD_MS (2 minutes) as the threshold for "near expiry".
      */
     async checkAndRefreshIfNeeded(): Promise<void> {
         const expiresAt = await this.secretStorage.get(SECRET_KEYS.SESSION_EXPIRES_AT);
@@ -469,30 +859,27 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
             return;
         }
 
+        const refreshToken = await this.secretStorage.get(SECRET_KEYS.REFRESH_TOKEN);
+        if (!refreshToken) {
+            this.log('No refresh token available, skipping activation refresh check');
+            return;
+        }
+
         const expiryDate = new Date(expiresAt);
         const now = new Date();
         const remainingMs = expiryDate.getTime() - now.getTime();
 
-        // If already expired, try to refresh
-        if (remainingMs <= 0) {
-            this.log('Session has expired, attempting refresh');
-            const refreshed = await this.tryRefreshSession();
-            if (!refreshed) {
-                this.log('Could not refresh expired session, user will need to re-authenticate');
+        // If already expired or within near-expiry window, try to refresh
+        if (remainingMs <= NEAR_EXPIRY_THRESHOLD_MS) {
+            this.log(`Session ${remainingMs <= 0 ? 'has expired' : `expires in ${Math.round(remainingMs / 1000)}s (near expiry)`}, attempting refresh`);
+            const result = await this.requestRefresh();
+            if (!result.success && !result.throttled) {
+                this.log('Could not refresh session, user may need to re-authenticate');
             }
             return;
         }
 
-        // If close to expiry (within threshold), refresh proactively
-        const totalTtlMs = 24 * 60 * 60 * 1000; // Assume 24h TTL for threshold calculation
-        const thresholdMs = totalTtlMs * SESSION_REFRESH.REFRESH_THRESHOLD_FRACTION;
-        if (remainingMs < thresholdMs) {
-            this.log('Session close to expiry, refreshing proactively');
-            await this.tryRefreshSession();
-            return;
-        }
-
-        // Schedule refresh for later
+        // Session is still valid - schedule refresh for later
         this.scheduleRefresh(expiresAt);
     }
 

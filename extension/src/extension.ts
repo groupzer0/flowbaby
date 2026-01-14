@@ -315,6 +315,41 @@ export async function activate(_context: vscode.ExtensionContext) {
         );
         debugLog('Plan 090: UsageMeter initialized with Cloud dependencies');
 
+        // Plan 104: Attempt bounded activation refresh before first readiness evaluation
+        // This ensures session is refreshed (if needed) before readiness is published,
+        // preventing unnecessary "logged out" flickers on VS Code restart.
+        // The 2-second budget ensures activation isn't blocked by slow refresh.
+        (async () => {
+            // Milestone 6: One-time activation diagnostics log
+            const preState = await cloudAuth.getAuthState();
+            debugLog('Plan 104: Activation auth state check', {
+                state: preState.state,
+                refreshTokenPresent: preState.refreshTokenPresent,
+                remainingTtlMs: preState.remainingTtlMs,
+                expiresAt: preState.expiresAt,
+            });
+
+            const result = await cloudAuth.activationRefresh();
+            debugLog('Plan 104: Activation refresh completed', {
+                attempted: result.attempted,
+                success: result.success,
+                timedOut: result.timedOut,
+                reason: result.reason,
+            });
+
+            // Log post-refresh state if refresh was attempted
+            if (result.attempted) {
+                const postState = await cloudAuth.getAuthState();
+                debugLog('Plan 104: Post-refresh auth state', {
+                    state: postState.state,
+                    remainingTtlMs: postState.remainingTtlMs,
+                });
+            }
+        })().catch((err) => {
+            // activationRefresh should never throw, but log if it does
+            debugLog('Plan 104: Activation refresh error (unexpected)', { error: String(err) });
+        });
+
         // Plan 087: Initialize Cloud Readiness Service
         // This provides unified readiness state (auth/vend/bridge) and throttled error display.
         // Note: bridgeChecker is undefined during bootstrap - will be wired after daemon init.

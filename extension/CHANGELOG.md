@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.7.2] - 2026-01-14
+
+### Fixed
+
+- **Cloud Auth Session Persistence (Plan 104)**: Fixed unexpected logouts after VS Code restart or idle periods by improving session refresh handling:
+  - **Side-Effect-Free Auth State Query**: New `getAuthState()` method allows readiness evaluation without triggering logout on expired tokens
+  - **Bounded Activation Refresh**: On startup, attempts session refresh within a 2-second budget to avoid blocking activation
+  - **TTL-Aware Refresh Threshold**: Sessions within 2 minutes of expiry are now proactively refreshed (was 24 hours)
+  - **Refresh Coordinator**: Singleflight pattern prevents concurrent refresh requests; 30-second throttling after failures
+  - **Fail-Closed Semantics**: Invalid refresh tokens (revoked/reused) immediately log out the user rather than retrying
+  - **Activation Diagnostics**: One-time startup log captures session state, remaining TTL, and refresh outcome for debugging
+
 ## [0.7.1] - 2026-01-13
 
 ### Fixed

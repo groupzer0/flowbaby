@@ -20,12 +20,18 @@ export * from './types';
 export { FlowbabyCloudClient, getCloudClient, resetCloudClient } from './client';
 
 // Re-export auth module (M2)
+// Plan 104: Added AuthState, AuthStateInfo, RefreshResult, ActivationRefreshResult, RefreshScheduleInfo
 export {
     FlowbabyCloudAuth,
     MockAuthClient,
     createFlowbabyCloudAuth,
     type IAuthClient,
     type AuthStateChangeEvent,
+    type AuthState,
+    type AuthStateInfo,
+    type RefreshResult,
+    type ActivationRefreshResult,
+    type RefreshScheduleInfo,
 } from './auth';
 
 // Re-export commands (M2)

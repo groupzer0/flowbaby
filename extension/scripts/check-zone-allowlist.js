@@ -43,7 +43,22 @@ try {
 }
 
 // Get the preferredZone config
-const preferredZoneConfig = packageJson?.contributes?.configuration?.properties?.['flowbaby.cloud.preferredZone'];
+// Handle both object and array formats for contributes.configuration
+let preferredZoneConfig;
+const configSections = packageJson?.contributes?.configuration;
+if (Array.isArray(configSections)) {
+    // Array format: iterate through sections to find the property
+    for (const section of configSections) {
+        if (section?.properties?.['flowbaby.cloud.preferredZone']) {
+            preferredZoneConfig = section.properties['flowbaby.cloud.preferredZone'];
+            break;
+        }
+    }
+} else if (configSections?.properties) {
+    // Object format: direct access
+    preferredZoneConfig = configSections.properties['flowbaby.cloud.preferredZone'];
+}
+
 if (!preferredZoneConfig) {
     console.error('ERROR: flowbaby.cloud.preferredZone not found in package.json');
     process.exit(1);

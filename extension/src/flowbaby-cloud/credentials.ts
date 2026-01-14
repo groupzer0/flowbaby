@@ -266,10 +266,16 @@ export class FlowbabyCloudCredentials implements vscode.Disposable {
     /**
      * Internal method that performs the actual credential refresh.
      * Called by refreshCredentials() which wraps it with single-flight guard.
+     * 
+     * Plan 104: Uses getAuthState() instead of isAuthenticated() to avoid
+     * side effects (logout/secret clearing) when session is expired but
+     * refresh token exists. The refresh coordinator handles token refresh.
      */
     private async doRefreshCredentials(): Promise<CachedCredentials> {
-        // Ensure authenticated
-        if (!(await this.auth.isAuthenticated())) {
+        // Plan 104: Use side-effect-free auth state check
+        // isAuthenticated() would log out on expiry even when refresh token exists
+        const authState = await this.auth.getAuthState();
+        if (authState.state === 'logged_out' || authState.state === 'login_required') {
             throw new FlowbabyCloudError('NOT_AUTHENTICATED', 'Must be logged in to vend credentials');
         }
 

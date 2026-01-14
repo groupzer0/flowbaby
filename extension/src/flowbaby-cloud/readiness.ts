@@ -19,7 +19,7 @@
  */
 
 import * as vscode from 'vscode';
-import { FlowbabyCloudAuth } from './auth';
+import { FlowbabyCloudAuth, AuthState } from './auth';
 import { FlowbabyCloudCredentials } from './credentials';
 import { mapCloudErrorToUX, CloudErrorUX, CLOUD_ERROR_COMMANDS } from './errorMapping';
 import { FlowbabyCloudError } from './types';
@@ -353,15 +353,24 @@ export class CloudReadinessService implements vscode.Disposable {
     // =========================================================================
 
     private async evaluateAuth(): Promise<AuthReadinessState> {
-        try {
-            const isAuth = await this.auth.isAuthenticated();
-            return isAuth ? 'authenticated' : 'not_authenticated';
-        } catch (error) {
-            if (error instanceof FlowbabyCloudError && 
-                (error.code === 'SESSION_EXPIRED' || error.code === 'SESSION_INVALID')) {
+        // Plan 104: Use getAuthState() for side-effect-free auth evaluation.
+        // Unlike isAuthenticated(), this NEVER clears secrets or triggers logout.
+        const stateInfo = await this.auth.getAuthState();
+        
+        switch (stateInfo.state) {
+            case 'valid':
+            case 'refresh_in_progress':
+                return 'authenticated';
+            case 'expired_refreshable':
+                // Session expired but refresh token available - consider authenticated
+                // since refresh can happen in background
+                return 'authenticated';
+            case 'login_required':
+                // Session expired and no refresh possible - session_expired state
                 return 'session_expired';
-            }
-            return 'not_authenticated';
+            case 'logged_out':
+            default:
+                return 'not_authenticated';
         }
     }
 
