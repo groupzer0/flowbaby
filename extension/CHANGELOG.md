@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.1] - 2026-01-13
 
+### Fixed
+
+- **Configured Python Adoption Marker (Plan 103)**: Prevent unexpected `.flowbaby` backups when using a configured Python interpreter by ensuring the embedding schema marker is written during adoption.
+
 ### Changed
 
 - **Settings UX Reorganization (Plan 102)**: Flowbaby settings are now organized into two groups for clarity:

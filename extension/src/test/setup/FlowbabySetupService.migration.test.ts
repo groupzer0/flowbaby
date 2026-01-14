@@ -623,4 +623,50 @@ suite('Plan 101: Embedding Schema Migration', () => {
             assert.ok(fs.existsSync(markerPath), 'Marker file should exist');
         });
     });
+
+    suite('initializeWorkspace() - Configured Python Adoption (Plan 103)', () => {
+        test('writes schema marker when adopting configured Python (prevents false pre-upgrade detection)', async () => {
+            mock({
+                [testWorkspacePath]: {}
+            });
+
+            const configStub = sandbox.stub().returns('/mock/python');
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: configStub
+            } as any);
+
+            (vscode.window.showInformationMessage as any).resolves('Use Configured Python');
+
+            const service = new FlowbabySetupService(
+                mockContext,
+                testWorkspacePath,
+                outputChannel,
+                undefined,
+                undefined,
+                undefined,
+                stopDaemonStub
+            );
+
+            sandbox.stub(service as any, 'getSystemPythonCommand').returns('python');
+            sandbox.stub(service, 'computeRequirementsHash').resolves('abc123');
+            sandbox.stub(service, 'verifyEnvironment').resolves(true);
+
+            await service.initializeWorkspace();
+
+            const markerPath = path.join(testWorkspacePath, '.flowbaby', 'system', 'EMBEDDING_SCHEMA_VERSION');
+            assert.ok(fs.existsSync(markerPath), 'Marker file should exist after configured-Python adoption');
+            assert.strictEqual(fs.readFileSync(markerPath, 'utf8'), String(CURRENT_EMBEDDING_SCHEMA));
+
+            const isPreUpgrade = await service.isPreUpgradeWorkspace();
+            assert.strictEqual(isPreUpgrade, false);
+
+            const migrationResult = await service.checkPreUpgradeMigration();
+            assert.strictEqual(migrationResult.action, 'none');
+            assert.strictEqual(migrationResult.requiresFreshInit, false);
+
+            const children = fs.readdirSync(testWorkspacePath);
+            const backupFolders = children.filter(name => name.startsWith('.flowbaby-pre-0.7.0-backup-'));
+            assert.strictEqual(backupFolders.length, 0, 'No backup folder should be created after configured-Python adoption');
+        });
+    });
 });

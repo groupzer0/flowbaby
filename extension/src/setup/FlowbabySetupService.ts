@@ -231,6 +231,11 @@ export class FlowbabySetupService {
                     createdAt: new Date().toISOString(),
                     platform: process.platform
                 });
+
+                // Plan 103: configured-Python adoption must also write the embedding schema marker.
+                // The marker indicates post-0.7.0 embedding format and must not be coupled to dependency health.
+                await this.writeEmbeddingSchemaMarker();
+
                 const verified = await this.verifyEnvironment();
                 if (verified) {
                     await this.setVerified(true);
