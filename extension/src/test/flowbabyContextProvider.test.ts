@@ -25,6 +25,11 @@ suite('FlowbabyContextProvider Test Suite', () => {
 
     setup(() => {
         sandbox = sinon.createSandbox();
+
+		// Default config lookup for any codepaths that read VS Code settings.
+		sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+			get: (_key: string, defaultValue?: unknown) => defaultValue
+		} as unknown as vscode.WorkspaceConfiguration);
         
         // Mock output channel
         outputChannel = {
@@ -54,31 +59,28 @@ suite('FlowbabyContextProvider Test Suite', () => {
     function createProvider(config: {
         maxConcurrentRequests?: number;
         rateLimitPerMinute?: number;
+		maxQueueSize?: number;
     } = {}, isVerified: boolean = true): FlowbabyContextProvider {
-        const mockConfig = {
-            get: (key: string, defaultValue?: any) => {
-                if (key === 'maxConcurrentRequests') {
-                    return config.maxConcurrentRequests !== undefined 
-                        ? config.maxConcurrentRequests 
-                        : defaultValue;
-                }
-                if (key === 'rateLimitPerMinute') {
-                    return config.rateLimitPerMinute !== undefined 
-                        ? config.rateLimitPerMinute 
-                        : defaultValue;
-                }
-                return defaultValue;
-            }
-        };
-
-        sandbox.stub(vscode.workspace, 'getConfiguration')
-            .returns(mockConfig as any);
-
         const mockSetupService = {
             isVerified: isVerified
         } as unknown as FlowbabySetupService;
 
-        return new FlowbabyContextProvider(mockClient as any, outputChannel, mockSetupService);
+		const provider = new FlowbabyContextProvider(mockClient as any, outputChannel, mockSetupService);
+
+		// Plan 102: provider config is now hardcoded (not configurable). For unit tests,
+		// override the private config to exercise concurrency/rate-limit behaviors.
+		if (
+			config.maxConcurrentRequests !== undefined ||
+			config.rateLimitPerMinute !== undefined ||
+			config.maxQueueSize !== undefined
+		) {
+			(provider as any).config = {
+				...(provider as any).config,
+				...config
+			};
+		}
+
+		return provider;
     }
 
     /**
@@ -116,53 +118,21 @@ suite('FlowbabyContextProvider Test Suite', () => {
             const provider = createProvider();
             const status = provider.getStatus();
 
-            assert.strictEqual(status.maxConcurrent, 2, 'Default maxConcurrent should be 2');
-            assert.strictEqual(status.rateLimit, 10, 'Default rateLimit should be 10');
+            // Plan 102: hardcoded architectural limits
+            assert.strictEqual(status.maxConcurrent, 5, 'Default maxConcurrent should be 5');
+            assert.strictEqual(status.rateLimit, 30, 'Default rateLimit should be 30');
         });
 
-        test('Respects custom configuration values within safe bounds', () => {
-            const provider = createProvider({
-                maxConcurrentRequests: 3,
-                rateLimitPerMinute: 15
-            });
+        test('Is not configurable via workspace settings (Plan 102)', () => {
+            (vscode.workspace.getConfiguration as sinon.SinonStub).returns({
+                get: (_key: string, _defaultValue?: unknown) => 999
+            } as unknown as vscode.WorkspaceConfiguration);
+
+            const provider = createProvider();
             const status = provider.getStatus();
 
-            assert.strictEqual(status.maxConcurrent, 3);
-            assert.strictEqual(status.rateLimit, 15);
-        });
-
-        test('Clamps maxConcurrentRequests to max 5', () => {
-            const provider = createProvider({
-                maxConcurrentRequests: 10 // Exceeds architectural limit
-            });
-            const status = provider.getStatus();
-
-            assert.strictEqual(status.maxConcurrent, 5, 'Should clamp to architectural max 5');
-            
-            // Verify warning was logged
-            const appendLineCalls = (outputChannel.appendLine as sinon.SinonStub).getCalls();
-            const hasWarning = appendLineCalls.some(call => 
-                call.args[0].includes('WARNING') && 
-                call.args[0].includes('maxConcurrentRequests clamped')
-            );
-            assert.strictEqual(hasWarning, true, 'Should log warning when clamping');
-        });
-
-        test('Clamps rateLimitPerMinute to max 30', () => {
-            const provider = createProvider({
-                rateLimitPerMinute: 50 // Exceeds architectural limit
-            });
-            const status = provider.getStatus();
-
-            assert.strictEqual(status.rateLimit, 30, 'Should clamp to architectural max 30');
-            
-            // Verify warning was logged
-            const appendLineCalls = (outputChannel.appendLine as sinon.SinonStub).getCalls();
-            const hasWarning = appendLineCalls.some(call => 
-                call.args[0].includes('WARNING') && 
-                call.args[0].includes('rateLimitPerMinute clamped')
-            );
-            assert.strictEqual(hasWarning, true, 'Should log warning when clamping');
+            assert.strictEqual(status.maxConcurrent, 5);
+            assert.strictEqual(status.rateLimit, 30);
         });
     });
 
@@ -649,7 +619,7 @@ suite('FlowbabyContextProvider Test Suite', () => {
                         return defaultValue;
                     }
                 };
-                toastSandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+                (vscode.workspace.getConfiguration as sinon.SinonStub).returns(mockConfig as any);
                 
                 const showInfoStub = toastSandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
                 clock = toastSandbox.useFakeTimers();
@@ -699,7 +669,7 @@ suite('FlowbabyContextProvider Test Suite', () => {
                         return defaultValue;
                     }
                 };
-                toastSandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+                (vscode.workspace.getConfiguration as sinon.SinonStub).returns(mockConfig as any);
                 
                 const showInfoStub = toastSandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
                 clock = toastSandbox.useFakeTimers();
@@ -749,7 +719,7 @@ suite('FlowbabyContextProvider Test Suite', () => {
                         return defaultValue;
                     }
                 };
-                toastSandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+                (vscode.workspace.getConfiguration as sinon.SinonStub).returns(mockConfig as any);
                 
                 const showInfoStub = toastSandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
                 clock = toastSandbox.useFakeTimers();
@@ -793,7 +763,7 @@ suite('FlowbabyContextProvider Test Suite', () => {
                 const mockConfig = {
                     get: (key: string, defaultValue?: any) => defaultValue
                 };
-                toastSandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+                (vscode.workspace.getConfiguration as sinon.SinonStub).returns(mockConfig as any);
                 
                 const mockSetupService = { isVerified: true } as unknown as FlowbabySetupService;
                 const provider = new FlowbabyContextProvider(toastMockClient as any, mockOutputChannel, mockSetupService);
@@ -834,7 +804,7 @@ suite('FlowbabyContextProvider Test Suite', () => {
                         return defaultValue;
                     }
                 };
-                toastSandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+                (vscode.workspace.getConfiguration as sinon.SinonStub).returns(mockConfig as any);
                 
                 const showInfoStub = toastSandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
                 clock = toastSandbox.useFakeTimers();
@@ -894,7 +864,7 @@ suite('FlowbabyContextProvider Test Suite', () => {
                         return defaultValue;
                     }
                 };
-                toastSandbox.stub(vscode.workspace, 'getConfiguration').returns(mockConfig as any);
+                (vscode.workspace.getConfiguration as sinon.SinonStub).returns(mockConfig as any);
 
                 const showInfoStub = toastSandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
                 // Avoid fake timers inside VS Code extension host; stub setTimeout to run immediately.

@@ -11,10 +11,16 @@ suite('Plan 087: Cloud readiness wiring (targeted)', () => {
     let sandbox: sinon.SinonSandbox;
     let mockContext: vscode.ExtensionContext;
     let workspaceFoldersStub: sinon.SinonStub;
+    let initializeReadinessServiceStub: sinon.SinonStub;
+    let getReadinessServiceStub: sinon.SinonStub;
+    let resetReadinessServiceStub: sinon.SinonStub;
 
     setup(() => {
         sandbox = sinon.createSandbox();
         __resetRegistrationHelperStateForTests();
+
+        // Activation awaits the Agent Team recommendation prompt; stub to avoid hanging tests.
+        sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
 
         mockContext = {
             subscriptions: [],
@@ -75,6 +81,33 @@ suite('Plan 087: Cloud readiness wiring (targeted)', () => {
                 statusMessage: 'ok',
             },
         });
+
+        // Flowbaby Cloud exports are re-exported via getters from ../flowbaby-cloud.
+        // Stub the underlying readiness module so activation uses deterministic readiness.
+        const readinessMod = require('../flowbaby-cloud/readiness') as typeof import('../flowbaby-cloud/readiness');
+
+        const defaultEmitter = new vscode.EventEmitter<any>();
+        const defaultReadinessService = {
+            onDidChangeReadiness: defaultEmitter.event,
+            evaluateReadiness: sandbox.stub().resolves({
+                auth: 'authenticated',
+                vend: 'not_checked',
+                bridge: 'not_checked',
+                overall: 'ready',
+                evaluatedAt: new Date(),
+            }),
+            needsLogin: sandbox.stub().returns(false),
+            isFullyReady: sandbox.stub().returns(true),
+            getRemediation: sandbox.stub().returns({
+                message: 'ok',
+                primaryAction: { label: 'Check Status', commandId: 'flowbaby.cloud.status' },
+            }),
+            dispose: () => defaultEmitter.dispose(),
+        } as any;
+
+        initializeReadinessServiceStub = sandbox.stub(readinessMod, 'initializeReadinessService').returns(defaultReadinessService);
+        getReadinessServiceStub = sandbox.stub(readinessMod, 'getReadinessService').returns(defaultReadinessService);
+        resetReadinessServiceStub = sandbox.stub(readinessMod, 'resetReadinessService').callsFake(() => undefined);
     });
 
     teardown(async () => {
@@ -89,7 +122,6 @@ suite('Plan 087: Cloud readiness wiring (targeted)', () => {
         const statusBarSetStatus = FlowbabyStatusBar.prototype.setStatus as sinon.SinonStub;
         const showWarning = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
 
-        const readinessEmitter = new vscode.EventEmitter<any>();
         const evaluateReadiness = sandbox.stub().resolves({
             auth: 'authenticated',
             vend: 'failed',
@@ -100,7 +132,7 @@ suite('Plan 087: Cloud readiness wiring (targeted)', () => {
         });
 
         const readinessService = {
-            onDidChangeReadiness: readinessEmitter.event,
+            onDidChangeReadiness: new vscode.EventEmitter<any>().event,
             evaluateReadiness,
             needsLogin: sandbox.stub().returns(false),
             isFullyReady: sandbox.stub().returns(false),
@@ -108,13 +140,12 @@ suite('Plan 087: Cloud readiness wiring (targeted)', () => {
                 message: 'Flowbaby Cloud credentials unavailable. Check Cloud status or retry.',
                 primaryAction: { label: 'Check Status', commandId: 'flowbaby.cloud.status' },
             }),
-            dispose: () => readinessEmitter.dispose(),
+            dispose: () => void 0,
         } as any;
 
-        const readinessMod = require('../flowbaby-cloud/readiness') as typeof import('../flowbaby-cloud/readiness');
-        sandbox.stub(readinessMod, 'initializeReadinessService').returns(readinessService);
-        sandbox.stub(readinessMod, 'getReadinessService').returns(readinessService);
-        sandbox.stub(readinessMod, 'resetReadinessService').callsFake(() => undefined);
+        // Ensure activation/handleInitSuccess uses this targeted readiness service.
+        initializeReadinessServiceStub.returns(readinessService);
+        getReadinessServiceStub.returns(readinessService);
 
         await activate(mockContext);
         await deactivate();
@@ -148,9 +179,8 @@ suite('Plan 087: Cloud readiness wiring (targeted)', () => {
         const statusBarSetStatus = FlowbabyStatusBar.prototype.setStatus as sinon.SinonStub;
         const showWarning = sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
 
-        const readinessEmitter = new vscode.EventEmitter<any>();
         const readinessService = {
-            onDidChangeReadiness: readinessEmitter.event,
+            onDidChangeReadiness: new vscode.EventEmitter<any>().event,
             evaluateReadiness: sandbox.stub().resolves({
                 auth: 'not_authenticated',
                 vend: 'not_attempted',
@@ -164,13 +194,11 @@ suite('Plan 087: Cloud readiness wiring (targeted)', () => {
                 message: 'Login to Flowbaby Cloud to enable memory operations.',
                 primaryAction: { label: 'Login to Cloud', commandId: 'flowbaby.cloud.login' },
             }),
-            dispose: () => readinessEmitter.dispose(),
+            dispose: () => void 0,
         } as any;
 
-        const readinessMod = require('../flowbaby-cloud/readiness') as typeof import('../flowbaby-cloud/readiness');
-        sandbox.stub(readinessMod, 'initializeReadinessService').returns(readinessService);
-        sandbox.stub(readinessMod, 'getReadinessService').returns(readinessService);
-        sandbox.stub(readinessMod, 'resetReadinessService').callsFake(() => undefined);
+        initializeReadinessServiceStub.returns(readinessService);
+        getReadinessServiceStub.returns(readinessService);
 
         await activate(mockContext);
         await deactivate();

@@ -1,4 +1,6 @@
 import * as path from 'path';
+import * as os from 'os';
+import * as fs from 'fs';
 import { runTests } from '@vscode/test-electron';
 
 async function main() {
@@ -15,6 +17,10 @@ async function main() {
 		// This allows workspace configuration updates during testing
 		const testWorkspace = path.resolve(extensionDevelopmentPath, '..');
 
+		// Use an isolated VS Code user data dir so tests can run even if another
+		// VS Code instance is open.
+		const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'flowbaby-vscode-test-user-data-'));
+
 		// Download VS Code, unzip it and run the integration test
 		await runTests({
 			extensionDevelopmentPath,
@@ -22,6 +28,7 @@ async function main() {
 			launchArgs: [
 				testWorkspace, // Open workspace for configuration tests
 				'--disable-extensions', // Disable other extensions during testing
+				`--user-data-dir=${userDataDir}`,
 				'--disable-workspace-trust' // Disable workspace trust dialog
 			]
 		});

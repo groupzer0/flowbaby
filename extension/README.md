@@ -201,12 +201,33 @@ This is Flowbaby's primary mode of operation—often so seamless that developers
 
 ## Configuration
 
+### Core Settings
+
+These settings appear in the primary **Flowbaby** settings group:
+
 | Setting | Description | Default |
 |---------|-------------|---------|
 | `Flowbaby.enabled` | Enable/disable automatic context operations | `true` |
-| `flowbaby.cloud.preferredZone` | Geographic zone: `us`, `eu`, `apac` | Backend default |
+| `flowbaby.cloud.preferredZone` | Geographic zone for Cloud LLM calls: `us`, `eu`, `apac` | Backend default |
+| `Flowbaby.synthesis.modelId` | Copilot synthesis model for memory retrieval | `gpt-5-mini` |
+| `Flowbaby.sessionManagement.enabled` | Group interactions into sessions | `true` |
+| `Flowbaby.debugLogging` | Enable verbose debug output | `false` |
+| `flowbaby.notifications.showIngestionSuccess` | Show toast on successful memory capture | `true` |
+| `flowbaby.showRetrievalNotifications` | Show toast when memories are retrieved | `true` |
 
-Full settings available in VS Code under Extensions → Flowbaby.
+### Advanced Settings
+
+Additional tuning knobs are available under **Flowbaby (Advanced)** in VS Code Settings. These are intended for power users and support workflows. Most users can safely ignore them.
+
+### Hidden-but-Supported Settings
+
+The following settings are intentionally hidden from the Settings UI but remain fully functional when set via `settings.json`:
+
+| Setting | Purpose |
+|---------|---------|
+| `Flowbaby.bridgeMode` | Bridge execution mode (`daemon` or `spawn`) |
+| `Flowbaby.daemonIdleTimeoutMinutes` | Daemon idle timeout (1–60 minutes) |
+| `flowbaby.cloud.apiEndpoint` | Cloud API endpoint override (developer use) |
 
 ---
 

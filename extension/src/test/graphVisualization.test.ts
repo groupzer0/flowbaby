@@ -266,7 +266,16 @@ suite('Graph Visualization Test Suite (Plan 067)', () => {
             assert.ok(fs.existsSync(packageJsonPath), 'package.json should exist');
             
             const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-            const settings = packageJson.contributes?.configuration?.properties;
+            const contributesConfiguration = packageJson.contributes?.configuration;
+            const configurationBlocks = Array.isArray(contributesConfiguration)
+                ? contributesConfiguration
+                : contributesConfiguration
+                    ? [contributesConfiguration]
+                    : [];
+            const settings = Object.assign(
+                {},
+                ...configurationBlocks.map((block: any) => block?.properties ?? {})
+            );
             
             assert.ok(settings, 'Should have configuration properties');
             assert.ok(

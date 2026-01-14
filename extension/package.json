@@ -2,7 +2,7 @@
   "name": "flowbaby",
   "displayName": "Flowbaby",
   "description": "A persistent memory layer for AI coding in VS Code — no drift, no drama.",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "publisher": "Flowbaby",
   "icon": "media/flowbaby-icon-tightcrop.png",
   "engines": {
@@ -357,147 +357,150 @@
         ]
       }
     ],
-    "configuration": {
-      "title": "Flowbaby",
-      "properties": {
-        "Flowbaby.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable/disable automatic memory capture and retrieval"
-        },
-        "Flowbaby.maxContextResults": {
-          "type": "number",
-          "default": 3,
-          "minimum": 1,
-          "maximum": 10,
-          "description": "Maximum number of memory results to retrieve"
-        },
-        "Flowbaby.maxContextTokens": {
-          "type": "number",
-          "default": 32000,
-          "minimum": 100,
-          "maximum": 100000,
-          "description": "Maximum token budget for retrieved context (higher values may increase latency and memory usage; hard-clamped to 100k in the bridge)"
-        },
-        "Flowbaby.searchTopK": {
-          "type": "number",
-          "default": 10,
-          "minimum": 1,
-          "maximum": 100,
-          "description": "Maximum number of candidates to request from the Flowbaby search engine before ranking. Values are normalized so they are never lower than maxContextResults and are hard-clamped to 100 in the bridge."
-        },
-        "Flowbaby.ranking.halfLifeDays": {
-          "type": "number",
-          "default": 7,
-          "minimum": 0.5,
-          "maximum": 90,
-          "markdownDescription": "Half-life (in days) used for recency-aware ranking. Memories older than this value will have their relevance score halved. Leave between 0.5 and 90 days to balance freshness vs. semantic similarity."
-        },
-        "Flowbaby.advancedSearch.wideSearchTopK": {
-          "type": "number",
-          "default": 150,
-          "minimum": 10,
-          "maximum": 500,
-          "markdownDescription": "(Advanced) Maximum number of graph triplets to retrieve during wide graph search. Higher values may improve recall but increase latency. Plan 063: Widen graph search for richer context."
-        },
-        "Flowbaby.advancedSearch.tripletDistancePenalty": {
-          "type": "number",
-          "default": 3,
-          "minimum": 0.1,
-          "maximum": 10,
-          "markdownDescription": "(Advanced) Penalty applied to triplet distance during graph search ranking. Lower values favor closer triplets; higher values relax distance requirements. Plan 063: Tune for better recall."
-        },
-        "Flowbaby.pythonPath": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Path to Python interpreter. Leave empty for auto-detection (uses `.flowbaby/venv` if present, otherwise system Python). Set an explicit path to override auto-detection."
-        },
-        "Flowbaby.logLevel": {
-          "type": "string",
-          "enum": [
-            "error",
-            "warn",
-            "info",
-            "debug"
-          ],
-          "default": "info",
-          "description": "Logging verbosity level"
-        },
-        "Flowbaby.debugLogging": {
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "Enable debug output channel for extension diagnostics. Shows detailed logs for activation, Python bridge communication, setup operations, and status bar events. Use this when troubleshooting issues."
-        },
-        "Flowbaby.bridgeMode": {
-          "type": "string",
-          "enum": [
-            "daemon",
-            "spawn"
-          ],
-          "default": "daemon",
-          "markdownDescription": "Bridge execution mode. **daemon** (default) uses a long-lived Python process for faster requests (~300ms vs ~2-3s). **spawn** uses the legacy per-request process spawn. Use spawn for troubleshooting if daemon mode causes issues."
-        },
-        "Flowbaby.daemonIdleTimeoutMinutes": {
-          "type": "number",
-          "default": 30,
-          "minimum": 1,
-          "maximum": 60,
-          "markdownDescription": "Minutes of inactivity before the bridge daemon exits. Next request will restart it with a small warm-up delay. Lower values save memory; higher values keep the daemon ready. (Plan 061: default increased from 5 to 30 minutes)"
-        },
-        "Flowbaby.sessionManagement.enabled": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "Control whether Flowbaby groups interactions into sessions. When enabled, Flowbaby attaches a session ID to retrieval and ingestion so related chats stay together. Disable to make interactions stateless."
-        },
-        "flowbaby.notifications.showIngestionSuccess": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "Show toast notifications when memory ingestion completes successfully. Error notifications are always shown regardless of this setting."
-        },
-        "flowbaby.showRetrievalNotifications": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "Show a notification when Flowbaby retrieves relevant memories. Disable to suppress retrieval toasts. Plan 067."
-        },
-        "Flowbaby.synthesis.modelId": {
-          "type": "string",
-          "enum": [
-            "gpt-5-mini",
-            "gpt-4o",
-            "gpt-4.1"
-          ],
-          "enumDescriptions": [
-            "GPT-5 mini - Fast, capable, and cost-effective (recommended)",
-            "GPT-4o - High capability, balanced performance",
-            "GPT-4.1 - Latest GPT-4 series model"
-          ],
-          "default": "gpt-5-mini",
-          "markdownDescription": "**Copilot synthesis model** used for Plan 073 memory retrieval. This setting controls which VS Code LM API (Copilot) model synthesizes answers from retrieved graph context.\n\nSynthesis fails with a clear error if the selected model is unavailable (no silent fallback).\n\n**Note**: This curated list is reviewed each release as Copilot model availability evolves."
-        },
-        "flowbaby.cloud.preferredZone": {
-          "type": "string",
-          "enum": [
-            "",
-            "us",
-            "eu",
-            "apac"
-          ],
-          "enumDescriptions": [
-            "Backend default (recommended)",
-            "United States",
-            "Europe",
-            "Asia Pacific"
-          ],
-          "default": "",
-          "markdownDescription": "**Flowbaby Cloud: Preferred geographic zone** for Bedrock LLM calls.\n\nLeave empty to use the backend default (recommended). The backend validates your preference and returns the authoritative zone and region.\n\n**Note**: This setting replaces `preferredRegion`. Values: `us`, `eu`, `apac`."
-        },
-        "flowbaby.cloud.apiEndpoint": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "**Flowbaby Cloud: API endpoint override** (developer/testing only). Leave empty for the built-in default (`api.flowbaby.ai`). Use `api-staging.flowbaby.ai` for staging environment."
+    "configuration": [
+      {
+        "title": "Flowbaby",
+        "order": 1,
+        "properties": {
+          "Flowbaby.enabled": {
+            "type": "boolean",
+            "default": true,
+            "order": 1,
+            "description": "Enable/disable automatic memory capture and retrieval"
+          },
+          "flowbaby.cloud.preferredZone": {
+            "type": "string",
+            "enum": [
+              "",
+              "us",
+              "eu",
+              "apac"
+            ],
+            "enumDescriptions": [
+              "Backend default (recommended)",
+              "United States",
+              "Europe",
+              "Asia Pacific"
+            ],
+            "default": "",
+            "order": 2,
+            "markdownDescription": "**Flowbaby Cloud: Preferred geographic zone** for Bedrock LLM calls.\n\nLeave empty to use the backend default (recommended). The backend validates your preference and returns the authoritative zone and region.\n\n**Note**: Values: `us`, `eu`, `apac`."
+          },
+          "Flowbaby.synthesis.modelId": {
+            "type": "string",
+            "enum": [
+              "gpt-5-mini",
+              "gpt-4o",
+              "gpt-4.1"
+            ],
+            "enumDescriptions": [
+              "GPT-5 mini - Fast, capable, and cost-effective (recommended)",
+              "GPT-4o - High capability, balanced performance",
+              "GPT-4.1 - Latest GPT-4 series model"
+            ],
+            "default": "gpt-5-mini",
+            "order": 3,
+            "markdownDescription": "**Copilot synthesis model** used for memory retrieval. Controls which VS Code LM API (Copilot) model synthesizes answers from retrieved graph context.\n\nSynthesis fails with a clear error if the selected model is unavailable (no silent fallback).\n\n**Note**: This curated list is reviewed each release as Copilot model availability evolves."
+          },
+          "Flowbaby.sessionManagement.enabled": {
+            "type": "boolean",
+            "default": true,
+            "order": 4,
+            "markdownDescription": "Control whether Flowbaby groups interactions into sessions. When enabled, Flowbaby attaches a session ID to retrieval and ingestion so related chats stay together. Disable to make interactions stateless."
+          },
+          "Flowbaby.debugLogging": {
+            "type": "boolean",
+            "default": false,
+            "order": 5,
+            "markdownDescription": "Enable debug output channel for extension diagnostics. Shows detailed logs for activation, Python bridge communication, setup operations, and status bar events. Use this when troubleshooting issues."
+          },
+          "flowbaby.notifications.showIngestionSuccess": {
+            "type": "boolean",
+            "default": true,
+            "order": 6,
+            "markdownDescription": "Show toast notifications when memory ingestion completes successfully. Error notifications are always shown regardless of this setting."
+          },
+          "flowbaby.showRetrievalNotifications": {
+            "type": "boolean",
+            "default": true,
+            "order": 7,
+            "markdownDescription": "Show a notification when Flowbaby retrieves relevant memories. Disable to suppress retrieval toasts."
+          }
+        }
+      },
+      {
+        "title": "Flowbaby (Advanced)",
+        "order": 2,
+        "properties": {
+          "Flowbaby.maxContextResults": {
+            "type": "number",
+            "default": 3,
+            "minimum": 1,
+            "maximum": 10,
+            "order": 1,
+            "markdownDescription": "**Tuning**: Maximum number of memory results to retrieve. Higher values provide more context but may increase response latency."
+          },
+          "Flowbaby.maxContextTokens": {
+            "type": "number",
+            "default": 32000,
+            "minimum": 100,
+            "maximum": 100000,
+            "order": 2,
+            "markdownDescription": "**Tuning**: Maximum token budget for retrieved context. Higher values may increase latency and memory usage. Hard-clamped to 100k in the bridge."
+          },
+          "Flowbaby.searchTopK": {
+            "type": "number",
+            "default": 10,
+            "minimum": 1,
+            "maximum": 100,
+            "order": 3,
+            "markdownDescription": "**Tuning**: Maximum candidates to request from search engine before ranking. Values are normalized to be at least `maxContextResults` and hard-clamped to 100."
+          },
+          "Flowbaby.ranking.halfLifeDays": {
+            "type": "number",
+            "default": 7,
+            "minimum": 0.5,
+            "maximum": 90,
+            "order": 4,
+            "markdownDescription": "**Tuning**: Half-life (in days) for recency-aware ranking. Memories older than this value have their relevance score halved. Range: 0.5–90 days."
+          },
+          "Flowbaby.advancedSearch.wideSearchTopK": {
+            "type": "number",
+            "default": 150,
+            "minimum": 10,
+            "maximum": 500,
+            "order": 5,
+            "markdownDescription": "**Support-only**: Maximum graph triplets to retrieve during wide graph search. Higher values may improve recall but increase latency. Only adjust if advised by support."
+          },
+          "Flowbaby.advancedSearch.tripletDistancePenalty": {
+            "type": "number",
+            "default": 3,
+            "minimum": 0.1,
+            "maximum": 10,
+            "order": 6,
+            "markdownDescription": "**Support-only**: Penalty for triplet distance during graph ranking. Lower values favor closer triplets; higher values relax distance requirements. Only adjust if advised by support."
+          },
+          "Flowbaby.pythonPath": {
+            "type": "string",
+            "default": "",
+            "order": 7,
+            "markdownDescription": "**Power-user**: Path to Python interpreter. Leave empty for auto-detection (uses `.flowbaby/venv` if present, otherwise system Python). Set an explicit path to override."
+          },
+          "Flowbaby.logLevel": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warn",
+              "info",
+              "debug"
+            ],
+            "default": "info",
+            "order": 8,
+            "markdownDescription": "**Support-only**: Logging verbosity level. Only adjust if advised by support for troubleshooting."
+          }
         }
       }
-    }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

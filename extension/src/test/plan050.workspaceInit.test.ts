@@ -15,6 +15,33 @@ suite('Plan 050: Workspace initialization isolation', () => {
         sandbox = sinon.createSandbox();
         __resetRegistrationHelperStateForTests();
 
+        // Activation awaits the Agent Team recommendation prompt; stub to avoid hanging tests.
+        sandbox.stub(vscode.window, 'showInformationMessage').resolves(undefined);
+
+        // Activation/initialization consults Cloud readiness. Make it deterministic for this suite.
+        const readinessEmitter = new vscode.EventEmitter<any>();
+        const readinessService = {
+            onDidChangeReadiness: readinessEmitter.event,
+            evaluateReadiness: sandbox.stub().resolves({
+                auth: 'authenticated',
+                vend: 'not_checked',
+                bridge: 'not_checked',
+                overall: 'ready',
+                evaluatedAt: new Date(),
+            }),
+            needsLogin: sandbox.stub().returns(false),
+            isFullyReady: sandbox.stub().returns(true),
+            getRemediation: sandbox.stub().returns({
+                message: 'ok',
+                primaryAction: { label: 'Check Status', commandId: 'flowbaby.cloud.status' },
+            }),
+            dispose: () => readinessEmitter.dispose(),
+        } as any;
+        const cloudMod = require('../flowbaby-cloud') as typeof import('../flowbaby-cloud');
+        sandbox.stub(cloudMod, 'initializeReadinessService').returns(readinessService);
+        sandbox.stub(cloudMod, 'getReadinessService').returns(readinessService);
+        sandbox.stub(cloudMod, 'resetReadinessService').callsFake(() => undefined);
+
         mockContext = {
             subscriptions: [],
             workspaceState: {} as any,

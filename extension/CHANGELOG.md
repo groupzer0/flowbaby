@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.7.1] - 2026-01-13
+
+### Changed
+
+- **Settings UX Reorganization (Plan 102)**: Flowbaby settings are now organized into two groups for clarity:
+  - **Flowbaby**: Core settings for everyday use (7 settings including enabled, cloud zone, synthesis model, session management, debug logging, and notification toggles)
+  - **Flowbaby (Advanced)**: Tuning knobs for power users and support workflows (retrieval limits, ranking parameters, search tuning, Python path, log level)
+  - Settings are now ordered by importance with explicit `order` fields
+  - Advanced settings include guidance labels ("Tuning", "Support-only", "Power-user") in descriptions
+
+- **Hidden-but-Supported Settings (Plan 102)**: Three settings are now hidden from the Settings UI but remain fully functional when set via `settings.json`:
+  - `Flowbaby.bridgeMode`: Bridge execution mode (`daemon` or `spawn`)
+  - `Flowbaby.daemonIdleTimeoutMinutes`: Daemon idle timeout (1–60 minutes)
+  - `flowbaby.cloud.apiEndpoint`: Cloud API endpoint override (developer use)
+  - This reduces misconfiguration risk while preserving advanced troubleshooting capabilities
+
+- **Centralized Configuration Layer (Plan 102)**: All settings reads now flow through a single TypeScript module (`src/config/flowbabyConfig.ts`) to prevent configuration drift and ensure consistent behavior across the extension.
+
+### Removed
+
+- **Agent Access Configuration (Plan 102)**: The undeclared `Flowbaby.agentAccess.*` configuration surface has been removed. Concurrency and rate limits are now hardcoded architectural constants (max 5 concurrent requests, 5 queue size, 30 requests/minute) per the architecture doc.
+
 ## [0.7.0] - 2026-01-07
 
 ### ⚠️ Breaking Changes

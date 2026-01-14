@@ -19,6 +19,7 @@ import {
     AgentErrorResponse
 } from './types/agentIntegration';
 import { SessionManager } from './sessionManager';
+import { getAgentAccessConfig, shouldShowRetrievalNotifications } from './config/flowbabyConfig';
 
 /**
  * Request queue item with timestamp for rate limiting
@@ -111,28 +112,9 @@ export class FlowbabyContextProvider {
         this.setupService = setupService;
         this.sessionManager = sessionManager;
 
-        // Load configuration with safe upper bounds
-        const vsConfig = vscode.workspace.getConfiguration('Flowbaby.agentAccess');
-        const maxConcurrent = vsConfig.get<number>('maxConcurrentRequests', 2);
-        const rateLimit = vsConfig.get<number>('rateLimitPerMinute', 10);
-
-        this.config = {
-            maxConcurrentRequests: Math.min(maxConcurrent, 5), // Clamp to max 5
-            maxQueueSize: 5,
-            rateLimitPerMinute: Math.min(rateLimit, 30) // Clamp to max 30
-        };
-
-        // Log configuration with warnings if clamped
-        if (maxConcurrent > 5) {
-            this.outputChannel.appendLine(
-                `[WARNING] maxConcurrentRequests clamped from ${maxConcurrent} to 5 (architectural limit)`
-            );
-        }
-        if (rateLimit > 30) {
-            this.outputChannel.appendLine(
-                `[WARNING] rateLimitPerMinute clamped from ${rateLimit} to 30 (architectural limit)`
-            );
-        }
+        // Plan 102: Use centralized config with hardcoded architectural limits
+        // (removed Flowbaby.agentAccess.* configuration reads)
+        this.config = getAgentAccessConfig();
 
         this.outputChannel.appendLine(
             `[FlowbabyContextProvider] Initialized with concurrency=${this.config.maxConcurrentRequests}, ` +
@@ -378,8 +360,8 @@ export class FlowbabyContextProvider {
 
             // Plan 067: Show toast notification for interactive retrieval when enabled
             if (entries.length > 0) {
-                const showNotifications = vscode.workspace.getConfiguration('flowbaby')
-                    .get<boolean>('showRetrievalNotifications', true);
+                // Plan 102: Use centralized config
+                const showNotifications = shouldShowRetrievalNotifications();
 
                 if (showNotifications) {
                     // Dedupe guard: suppress rapid successive toasts (Plan 067)

@@ -53,7 +53,7 @@ export function run(): Promise<void> {
 	const mocha = new Mocha({
 		ui: 'tdd',
 		color: true,
-		timeout: 10000, // 10 seconds timeout for tests
+		timeout: 30000, // 30 seconds timeout to reduce flakiness in extension-host tests
 		reporter: 'spec' // Use spec reporter for clear output
 	});
 

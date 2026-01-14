@@ -218,13 +218,10 @@ suite('FlowbabySetupService Test Suite', () => {
         const verifyMock = createMockProcess(0, JSON.stringify({ status: 'ok', details: {} }));
         spawnStub.returns(verifyMock);
 
-        // Mock showWarningMessage to return undefined (user ignores)
-        (vscode.window.showWarningMessage as sinon.SinonStub).resolves(undefined);
-
         await service.initializeWorkspace();
 
-        assert.ok((vscode.window.showWarningMessage as sinon.SinonStub).calledWith(sinon.match(/updated/)));
-        // Plan 049: Strict enforcement - if user ignores update, environment remains unverified
+        // Plan 050/049: On hash mismatch, initializeWorkspace marks the environment unverified.
+        // User prompting is handled at activation time (init.ts), not here.
         assert.ok((vscode.commands.executeCommand as sinon.SinonStub).calledWith('setContext', 'Flowbaby.environmentVerified', false));
         assert.ok((vscode.commands.executeCommand as sinon.SinonStub).neverCalledWith('setContext', 'Flowbaby.environmentVerified', true));
     });
