@@ -256,22 +256,102 @@ export function getApiBaseUrl(): string {
     return DEFAULT_CONFIG.apiBaseUrl;
 }
 
+// =============================================================================
+// Plan 106: Dynamic OAuth Callback URI for VS Code Variants
+// =============================================================================
+
 /**
- * OAuth callback URI for the extension.
- * Must match the URI handler registration and GitHub OAuth app configuration.
- *
- * Format: vscode://<publisher>.<name>/<path>
- * For this extension: vscode://Flowbaby.flowbaby/auth/callback
+ * Supported URI schemes for OAuth callback.
+ * Only VS Code stable and Insiders are supported in v0.7.2.
+ * 
+ * This is an explicit allowlist — fail-closed for unsupported schemes.
+ * 
+ * @see agent-output/planning/106-oauth-callback-vscode-variants.md
+ */
+export const SUPPORTED_URI_SCHEMES = ['vscode', 'vscode-insiders'] as const;
+export type SupportedUriScheme = typeof SUPPORTED_URI_SCHEMES[number];
+
+/**
+ * Error thrown when OAuth login is attempted from an unsupported editor variant.
+ * Provides actionable guidance to the user.
+ */
+export class UnsupportedUriSchemeError extends Error {
+    public readonly scheme: string;
+
+    constructor(scheme: string) {
+        super(
+            `OAuth login is not supported in this editor (scheme: ${scheme}). ` +
+            `Please use VS Code or VS Code Insiders.`
+        );
+        this.name = 'UnsupportedUriSchemeError';
+        this.scheme = scheme;
+        Object.setPrototypeOf(this, UnsupportedUriSchemeError.prototype);
+    }
+}
+
+/**
+ * Get the OAuth callback URI for the current editor variant.
+ * 
+ * Uses vscode.env.uriScheme to dynamically determine the correct protocol,
+ * and derives the authority from the runtime extension ID.
+ * 
+ * @throws UnsupportedUriSchemeError if the current editor scheme is not allowlisted
+ * @returns The callback URI (e.g., 'vscode://Flowbaby.flowbaby/auth/callback')
+ * 
+ * @see agent-output/planning/106-oauth-callback-vscode-variants.md
+ */
+export function getOAuthCallbackUri(): string {
+    const scheme = vscode.env.uriScheme;
+
+    // Fail-closed: reject unsupported schemes with explicit error
+    if (!SUPPORTED_URI_SCHEMES.includes(scheme as SupportedUriScheme)) {
+        throw new UnsupportedUriSchemeError(scheme);
+    }
+
+    // Plan 106: Derive authority from runtime extension ID via activation context
+    // This avoids hardcoding 'Flowbaby.flowbaby' in extension logic
+    const { getActiveExtensionId } = require('../lifecycle/registrationHelper');
+    const extensionId = getActiveExtensionId();
+    if (!extensionId) {
+        // Fail-closed: cannot build callback URI without extension identity
+        throw new Error('Extension context not available. Cannot determine extension ID for OAuth callback.');
+    }
+
+    return `${scheme}://${extensionId}/auth/callback`;
+}
+
+/**
+ * @deprecated Use getOAuthCallbackUri() instead. Retained for backward compatibility.
+ * 
+ * Legacy constant for OAuth callback URI.
+ * This hardcodes the vscode:// scheme and breaks VS Code Insiders.
+ * 
+ * Plan 106 replaces this with getOAuthCallbackUri() which derives the scheme
+ * from vscode.env.uriScheme at runtime.
  */
 export const OAUTH_CALLBACK_URI = 'vscode://Flowbaby.flowbaby/auth/callback';
 
 /**
- * Verify that the OAuth callback URI matches the extension manifest.
- * This is a development-time check to catch mismatches early.
+ * Verify that the OAuth callback URI matches the expected extension identity.
+ * 
+ * Plan 106: Updated to validate against a dynamically generated URI instead
+ * of comparing to a hardcoded constant. The scheme is now allowed to vary
+ * between 'vscode' and 'vscode-insiders'.
+ * 
+ * @param extensionId The full extension ID (publisher.name format)
+ * @returns true if the current environment's callback URI matches expected pattern
  */
-export function verifyOAuthCallbackUri(publisher: string, name: string): boolean {
-    const expectedUri = `vscode://${publisher}.${name}/auth/callback`;
-    return OAUTH_CALLBACK_URI === expectedUri;
+export function verifyOAuthCallbackUri(extensionId: string): boolean {
+    try {
+        const callbackUri = getOAuthCallbackUri();
+        // Validate that authority matches the expected extension ID
+        const url = new URL(callbackUri);
+        return url.host.toLowerCase() === extensionId.toLowerCase() &&
+               url.pathname === '/auth/callback';
+    } catch {
+        // If getOAuthCallbackUri throws (unsupported scheme), verification fails
+        return false;
+    }
 }
 
 /**

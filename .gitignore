@@ -29,6 +29,7 @@ tutorial/artifacts/*.png
 # Extension build artifacts
 extension/out/
 extension/dist/
+extension/pkg/
 extension/node_modules/
 extension/*.vsix
 extension/*.vsix.sha256

@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **VS Code Insiders OAuth Login (Plan 106)**: OAuth callback now uses runtime URI scheme; fixes login redirect for VS Code Insiders users who were previously redirected to VS Code stable:
+  - **Dynamic Callback URI**: Callback scheme is derived from `vscode.env.uriScheme` at runtime instead of hardcoded `vscode://`
+  - **Runtime Extension ID**: Callback authority is derived from the runtime extension ID to avoid hardcoded identifiers
+  - **Scheme Allowlist**: Only `vscode` and `vscode-insiders` schemes are supported; unsupported editors (Cursor, VSCodium, etc.) receive explicit error guidance
+  - **Fail-Closed UX**: Unsupported schemes fail immediately with actionable user messaging rather than silent fallback
+
 - **Cloud Auth Session Persistence (Plan 104)**: Fixed unexpected logouts after VS Code restart or idle periods by improving session refresh handling:
   - **Side-Effect-Free Auth State Query**: New `getAuthState()` method allows readiness evaluation without triggering logout on expired tokens
   - **Bounded Activation Refresh**: On startup, attempts session refresh within a 2-second budget to avoid blocking activation

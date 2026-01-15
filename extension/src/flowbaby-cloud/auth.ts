@@ -24,7 +24,7 @@
 
 import * as vscode from 'vscode';
 import type { AuthResponse, RefreshResponse, ExtensionAuthResponse, ExtensionRefreshResponse } from './types';
-import { FlowbabyCloudError, SECRET_KEYS, OAUTH_CALLBACK_URI, FLOWBABY_CLOUD_CONFIG, SESSION_REFRESH, isExtensionAuthResponse, isExtensionRefreshResponse } from './types';
+import { FlowbabyCloudError, SECRET_KEYS, getOAuthCallbackUri, UnsupportedUriSchemeError, FLOWBABY_CLOUD_CONFIG, SESSION_REFRESH, isExtensionAuthResponse, isExtensionRefreshResponse } from './types';
 import { FlowbabyCloudClient } from './client';
 
 // =============================================================================
@@ -573,10 +573,26 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
      * Returns when the OAuth flow completes successfully.
      *
      * @throws FlowbabyCloudError if the OAuth flow fails
+     * @throws UnsupportedUriSchemeError if running in an unsupported editor (Plan 106)
      */
     async login(): Promise<void> {
-        // Verify callback URI matches extension ID
-        const extensionId = vscode.extensions.getExtension('Flowbaby.flowbaby')?.id;
+        // Plan 106: Get dynamic callback URI based on current editor variant
+        // This will throw UnsupportedUriSchemeError for non-allowlisted editors
+        let callbackUri: string;
+        try {
+            callbackUri = getOAuthCallbackUri();
+        } catch (error) {
+            if (error instanceof UnsupportedUriSchemeError) {
+                this.log(`OAuth login blocked: ${error.message}`);
+                // Re-throw with user-facing error for UI handling
+                throw error;
+            }
+            throw error;
+        }
+
+        // Plan 106: Verify callback URI authority matches extension ID from activation context
+        const { getActiveExtensionId } = require('../lifecycle/registrationHelper');
+        const extensionId = getActiveExtensionId();
         if (!extensionId) {
             throw new FlowbabyCloudError(
                 'NOT_AUTHENTICATED',
@@ -584,17 +600,17 @@ export class FlowbabyCloudAuth implements vscode.Disposable {
             );
         }
 
-        // Validate callback URI matches expected format
-        const expectedCallbackPrefix = `vscode://${extensionId}/auth/callback`;
-        if (!OAUTH_CALLBACK_URI.toLowerCase().startsWith(`vscode://${extensionId.toLowerCase()}`)) {
-            this.log(`Warning: OAuth callback URI may not match extension ID. Expected prefix: ${expectedCallbackPrefix}, Configured: ${OAUTH_CALLBACK_URI}`);
+        // Plan 106: Validate callback URI authority (scheme is now dynamic)
+        const url = new URL(callbackUri);
+        if (url.host.toLowerCase() !== extensionId.toLowerCase()) {
+            this.log(`Warning: OAuth callback URI authority mismatch. Expected: ${extensionId}, Got: ${url.host}`);
         }
 
-        this.log('Starting OAuth login flow');
+        this.log(`Starting OAuth login flow (scheme: ${vscode.env.uriScheme})`);
 
         // Build the OAuth authorization URL
         const authUrl = new URL(`${FLOWBABY_CLOUD_CONFIG.baseUrl}/auth/login`);
-        authUrl.searchParams.set('redirect_uri', OAUTH_CALLBACK_URI);
+        authUrl.searchParams.set('redirect_uri', callbackUri);
 
         // Open browser for OAuth
         this.log(`Opening OAuth URL: ${authUrl.toString()}`);

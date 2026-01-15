@@ -317,6 +317,18 @@ export function isActive(): boolean {
 }
 
 /**
+ * Get the extension ID from the activation context.
+ * 
+ * Plan 106: Provides a non-hardcoded source for the extension ID.
+ * Returns undefined if no activation context is available.
+ * 
+ * @returns The extension ID (e.g., 'Flowbaby.flowbaby') or undefined
+ */
+export function getActiveExtensionId(): string | undefined {
+    return activeContext?.extension?.id;
+}
+
+/**
  * Return diagnostic details for the currently tracked activation context.
  */
 export function getActiveContextDiagnostics(): {
