@@ -12,6 +12,8 @@ Flowbaby solves memory drift by managing context, not expanding it. It injects a
 
 *(Best experienced with the [Flowbaby Agent Team](https://github.com/groupzer0/vs-code-agents).)*
 
+Flowbaby is currently in Beta and may change in breaking ways as we move towards a stable release.
+
 ## Why This Matters
 
 Context is a scarce, high-value resource. Instead of dumping memory into the agent's working window, Flowbaby:

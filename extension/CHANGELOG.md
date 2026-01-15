@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
-## [0.7.2] - 2026-01-14
+## [0.7.2] - 2026-01-15
+
+### Changed
+
+- **Backup Safety and User Confirmation (Plan 107)**: Pre-upgrade backup now requires explicit user consent and includes hardened detection to eliminate false-positive triggers:
+  - **User Confirmation Modal**: Backup is gated behind an information modal with "Proceed" / "Ignore" actions; closing the modal without choosing aborts the backup (fail-closed semantics)
+  - **Pre-Backup Revalidation**: A second `detectMigrationState()` call occurs after user confirmation to detect race conditions (e.g., marker appearing during modal display)
+  - **Early Marker Write**: Embedding schema marker is now written at the start of environment initialization (before `bridge-env.json`) to prevent cross-window false positives
+  - **Mandatory Forensic Logging**: All backup events log to `console.log` (not `debugLog`) with `[BACKUP-TRIGGER]` prefix for production visibility regardless of debug settings
+  - **Explicit Detection State Model**: `detectMigrationState()` now returns one of three explicit states (`NOT_LEGACY`, `LEGACY_CONFIRMED`, `UNKNOWN_IO_ERROR`) to prevent silent failures from triggering backups
 
 ### Fixed
 

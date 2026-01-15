@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 import { FlowbabyStatusBar, FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
 import { debugLog } from '../outputChannels';
+import { BackupAuditLogger, BackupAuditEventType } from './BackupAuditLogger';
 
 export type WorkspaceHealthStatus = 'FRESH' | 'BROKEN' | 'VALID';
 
@@ -22,17 +23,63 @@ export const EMBEDDING_SCHEMA_VERSION = 'system/EMBEDDING_SCHEMA_VERSION';
 export const CURRENT_EMBEDDING_SCHEMA = 2;
 
 /**
+ * Plan 107 REQ-7: Guard file name (stored in globalStorageUri, workspace-partitioned)
+ * Written before rename, deleted on success, orphan detected on activation.
+ */
+export const BACKUP_GUARD_FILENAME = 'backup-guard.json';
+
+/**
+ * Plan 107: Quiescence timeout for daemon stop before rename (ms)
+ */
+export const QUIESCE_TIMEOUT_MS = 15000;
+
+/**
  * Plan 101: Result of pre-upgrade migration check
  */
 export interface PreUpgradeMigrationResult {
-    /** Action taken: 'none' (no migration needed), 'backup-success', 'backup-failed' */
-    action: 'none' | 'backup-success' | 'backup-failed';
+    /** Action taken: 'none' (no migration needed), 'backup-success', 'backup-failed', 'io-error', 'user-declined', 'revalidation-aborted' */
+    action: 'none' | 'backup-success' | 'backup-failed' | 'io-error' | 'user-declined' | 'revalidation-aborted';
     /** Whether workspace needs fresh initialization after this check */
     requiresFreshInit: boolean;
     /** Path to backup folder if backup was created */
     backupPath?: string;
     /** Error message if backup failed */
     error?: string;
+}
+
+/**
+ * Plan 107: Migration detection state model
+ * 
+ * Every activation must resolve and log exactly one of these states:
+ * - NOT_LEGACY: marker present with current version; no backup needed
+ * - LEGACY_CONFIRMED: marker missing/old in a deterministic way; eligible to prompt for backup
+ * - UNKNOWN_IO_ERROR: any non-ENOENT error when reading marker; must NOT trigger backup
+ */
+export type MigrationDetectionState = 'NOT_LEGACY' | 'LEGACY_CONFIRMED' | 'UNKNOWN_IO_ERROR';
+
+/**
+ * Plan 107: Result of migration state detection
+ */
+export interface MigrationDetectionResult {
+    /** The detected state */
+    state: MigrationDetectionState;
+    /** Whether backup is required (only true for LEGACY_CONFIRMED) */
+    requiresBackup: boolean;
+    /** Human-readable reason for the decision */
+    reason: string;
+    /** Detailed data for forensic logging */
+    data: {
+        flowbabyExists: boolean;
+        bridgeEnvExists: boolean;
+        bridgeEnvOwnership?: 'managed' | 'external';
+        markerPath: string;
+        markerExists?: boolean;
+        markerContent?: string;
+        markerVersion?: number;
+        currentSchemaVersion: number;
+        errorCode?: string;
+        errorMessage?: string;
+    };
 }
 
 /**
@@ -76,6 +123,9 @@ export class FlowbabySetupService {
     private readonly spawnFn: typeof spawn;
     private readonly statusBar?: FlowbabyStatusBar;
     private readonly stopDaemonFn?: () => Promise<void>;
+    private readonly context: vscode.ExtensionContext;
+    private auditLogger: BackupAuditLogger | null = null;
+    private readonly extensionVersion: string;
 
     private _isVerified: boolean = false;
 
@@ -105,6 +155,7 @@ export class FlowbabySetupService {
         statusBar?: FlowbabyStatusBar,
         stopDaemonFn?: () => Promise<void>
     ) {
+        this.context = context;
         this.workspacePath = workspacePath;
         this.outputChannel = outputChannel;
         this.bridgePath = path.join(context.extensionPath, 'bridge');
@@ -112,6 +163,8 @@ export class FlowbabySetupService {
         this.spawnFn = spawnFunction || spawn;
         this.statusBar = statusBar;
         this.stopDaemonFn = stopDaemonFn;
+        // Plan 107: Get extension version for audit logging
+        this.extensionVersion = context.extension?.packageJSON?.version ?? 'unknown';
     }
 
     /**
@@ -222,6 +275,13 @@ export class FlowbabySetupService {
             );
             
             if (adopt === 'Use Configured Python') {
+                // Plan 107 REQ-5: Ensure .flowbaby directory exists and write marker EARLY
+                const cogneeDir = path.join(this.workspacePath, '.flowbaby');
+                if (!this.fs.existsSync(cogneeDir)) {
+                    await fs.promises.mkdir(cogneeDir, { recursive: true });
+                }
+                await this.writeEmbeddingSchemaMarker();
+                
                 // Adopt as external
                 const requirementsHash = await this.computeRequirementsHash();
                 await this.writeBridgeEnv({
@@ -232,9 +292,7 @@ export class FlowbabySetupService {
                     platform: process.platform
                 });
 
-                // Plan 103: configured-Python adoption must also write the embedding schema marker.
-                // The marker indicates post-0.7.0 embedding format and must not be coupled to dependency health.
-                await this.writeEmbeddingSchemaMarker();
+                // Note: Marker already written early per Plan 107 REQ-5
 
                 const verified = await this.verifyEnvironment();
                 if (verified) {
@@ -359,6 +417,11 @@ export class FlowbabySetupService {
                     await fs.promises.mkdir(cogneeDir, { recursive: true });
                 }
 
+                // Plan 107 REQ-5: Write marker EARLY in initialization
+                // This prevents false-positive backup triggers on partial init
+                // If later steps fail, the marker ensures we don't treat the workspace as pre-0.7.0
+                await this.writeEmbeddingSchemaMarker();
+
                 // 3. Create venv in .flowbaby/venv
                 progress.report({ message: "Creating virtual environment..." });
                 this.log('Creating virtual environment in .flowbaby/venv...');
@@ -393,9 +456,7 @@ export class FlowbabySetupService {
 
                 await this.setVerified(true);
 
-                // Plan 101: Write embedding schema marker on successful initialization
-                // This prevents repeated backup prompts on subsequent activations
-                await this.writeEmbeddingSchemaMarker();
+                // Note: Marker already written early per Plan 107 REQ-5
 
                 vscode.window.showInformationMessage('Flowbaby environment setup complete!');
                 debugLog('Environment creation successful', { venvPath });
@@ -448,6 +509,13 @@ export class FlowbabySetupService {
             const venvPath = path.join(this.workspacePath, '.venv');
             
             try {
+                // Plan 107 REQ-5: Ensure .flowbaby directory exists and write marker EARLY
+                const cogneeDir = path.join(this.workspacePath, '.flowbaby');
+                if (!this.fs.existsSync(cogneeDir)) {
+                    await fs.promises.mkdir(cogneeDir, { recursive: true });
+                }
+                await this.writeEmbeddingSchemaMarker();
+
                 // 1. Install dependencies into existing venv
                 progress.report({ message: "Installing dependencies..." });
                 
@@ -481,8 +549,7 @@ export class FlowbabySetupService {
 
                 await this.setVerified(true);
 
-                // Plan 101: Write embedding schema marker on successful initialization
-                await this.writeEmbeddingSchemaMarker();
+                // Note: Marker already written early per Plan 107 REQ-5
 
                 vscode.window.showInformationMessage('Flowbaby installed into existing .venv');
                 debugLog('Environment setup completed using existing .venv', { venvPath });
@@ -683,6 +750,122 @@ export class FlowbabySetupService {
     }
 
     /**
+     * Plan 107: Detect migration state with explicit state model
+     * 
+     * Returns one of three states per Architecture Guardrail 1:
+     * - NOT_LEGACY: marker present/current; no backup needed
+     * - LEGACY_CONFIRMED: marker missing/old deterministically; eligible to prompt
+     * - UNKNOWN_IO_ERROR: any non-ENOENT error; must NOT trigger backup
+     * 
+     * REQ-2: Fail-open on marker read error (non-ENOENT → UNKNOWN_IO_ERROR)
+     * REQ-3: Atomic detection via single-read pattern (no TOCTOU)
+     * 
+     * @returns MigrationDetectionResult with state, reason, and diagnostic data
+     */
+    async detectMigrationState(): Promise<MigrationDetectionResult> {
+        const flowbabyDir = path.join(this.workspacePath, '.flowbaby');
+        const markerPath = path.join(flowbabyDir, EMBEDDING_SCHEMA_VERSION);
+        
+        // Build diagnostic data progressively
+        const data: MigrationDetectionResult['data'] = {
+            flowbabyExists: false,
+            bridgeEnvExists: false,
+            markerPath,
+            currentSchemaVersion: CURRENT_EMBEDDING_SCHEMA
+        };
+
+        // Step 1: Check .flowbaby directory exists
+        if (!this.fs.existsSync(flowbabyDir)) {
+            data.flowbabyExists = false;
+            const result: MigrationDetectionResult = {
+                state: 'NOT_LEGACY',
+                requiresBackup: false,
+                reason: 'No .flowbaby directory (fresh workspace)',
+                data
+            };
+            console.log('[BACKUP-TRIGGER] detectMigrationState', result);
+            return result;
+        }
+        data.flowbabyExists = true;
+
+        // Step 2: Check bridge-env.json exists
+        const bridgeEnv = await this.readBridgeEnv();
+        if (!bridgeEnv) {
+            data.bridgeEnvExists = false;
+            const result: MigrationDetectionResult = {
+                state: 'NOT_LEGACY',
+                requiresBackup: false,
+                reason: 'No bridge-env.json (fresh workspace)',
+                data
+            };
+            console.log('[BACKUP-TRIGGER] detectMigrationState', result);
+            return result;
+        }
+        data.bridgeEnvExists = true;
+        data.bridgeEnvOwnership = bridgeEnv.ownership;
+
+        // Step 3: Single-read attempt for marker (REQ-3: atomic detection)
+        // Do NOT use existsSync + readFile (TOCTOU race)
+        try {
+            const content = await fs.promises.readFile(markerPath, 'utf8');
+            data.markerExists = true;
+            data.markerContent = content.trim();
+            
+            const version = parseInt(content.trim(), 10);
+            data.markerVersion = isNaN(version) ? undefined : version;
+
+            if (!isNaN(version) && version >= CURRENT_EMBEDDING_SCHEMA) {
+                const result: MigrationDetectionResult = {
+                    state: 'NOT_LEGACY',
+                    requiresBackup: false,
+                    reason: `Current schema version (${version})`,
+                    data
+                };
+                console.log('[BACKUP-TRIGGER] detectMigrationState', result);
+                return result;
+            }
+
+            // Old version marker
+            const result: MigrationDetectionResult = {
+                state: 'LEGACY_CONFIRMED',
+                requiresBackup: true,
+                reason: `Older schema version (${version}, current: ${CURRENT_EMBEDDING_SCHEMA})`,
+                data
+            };
+            console.log('[BACKUP-TRIGGER] detectMigrationState', result);
+            return result;
+
+        } catch (error: any) {
+            // REQ-2: Distinguish ENOENT from other errors
+            if (error.code === 'ENOENT') {
+                // Marker file doesn't exist, but bridge-env.json does → pre-0.7.0
+                data.markerExists = false;
+                const result: MigrationDetectionResult = {
+                    state: 'LEGACY_CONFIRMED',
+                    requiresBackup: true,
+                    reason: 'bridge-env.json exists but schema marker missing (pre-0.7.0)',
+                    data
+                };
+                console.log('[BACKUP-TRIGGER] detectMigrationState', result);
+                return result;
+            }
+
+            // Non-ENOENT error → UNKNOWN_IO_ERROR (REQ-2: fail-open for backup)
+            data.errorCode = error.code || 'UNKNOWN';
+            data.errorMessage = error.message || String(error);
+            
+            const result: MigrationDetectionResult = {
+                state: 'UNKNOWN_IO_ERROR',
+                requiresBackup: false, // Critical: do NOT trigger backup
+                reason: `Marker read error (${error.code}): ${error.message}`,
+                data
+            };
+            console.log('[BACKUP-TRIGGER] detectMigrationState UNKNOWN_IO_ERROR', result);
+            return result;
+        }
+    }
+
+    /**
      * Plan 101: Generate a Windows-safe, collision-resistant backup folder name
      * Format: .flowbaby-pre-0.7.0-backup-{YYYYMMDD}T{HHMMSS}-{suffix}
      * 
@@ -711,63 +894,386 @@ export class FlowbabySetupService {
     }
 
     /**
-     * Plan 101: Backup the pre-upgrade .flowbaby folder
+     * Plan 107: Initialize the audit logger for this workspace
+     */
+    private async initAuditLogger(): Promise<void> {
+        if (!this.auditLogger) {
+            try {
+                this.auditLogger = new BackupAuditLogger(this.context);
+                await this.auditLogger.initializeForWorkspace(this.workspacePath);
+            } catch (error) {
+                // Audit logging is best-effort - don't fail if it can't be initialized
+                console.log('[BACKUP-TRIGGER] initAuditLogger: failed to initialize (continuing)', { error: String(error) });
+                this.auditLogger = null;
+            }
+        }
+    }
+
+    /**
+     * Plan 107: Log an audit event (best-effort, never throws)
+     */
+    private async logAuditEvent(type: BackupAuditEventType, data?: Record<string, unknown>): Promise<void> {
+        try {
+            await this.initAuditLogger();
+            if (this.auditLogger) {
+                await this.auditLogger.log({
+                    type,
+                    timestamp: new Date().toISOString(),
+                    windowId: vscode.env.sessionId,
+                    workspacePath: this.workspacePath,
+                    extensionVersion: this.extensionVersion,
+                    data
+                });
+            }
+        } catch (error) {
+            // Audit logging is best-effort - log to console but don't fail
+            console.log('[BACKUP-TRIGGER] logAuditEvent: failed to log event (continuing)', { 
+                type, 
+                error: String(error) 
+            });
+        }
+    }
+
+    /**
+     * Plan 107 REQ-7: Get guard file path (in globalStorageUri, workspace-partitioned)
+     */
+    private getGuardFilePath(): string {
+        const workspaceHash = crypto.createHash('sha256')
+            .update(this.workspacePath)
+            .digest('hex')
+            .substring(0, 12);
+        return path.join(this.context.globalStorageUri.fsPath, 'backup-audit', `backup-guard-${workspaceHash}.json`);
+    }
+
+    /**
+     * Plan 107 REQ-7: Write guard file before rename with rich state (best-effort)
+     */
+    private async writeGuardFile(operationId: string, backupPath: string): Promise<void> {
+        try {
+            const guardPath = this.getGuardFilePath();
+            const guardContent = {
+                operationId,
+                timestamp: new Date().toISOString(),
+                workspacePath: this.workspacePath,
+                extensionVersion: this.extensionVersion,
+                backupPath,
+                status: 'in-progress'
+            };
+            
+            // Ensure directory exists
+            await fs.promises.mkdir(path.dirname(guardPath), { recursive: true });
+            await fs.promises.writeFile(guardPath, JSON.stringify(guardContent, null, 2), 'utf8');
+            
+            console.log('[BACKUP-TRIGGER] writeGuardFile: guard file written', { guardPath });
+            await this.logAuditEvent(BackupAuditEventType.BACKUP_GUARD_FILE_WRITTEN, {
+                guardFilePath: guardPath,
+                operationId
+            });
+        } catch (error) {
+            // Guard file is best-effort - log but don't fail backup
+            console.log('[BACKUP-TRIGGER] writeGuardFile: failed (continuing)', { error: String(error) });
+        }
+    }
+
+    /**
+     * Plan 107 REQ-7: Delete guard file on successful backup (best-effort)
+     */
+    private async deleteGuardFile(): Promise<void> {
+        try {
+            const guardPath = this.getGuardFilePath();
+            await fs.promises.unlink(guardPath);
+            console.log('[BACKUP-TRIGGER] deleteGuardFile: guard file deleted', { guardPath });
+            await this.logAuditEvent(BackupAuditEventType.BACKUP_GUARD_FILE_DELETED, {
+                guardFilePath: guardPath
+            });
+        } catch (error) {
+            // Ignore all errors - guard file deletion is best-effort
+            console.log('[BACKUP-TRIGGER] deleteGuardFile: failed or not present (continuing)', { error: String(error) });
+        }
+    }
+
+    /**
+     * Plan 107 REQ-7: Check for orphan guard file on activation
+     * Returns the guard file content if an orphan is detected, null otherwise.
+     */
+    async checkOrphanGuardFile(): Promise<{ operationId: string; timestamp: string; backupPath: string } | null> {
+        try {
+            const guardPath = this.getGuardFilePath();
+            const content = await fs.promises.readFile(guardPath, 'utf8');
+            const parsed = JSON.parse(content);
+            
+            console.log('[BACKUP-TRIGGER] checkOrphanGuardFile: orphan guard file detected', { guardPath, parsed });
+            await this.logAuditEvent(BackupAuditEventType.ORPHAN_GUARD_FILE_DETECTED, {
+                guardFilePath: guardPath,
+                operationId: parsed.operationId,
+                backupPath: parsed.backupPath
+            });
+            
+            return parsed;
+        } catch {
+            // No guard file or parse error - normal case
+            return null;
+        }
+    }
+
+    /**
+     * Plan 101/107: Backup the pre-upgrade .flowbaby folder
+     * 
+     * Plan 107 enhancements:
+     * - REQ-7: Write guard file before rename, delete on success
+     * - REQ-8: Audit logging for all events
+     * - Architecture: Quiesce-before-rename is enforced (abort on failure)
      * 
      * Steps:
-     * 1. Stop daemon to release file locks (especially important on Windows)
-     * 2. Generate Windows-safe backup folder name
-     * 3. Rename .flowbaby → backup folder
+     * 1. Quiesce workspace (daemon stop + background ops pause) with bounded timeout
+     * 2. Write guard file with rich state
+     * 3. Generate Windows-safe backup folder name
+     * 4. Rename .flowbaby → backup folder
+     * 5. Delete guard file on success
      * 
      * @returns BackupResult with success status and backup path or error
      */
     async backupPreUpgradeWorkspace(): Promise<BackupResult> {
         const flowbabyDir = path.join(this.workspacePath, '.flowbaby');
+        const operationId = crypto.randomUUID();
         
-        // Step 1: Stop daemon before rename (reduce Windows lock failures)
+        await this.logAuditEvent(BackupAuditEventType.BACKUP_STARTED, {
+            operationId,
+            sourcePath: flowbabyDir
+        });
+        
+        // Step 1: Quiesce workspace with enforced timeout (Architecture Guardrail 4)
+        await this.logAuditEvent(BackupAuditEventType.BACKUP_QUIESCE_START, {
+            operationId,
+            quiesceTimeoutMs: QUIESCE_TIMEOUT_MS
+        });
+        
+        let daemonStopped = false;
+        let backgroundOpsPaused = false;
+        
+        // 1a. Pause background operations (if manager available)
+        let bgManager: BackgroundOperationManager | null = null;
+        try {
+            bgManager = BackgroundOperationManager.getInstance();
+            backgroundOpsPaused = await bgManager.pause(5000); // 5s timeout for pause
+        } catch {
+            // Manager not initialized - proceed
+            backgroundOpsPaused = true; // No ops to pause
+        }
+        
+        // 1b. Stop daemon with bounded wait
         if (this.stopDaemonFn) {
-            try {
-                debugLog('backupPreUpgradeWorkspace: stopping daemon before rename');
-                await this.stopDaemonFn();
+            const timeoutPromise = new Promise<boolean>((resolve) => {
+                setTimeout(() => resolve(false), QUIESCE_TIMEOUT_MS);
+            });
+            const stopPromise = this.stopDaemonFn()
+                .then(() => true)
+                .catch(() => false);
+            
+            daemonStopped = await Promise.race([stopPromise, timeoutPromise]);
+            
+            if (daemonStopped) {
                 // Give Windows a moment to release file locks
                 await new Promise(resolve => setTimeout(resolve, 300));
-            } catch (error) {
-                debugLog('backupPreUpgradeWorkspace: daemon stop failed (continuing)', { error: String(error) });
-                // Continue anyway - rename might still work
+                console.log('[BACKUP-TRIGGER] backupPreUpgradeWorkspace: daemon stopped successfully');
+            } else {
+                console.log('[BACKUP-TRIGGER] backupPreUpgradeWorkspace: daemon stop timed out or failed');
             }
+        } else {
+            daemonStopped = true; // No daemon to stop
         }
+        
+        // Check if quiescence achieved
+        if (!daemonStopped || !backgroundOpsPaused) {
+            // Architecture Guardrail 4: If quiescence cannot be achieved, abort backup
+            console.log('[BACKUP-TRIGGER] backupPreUpgradeWorkspace: quiescence failed - aborting backup', {
+                daemonStopped,
+                backgroundOpsPaused
+            });
+            
+            await this.logAuditEvent(BackupAuditEventType.BACKUP_QUIESCE_FAILED, {
+                operationId,
+                daemonStopped,
+                backgroundOpsPaused
+            });
+            
+            // Resume background ops if we paused them
+            if (bgManager && backgroundOpsPaused) {
+                bgManager.resume();
+            }
+            
+            return {
+                success: false,
+                error: 'Could not achieve workspace quiescence before backup. Please close other VS Code windows using this workspace and try again.'
+            };
+        }
+        
+        await this.logAuditEvent(BackupAuditEventType.BACKUP_QUIESCE_COMPLETE, {
+            operationId,
+            daemonStopped,
+            backgroundOpsPaused
+        });
         
         // Step 2: Generate backup folder name
         const backupFolderName = this.generateBackupFolderName();
         const backupPath = path.join(this.workspacePath, backupFolderName);
         
-        // Step 3: Attempt rename with retries (uses existing renameWithRetries for Windows robustness)
+        // Step 3: Write guard file before rename (REQ-7)
+        await this.writeGuardFile(operationId, backupPath);
+        
+        // Step 4: Attempt rename with retries (uses existing renameWithRetries for Windows robustness)
         try {
-            debugLog('backupPreUpgradeWorkspace: renaming .flowbaby to backup', { backupPath });
+            console.log('[BACKUP-TRIGGER] backupPreUpgradeWorkspace: executing rename', { 
+                source: flowbabyDir, 
+                target: backupPath 
+            });
             await this.renameWithRetries(flowbabyDir, backupPath);
-            debugLog('backupPreUpgradeWorkspace: backup successful', { backupPath });
+            console.log('[BACKUP-TRIGGER] backupPreUpgradeWorkspace: backup successful', { backupPath });
+            
+            // Step 5: Delete guard file on success (REQ-7)
+            await this.deleteGuardFile();
+            
+            await this.logAuditEvent(BackupAuditEventType.BACKUP_COMPLETED, {
+                operationId,
+                backupPath
+            });
+            
             return { success: true, backupPath };
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            debugLog('backupPreUpgradeWorkspace: rename failed', { error: errorMessage });
+            console.log('[BACKUP-TRIGGER] backupPreUpgradeWorkspace: rename failed', { error: errorMessage });
+            
+            await this.logAuditEvent(BackupAuditEventType.BACKUP_FAILED, {
+                operationId,
+                errorMessage
+            });
+            
+            // Guard file intentionally left in place for forensics
             return { success: false, error: errorMessage };
         }
     }
 
     /**
-     * Plan 101: Check for pre-upgrade workspace and perform migration if needed
+     * Plan 101/107: Check for pre-upgrade workspace and perform migration if needed
      * 
      * This is the main orchestration method that should be called from activation.
      * It combines detection, backup, and user notification.
      * 
+     * Plan 107 enhancements:
+     * - Uses explicit state model (NOT_LEGACY, LEGACY_CONFIRMED, UNKNOWN_IO_ERROR)
+     * - UNKNOWN_IO_ERROR returns io-error action (no backup, no proceed)
+     * - REQ-1: User confirmation modal before backup (fail-closed on Ignore/Close)
+     * - REQ-7: Check for orphan guard files on activation
+     * - REQ-8: Audit logging for all events
+     * 
      * @returns PreUpgradeMigrationResult indicating what happened and what to do next
      */
     async checkPreUpgradeMigration(): Promise<PreUpgradeMigrationResult> {
-        // Check if migration is needed
-        const isPreUpgrade = await this.isPreUpgradeWorkspace();
+        // Plan 107 REQ-8: Log migration check invocation
+        await this.logAuditEvent(BackupAuditEventType.MIGRATION_CHECK_INVOKED, {
+            workspacePath: this.workspacePath
+        });
         
-        if (!isPreUpgrade) {
+        // Plan 107 REQ-7: Check for orphan guard file (interrupted previous backup)
+        const orphanGuard = await this.checkOrphanGuardFile();
+        if (orphanGuard) {
+            // Orphan guard file detected - a previous backup was interrupted
+            // This is informational; we still proceed with fresh detection
+            console.log('[BACKUP-TRIGGER] checkPreUpgradeMigration: orphan guard file detected from previous interrupted backup', orphanGuard);
+        }
+        
+        // Plan 107: Use explicit state model for detection
+        const detectionResult = await this.detectMigrationState();
+        
+        // Plan 107 REQ-8: Log detection result
+        await this.logAuditEvent(BackupAuditEventType.MIGRATION_DETECTION_RESULT, {
+            detectionState: detectionResult.state,
+            decisionReason: detectionResult.reason,
+            ...detectionResult.data
+        });
+        
+        // Handle UNKNOWN_IO_ERROR: fail-closed for initialization (Architecture Guardrail 2)
+        if (detectionResult.state === 'UNKNOWN_IO_ERROR') {
+            console.log('[BACKUP-TRIGGER] checkPreUpgradeMigration: UNKNOWN_IO_ERROR - no backup, no proceed', detectionResult);
+            await this.logAuditEvent(BackupAuditEventType.UNKNOWN_IO_ERROR, {
+                errorCode: detectionResult.data.errorCode,
+                errorMessage: detectionResult.data.errorMessage
+            });
+            return { 
+                action: 'io-error', 
+                requiresFreshInit: false,
+                error: detectionResult.reason
+            };
+        }
+        
+        // Handle NOT_LEGACY: no migration needed
+        if (detectionResult.state === 'NOT_LEGACY') {
             return { action: 'none', requiresFreshInit: false };
         }
+        
+        // Handle LEGACY_CONFIRMED: backup is needed, but requires user confirmation first (REQ-1)
+        console.log('[BACKUP-TRIGGER] checkPreUpgradeMigration: LEGACY_CONFIRMED, showing confirmation modal', detectionResult);
+        
+        // Plan 107 REQ-8: Log modal shown
+        await this.logAuditEvent(BackupAuditEventType.BACKUP_MODAL_SHOWN, {
+            detectionState: detectionResult.state,
+            decisionReason: detectionResult.reason
+        });
+        
+        // REQ-1: User confirmation modal before backup
+        // Modal copy sourced from Analysis 107
+        const choice = await vscode.window.showWarningMessage(
+            'No existing Flowbaby 0.7.0-compatible environment has been detected. ' +
+            'A new initialization is recommended. Your existing data will be backed up. ' +
+            'If you believe this is an error, click "Ignore" and report the issue to the Flowbaby team.',
+            { modal: true },
+            'Proceed with Backup',
+            'Ignore'
+        );
+        
+        // Architecture Guardrail 3: Ignore/Cancel/Close is fail-closed
+        if (choice !== 'Proceed with Backup') {
+            console.log('[BACKUP-TRIGGER] checkPreUpgradeMigration: User declined backup', { choice });
+            await this.logAuditEvent(BackupAuditEventType.BACKUP_USER_DECLINED, {
+                decision: choice ?? 'modal-closed'
+            });
+            return { action: 'user-declined', requiresFreshInit: false };
+        }
+        
+        // Plan 107 REQ-8: Log user confirmed
+        await this.logAuditEvent(BackupAuditEventType.BACKUP_USER_CONFIRMED, {});
+        
+        console.log('[BACKUP-TRIGGER] checkPreUpgradeMigration: User confirmed, starting pre-backup revalidation', detectionResult);
+        
+        // REQ-4: Pre-backup revalidation - re-verify marker state immediately before backup
+        // This catches race conditions where another window completed init during modal display
+        const revalidationResult = await this.detectMigrationState();
+        console.log('[BACKUP-TRIGGER] checkPreUpgradeMigration: Pre-backup revalidation result', revalidationResult);
+        
+        // Plan 107 REQ-8: Log revalidation result
+        await this.logAuditEvent(BackupAuditEventType.PRE_BACKUP_REVALIDATION, {
+            revalidationResult: revalidationResult.state,
+            markerNowPresent: revalidationResult.state === 'NOT_LEGACY'
+        });
+        
+        if (revalidationResult.state === 'NOT_LEGACY') {
+            // Marker appeared after initial detection - abort backup
+            console.log('[BACKUP-TRIGGER] checkPreUpgradeMigration: Revalidation shows NOT_LEGACY - aborting backup');
+            return { action: 'revalidation-aborted', requiresFreshInit: false };
+        }
+        
+        if (revalidationResult.state === 'UNKNOWN_IO_ERROR') {
+            // IO error during revalidation - fail-closed (no backup, no proceed)
+            console.log('[BACKUP-TRIGGER] checkPreUpgradeMigration: Revalidation shows UNKNOWN_IO_ERROR - aborting backup', revalidationResult);
+            return { 
+                action: 'io-error', 
+                requiresFreshInit: false,
+                error: revalidationResult.reason
+            };
+        }
+        
+        // Revalidation still shows LEGACY_CONFIRMED - proceed with backup
+        console.log('[BACKUP-TRIGGER] checkPreUpgradeMigration: Revalidation confirmed LEGACY_CONFIRMED, proceeding with backup');
         
         // Attempt backup
         debugLog('checkPreUpgradeMigration: pre-0.7.0 workspace detected, attempting backup');

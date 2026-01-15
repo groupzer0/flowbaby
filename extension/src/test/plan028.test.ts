@@ -167,8 +167,9 @@ suite('Plan 028: Extension Isolation & Global Config', () => {
             };
             sandbox.stub(BackgroundOperationManager, 'getInstance').returns(bgManagerStub as any);
 
-            // Mock mkdir
+            // Mock mkdir and writeFile (Plan 107 REQ-5 adds early marker write)
             sandbox.stub(fs.promises, 'mkdir').resolves();
+            sandbox.stub(fs.promises, 'writeFile').resolves();
             
             // Helper to create mock process with stdout
             const createMockProcess = (stdout: string = '') => {
