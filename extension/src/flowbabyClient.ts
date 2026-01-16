@@ -771,11 +771,14 @@ export class FlowbabyClient {
                 const pythonConfigured = result.api_key_configured === true;
                 const apiKeyState = await buildApiKeyState(pythonConfigured);
                 
-                // Log API key status
-                this.log('INFO', 'API key status', {
-                    python_configured: apiKeyState.pythonConfigured,
-                    typescript_configured: apiKeyState.typescriptConfigured,
-                    llm_ready: apiKeyState.llmReady
+                // Plan 109: Log cloud auth readiness (replaced legacy "API key status" message)
+                // This terminology aligns with Cloud-only mode (v0.7.0+)
+                this.log('INFO', 'Cloud auth readiness', {
+                    cloud_credentials: apiKeyState.pythonConfigured || apiKeyState.typescriptConfigured,
+                    llm_ready: apiKeyState.llmReady,
+                    message: apiKeyState.llmReady 
+                        ? 'Cloud credentials available - memory operations ready'
+                        : 'Cloud login required for memory operations'
                 });
 
                 // Plan 045 Hotfix: Cache the API key state for later access

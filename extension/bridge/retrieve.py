@@ -5,11 +5,15 @@ Cognee Context Retrieval Script for VS Code Extension
 Usage: python retrieve.py <workspace_path> <query> [max_results] [max_tokens] [half_life_days] [include_superseded] [top_k]
 
 Retrieves relevant context from Cognee using hybrid graph-vector search with workspace isolation:
-1. Loads API key from workspace .env
+1. Reads Cloud credentials from environment (AWS_* from Flowbaby Cloud vend)
 2. Generates unique dataset name for workspace
 3. Executes GRAPH_COMPLETION search with only_context=True (Plan 073: eliminates LLM bottleneck)
 4. Returns raw graph context for TypeScript-side synthesis via Copilot LM API
 5. Calculates recency-aware, status-aware scores using exponential decay
+
+Plan 109: .env file loading is fully deprecated. All configuration comes from:
+- Cloud credentials (AWS_* environment variables from Flowbaby Cloud vend)
+- VS Code settings (settings.json)
 
 Plan 073: Architecture Overhaul
 - Uses only_context=True to skip Cognee's internal LLM call (~17-32s savings)

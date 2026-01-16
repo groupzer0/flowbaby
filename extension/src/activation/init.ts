@@ -381,6 +381,10 @@ export async function handleInitSuccess(
 
 /**
  * Handle failed client initialization
+ * 
+ * Plan 109: Gate cloud-login prompts on local environment health.
+ * Only offer "Login to Cloud" when local preflight is healthy but auth is missing.
+ * When local environment is broken, guide users to "Refresh Bridge Dependencies" first.
  */
 export function handleInitFailure(
     deps: WorkspaceInitDeps,
@@ -397,18 +401,34 @@ export function handleInitFailure(
 
     setInitState(workspacePath, { initialized: false, initFailed: true });
 
+    // Plan 109: Determine if local environment is healthy or broken
+    // If healthStatus is BROKEN or FRESH, the local environment needs repair first
+    const isLocalEnvHealthy = healthStatus === 'VALID';
+    const needsLocalRepair = healthStatus === 'BROKEN' || requirementsStatus === 'mismatch';
+
     // Show helpful guidance
     // Plan 083 M5: Updated guidance for Cloud-only v0.7.0+
+    // Plan 109: Prioritize local repair guidance when environment is broken
     const outputChannel = getFlowbabyOutputChannel();
     outputChannel.appendLine('Failed to initialize Flowbaby. Common issues:');
     outputChannel.appendLine('');
-    outputChannel.appendLine('1. Not logged in to Flowbaby Cloud:');
-    outputChannel.appendLine('   - Use "Flowbaby Cloud: Login" command to authenticate');
-    outputChannel.appendLine('   - Cloud login is required for LLM memory operations');
-    outputChannel.appendLine('');
-    outputChannel.appendLine('2. Missing Python dependencies:');
-    outputChannel.appendLine('   - Use "Flowbaby: Initialize Workspace" to set up the environment');
-    outputChannel.appendLine('   - Or use "Flowbaby: Refresh Bridge Dependencies" to repair');
+    
+    if (needsLocalRepair) {
+        outputChannel.appendLine('1. Missing or outdated Python dependencies:');
+        outputChannel.appendLine('   - Use "Flowbaby: Refresh Bridge Dependencies" to repair');
+        outputChannel.appendLine('   - Or use "Flowbaby: Initialize Workspace" to set up the environment');
+        outputChannel.appendLine('');
+        outputChannel.appendLine('2. Not logged in to Flowbaby Cloud (after fixing dependencies):');
+        outputChannel.appendLine('   - Use "Flowbaby Cloud: Login" command to authenticate');
+    } else {
+        outputChannel.appendLine('1. Not logged in to Flowbaby Cloud:');
+        outputChannel.appendLine('   - Use "Flowbaby Cloud: Login" command to authenticate');
+        outputChannel.appendLine('   - Cloud login is required for LLM memory operations');
+        outputChannel.appendLine('');
+        outputChannel.appendLine('2. Missing Python dependencies:');
+        outputChannel.appendLine('   - Use "Flowbaby: Initialize Workspace" to set up the environment');
+        outputChannel.appendLine('   - Or use "Flowbaby: Refresh Bridge Dependencies" to repair');
+    }
     outputChannel.show();
 
     recordActivationCompletion({
@@ -417,21 +437,45 @@ export function handleInitFailure(
         initResult: { success: false, error: initResult.error }
     });
 
-    // Non-blocking warning message
-    // Plan 083 M4: Removed Set API Key option (Cloud-only in v0.7.0)
-    vscode.window.showWarningMessage(
-        'Flowbaby initialization failed. Check Output > Flowbaby for setup instructions.',
-        'Open Output',
-        'Login to Cloud',
-        'Dismiss'
-    ).then(action => {
-        if (action === 'Open Output') {
-            outputChannel.show();
-        } else if (action === 'Login to Cloud') {
-            // Plan 085: Use canonical command ID
-            vscode.commands.executeCommand('flowbaby.cloud.login');
-        }
-    });
+    // Plan 109: Non-blocking warning with context-appropriate actions
+    // When local env is broken, offer Refresh Dependencies first (not Login to Cloud)
+    if (needsLocalRepair) {
+        debugLog('Plan 109: Init failure - local environment needs repair first', {
+            healthStatus,
+            requirementsStatus
+        });
+        vscode.window.showWarningMessage(
+            'Flowbaby initialization failed. Local environment needs repair.',
+            'Refresh Dependencies',
+            'Open Output',
+            'Dismiss'
+        ).then(action => {
+            if (action === 'Refresh Dependencies') {
+                vscode.commands.executeCommand('Flowbaby.refreshDependencies');
+            } else if (action === 'Open Output') {
+                outputChannel.show();
+            }
+        });
+    } else {
+        // Local env appears healthy - likely a cloud auth issue
+        debugLog('Plan 109: Init failure - likely cloud auth issue', {
+            healthStatus,
+            requirementsStatus,
+            isLocalEnvHealthy
+        });
+        vscode.window.showWarningMessage(
+            'Flowbaby initialization failed. Check Output > Flowbaby for setup instructions.',
+            'Open Output',
+            'Login to Cloud',
+            'Dismiss'
+        ).then(action => {
+            if (action === 'Open Output') {
+                outputChannel.show();
+            } else if (action === 'Login to Cloud') {
+                vscode.commands.executeCommand('flowbaby.cloud.login');
+            }
+        });
+    }
 
     return { success: false, error: initResult.error };
 }

@@ -513,6 +513,8 @@
     "compile:tests": "tsc -p tsconfig.test.json && node -e \"const fs=require('fs'); const path=require('path'); const src=path.join('src','test','run-test-agent.js'); const dstDir=path.join('out','test'); const dst=path.join(dstDir,'run-test-agent.js'); fs.mkdirSync(dstDir,{recursive:true}); fs.copyFileSync(src,dst);\"",
     "pretest": "npm run compile:tests",
     "watch": "node esbuild.js --watch",
+    "generate:commands": "node scripts/generate-commands-md.js",
+    "generate:commands:check": "node scripts/generate-commands-md.js --check",
     "lint": "eslint src --ext ts",
     "lint:python": "node -e \"const cp=require('child_process'); const fs=require('fs'); const path=require('path'); const extensionDir=__dirname; const bridgeDir=path.join(extensionDir,'bridge'); const rootDir=path.resolve(extensionDir,'..'); const candidates=process.platform==='win32' ? [path.join(rootDir,'.flowbaby','venv','Scripts','python.exe'),'python','py'] : [path.join(rootDir,'.flowbaby','venv','bin','python'),'python3','python']; const canUse=(cmd)=>!cmd.includes(path.sep)||fs.existsSync(cmd); const probe=(cmd)=>{ const r=cp.spawnSync(cmd,['-m','ruff','--version'],{cwd:bridgeDir,stdio:'ignore'}); return r.status===0; }; const run=(cmd)=>{ const r=cp.spawnSync(cmd,['-m','ruff','check','.'],{cwd:bridgeDir,stdio:'inherit'}); process.exit(typeof r.status==='number'?r.status:1); }; for (const cmd of candidates){ if (!canUse(cmd)) continue; if (probe(cmd)) run(cmd); } console.error('ruff is not available. Install it (e.g. pip install ruff) or initialize Flowbaby to create .flowbaby/venv.'); process.exit(1);\"",
     "lint:markdown": "markdownlint -c .markdownlint.json README.md CHANGELOG.md AGENT_INTEGRATION.md SETUP.md DISTRIBUTION.md",

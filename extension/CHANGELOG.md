@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Recommended actions for unhealthy environments
   - Technical details in structured JSON format
 
+- **Command Reference Documentation (Plan 109)**: Auto-generated `COMMANDS.md` provides searchable reference of all Flowbaby commands:
+  - Generated from `package.json` contributions for guaranteed accuracy
+  - `npm run generate:commands` regenerates; `npm run generate:commands:check` verifies sync
+  - Includes command IDs, titles, categories, and keybindings
+
 ### Changed
 
 - **Interpreter Selection Priority (Plan 108)**: Interpreter resolution now follows metadata-first priority:
@@ -33,7 +38,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Preflight Cache Invalidation (Plan 108)**: Preflight verification cache now invalidates on requirements hash changes (in addition to pythonPath and ownership changes), ensuring refresh completion correctly triggers re-verification
 
+- **Managed Venv Defaults (Plan 109)**: Setup flow now defaults to managed `.flowbaby/venv` without showing a choice modal:
+  - Removed modal asking whether to use existing `.venv` or create `.flowbaby/venv`
+  - Always creates managed environment for consistent, maintainable setup
+  - External ownership migration path remains available via `Flowbaby.diagnoseEnvironment`
+
+- **Cloud Auth Terminology (Plan 109)**: Updated logging from legacy "API key status" to "Cloud auth readiness" for clarity in cloud-only mode
+
 ### Fixed
+
+- **Dashboard Setup Button (Plan 109)**: Dashboard "Setup Environment" button now correctly triggers `Flowbaby.initializeWorkspace` instead of unregistered `Flowbaby.setup` command
+
+- **Login Prompt Gating (Plan 109)**: Cloud login prompts are now gated on local environment health—when the Python environment is broken or requirements mismatched, users are offered "Refresh Dependencies" instead of "Login to Cloud"
 
 - **Refresh Quiescence (Plan 108)**: Verified that dependency refresh correctly pauses background operations and stops the bridge daemon before venv mutation, preventing "import during install" races
 

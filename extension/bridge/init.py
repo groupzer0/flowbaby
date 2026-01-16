@@ -5,11 +5,14 @@ Cognee Initialization Script for VS Code Extension
 Usage: python init.py <workspace_path>
 
 Initializes Cognee for a workspace by:
-1. Loading environment variables from workspace .env file
-2. Configuring Cognee with OpenAI API key
-3. Generating unique dataset name for workspace isolation
-4. Setting up workspace-local .flowbaby/ directory for marker files
-5. Performing one-time global data prune if needed (with safety checks)
+1. Configuring Cognee with Cloud credentials (AWS STS via Flowbaby Cloud)
+2. Generating unique dataset name for workspace isolation
+3. Setting up workspace-local .flowbaby/ directory for marker files
+4. Performing one-time global data prune if needed (with safety checks)
+
+Plan 109: .env file loading is fully deprecated. All configuration comes from:
+- Cloud credentials (AWS_* environment variables from Flowbaby Cloud vend)
+- VS Code settings (settings.json)
 
 Returns JSON to stdout:
   Success: {"success": true, "dataset_name": "ws_abc123...", "flowbaby_dir": "/path/to/.flowbaby",

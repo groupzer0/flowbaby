@@ -320,6 +320,8 @@ export class FlowbabySetupService {
     /**
      * Create .flowbaby/venv and install dependencies (Plan 028 M3)
      * Uses isolated .flowbaby/venv path to avoid conflicts with user's workspace .venv
+     * 
+     * Plan 109: Always use managed .flowbaby/venv - no modal choice for existing .venv
      */
     async createEnvironment(): Promise<boolean> {
         if (this.statusBar) {this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Creating environment...');}
@@ -327,43 +329,15 @@ export class FlowbabySetupService {
         // Plan 028 M2: Debug logging for setup operations
         debugLog('Creating Python environment', { workspacePath: this.workspacePath });
         
-        // Plan 028 M7: Detect existing workspace .venv and offer choices
+        // Plan 109: Log if workspace has existing .venv but always use managed .flowbaby/venv
+        // The modal choice has been removed - managed venv is the only supported path via UX
         const existingVenvPath = path.join(this.workspacePath, '.venv');
         if (this.fs.existsSync(existingVenvPath)) {
-            debugLog('Existing workspace .venv detected', { existingVenvPath });
-            
-            const choice = await vscode.window.showInformationMessage(
-                'Your workspace has an existing .venv folder. **Recommended**: Flowbaby will create its own isolated environment in .flowbaby/venv to avoid dependency conflicts.',
-                { modal: true },
-                'Use .flowbaby/venv (Recommended)',
-                'Use existing .venv (Advanced)'
-            );
-            
-            if (!choice) {
-                // User cancelled
-                debugLog('User cancelled environment setup due to venv conflict');
-                return false;
-            }
-            
-            if (choice === 'Use existing .venv (Advanced)') {
-                // User chose to use existing .venv - warn about conflicts
-                debugLog('User chose to use existing .venv (advanced option)');
-                
-                const confirmConflict = await vscode.window.showWarningMessage(
-                    'Using your existing .venv may cause version conflicts with your project. Flowbaby will install cognee and its dependencies into this environment.',
-                    { modal: true },
-                    'Proceed',
-                    'Cancel'
-                );
-                
-                if (confirmConflict !== 'Proceed') {
-                    return false;
-                }
-                
-                // Install into existing .venv using legacy path
-                return this.installIntoExistingVenv();
-            }
-            // Otherwise, continue with .flowbaby/venv (recommended)
+            debugLog('Plan 109: Existing workspace .venv detected but using managed .flowbaby/venv', { 
+                existingVenvPath,
+                managedVenvPath: path.join(this.workspacePath, '.flowbaby', 'venv')
+            });
+            // Note: installIntoExistingVenv() path is retained but unreachable via normal UX
         }
         
         // Plan 028 M3: Check BackgroundOperationManager queue before proceeding

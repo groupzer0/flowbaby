@@ -53,7 +53,9 @@ export class DashboardViewProvider implements vscode.WebviewViewProvider {
                     break;
 
                 case 'setupEnvironment':
-                    await vscode.commands.executeCommand('Flowbaby.setup');
+                    // Plan 109: Use Flowbaby.initializeWorkspace (full environment creation + initialize)
+                    // Previously used unregistered 'Flowbaby.setup' which was a no-op
+                    await vscode.commands.executeCommand('Flowbaby.initializeWorkspace');
                     break;
 
                 case 'visualizeGraph':
