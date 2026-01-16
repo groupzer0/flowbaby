@@ -83,6 +83,13 @@ export class DashboardViewProvider implements vscode.WebviewViewProvider {
                     // Refresh after logout
                     await this._updateView();
                     break;
+
+                case 'executeCommand':
+                    // Plan 109: Execute any command by ID from the commands reference
+                    if (message.url) {
+                        await vscode.commands.executeCommand(message.url);
+                    }
+                    break;
             }
         });
 

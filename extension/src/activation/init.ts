@@ -702,6 +702,22 @@ export function registerSetupCommands(
         'Flowbaby.initializeWorkspace',
         async () => {
             const outputChannel = getFlowbabyOutputChannel();
+            
+            // Plan 109: Confirmation modal before environment initialization
+            // Note: modal: true automatically adds a Cancel button, so we only specify 'Initialize'
+            const choice = await vscode.window.showInformationMessage(
+                'Initialize the Flowbaby environment for this workspace.\n\n' +
+                'This is intended for new environments and installs required dependencies and databases.\n\n' +
+                'If this workspace already exists, use "Flowbaby: Refresh Bridge Dependencies" instead.',
+                { modal: true },
+                'Initialize'
+            );
+            
+            if (choice !== 'Initialize') {
+                outputChannel.appendLine('[Init] Workspace initialization cancelled by user');
+                return;
+            }
+            
             outputChannel.appendLine('[Init] Starting workspace initialization...');
 
             const success = await setupService.createEnvironment();

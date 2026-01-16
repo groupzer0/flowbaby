@@ -280,6 +280,134 @@ export function generateDashboardHtml(
             content: '↗';
             margin-left: 4px;
         }
+
+        /* Collapsible section */
+        .collapsible-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            padding: 8px 0;
+            user-select: none;
+        }
+
+        .collapsible-header:hover {
+            opacity: 0.8;
+        }
+
+        .collapsible-arrow {
+            transition: transform 0.2s ease;
+            font-size: 0.8em;
+        }
+
+        .collapsible-arrow.expanded {
+            transform: rotate(90deg);
+        }
+
+        .collapsible-content {
+            display: none;
+            padding-top: 8px;
+        }
+
+        .collapsible-content.expanded {
+            display: block;
+        }
+
+        /* Command list */
+        .command-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .command-item {
+            display: flex;
+            flex-direction: column;
+            padding: 10px 12px;
+            background: var(--button-secondary-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .command-item:hover {
+            background: var(--vscode-list-hoverBackground);
+            border-color: var(--vscode-focusBorder);
+        }
+
+        .command-name {
+            font-weight: 500;
+            font-size: 0.9em;
+            margin-bottom: 4px;
+            color: var(--vscode-textLink-foreground);
+        }
+
+        .command-desc {
+            font-size: 0.85em;
+            color: var(--fg-muted);
+            line-height: 1.4;
+        }
+
+        /* Help section */
+        .help-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: var(--button-secondary-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            margin-bottom: 8px;
+        }
+
+        .help-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .help-item:hover {
+            background: var(--vscode-list-hoverBackground);
+            border-color: var(--vscode-focusBorder);
+        }
+
+        .help-icon {
+            font-size: 1.4em;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+
+        .help-content {
+            flex: 1;
+        }
+
+        .help-title {
+            font-weight: 500;
+            font-size: 0.9em;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .help-badge {
+            font-size: 0.75em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            font-weight: 500;
+        }
+
+        .help-subtitle {
+            font-size: 0.85em;
+            color: var(--fg-muted);
+        }
+
+        .help-arrow {
+            color: var(--fg-muted);
+            margin-left: 8px;
+        }
     </style>
 </head>
 <body>
@@ -297,6 +425,28 @@ export function generateDashboardHtml(
                 const command = btn.getAttribute('data-command');
                 const url = btn.getAttribute('data-url');
                 sendCommand(command, url);
+            });
+        });
+
+        // Handle collapsible sections
+        document.querySelectorAll('.collapsible-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const arrow = header.querySelector('.collapsible-arrow');
+                const content = header.nextElementSibling;
+                if (arrow && content) {
+                    arrow.classList.toggle('expanded');
+                    content.classList.toggle('expanded');
+                }
+            });
+        });
+
+        // Handle command item clicks
+        document.querySelectorAll('.command-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const commandId = item.getAttribute('data-command-id');
+                if (commandId) {
+                    sendCommand('executeCommand', commandId);
+                }
             });
         });
     </script>
@@ -331,7 +481,7 @@ function buildDashboardContent(
             <div class="welcome-text">Thanks for using Flowbaby, <strong>${escapeHtml(profile.githubUsername)}</strong>!</div>
         </div>
 
-        <!-- Usage Section -->
+        <!-- 1. Monthly Credits -->
         <div class="section">
             <div class="section-title">Monthly Credits</div>
             <div class="usage-text">${usage.credits.used} / ${usage.credits.limit} credits used (${percentUsed}%)</div>
@@ -341,7 +491,7 @@ function buildDashboardContent(
             <div class="usage-period">Billing period: ${billingStart} - ${billingEnd}</div>
         </div>
 
-        <!-- Social Links -->
+        <!-- 2. Star and Review -->
         <div class="section">
             <div class="section-subtitle">Stars and reviews help others find Flowbaby!</div>
             <div class="button-row">
@@ -354,7 +504,45 @@ function buildDashboardContent(
             </div>
         </div>
 
-        <!-- Quick Actions -->
+        <!-- 3. Manage Subscription -->
+        <div class="section">
+            <div class="section-title">Manage Subscription</div>
+            <button class="btn btn-primary btn-full icon-external" data-command="openUrl" data-url="https://flowbaby.ai/dashboard">
+                Manage Subscription
+            </button>
+        </div>
+
+        <!-- 4. Need Help? (Support) -->
+        <div class="section">
+            <div class="section-title">Need Help? 💬</div>
+            <div class="section-subtitle">We're here to help! Choose the best way to reach us:</div>
+            <div class="help-item" data-command="openUrl" data-url="https://github.com/groupzer0/flowbaby/discussions">
+                <span class="help-icon">💬</span>
+                <div class="help-content">
+                    <div class="help-title">GitHub Discussions <span class="help-badge">Recommended</span></div>
+                    <div class="help-subtitle">Ask questions, share ideas, and connect with the community</div>
+                </div>
+                <span class="help-arrow">→</span>
+            </div>
+            <div class="help-item" data-command="openUrl" data-url="https://github.com/groupzer0/flowbaby/issues">
+                <span class="help-icon">🐛</span>
+                <div class="help-content">
+                    <div class="help-title">Report an Issue</div>
+                    <div class="help-subtitle">Found a bug? Let us know on GitHub Issues</div>
+                </div>
+                <span class="help-arrow">→</span>
+            </div>
+            <div class="help-item" data-command="openUrl" data-url="mailto:contact@flowbaby.ai">
+                <span class="help-icon">✉️</span>
+                <div class="help-content">
+                    <div class="help-title">Email Support</div>
+                    <div class="help-subtitle">contact@flowbaby.ai — for private or billing inquiries</div>
+                </div>
+                <span class="help-arrow">→</span>
+            </div>
+        </div>
+
+        <!-- 5. Quick Actions -->
         <div class="section">
             <div class="section-title">Quick Actions</div>
             <div class="button-row">
@@ -370,12 +558,56 @@ function buildDashboardContent(
             </div>
         </div>
 
-        <!-- Manage Subscription -->
+        <!-- 6. Commands Reference -->
         <div class="section">
-            <div class="section-title">Manage Subscription</div>
-            <button class="btn btn-primary btn-full icon-external" data-command="openUrl" data-url="https://flowbaby.ai/dashboard">
-                Manage Subscription
-            </button>
+            <div class="collapsible-header">
+                <span class="section-title" style="margin-bottom: 0;">Commands Reference</span>
+                <span class="collapsible-arrow">▶</span>
+            </div>
+            <div class="collapsible-content">
+                <div class="command-list">
+                    <div class="command-item" data-command-id="Flowbaby.captureMessage">
+                        <div class="command-name">Capture to Memory</div>
+                        <div class="command-desc">Save the current selection or chat context to workspace memory. Use Ctrl+Alt+F (Cmd+Alt+F on Mac).</div>
+                    </div>
+                    <div class="command-item" data-command-id="Flowbaby.initializeWorkspace">
+                        <div class="command-name">Initialize Workspace</div>
+                        <div class="command-desc">Set up the Flowbaby environment for a new workspace. Creates the Python venv and databases.</div>
+                    </div>
+                    <div class="command-item" data-command-id="Flowbaby.refreshDependencies">
+                        <div class="command-name">Refresh Bridge Dependencies</div>
+                        <div class="command-desc">Update Python packages in the managed environment. Use when dependencies are outdated.</div>
+                    </div>
+                    <div class="command-item" data-command-id="Flowbaby.diagnoseEnvironment">
+                        <div class="command-name">Diagnose Environment</div>
+                        <div class="command-desc">Generate a diagnostic report of your Flowbaby environment for troubleshooting.</div>
+                    </div>
+                    <div class="command-item" data-command-id="Flowbaby.clearMemory">
+                        <div class="command-name">Clear Workspace Memory</div>
+                        <div class="command-desc">Delete all stored memories from this workspace. Use with caution.</div>
+                    </div>
+                    <div class="command-item" data-command-id="Flowbaby.visualizeGraph">
+                        <div class="command-name">Visualize Memory Graph</div>
+                        <div class="command-desc">Open an interactive visualization of your workspace's knowledge graph.</div>
+                    </div>
+                    <div class="command-item" data-command-id="Flowbaby.backgroundStatus">
+                        <div class="command-name">View Background Operations</div>
+                        <div class="command-desc">See pending and completed background operations like memory ingestion.</div>
+                    </div>
+                    <div class="command-item" data-command-id="flowbaby.cloud.status">
+                        <div class="command-name">Show Cloud Status</div>
+                        <div class="command-desc">Display your Flowbaby Cloud connection status and account information.</div>
+                    </div>
+                    <div class="command-item" data-command-id="flowbaby.cloud.login">
+                        <div class="command-name">Login with GitHub</div>
+                        <div class="command-desc">Authenticate with Flowbaby Cloud using your GitHub account.</div>
+                    </div>
+                    <div class="command-item" data-command-id="flowbaby.cloud.logout">
+                        <div class="command-name">Logout</div>
+                        <div class="command-desc">Sign out of Flowbaby Cloud.</div>
+                    </div>
+                </div>
+            </div>
         </div>
     `;
 }
