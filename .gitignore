@@ -67,6 +67,7 @@ agent-output/
 .github/agents/
 .github/chatmodes/
 .github/instructions/
+.github/skills
 .github/copilot-instructions.md
 
 # Local POC artifacts

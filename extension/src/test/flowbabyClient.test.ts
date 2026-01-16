@@ -8,6 +8,7 @@ import { FlowbabyClient } from '../flowbabyClient';
 import { PythonBridgeDaemonManager } from '../bridge/PythonBridgeDaemonManager';
 import * as cloudProvider from '../flowbaby-cloud/provider';
 import * as usageMeter from '../flowbaby-cloud/usageMeter';
+import { PreflightVerificationService, PreflightStatus } from '../setup/PreflightVerificationService';
 
 // Helper to create directory structure
 function createTestStructure(basePath: string, structure: any) {
@@ -78,6 +79,25 @@ function createMockContext(): vscode.ExtensionContext {
 suite('FlowbabyClient Test Suite', () => {
     const testWorkspacePath = path.resolve('tmp', 'test-workspace');
     let mockContext: vscode.ExtensionContext;
+    let preflightStub: sinon.SinonStub;
+
+    // Plan 108: Stub preflight verification to always return healthy
+    // This prevents preflight checks from interfering with existing tests
+    suiteSetup(() => {
+        preflightStub = sinon.stub(PreflightVerificationService.prototype, 'verify').resolves({
+            status: PreflightStatus.HEALTHY,
+            cogneeImportable: true,
+            cogneeVersion: '0.1.40',
+            pythonPath: '/test/python',
+            ownership: 'managed',
+            durationMs: 1,
+            cached: true
+        });
+    });
+
+    suiteTeardown(() => {
+        preflightStub.restore();
+    });
 
     // Initialize mock context before each test
     setup(() => {
@@ -1115,6 +1135,69 @@ suite('FlowbabyClient Test Suite', () => {
             const errorCall = logStub.getCalls().find((call) => call.args[1] === 'JSON parse failed');
             assert.ok(errorCall, 'Should log JSON parse failure');
             assert.strictEqual(errorCall!.args[2].stderr_preview, 'Error details in stderr', 'Log should include stderr preview');
+        });
+
+        test('runPythonScript performs preflight by default (Plan 108 gate wired)', async () => {
+            stubSharedDependencies();
+            preflightStub.resetHistory();
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = new EventEmitter() as any;
+            mockProcess.stdout = new EventEmitter();
+            mockProcess.stderr = new EventEmitter();
+            mockProcess.kill = sandbox.stub();
+            sandbox.stub(client as any, 'spawnProcess').returns(mockProcess);
+
+            const runScriptPromise = (client as any).runPythonScript('retrieve.py', []);
+            setTimeout(() => {
+                mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                mockProcess.emit('close', 0);
+            }, 10);
+
+            await runScriptPromise;
+            assert.strictEqual(preflightStub.callCount, 1, 'Preflight should run once by default');
+        });
+
+        test('runPythonScript skips preflight when skipPreflight=true', async () => {
+            stubSharedDependencies();
+            preflightStub.resetHistory();
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = new EventEmitter() as any;
+            mockProcess.stdout = new EventEmitter();
+            mockProcess.stderr = new EventEmitter();
+            mockProcess.kill = sandbox.stub();
+            sandbox.stub(client as any, 'spawnProcess').returns(mockProcess);
+
+            const runScriptPromise = (client as any).runPythonScript('retrieve.py', [], { skipPreflight: true });
+            setTimeout(() => {
+                mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                mockProcess.emit('close', 0);
+            }, 10);
+
+            await runScriptPromise;
+            assert.strictEqual(preflightStub.callCount, 0, 'Preflight should be skipped when skipPreflight=true');
+        });
+
+        test('runPythonScript skips preflight when skipCloudCredentials=true (Plan 084 bootstrap decoupling)', async () => {
+            stubSharedDependencies();
+            preflightStub.resetHistory();
+
+            const client = new FlowbabyClient(workspacePath, mockContext);
+            const mockProcess = new EventEmitter() as any;
+            mockProcess.stdout = new EventEmitter();
+            mockProcess.stderr = new EventEmitter();
+            mockProcess.kill = sandbox.stub();
+            sandbox.stub(client as any, 'spawnProcess').returns(mockProcess);
+
+            const runScriptPromise = (client as any).runPythonScript('init.py', [], { skipCloudCredentials: true });
+            setTimeout(() => {
+                mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
+                mockProcess.emit('close', 0);
+            }, 10);
+
+            await runScriptPromise;
+            assert.strictEqual(preflightStub.callCount, 0, 'Preflight should be skipped when skipCloudCredentials=true');
         });
     });
 

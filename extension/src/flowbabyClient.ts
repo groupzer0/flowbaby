@@ -7,6 +7,9 @@ import { getFlowbabyOutputChannel, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
 import { SessionManager } from './sessionManager';
 import { PythonBridgeDaemonManager, DaemonHealthStatus } from './bridge/PythonBridgeDaemonManager';
+// Plan 108: Import preflight verification for cognee import gate
+import { PreflightVerificationService, PreflightStatus, PreflightResult } from './setup/PreflightVerificationService';
+import { InterpreterSelectionService } from './setup/InterpreterSelectionService';
 // Plan 073: Import synthesis module for Copilot-based answer generation
 import { synthesizeWithCopilot, isNoRelevantContext, SynthesisResult } from './synthesis';
 // Plan 081: Import Cloud provider for Bedrock credentials
@@ -56,6 +59,8 @@ interface RunPythonScriptOptions {
     timeoutMs?: number;
     /** Skip Cloud credential injection for bootstrap operations (default: false) */
     skipCloudCredentials?: boolean;
+    /** Skip preflight verification (for preflight probe itself or special cases) */
+    skipPreflight?: boolean;
 }
 
 /**
@@ -213,6 +218,12 @@ export class FlowbabyClient {
     private readonly debugLoggingEnabled: boolean; // Plan 050: Propagate debug gate to bridge
     private daemonManager?: PythonBridgeDaemonManager; // Plan 054: Bridge daemon manager
     private readonly daemonModeEnabled: boolean; // Plan 054: Feature flag for daemon mode
+    
+    // Plan 108: Interpreter selection tracking for audit and diagnostics
+    private interpreterOwnership?: 'managed' | 'external';
+    private interpreterReason?: string;
+    private preflightService?: PreflightVerificationService;
+    private interpreterService?: InterpreterSelectionService;
 
     // Plan 092 M4: Auto-retry configuration for staging failures
     private readonly STAGING_MAX_RETRIES = 2; // Total attempts = MAX_RETRIES + 1
@@ -268,16 +279,12 @@ export class FlowbabyClient {
         // Validate Python version compatibility before using the interpreter
         this.pythonPath = this.validatePythonVersion(this.pythonPath);
 
-        // Log detected interpreter with source attribution
-        const configuredPath = config.get<string>('pythonPath', 'python3');
-        const detectionSource = (configuredPath !== 'python3' && configuredPath !== '') 
-            ? 'explicit_config' 
-            : 'auto_detected';
-
+        // Log detected interpreter with source attribution (Plan 108: enhanced logging)
         this.log('INFO', 'FlowbabyClient initialized', {
             workspace: workspacePath,
             pythonPath: this.pythonPath,
-            pythonSource: detectionSource,
+            interpreterReason: this.interpreterReason || 'unknown',
+            interpreterOwnership: this.interpreterOwnership || 'unknown',
             maxContextResults: this.maxContextResults,
             maxContextTokens: this.maxContextTokens,
             searchTopK: this.searchTopK,
@@ -288,9 +295,47 @@ export class FlowbabyClient {
             daemonModeEnabled: this.daemonModeEnabled
         });
 
+        // Plan 108: Initialize preflight verification service for cognee import gate
+        this.initializePreflightService();
+
         // Plan 054: Initialize daemon manager if daemon mode is enabled
         if (this.daemonModeEnabled) {
             this.initializeDaemonManager();
+        }
+    }
+
+    /**
+     * Plan 108: Initialize the preflight verification service
+     * 
+     * Creates services for interpreter selection and preflight verification
+     * to gate bridge calls with cognee import checks.
+     */
+    private initializePreflightService(): void {
+        try {
+            // Create interpreter selection service with VS Code config interface
+            const config = vscode.workspace.getConfiguration('Flowbaby');
+            this.interpreterService = new InterpreterSelectionService(
+                this.workspacePath,
+                undefined, // Use default fs
+                {
+                    get: <T>(key: string, defaultValue: T): T => 
+                        config.get<T>(key, defaultValue) ?? defaultValue
+                }
+            );
+            
+            // Create preflight verification service
+            this.preflightService = new PreflightVerificationService(
+                this.workspacePath,
+                this.bridgePath,
+                this.interpreterService
+            );
+            
+            debugLog('Preflight verification service initialized');
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.log('WARN', 'Failed to initialize preflight service, cognee checks will be skipped', {
+                error: errorMessage
+            });
         }
     }
 
@@ -545,26 +590,56 @@ export class FlowbabyClient {
      * 
      * @returns string - Path to Python interpreter
      */
+    /**
+     * Detect Python interpreter with metadata-first priority (Plan 108)
+     * 
+     * Priority order (Plan 108 Milestone 1 - metadata-first):
+     * 1. Metadata from .flowbaby/bridge-env.json (when present) - SINGLE SOURCE OF TRUTH
+     * 2. .flowbaby/venv virtual environment heuristic (managed environment)
+     * 3. Explicit Flowbaby.pythonPath setting (if set)
+     * 4. System Python ("python" on Windows, "python3" on Unix with "python" fallback)
+     * 
+     * @returns string - Path to Python interpreter
+     */
     private detectPythonInterpreter(): string {
         const config = vscode.workspace.getConfiguration('Flowbaby');
         const configuredPath = config.get<string>('pythonPath', '');
+        const isWindows = process.platform === 'win32';
 
-        // Priority 1: Explicit config always wins (user override is sacred)
-        if (configuredPath && configuredPath.trim() !== '') {
-            debugLog('Python interpreter: using explicit config', { pythonPath: configuredPath });
-            return configuredPath;
+        // Plan 108 Priority 1: Check .flowbaby/bridge-env.json metadata (METADATA-FIRST)
+        const bridgeEnvPath = path.join(this.workspacePath, '.flowbaby', 'bridge-env.json');
+        try {
+            if (fs.existsSync(bridgeEnvPath)) {
+                const metadata = JSON.parse(fs.readFileSync(bridgeEnvPath, 'utf-8'));
+                if (metadata.pythonPath && typeof metadata.pythonPath === 'string') {
+                    // Metadata exists - this is the single source of truth
+                    debugLog('Python interpreter: using bridge-env.json metadata (Plan 108)', { 
+                        pythonPath: metadata.pythonPath,
+                        ownership: metadata.ownership || 'unknown',
+                        reason: 'metadata'
+                    });
+                    this.interpreterOwnership = metadata.ownership;
+                    this.interpreterReason = 'metadata';
+                    return metadata.pythonPath;
+                }
+            }
+        } catch (error) {
+            // bridge-env.json doesn't exist or is invalid - fall through to heuristics
+            debugLog('Python interpreter: bridge-env.json not found or invalid, using heuristics', {
+                error: error instanceof Error ? error.message : String(error)
+            });
         }
 
-        const isWindows = process.platform === 'win32';
-        
-        // Priority 2: Check .flowbaby/venv (managed environment)
+        // Priority 2: Check .flowbaby/venv (managed environment heuristic)
         const flowbabyPath = isWindows
             ? path.join(this.workspacePath, '.flowbaby', 'venv', 'Scripts', 'python.exe')
             : path.join(this.workspacePath, '.flowbaby', 'venv', 'bin', 'python');
 
         try {
             if (fs.existsSync(flowbabyPath)) {
-                debugLog('Python interpreter: using .flowbaby/venv', { pythonPath: flowbabyPath });
+                debugLog('Python interpreter: using .flowbaby/venv heuristic', { pythonPath: flowbabyPath });
+                this.interpreterOwnership = 'managed';
+                this.interpreterReason = 'managed-venv-heuristic';
                 return flowbabyPath;
             }
         } catch (error) {
@@ -574,9 +649,19 @@ export class FlowbabyClient {
             });
         }
 
-        // Priority 3: Fall back to system Python on each platform
+        // Priority 3: Explicit config (only when metadata/heuristic not available)
+        if (configuredPath && configuredPath.trim() !== '') {
+            debugLog('Python interpreter: using explicit config', { pythonPath: configuredPath });
+            this.interpreterOwnership = 'external';
+            this.interpreterReason = 'explicit-config';
+            return configuredPath;
+        }
+
+        // Priority 4: Fall back to system Python on each platform
         if (isWindows) {
             debugLog('Python interpreter: using system python (Windows)');
+            this.interpreterOwnership = 'external';
+            this.interpreterReason = 'system-fallback';
             return 'python';
         }
 
@@ -584,6 +669,8 @@ export class FlowbabyClient {
         // The actual failure mode (if both are missing or broken) will be surfaced
         // by validatePythonVersion with a clear, user-friendly message.
         debugLog('Python interpreter: preferring system python3 (Unix)');
+        this.interpreterOwnership = 'external';
+        this.interpreterReason = 'system-fallback';
         return 'python3';
     }
 
@@ -2202,6 +2289,48 @@ export class FlowbabyClient {
             timeout_ms: timeoutMs
         });
 
+        // Plan 108: Preflight verification gate - check cognee importability before spawning
+        // Skip preflight for bootstrap operations (init.py with skipCloudCredentials)
+        // to avoid chicken-and-egg issues during first setup.
+        // Plan 108 fix: skipCloudCredentials implies skipPreflight for bootstrap decoupling (Plan 084).
+        const skipPreflight = opts.skipPreflight ?? skipCloudCredentials;
+        if (this.preflightService && !skipPreflight) {
+            try {
+                const preflightResult = await this.preflightService.verify();
+                if (preflightResult.status !== PreflightStatus.HEALTHY) {
+                    // Return structured error with remediation, not a spawn error
+                    const errorMessage = this.formatPreflightError(preflightResult);
+                    this.log('ERROR', 'Preflight verification failed', {
+                        script: scriptName,
+                        status: preflightResult.status,
+                        error: preflightResult.error,
+                        remediation: preflightResult.remediation?.action
+                    });
+                    
+                    return {
+                        success: false,
+                        error: errorMessage,
+                        preflight_failed: true,
+                        preflight_status: preflightResult.status,
+                        remediation: preflightResult.remediation
+                    };
+                }
+                
+                debugLog('Preflight verification passed', {
+                    script: scriptName,
+                    cogneeVersion: preflightResult.cogneeVersion,
+                    cached: preflightResult.cached
+                });
+            } catch (preflightError) {
+                // Log but don't block - preflight is fail-fast, not fail-safe
+                const errorMsg = preflightError instanceof Error ? preflightError.message : String(preflightError);
+                this.log('WARN', 'Preflight verification threw exception, proceeding with spawn', {
+                    script: scriptName,
+                    error: errorMsg
+                });
+            }
+        }
+
         return new Promise((resolve, reject) => {
             // Milestone 5: Track process timing to distinguish timeout vs exit timing
             let timedOut = false;
@@ -2437,6 +2566,39 @@ export class FlowbabyClient {
             });
             })().catch(reject);  // Close async IIFE and forward any errors to reject
         });
+    }
+
+    /**
+     * Plan 108: Format a preflight error into a user-friendly message with remediation
+     * 
+     * @param result The preflight verification result
+     * @returns User-friendly error message
+     */
+    private formatPreflightError(result: PreflightResult): string {
+        const status = result.status;
+        const remediation = result.remediation;
+        
+        let message = 'Flowbaby environment verification failed: ';
+        
+        switch (status) {
+            case PreflightStatus.COGNEE_MISSING:
+                message += 'cognee module is not importable. ';
+                break;
+            case PreflightStatus.INTERPRETER_NOT_RUNNABLE:
+                message += 'Python interpreter cannot be executed. ';
+                break;
+            default:
+                message += `${result.error || 'Unknown error'}. `;
+        }
+        
+        if (remediation) {
+            message += remediation.message;
+            if (remediation.commandId) {
+                message += ` (Command: ${remediation.commandId})`;
+            }
+        }
+        
+        return message;
     }
 
     /**

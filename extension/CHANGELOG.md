@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.7.3] - 2026-01-15
+
+### Added
+
+- **Cognee Import Preflight Verification (Plan 108)**: Fail-fast preflight check prevents cryptic "No module named 'cognee'" errors by verifying the Python environment before bridge operations:
+  - **Metadata-First Interpreter Selection**: Bridge operations now prioritize `.flowbaby/bridge-env.json` metadata over explicit config, eliminating interpreter drift that causes missing module errors
+  - **Preflight Gate**: All bridge calls pass through a preflight verification that checks cognee importability before spawning Python
+  - **Actionable Remediation**: Failures provide clear guidance (managed env → "Refresh Bridge Dependencies"; external env → pip install instructions)
+  - **In-Memory Caching**: 30-second cache prevents repeated verification during activation bursts; cache invalidates on interpreter/ownership/requirements changes
+
+- **Diagnose Environment Command (Plan 108)**: New `Flowbaby: Diagnose Environment` command generates a shareable markdown report with:
+  - Interpreter selection details (path, selection reason, ownership)
+  - Preflight verification status (cognee importability, version)
+  - Recommended actions for unhealthy environments
+  - Technical details in structured JSON format
+
+### Changed
+
+- **Interpreter Selection Priority (Plan 108)**: Interpreter resolution now follows metadata-first priority:
+  1. `.flowbaby/bridge-env.json` metadata (single source of truth when present)
+  2. `.flowbaby/venv` heuristic (managed environment)
+  3. Explicit `Flowbaby.pythonPath` setting
+  4. System Python fallback
+
+- **Preflight Cache Invalidation (Plan 108)**: Preflight verification cache now invalidates on requirements hash changes (in addition to pythonPath and ownership changes), ensuring refresh completion correctly triggers re-verification
+
+### Fixed
+
+- **Refresh Quiescence (Plan 108)**: Verified that dependency refresh correctly pauses background operations and stops the bridge daemon before venv mutation, preventing "import during install" races
+
 ## [0.7.2] - 2026-01-15
 
 ### Changed

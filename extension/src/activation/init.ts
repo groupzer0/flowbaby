@@ -14,6 +14,10 @@ import { FlowbabyStatusBar, FlowbabyStatus } from '../statusBar/FlowbabyStatusBa
 import { FlowbabyContextProvider } from '../flowbabyContextProvider';
 import { SessionManager } from '../sessionManager';
 import { getFlowbabyOutputChannel, debugLog } from '../outputChannels';
+// Plan 108: Import DiagnoseEnvironmentService for environment diagnostics command
+import { DiagnoseEnvironmentService } from '../setup/DiagnoseEnvironmentService';
+import { InterpreterSelectionService } from '../setup/InterpreterSelectionService';
+import { PreflightVerificationService } from '../setup/PreflightVerificationService';
 // Plan 083 M4: getAuditLogger import removed - was only used by legacy API key commands
 // Plan 087: Import readiness service for prompt gating
 import { getReadinessService } from '../flowbaby-cloud';
@@ -816,6 +820,65 @@ export function registerSetupCommands(
         }
     );
     context.subscriptions.push(refreshDependenciesCommand);
+
+    // Plan 108 Milestone 4: Diagnose Environment command
+    const diagnoseEnvironmentCommand = vscode.commands.registerCommand(
+        'Flowbaby.diagnoseEnvironment',
+        async () => {
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: "Diagnosing Flowbaby Environment...",
+                cancellable: false
+            }, async () => {
+                try {
+                    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '.';
+                    const bridgePath = require('path').join(__dirname, '..', 'bridge');
+                    
+                    // Create services for diagnostics
+                    const config = vscode.workspace.getConfiguration('Flowbaby');
+                    const interpreterService = new InterpreterSelectionService(
+                        workspacePath,
+                        undefined,
+                        {
+                            get: <T>(key: string, defaultValue: T): T => 
+                                config.get<T>(key, defaultValue) ?? defaultValue
+                        }
+                    );
+                    const preflightService = new PreflightVerificationService(
+                        workspacePath,
+                        bridgePath,
+                        interpreterService
+                    );
+                    const diagnoseService = new DiagnoseEnvironmentService(
+                        workspacePath,
+                        bridgePath,
+                        interpreterService,
+                        preflightService
+                    );
+                    
+                    const report = await diagnoseService.generateReport();
+                    
+                    // Show report in editor
+                    const doc = await vscode.workspace.openTextDocument({
+                        content: report.markdown,
+                        language: 'markdown'
+                    });
+                    await vscode.window.showTextDocument(doc);
+                    
+                    // Also log to output channel
+                    const outputChannel = getFlowbabyOutputChannel();
+                    outputChannel.appendLine('--- Environment Diagnostics Report ---');
+                    outputChannel.appendLine(report.markdown);
+                    
+                } catch (error) {
+                    const errorMsg = error instanceof Error ? error.message : String(error);
+                    vscode.window.showErrorMessage(`Failed to diagnose environment: ${errorMsg}`);
+                    debugLog('Diagnose environment failed', { error: errorMsg });
+                }
+            });
+        }
+    );
+    context.subscriptions.push(diagnoseEnvironmentCommand);
 }
 
 /**
