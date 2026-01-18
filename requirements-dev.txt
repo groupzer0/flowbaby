@@ -1,0 +1,15 @@
+# Development dependencies for repo-level tooling
+# These are NOT part of the extension runtime - install in root .venv only
+#
+# Usage:
+#   cd /path/to/flowbaby
+#   source .venv/bin/activate
+#   pip install -r requirements-dev.txt
+#
+# For bridge runtime deps, see extension/bridge/requirements.txt
+
+# Benchmark harness (Plan 112)
+# Offline retrieval evaluation tools - run from extension/bridge/ directory
+# Example: cd extension/bridge && python -m pytest benchmark/ -v
+ir_measures>=0.3.0
+pytrec-eval-terrier>=0.5.6

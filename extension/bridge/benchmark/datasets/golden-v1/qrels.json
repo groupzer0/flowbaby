@@ -1,0 +1,39 @@
+[
+  {"query_id": "q001", "canonical_item_id": "memory-system-overview-001", "relevance": 2},
+  {"query_id": "q001", "canonical_item_id": "memory-architecture-components-002", "relevance": 1},
+  {"query_id": "q001", "canonical_item_id": "flowbaby-kg-design-003", "relevance": 1},
+
+  {"query_id": "q002", "canonical_item_id": "python-env-setup-001", "relevance": 2},
+  {"query_id": "q002", "canonical_item_id": "venv-configuration-002", "relevance": 1},
+
+  {"query_id": "q003", "canonical_item_id": "auth-decision-oauth-001", "relevance": 2},
+  {"query_id": "q003", "canonical_item_id": "auth-decision-session-002", "relevance": 1},
+  {"query_id": "q003", "canonical_item_id": "auth-decision-tokens-003", "relevance": 1},
+  {"query_id": "q003", "canonical_item_id": "auth-decision-security-004", "relevance": 1},
+
+  {"query_id": "q004", "canonical_item_id": "error-handling-pattern-001", "relevance": 2},
+  {"query_id": "q004", "canonical_item_id": "exception-types-002", "relevance": 1},
+
+  {"query_id": "q005", "canonical_item_id": "vscode-extension-main-001", "relevance": 2},
+  {"query_id": "q005", "canonical_item_id": "vscode-commands-002", "relevance": 1},
+  {"query_id": "q005", "canonical_item_id": "vscode-bridge-003", "relevance": 1},
+
+  {"query_id": "q006", "canonical_item_id": "tdd-workflow-001", "relevance": 2},
+  {"query_id": "q006", "canonical_item_id": "testing-patterns-skill-002", "relevance": 1},
+
+  {"query_id": "q007", "canonical_item_id": "benchmark-scoring-impl-001", "relevance": 2},
+  {"query_id": "q007", "canonical_item_id": "ir-measures-usage-002", "relevance": 1},
+  {"query_id": "q007", "canonical_item_id": "metrics-definition-003", "relevance": 1},
+
+  {"query_id": "q009", "canonical_item_id": "canonicalize-id-impl-001", "relevance": 2},
+
+  {"query_id": "q010", "canonical_item_id": "agent-prompt-templates-001", "relevance": 2},
+  {"query_id": "q010", "canonical_item_id": "prompt-structure-002", "relevance": 1},
+
+  {"query_id": "q011", "canonical_item_id": "cognee-import-error-001", "relevance": 2},
+
+  {"query_id": "q012", "canonical_item_id": "memory-retrieval-decision-001", "relevance": 2},
+  {"query_id": "q012", "canonical_item_id": "retrieval-design-rationale-002", "relevance": 2},
+  {"query_id": "q012", "canonical_item_id": "memory-adr-003", "relevance": 1},
+  {"query_id": "q012", "canonical_item_id": "kg-retrieval-evolution-004", "relevance": 1}
+]

@@ -1,0 +1,86 @@
+[
+  {
+    "query_id": "q001",
+    "query_text": "What is the architecture of the Flowbaby memory system?",
+    "slice_ids": ["relationship-heavy", "multi-hop"],
+    "notes": "Tests multi-hop reasoning across architecture components",
+    "expected_positive_count": 3
+  },
+  {
+    "query_id": "q002",
+    "query_text": "How do I configure the Python environment?",
+    "slice_ids": ["short-factual", "chat-shaped"],
+    "notes": "Simple factual lookup, typical chat query",
+    "expected_positive_count": 2
+  },
+  {
+    "query_id": "q003",
+    "query_text": "Show me all decisions about authentication",
+    "slice_ids": ["relationship-heavy"],
+    "notes": "Requires traversing decision relationships",
+    "expected_positive_count": 4
+  },
+  {
+    "query_id": "q004",
+    "query_text": "What error handling pattern does Flowbaby use?",
+    "slice_ids": ["technical", "template-heavy"],
+    "notes": "Technical query with potential template artifacts",
+    "expected_positive_count": 2
+  },
+  {
+    "query_id": "q005",
+    "query_text": "List the main components of the VS Code extension",
+    "slice_ids": ["short-factual", "edge-sparse"],
+    "notes": "May return metadata-only summaries for components",
+    "expected_positive_count": 3
+  },
+  {
+    "query_id": "q006",
+    "query_text": "What are the best practices for TDD in this project?",
+    "slice_ids": ["chat-shaped", "relationship-heavy"],
+    "notes": "Chat-style query about testing practices",
+    "expected_positive_count": 2
+  },
+  {
+    "query_id": "q007",
+    "query_text": "Explain the benchmark scoring methodology",
+    "slice_ids": ["multi-hop", "technical"],
+    "notes": "Multi-hop through scoring implementation details",
+    "expected_positive_count": 3
+  },
+  {
+    "query_id": "q008",
+    "query_text": "What is the color of Napoleon's white horse?",
+    "slice_ids": ["no-context"],
+    "notes": "True negative - no relevant Flowbaby context",
+    "expected_positive_count": 0
+  },
+  {
+    "query_id": "q009",
+    "query_text": "How does the canonicalize_id function work?",
+    "slice_ids": ["short-factual", "technical"],
+    "notes": "Specific code lookup",
+    "expected_positive_count": 1
+  },
+  {
+    "query_id": "q010",
+    "query_text": "What templates are used for agent prompts?",
+    "slice_ids": ["template-heavy"],
+    "notes": "May return placeholder-heavy content",
+    "expected_positive_count": 2
+  },
+  {
+    "query_id": "q011",
+    "query_text": "ModuleNotFoundError: No module named 'cognee'",
+    "slice_ids": ["technical", "edge-sparse"],
+    "notes": "Error message query - may match sparse metadata",
+    "expected_positive_count": 1
+  },
+  {
+    "query_id": "q012",
+    "query_text": "What decisions led to the current memory retrieval design and why?",
+    "slice_ids": ["multi-hop", "relationship-heavy"],
+    "notes": "Complex query requiring decision chain traversal",
+    "expected_positive_count": 4
+  }
+]
