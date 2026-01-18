@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.7.4] - 2026-01-18
+
+### Added
+
+- **Retrieval-First Benchmark Harness (Plan 112)**: Minimal, maintainable offline evaluation harness for Flowbaby's retrieval system:
+  - **Deterministic Scorer**: Multi-metric scorecard (Recall@K, Precision@K, MRR, MAP@K, nDCG@K) using `ir_measures` and `pytrec_eval` for reliable, offline-only evaluation.
+  - **Golden Dataset**: Initial 12-topic dataset covering mandatory risk slices (template-heavy, edge-sparse, technical, chat-shaped, relationship-heavy, no-context, short-factual, multi-hop).
+  - **Stable ID Contract**: Topic IDs mapped to canonical identifiers (uuid5-based) ensuring qrels remain valid across re-indexing and extraction churn.
+  - **Run Exporter**: Decoupled exporter step converts live Flowbaby retrieval results into benchmark-ready run files while filtering LLM-augmented content.
+  - **Benchmark CLI**: Command-line interface for scoring runs and generating markdown performance summaries.
+  - **Artifact Provenance**: Comprehensive run summaries tracking git SHA, dataset versions, and retrieval contract state.
+
 ## [0.7.3] - 2026-01-15
 
 ### Added
