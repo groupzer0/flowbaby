@@ -3,9 +3,10 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { spawn, execFileSync, ExecFileSyncOptions } from 'child_process';
 import * as crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
 import { FlowbabyStatusBar, FlowbabyStatus } from '../statusBar/FlowbabyStatusBar';
-import { debugLog } from '../outputChannels';
+import { debugLog, isDebugLoggingEnabled } from '../outputChannels';
 import { BackupAuditLogger, BackupAuditEventType } from './BackupAuditLogger';
 
 export type WorkspaceHealthStatus = 'FRESH' | 'BROKEN' | 'VALID';
@@ -1326,16 +1327,41 @@ export class FlowbabySetupService {
             }
         }
 
-        // Plan 054: Stop the bridge daemon before touching the venv on Windows.
+        // Plan 115 M1: Generate operationId for correlation across all refresh-related logs
+        const operationId = uuidv4();
+        const sessionId = vscode.env.sessionId;
+        const extensionHostPid = process.pid;
+
+        // Plan 054 + Plan 115 M3 B1: Stop the bridge daemon before touching the venv on Windows.
         // The daemon can hold a lock on .flowbaby\venv, causing EPERM on rename.
+        // Plan 115 M4: Track stop duration for timing context.
+        let daemonStopTimestamp: number | null = null;
+        let daemonStopDurationMs: number | null = null;
         try {
             if (this.stopDaemonFn) {
+                const stopStart = Date.now();
                 await this.stopDaemonFn();
-                // Give Windows a moment to release file locks.
-                await new Promise(resolve => setTimeout(resolve, 300));
+                daemonStopDurationMs = Date.now() - stopStart;
+                daemonStopTimestamp = Date.now();
+                debugLog('Daemon stopped before refresh', {
+                    operationId,
+                    sessionId,
+                    extensionHostPid,
+                    durationMs: daemonStopDurationMs,
+                    platform: process.platform
+                });
+                // Plan 115 M3 B1: Increase post-stop delay on Windows (300ms → 2000ms)
+                // to allow file handles to release, especially with AV software.
+                const releaseDelayMs = process.platform === 'win32' ? 2000 : 300;
+                await new Promise(resolve => setTimeout(resolve, releaseDelayMs));
             }
         } catch (error) {
-            debugLog('Failed to stop bridge daemon before refresh (continuing)', { error: String(error) });
+            debugLog('Failed to stop bridge daemon before refresh (continuing)', {
+                operationId,
+                sessionId,
+                extensionHostPid,
+                error: String(error)
+            });
         }
 
         if (this.statusBar) {this.statusBar.setStatus(FlowbabyStatus.Refreshing, 'Refreshing dependencies...');}
@@ -1359,7 +1385,10 @@ export class FlowbabySetupService {
             
             debugLog('Refreshing dependencies', { 
                 venvPath: actualVenvPath, 
-                useLegacyPath 
+                useLegacyPath,
+                operationId,
+                sessionId,
+                extensionHostPid
             });
 
             try {
@@ -1376,7 +1405,7 @@ export class FlowbabySetupService {
                     if (this.fs.existsSync(actualBackupPath)) {
                         await fs.promises.rm(actualBackupPath, { recursive: true, force: true });
                     }
-                    await this.renameWithRetries(actualVenvPath, actualBackupPath);
+                    await this.renameWithRetries(actualVenvPath, actualBackupPath, { operationId, daemonStopTimestamp });
                 }
 
                 // 3. Recreate and Install
@@ -1410,7 +1439,11 @@ export class FlowbabySetupService {
 
                     await this.setVerified(true);
                     vscode.window.showInformationMessage('Dependencies refreshed successfully.');
-                    debugLog('Dependencies refresh completed successfully');
+                    debugLog('Dependencies refresh completed successfully', {
+                        operationId,
+                        sessionId,
+                        extensionHostPid
+                    });
                 } else {
                     throw new Error('VERIFICATION_FAILED');
                 }
@@ -1421,7 +1454,12 @@ export class FlowbabySetupService {
                 if (error instanceof Error && error.stack) {
                     this.log('Stack trace: ' + error.stack);
                 }
-                debugLog('Dependencies refresh failed', { error: String(error) });
+                debugLog('Dependencies refresh failed', { 
+                    error: String(error),
+                    operationId,
+                    sessionId,
+                    extensionHostPid
+                });
                 
                 this.outputChannel.show(true);
                 
@@ -1431,7 +1469,7 @@ export class FlowbabySetupService {
                     if (this.fs.existsSync(actualVenvPath)) {
                         await fs.promises.rm(actualVenvPath, { recursive: true, force: true });
                     }
-                    await this.renameWithRetries(actualBackupPath, actualVenvPath);
+                    await this.renameWithRetries(actualBackupPath, actualVenvPath, { operationId, daemonStopTimestamp });
                 }
                 
                 let msg = 'Refresh failed.';
@@ -1449,29 +1487,98 @@ export class FlowbabySetupService {
         });
     }
 
-    private async renameWithRetries(fromPath: string, toPath: string): Promise<void> {
+    /**
+     * Rename a file/directory with retry logic for Windows file locking.
+     * Plan 115 M3 B2/B3: Enhanced with correlation context and timing metrics.
+     * 
+     * On Windows, file operations can fail with EPERM/EBUSY/EACCES when processes
+     * (especially AV software) hold handles open. This method retries with exponential
+     * backoff to allow file locks to release.
+     * 
+     * Bounds: Windows maxAttempts=8, baseDelayMs=500 (worst-case ~18s).
+     * Observability: Normal logs emit single summary; Debug logs emit per-attempt details.
+     * 
+     * @param fromPath - Source path to rename from
+     * @param toPath - Destination path to rename to  
+     * @param context - Optional correlation context for logging
+     * @param context.operationId - UUID for this refresh operation (for cross-log correlation)
+     * @param context.daemonStopTimestamp - Timestamp when daemon was stopped (for timing diagnostics)
+     */
+    private async renameWithRetries(
+        fromPath: string,
+        toPath: string,
+        context?: { operationId?: string; daemonStopTimestamp?: number | null }
+    ): Promise<void> {
         const isWindows = process.platform === 'win32';
-        const maxAttempts = isWindows ? 6 : 2;
-        const baseDelayMs = isWindows ? 250 : 50;
+        // Plan 115 M3 B2: Increase retry budget on Windows
+        const maxAttempts = isWindows ? 8 : 2;
+        const baseDelayMs = isWindows ? 500 : 50;
+        const renameStartTime = Date.now();
 
         let lastError: unknown;
+        let lastCode: string | undefined;
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 await fs.promises.rename(fromPath, toPath);
+                // Plan 115 M3 B3: Log success summary if retries occurred
+                if (attempt > 1) {
+                    const totalDurationMs = Date.now() - renameStartTime;
+                    debugLog('renameWithRetries succeeded after retry', {
+                        fromPath: path.basename(fromPath),
+                        toPath: path.basename(toPath),
+                        attempt,
+                        totalDurationMs,
+                        operationId: context?.operationId
+                    });
+                }
                 return;
             } catch (error) {
                 lastError = error;
 
                 const err = error as { code?: string; message?: string };
                 const code = err?.code;
+                lastCode = code;
                 const msg = err?.message || String(error);
 
                 // Windows frequently returns EPERM when a process holds a handle open.
                 // Retry a few times to allow file locks (or AV scanning) to settle.
                 const retryable = code === 'EPERM' || code === 'EBUSY' || code === 'EACCES';
                 if (!retryable || attempt === maxAttempts) {
-                    debugLog('renameWithRetries failed', { fromPath, toPath, attempt, code, error: msg });
+                    // Plan 115 M3 B3 (Normal): Always-on summary log on final failure
+                    const totalDurationMs = Date.now() - renameStartTime;
+                    const timeSinceDaemonStop = context?.daemonStopTimestamp
+                        ? Date.now() - context.daemonStopTimestamp
+                        : null;
+                    debugLog('renameWithRetries failed (summary)', {
+                        fromPath: path.basename(fromPath),
+                        toPath: path.basename(toPath),
+                        attempt,
+                        maxAttempts,
+                        code,
+                        totalDurationMs,
+                        timeSinceDaemonStop,
+                        operationId: context?.operationId,
+                        platform: process.platform
+                    });
                     throw error;
+                }
+
+                // Plan 115 M3 B3 (Debug): Per-attempt retry log (gated by debug logging)
+                if (isDebugLoggingEnabled()) {
+                    const delayMs = baseDelayMs * attempt;
+                    const timeSinceDaemonStop = context?.daemonStopTimestamp
+                        ? Date.now() - context.daemonStopTimestamp
+                        : null;
+                    debugLog('renameWithRetries retrying', {
+                        fromPath: path.basename(fromPath),
+                        toPath: path.basename(toPath),
+                        attempt,
+                        maxAttempts,
+                        code,
+                        delayMs,
+                        timeSinceDaemonStop,
+                        operationId: context?.operationId
+                    });
                 }
 
                 await new Promise(resolve => setTimeout(resolve, baseDelayMs * attempt));

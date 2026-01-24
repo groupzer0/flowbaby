@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Windows Refresh Hardening & Diagnostics (Plan 115)**: Improved reliability and observability for dependency refresh operations on Windows:
+  - **Correlation Fields**: All daemon start/stop, lock acquisition/release, refresh, and preflight logs now include `sessionId`, `extensionHostPid`, and `operationId` for multi-window contention diagnosis
+  - **Preflight Reason Codes**: Preflight failures now emit a low-cardinality `reasonCode` (always-on) enabling triage without debug logs. Stderr excerpts logged only when debug logging is enabled.
+  - **Windows Rename Hardening**: Increased post-daemon-stop delay (300ms → 2000ms) and retry budget (maxAttempts=8, baseDelayMs=500, ~18s worst-case) to tolerate slow file-handle release and AV scanning
+  - **Timing Context**: Rename retry logs include `timeSinceDaemonStop` and daemon stop duration for race condition diagnosis
+  - **Lock Contention Breadcrumbs**: When lock acquisition fails, logs now include bounded snapshot of existing lock owner metadata (ownerPid, instanceId, lockAge, ownerPidAlive) to distinguish "another window owns the daemon" vs "stale lock"
+
 - **Retrieval-First Benchmark Harness (Plan 112)**: Minimal, maintainable offline evaluation harness for Flowbaby's retrieval system:
   - **Deterministic Scorer**: Multi-metric scorecard (Recall@K, Precision@K, MRR, MAP@K, nDCG@K) using `ir_measures` and `pytrec_eval` for reliable, offline-only evaluation.
   - **Golden Dataset**: Initial 12-topic dataset covering mandatory risk slices (template-heavy, edge-sparse, technical, chat-shaped, relationship-heavy, no-context, short-factual, multi-hop).

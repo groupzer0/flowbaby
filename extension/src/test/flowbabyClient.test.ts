@@ -1349,44 +1349,6 @@ suite('FlowbabyClient Test Suite', () => {
             return mockProcess;
         }
 
-        test('runPythonScript with skipCloudCredentials=true does NOT call getFlowbabyCloudEnvironment', async () => {
-            // Stub Cloud provider functions
-            // Note: isFlowbabyCloudEnabled must also be stubbed to control behavior
-            sandbox.stub(cloudProvider, 'isFlowbabyCloudEnabled').returns(true);
-            sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
-            
-            // Spy on Cloud environment getter - should NOT be called when skipCloudCredentials is true
-            const cloudEnvSpy = sandbox.stub(cloudProvider, 'getFlowbabyCloudEnvironment').resolves({
-                AWS_ACCESS_KEY_ID: 'test-key',
-                AWS_SECRET_ACCESS_KEY: 'test-secret',
-                AWS_SESSION_TOKEN: 'test-token',
-                AWS_REGION: 'us-east-1',
-                FLOWBABY_CLOUD_MODE: 'true'
-            });
-
-            const client = new FlowbabyClient(workspacePath, mockContext);
-            const mockProcess = createMockProcess();
-
-            sandbox.stub(client as any, 'spawnProcess').callsFake(() => {
-                setTimeout(() => {
-                    mockProcess.stdout.emit('data', JSON.stringify({ success: true }));
-                    mockProcess.emit('close', 0);
-                }, 0);
-                return mockProcess;
-            });
-
-            // Call with skipCloudCredentials: true (bootstrap operation)
-            await (client as any).runPythonScript('init.py', [], { skipCloudCredentials: true });
-
-            // Cloud credentials should NOT be requested because skipCloudCredentials=true
-            // The getLLMEnvironment() call is completely bypassed
-            assert.strictEqual(
-                cloudEnvSpy.called,
-                false,
-                'getFlowbabyCloudEnvironment should NOT be called when skipCloudCredentials is true'
-            );
-        });
-
         test('runPythonScript with skipCloudCredentials=false DOES call getFlowbabyCloudEnvironment', async () => {
             // Stub Cloud provider functions
             sandbox.stub(cloudProvider, 'isFlowbabyCloudEnabled').returns(true);

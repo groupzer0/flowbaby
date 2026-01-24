@@ -1,5 +1,6 @@
 /**
  * Plan 108: PreflightVerificationService
+ * Plan 115 M1+M2: Add correlation fields and reasonCode taxonomy
  * 
  * Fail-fast preflight verification for all bridge entrypoints.
  * Verifies cognee is importable before allowing bridge operations.
@@ -8,9 +9,10 @@
  * by checking import capability and providing actionable remediation.
  */
 
+import * as vscode from 'vscode';
 import * as path from 'path';
 import { execFile as nodeExecFile } from 'child_process';
-import { debugLog } from '../outputChannels';
+import { debugLog, isDebugLoggingEnabled } from '../outputChannels';
 import { InterpreterSelectionService, InterpreterSelectionResult } from './InterpreterSelectionService';
 
 /**
@@ -42,6 +44,31 @@ export enum PreflightRemediationAction {
 }
 
 /**
+ * Plan 115 M2: Low-cardinality reason codes for preflight failures.
+ * Always emitted in logs for triage. Extend only if clearly necessary.
+ */
+export enum PreflightReasonCode {
+    /** Python interpreter not found */
+    PYTHON_NOT_FOUND = 'PYTHON_NOT_FOUND',
+    /** Python execution failed */
+    PYTHON_EXEC_FAILED = 'PYTHON_EXEC_FAILED',
+    /** Python probe timed out */
+    PYTHON_TIMEOUT = 'PYTHON_TIMEOUT',
+    /** cognee import failed */
+    COGNEE_IMPORT_FAILED = 'COGNEE_IMPORT_FAILED',
+    /** cognee dependency not found */
+    COGNEE_DEP_NOT_FOUND = 'COGNEE_DEP_NOT_FOUND',
+    /** DLL or shared library load failed */
+    DLL_LOAD_FAILED = 'DLL_LOAD_FAILED',
+    /** Database locked or busy */
+    DB_LOCKED_OR_BUSY = 'DB_LOCKED_OR_BUSY',
+    /** Permission denied */
+    PERMISSION_DENIED = 'PERMISSION_DENIED',
+    /** Unknown error */
+    UNKNOWN = 'UNKNOWN'
+}
+
+/**
  * Remediation guidance for preflight failures
  */
 export interface PreflightRemediation {
@@ -69,6 +96,8 @@ export interface PreflightResult {
     ownership?: 'managed' | 'external';
     /** Error message if failed */
     error?: string;
+    /** Plan 115 M2: Low-cardinality reason code (always present on failure) */
+    reasonCode?: PreflightReasonCode;
     /** Remediation guidance if failed */
     remediation?: PreflightRemediation;
     /** Duration of verification in milliseconds */
@@ -79,12 +108,15 @@ export interface PreflightResult {
 
 /**
  * Internal verification response from Python probe
+ * Plan 115 M2: Now includes stderr for diagnostic purposes
  */
 interface VerificationResponse {
     status: 'ok' | 'error';
     cognee_importable: boolean;
     cognee_version?: string;
     error?: string;
+    /** Plan 115 M2: stderr captured from probe execution */
+    stderr?: string;
 }
 
 /**
@@ -256,7 +288,8 @@ export class PreflightVerificationService {
                     pythonPath,
                     interpreter.ownership,
                     response.error || "cognee module not importable",
-                    durationMs
+                    durationMs,
+                    response.stderr
                 );
             }
         } catch (error) {
@@ -271,13 +304,15 @@ export class PreflightVerificationService {
                 pythonPath,
                 interpreter.ownership,
                 isNotFound ? `Python interpreter not found: ${pythonPath}` : errorMessage,
-                durationMs
+                durationMs,
+                undefined // stderr not available in catch block
             );
         }
     }
 
     /**
      * Run the Python probe to check cognee importability
+     * Plan 115 M2: Captures stderr for diagnostic logging
      */
     private runProbe(pythonPath: string): Promise<VerificationResponse> {
         return new Promise((resolve, reject) => {
@@ -311,13 +346,28 @@ except Exception as e:
                 ['-c', probeScript],
                 { timeout: 10000, cwd: this.workspacePath },
                 (error, stdout, stderr) => {
+                    // Plan 115 M2: Log stderr excerpt only when debug logging is enabled
+                    if (stderr && stderr.trim() && isDebugLoggingEnabled()) {
+                        // Truncate and redact absolute paths for safety
+                        const redactedStderr = this.redactPaths(stderr.substring(0, 500));
+                        debugLog('PreflightVerificationService: probe stderr (debug)', {
+                            stderr: redactedStderr
+                        });
+                    }
+
                     if (error) {
-                        reject(error);
+                        // Plan 115 M2: Include stderr in error rejection
+                        const enhancedError = new Error(
+                            `${error.message}${stderr ? ` | stderr: ${this.redactPaths(stderr.substring(0, 200))}` : ''}`
+                        );
+                        reject(enhancedError);
                         return;
                     }
 
                     try {
                         const response = JSON.parse(stdout.trim()) as VerificationResponse;
+                        // Plan 115 M2: Attach stderr to response for downstream use
+                        response.stderr = stderr || undefined;
                         resolve(response);
                     } catch (parseError) {
                         reject(new Error(`Failed to parse probe output: ${stdout}`));
@@ -328,16 +378,30 @@ except Exception as e:
     }
 
     /**
+     * Plan 115 M2: Redact absolute paths from stderr to avoid leaking sensitive paths
+     */
+    private redactPaths(text: string): string {
+        // Replace absolute paths with basename or placeholder
+        // Match common path patterns: /path/to/file, C:\path\to\file
+        return text
+            .replace(/\/[^\s:]+\/[^\s:]+/g, '<path>')
+            .replace(/[A-Z]:\\[^\s:]+\\[^\s:]+/gi, '<path>');
+    }
+
+    /**
      * Build a failure result with appropriate remediation
+     * Plan 115 M2: Now includes reasonCode for always-on triage
      */
     private buildFailureResult(
         status: PreflightStatus,
         pythonPath: string,
         ownership: 'managed' | 'external' | undefined,
         error: string,
-        durationMs: number
+        durationMs: number,
+        stderr?: string
     ): PreflightResult {
         const remediation = this.getRemediation(status, ownership);
+        const reasonCode = this.classifyReasonCode(error, stderr);
 
         return {
             status,
@@ -345,10 +409,45 @@ except Exception as e:
             pythonPath,
             ownership,
             error,
+            reasonCode,
             remediation,
             durationMs,
             cached: false
         };
+    }
+
+    /**
+     * Plan 115 M2: Classify error into a low-cardinality reason code
+     */
+    private classifyReasonCode(error: string, stderr?: string): PreflightReasonCode {
+        const combined = `${error} ${stderr || ''}`.toLowerCase();
+
+        if (combined.includes('enoent') || combined.includes('not found') || combined.includes('spawn')) {
+            return PreflightReasonCode.PYTHON_NOT_FOUND;
+        }
+        if (combined.includes('timeout') || combined.includes('timed out')) {
+            return PreflightReasonCode.PYTHON_TIMEOUT;
+        }
+        if (combined.includes('dll') || combined.includes('.so') || combined.includes('load') && combined.includes('fail')) {
+            return PreflightReasonCode.DLL_LOAD_FAILED;
+        }
+        if (combined.includes('locked') || combined.includes('busy') || combined.includes('database is locked')) {
+            return PreflightReasonCode.DB_LOCKED_OR_BUSY;
+        }
+        if (combined.includes('permission') || combined.includes('access denied') || combined.includes('eacces')) {
+            return PreflightReasonCode.PERMISSION_DENIED;
+        }
+        if (combined.includes('no module named') || combined.includes('modulenotfounderror')) {
+            return PreflightReasonCode.COGNEE_DEP_NOT_FOUND;
+        }
+        if (combined.includes('importerror') || combined.includes('cannot import')) {
+            return PreflightReasonCode.COGNEE_IMPORT_FAILED;
+        }
+        if (combined.includes('exec') || combined.includes('failed to execute')) {
+            return PreflightReasonCode.PYTHON_EXEC_FAILED;
+        }
+
+        return PreflightReasonCode.UNKNOWN;
     }
 
     /**
@@ -392,6 +491,7 @@ except Exception as e:
     /**
      * Log preflight results at Normal observability level
      * Plan 108 Milestone 4.1: Always-on, low-volume logging
+     * Plan 115 M1+M2: Add correlation fields (sessionId, pid) and reasonCode
      */
     private logPreflight(result: PreflightResult, source: 'cache-hit' | 'verification'): void {
         debugLog('PreflightVerificationService: preflight complete', {
@@ -399,9 +499,13 @@ except Exception as e:
             cogneeImportable: result.cogneeImportable,
             cogneeVersion: result.cogneeVersion,
             ownership: result.ownership ?? 'unknown',
+            reasonCode: result.reasonCode,
             durationMs: result.durationMs,
             cached: result.cached,
-            source
+            source,
+            // Plan 115 M1: Correlation fields
+            sessionId: vscode.env.sessionId,
+            extensionHostPid: process.pid
         });
     }
 }

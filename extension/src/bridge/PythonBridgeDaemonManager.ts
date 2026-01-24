@@ -525,7 +525,12 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         const lockPath = this.getLockPath();
         const instanceId = uuidv4(); // Generate per-acquisition for log correlation
 
-        this.log('INFO', '[lock] acquire start', { instanceId });
+        // Plan 115 M1: Add correlation fields to lock acquire log
+        this.log('INFO', '[lock] acquire start', { 
+            instanceId,
+            sessionId: vscode.env.sessionId,
+            extensionHostPid: process.pid
+        });
 
         try {
             // Ensure .flowbaby directory exists
@@ -541,19 +546,39 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             // Write owner metadata immediately after acquisition
             await this.writeLockOwnerMetadata(instanceId);
 
-            this.log('INFO', '[lock] acquire success', { instanceId, pid: process.pid });
+            // Plan 115 M1: Add correlation fields to lock acquire success log
+            this.log('INFO', '[lock] acquire success', { 
+                instanceId, 
+                extensionHostPid: process.pid,
+                sessionId: vscode.env.sessionId
+            });
             return true;
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
                 // Plan 095: EEXIST recovery - check if lock is stale
+                // Plan 115 M5: Log bounded snapshot of existing lock owner metadata for contention diagnosis
                 this.log('INFO', '[lock] EEXIST - checking staleness', { instanceId });
+
+                // Plan 115 M5: Read existing lock owner metadata for contention breadcrumbs
+                const existingOwner = await this.readLockOwnerMetadata();
+                const lockAge = existingOwner ? Date.now() - existingOwner.createdAt : null;
+                const ownerPidAlive = existingOwner ? this.isProcessAlive(existingOwner.extensionHostPid) : null;
 
                 const { stale, reason } = await this.isLockStale();
 
                 if (!stale) {
+                    // Plan 115 M5: Log contention breadcrumbs when lock is held by another process
                     this.log('WARN', '[lock] acquire failed - lock held by another process', {
                         instanceId,
-                        reason
+                        reason,
+                        // Plan 115 M5: Bounded snapshot of existing lock owner (no absolute paths)
+                        ownerPid: existingOwner?.extensionHostPid,
+                        ownerInstanceId: existingOwner?.instanceId,
+                        lockAge,
+                        ownerPidAlive,
+                        // Plan 115 M1: Correlation fields
+                        sessionId: vscode.env.sessionId,
+                        extensionHostPid: process.pid
                     });
                     return false;
                 }
@@ -605,7 +630,11 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             return;
         }
 
-        this.log('INFO', '[lock] release start');
+        // Plan 115 M1: Add correlation fields to lock release log
+        this.log('INFO', '[lock] release start', {
+            sessionId: vscode.env.sessionId,
+            extensionHostPid: process.pid
+        });
 
         try {
             // Remove owner.json first
@@ -734,9 +763,13 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             this.resetIdleTimer();
 
             const startupDuration = Date.now() - startTime;
+            // Plan 115 M1: Add correlation fields to daemon start log
             this.log('INFO', 'Bridge daemon started successfully', {
                 startupDuration_ms: startupDuration,
-                pid: this.daemonProcess.pid
+                daemonPid: this.daemonProcess.pid,
+                extensionHostPid: process.pid,
+                sessionId: vscode.env.sessionId,
+                platform: process.platform
             });
 
             // Write PID file for crash recovery
@@ -1198,10 +1231,13 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             // Plan 092 M2.4: Release lock after daemon stops
             await this.releaseLock();
 
+            // Plan 115 M1: Add correlation fields to daemon stop log
             this.log('INFO', 'Daemon stopped', {
                 reason,
                 outcome: shutdownOutcome,
-                pid
+                daemonPid: pid,
+                extensionHostPid: process.pid,
+                sessionId: vscode.env.sessionId
             });
         }
     }

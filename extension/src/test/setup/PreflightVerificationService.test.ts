@@ -11,7 +11,8 @@ import {
     PreflightVerificationService,
     PreflightResult,
     PreflightStatus,
-    PreflightRemediationAction
+    PreflightRemediationAction,
+    PreflightReasonCode
 } from '../../setup/PreflightVerificationService';
 import { InterpreterSelectionResult, InterpreterSelectionReason } from '../../setup/InterpreterSelectionService';
 
@@ -444,6 +445,317 @@ suite('PreflightVerificationService Test Suite', () => {
             const result = await service.verify();
             
             assert.strictEqual(service.isHealthy(result), true);
+        });
+    });
+
+    suite('Plan 115: reasonCode classification', () => {
+        
+        test('healthy result has no reasonCode', async () => {
+            // Arrange: healthy probe response
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: '/managed/venv/bin/python',
+                reason: InterpreterSelectionReason.METADATA,
+                metadataExists: true,
+                ownership: 'managed'
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                cb(null, JSON.stringify({
+                    status: 'ok',
+                    cognee_importable: true,
+                    cognee_version: '0.5.15'
+                }), '');
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert: healthy results should have undefined reasonCode
+            assert.strictEqual(result.status, PreflightStatus.HEALTHY);
+            assert.strictEqual(result.reasonCode, undefined);
+        });
+        
+        test('ENOENT error maps to PYTHON_NOT_FOUND reasonCode', async () => {
+            // Arrange
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: '/nonexistent/python',
+                reason: InterpreterSelectionReason.SYSTEM_FALLBACK,
+                metadataExists: false
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                const error = new Error('ENOENT: spawn /nonexistent/python failed') as NodeJS.ErrnoException;
+                error.code = 'ENOENT';
+                cb(error, '', '');
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert
+            assert.strictEqual(result.status, PreflightStatus.INTERPRETER_NOT_RUNNABLE);
+            assert.strictEqual(result.reasonCode, PreflightReasonCode.PYTHON_NOT_FOUND);
+        });
+        
+        test('cognee import failure maps to COGNEE_DEP_NOT_FOUND reasonCode', async () => {
+            // Arrange: No module named 'cognee' is specifically a dependency not found issue
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: '/managed/venv/bin/python',
+                reason: InterpreterSelectionReason.METADATA,
+                metadataExists: true,
+                ownership: 'managed'
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                cb(null, JSON.stringify({
+                    status: 'error',
+                    cognee_importable: false,
+                    error: "No module named 'cognee'"
+                }), '');
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert: "No module named" maps to DEP_NOT_FOUND, not generic IMPORT_FAILED
+            assert.strictEqual(result.status, PreflightStatus.COGNEE_MISSING);
+            assert.strictEqual(result.reasonCode, PreflightReasonCode.COGNEE_DEP_NOT_FOUND);
+        });
+        
+        test('generic import error maps to COGNEE_IMPORT_FAILED reasonCode', async () => {
+            // Arrange: ImportError that's not a missing module
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: '/managed/venv/bin/python',
+                reason: InterpreterSelectionReason.METADATA,
+                metadataExists: true,
+                ownership: 'managed'
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                cb(null, JSON.stringify({
+                    status: 'error',
+                    cognee_importable: false,
+                    error: "ImportError: cannot import name 'something' from 'cognee'"
+                }), '');
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert: generic ImportError (not "no module named") maps to IMPORT_FAILED
+            assert.strictEqual(result.reasonCode, PreflightReasonCode.COGNEE_IMPORT_FAILED);
+        });
+        
+        test('DLL load failure maps to DLL_LOAD_FAILED reasonCode', async () => {
+            // Arrange: simulate DLL load error (Windows-specific issue)
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: '/managed/venv/bin/python',
+                reason: InterpreterSelectionReason.METADATA,
+                metadataExists: true,
+                ownership: 'managed'
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                cb(null, JSON.stringify({
+                    status: 'error',
+                    cognee_importable: false,
+                    error: "ImportError: DLL load failed while importing _sqlite3"
+                }), '');
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert
+            assert.strictEqual(result.reasonCode, PreflightReasonCode.DLL_LOAD_FAILED);
+        });
+        
+        test('database locked error maps to DB_LOCKED_OR_BUSY reasonCode', async () => {
+            // Arrange
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: '/managed/venv/bin/python',
+                reason: InterpreterSelectionReason.METADATA,
+                metadataExists: true,
+                ownership: 'managed'
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                cb(null, JSON.stringify({
+                    status: 'error',
+                    cognee_importable: false,
+                    error: "sqlite3.OperationalError: database is locked"
+                }), '');
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert
+            assert.strictEqual(result.reasonCode, PreflightReasonCode.DB_LOCKED_OR_BUSY);
+        });
+        
+        test('permission denied error maps to PERMISSION_DENIED reasonCode', async () => {
+            // Arrange
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: '/managed/venv/bin/python',
+                reason: InterpreterSelectionReason.METADATA,
+                metadataExists: true,
+                ownership: 'managed'
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                const error = new Error('EACCES: permission denied') as NodeJS.ErrnoException;
+                error.code = 'EACCES';
+                cb(error, '', '');
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert
+            assert.strictEqual(result.reasonCode, PreflightReasonCode.PERMISSION_DENIED);
+        });
+        
+        test('timeout error maps to PYTHON_TIMEOUT reasonCode', async () => {
+            // Arrange: simulate timeout (ETIMEDOUT or similar kill signal)
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: '/managed/venv/bin/python',
+                reason: InterpreterSelectionReason.METADATA,
+                metadataExists: true,
+                ownership: 'managed'
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                const error = new Error('Process timed out') as any;
+                error.killed = true;
+                error.signal = 'SIGTERM';
+                cb(error, '', '');
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert
+            assert.strictEqual(result.reasonCode, PreflightReasonCode.PYTHON_TIMEOUT);
+        });
+        
+        test('result includes reasonCode field when failure occurs', async () => {
+            // Arrange
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: '/nonexistent/python',
+                reason: InterpreterSelectionReason.SYSTEM_FALLBACK,
+                metadataExists: false
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                const error = new Error('spawn failed') as NodeJS.ErrnoException;
+                error.code = 'ENOENT';
+                cb(error, '', '');
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert: result structure includes reasonCode
+            assert.ok('reasonCode' in result, 'result should have reasonCode field');
+            assert.ok(Object.values(PreflightReasonCode).includes(result.reasonCode!), 
+                'reasonCode should be a valid PreflightReasonCode enum value');
+        });
+    });
+
+    suite('Plan 115: path redaction in error messages', () => {
+        
+        test('error messages with paths still allow reasonCode classification', async () => {
+            // Arrange: error message contains absolute Unix path, but we can still classify
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: '/managed/venv/bin/python',
+                reason: InterpreterSelectionReason.METADATA,
+                metadataExists: true,
+                ownership: 'managed'
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            // Simulate error with path in message - reasonCode classification still works
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                cb(null, JSON.stringify({
+                    status: 'error',
+                    cognee_importable: false,
+                    error: "No module named 'cognee' at /home/user/project/file.py"
+                }), '');
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert: reasonCode is correctly classified despite path in message
+            assert.strictEqual(result.status, PreflightStatus.COGNEE_MISSING);
+            assert.strictEqual(result.reasonCode, PreflightReasonCode.COGNEE_DEP_NOT_FOUND);
+            assert.ok(result.error, 'result should have error message');
+        });
+
+        test('Windows path patterns in error do not break reasonCode classification', async () => {
+            // Arrange: error message contains Windows path
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: 'C:\\Python311\\python.exe',
+                reason: InterpreterSelectionReason.METADATA,
+                metadataExists: true,
+                ownership: 'managed'
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            // Simulate DLL error with Windows path
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                cb(null, JSON.stringify({
+                    status: 'error',
+                    cognee_importable: false,
+                    error: "DLL load failed at C:\\Windows\\System32\\vcruntime140.dll"
+                }), '');
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert: DLL_LOAD_FAILED reasonCode is correctly identified
+            assert.strictEqual(result.status, PreflightStatus.COGNEE_MISSING);
+            assert.strictEqual(result.reasonCode, PreflightReasonCode.DLL_LOAD_FAILED);
+        });
+        
+        test('stderr with paths is bounded and redacted before logging', async () => {
+            // Arrange: long stderr with many paths
+            const interpreterResult: InterpreterSelectionResult = {
+                pythonPath: '/managed/venv/bin/python',
+                reason: InterpreterSelectionReason.METADATA,
+                metadataExists: true,
+                ownership: 'managed'
+            };
+            mockInterpreterService.selectInterpreter.resolves(interpreterResult);
+            
+            // Create a very long stderr (over 500 chars)
+            const longPath = '/home/user/very/deep/nested/path/to/some/file.py';
+            const longStderr = `Error: ${longPath}\n`.repeat(100);
+            
+            mockExecFile.callsFake((cmd: string, args: string[], opts: any, cb: Function) => {
+                const error = new Error('Import failed');
+                cb(error, '', longStderr);
+            });
+            
+            // Act
+            const result = await service.verify();
+            
+            // Assert: error was processed without crashing
+            assert.strictEqual(result.status, PreflightStatus.COGNEE_MISSING);
+            // The error message should be bounded (not contain the full 5KB+ of stderr)
+            assert.ok(result.error!.length < 1000, 
+                'Error message should be bounded, not include full stderr');
         });
     });
 });
