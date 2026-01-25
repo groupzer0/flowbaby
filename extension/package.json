@@ -135,6 +135,11 @@
         "category": "Flowbaby"
       },
       {
+        "command": "Flowbaby.diagnoseDaemon",
+        "title": "Flowbaby: Diagnose Daemon",
+        "category": "Flowbaby"
+      },
+      {
         "command": "Flowbaby.initializeWorkspace",
         "title": "Flowbaby: Initialize Workspace",
         "category": "Flowbaby"

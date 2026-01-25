@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Daemon Startup & Recovery Hardening (Plan 116)**: Comprehensive improvements to daemon lifecycle reliability, diagnostics, and observability:
+  - **Reliability Contract**: Stable reason codes (`DaemonUnavailableReason`) for all daemon unavailability scenarios enabling programmatic error handling and telemetry aggregation
+  - **Bounded Startup**: All startup paths now complete within a bounded deadline (30s default) with deterministic cleanup—no more stuck "starting" states
+  - **Recovery Loop**: Automatic recovery attempts (3 max) with exponential backoff when daemon startup fails; degraded mode entered after budget exhaustion
+  - **Daemon-Only Routing**: Memory operations (`retrieve`, `ingest`, `ingestSummary`) now route exclusively through the daemon—no subprocess fallback eliminates reliability edge cases
+  - **Background Cognify via Daemon**: `cognify()` operations now use daemon-managed execution; subprocess auto-retry removed for simpler, more predictable behavior
+  - **Diagnostics Command**: New `Flowbaby: Diagnose Daemon` command provides comprehensive diagnostic report including current state, last failure details, recovery status, lock ownership, and remediation hints
+  - **Normal vs Debug Observability**: State transitions and reason codes logged in normal mode; stderr excerpts and detailed retry logs only in debug mode
+  - **Startup Robustness Verification Matrix**: Engineering test harnesses covering immediate exit, hang, protocol errors, stdio issues, and runtime crash scenarios
+
+### Changed
+
+- **Error Messages**: Daemon unavailability errors now include actionable guidance (e.g., "Run 'Flowbaby: Diagnose Daemon' for details")
+- **Background Operation Manager**: Removed `AUTO_RETRY_COUNT`, `AUTO_RETRY_DELAY_MS`, and `forceSubprocess` parameter—all cognify operations are daemon-only
+- **Windows Subprocess Tests**: Updated to reflect daemon-only routing (Plan 115 subprocess spawn tests replaced with daemon routing tests)
+
 - **Windows Refresh Hardening & Diagnostics (Plan 115)**: Improved reliability and observability for dependency refresh operations on Windows:
   - **Correlation Fields**: All daemon start/stop, lock acquisition/release, refresh, and preflight logs now include `sessionId`, `extensionHostPid`, and `operationId` for multi-window contention diagnosis
   - **Preflight Reason Codes**: Preflight failures now emit a low-cardinality `reasonCode` (always-on) enabling triage without debug logs. Stderr excerpts logged only when debug logging is enabled.

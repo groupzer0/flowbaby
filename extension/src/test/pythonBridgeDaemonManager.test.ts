@@ -267,8 +267,13 @@ suite('PythonBridgeDaemonManager', () => {
                 mockOutputChannel
             );
 
-            // Start should be a no-op when disabled
-            await manager.start();
+            // Plan 116: Start throws DaemonUnavailableError when disabled
+            await assert.rejects(
+                async () => manager.start(),
+                (error: Error) => {
+                    return error.message.includes('disabled');
+                }
+            );
             assert.strictEqual(manager.getState(), 'stopped');
             assert.strictEqual(manager.isHealthy(), false);
 

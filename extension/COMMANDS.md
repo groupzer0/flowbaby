@@ -10,6 +10,7 @@
 | `Flowbaby.backgroundStatus` | Flowbaby: View Background Operations | Flowbaby | — |
 | `Flowbaby.captureMessage` | Flowbaby: Capture to Memory | Flowbaby | `ctrl+alt+f` (Mac: `cmd+alt+f`) |
 | `Flowbaby.clearMemory` | Flowbaby: Clear Workspace Memory | Flowbaby | — |
+| `Flowbaby.diagnoseDaemon` | Flowbaby: Diagnose Daemon | Flowbaby | — |
 | `Flowbaby.diagnoseEnvironment` | Flowbaby: Diagnose Environment | Flowbaby | — |
 | `Flowbaby.ingestForAgent` | Flowbaby: Ingest Summary for Agent | Flowbaby | — |
 | `Flowbaby.initializeWorkspace` | Flowbaby: Initialize Workspace | Flowbaby | — |
@@ -38,6 +39,8 @@
   - Command ID: `Flowbaby.captureMessage`
 - **Flowbaby: Clear Workspace Memory**
   - Command ID: `Flowbaby.clearMemory`
+- **Flowbaby: Diagnose Daemon**
+  - Command ID: `Flowbaby.diagnoseDaemon`
 - **Flowbaby: Diagnose Environment**
   - Command ID: `Flowbaby.diagnoseEnvironment`
 - **Flowbaby: Ingest Summary for Agent**

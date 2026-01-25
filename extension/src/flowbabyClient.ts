@@ -7,6 +7,8 @@ import { getFlowbabyOutputChannel, debugLog } from './outputChannels';
 import { getAuditLogger } from './audit/AuditLogger';
 import { SessionManager } from './sessionManager';
 import { PythonBridgeDaemonManager, DaemonHealthStatus } from './bridge/PythonBridgeDaemonManager';
+// Plan 116: Import DaemonUnavailableError for daemon-only routing
+import { DaemonUnavailableError, DaemonUnavailableReason } from './bridge/daemonReliabilityContract';
 // Plan 108: Import preflight verification for cognee import gate
 import { PreflightVerificationService, PreflightStatus, PreflightResult } from './setup/PreflightVerificationService';
 import { InterpreterSelectionService } from './setup/InterpreterSelectionService';
@@ -368,8 +370,11 @@ export class FlowbabyClient {
             });
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.log('WARN', 'Failed to initialize daemon manager, falling back to spawn-per-request', {
-                error: errorMessage
+            // Plan 116: Fail loudly instead of silently falling back to spawn-per-request
+            // Memory operations will fail with DaemonUnavailableError when daemonManager is undefined
+            this.log('ERROR', 'Failed to initialize daemon manager - memory operations will be unavailable', {
+                error: errorMessage,
+                remediation: 'Run "Flowbaby: Diagnose Daemon" for details or check Python path in settings'
             });
             this.daemonManager = undefined;
         }
@@ -922,6 +927,7 @@ export class FlowbabyClient {
             }
             
             // Plan 062: Route through daemon to avoid KuzuDB lock conflicts
+            // Plan 116: Daemon-only routing - no spawn fallback for memory operations
             let result: FlowbabyResult;
             if (this.daemonManager && this.daemonModeEnabled) {
                 try {
@@ -932,15 +938,20 @@ export class FlowbabyClient {
                     };
                     result = await this.ingestViaDaemon(daemonParams);
                 } catch (daemonError) {
+                    // Plan 116: Fail fast with reason-coded error, no spawn fallback
                     const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
-                    this.log('WARN', 'Daemon ingest failed, falling back to spawn-per-request', {
+                    this.log('ERROR', 'Daemon ingest failed (daemon-only routing, no fallback)', {
                         error: errorMsg
                     });
-                    result = await this.runPythonScript('ingest.py', [
-                        '--summary',
-                        '--summary-json',
-                        summaryJson
-                    ], 120000);
+                    // Re-throw with proper error type if not already a DaemonUnavailableError
+                    if (daemonError instanceof DaemonUnavailableError) {
+                        throw daemonError;
+                    }
+                    throw new DaemonUnavailableError(
+                        DaemonUnavailableReason.PROCESS_NOT_AVAILABLE,
+                        undefined,
+                        { operation: 'ingestSummary', originalError: errorMsg }
+                    );
                 }
             } else {
                 result = await this.runPythonScript('ingest.py', [
@@ -1002,6 +1013,16 @@ export class FlowbabyClient {
         } catch (error) {
             const duration = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : String(error);
+            
+            // Plan 116: Re-throw DaemonUnavailableError for daemon-only routing
+            if (error instanceof DaemonUnavailableError) {
+                this.log('ERROR', 'Daemon summary ingest failed (daemon-only routing)', {
+                    topic: summary.topic,
+                    duration_ms: duration,
+                    error: errorMessage
+                });
+                throw error;
+            }
             
             // Distinguish timeout vs true failure
             const isTimeout = /Python script timeout after/i.test(errorMessage);
@@ -1323,7 +1344,8 @@ export class FlowbabyClient {
                 throw new Error(`Payload too large (${userMessage.length + assistantMessage.length} chars). Max allowed is ${this.MAX_PAYLOAD_CHARS}.`);
             }
 
-            // Plan 054 Fix: Try daemon first (auto-starts via sendRequest), fall back on error
+            // Plan 054 Fix: Try daemon first (auto-starts via sendRequest)
+            // Plan 116: Daemon-only routing - no spawn fallback for memory operations
             // Use 120-second timeout for ingestion (Cognee setup + LLM processing can take time)
             let result: FlowbabyResult;
             if (this.daemonManager && this.daemonModeEnabled) {
@@ -1342,11 +1364,19 @@ export class FlowbabyClient {
                     }
                     result = await this.ingestViaDaemon(daemonParams);
                 } catch (daemonError) {
+                    // Plan 116: Fail fast with reason-coded error, no spawn fallback
                     const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
-                    this.log('WARN', 'Daemon ingest failed, falling back to spawn-per-request', {
+                    this.log('ERROR', 'Daemon ingest failed (daemon-only routing, no fallback)', {
                         error: errorMsg
                     });
-                    result = await this.runPythonScript('ingest.py', args, 120000);
+                    if (daemonError instanceof DaemonUnavailableError) {
+                        throw daemonError;
+                    }
+                    throw new DaemonUnavailableError(
+                        DaemonUnavailableReason.PROCESS_NOT_AVAILABLE,
+                        undefined,
+                        { operation: 'ingestConversation', originalError: errorMsg }
+                    );
                 }
             } else {
                 result = await this.runPythonScript('ingest.py', args, 120000);
@@ -1400,6 +1430,15 @@ export class FlowbabyClient {
         } catch (error) {
             const duration = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : String(error);
+            
+            // Plan 116: Re-throw DaemonUnavailableError for daemon-only routing
+            if (error instanceof DaemonUnavailableError) {
+                this.log('ERROR', 'Daemon ingest failed (daemon-only routing)', {
+                    duration_ms: duration,
+                    error: errorMessage
+                });
+                throw error;
+            }
             
             // Milestone 2: Distinguish timeout vs true failure
             const isTimeout = /Python script timeout after/i.test(errorMessage);
@@ -1665,17 +1704,26 @@ export class FlowbabyClient {
                 daemonHealthy: this.daemonManager?.isHealthy() ?? false
             });
             
-            // Plan 054 Fix: Try daemon first (auto-starts via sendRequest), fall back on error
+            // Plan 054 Fix: Try daemon first (auto-starts via sendRequest)
+            // Plan 116: Daemon-only routing - no spawn fallback for memory operations
             let result: FlowbabyResult;
             if (this.daemonManager && this.daemonModeEnabled) {
                 try {
                     result = await this.retrieveViaDaemon(payload);
                 } catch (daemonError) {
+                    // Plan 116: Fail fast with reason-coded error, no spawn fallback
                     const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
-                    this.log('WARN', 'Daemon retrieval failed, falling back to spawn-per-request', {
+                    this.log('ERROR', 'Daemon retrieval failed (daemon-only routing, no fallback)', {
                         error: errorMsg
                     });
-                    result = await this.runPythonScript('retrieve.py', args, RETRIEVAL_TIMEOUT_MS);
+                    if (daemonError instanceof DaemonUnavailableError) {
+                        throw daemonError;
+                    }
+                    throw new DaemonUnavailableError(
+                        DaemonUnavailableReason.PROCESS_NOT_AVAILABLE,
+                        undefined,
+                        { operation: 'retrieve', originalError: errorMsg }
+                    );
                 }
             } else {
                 result = await this.runPythonScript('retrieve.py', args, RETRIEVAL_TIMEOUT_MS);
@@ -1880,6 +1928,11 @@ export class FlowbabyClient {
                 duration: errorDuration,
                 error: errorMessage
             });
+            
+            // Plan 116: Re-throw DaemonUnavailableError for daemon-only routing
+            if (error instanceof DaemonUnavailableError) {
+                throw error;
+            }
             
             // Re-throw API key errors so they surface as actionable messages
             if (errorMessage.includes('API_KEY') || errorMessage.includes('API key')) {

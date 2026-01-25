@@ -939,6 +939,159 @@ export function registerSetupCommands(
         }
     );
     context.subscriptions.push(diagnoseEnvironmentCommand);
+
+    // Plan 116 M6: Diagnose Daemon command
+    const diagnoseDaemonCommand = vscode.commands.registerCommand(
+        'Flowbaby.diagnoseDaemon',
+        async () => {
+            const outputChannel = getFlowbabyOutputChannel();
+            
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: "Diagnosing Daemon...",
+                cancellable: false
+            }, async () => {
+                try {
+                    const client = getClient();
+                    const daemonManager = client?.getDaemonManager();
+                    
+                    if (!daemonManager) {
+                        const report = [
+                            '# Flowbaby Daemon Diagnostic Report',
+                            '',
+                            '**Status**: No daemon manager available',
+                            '',
+                            '## Possible Causes',
+                            '- Flowbaby is not fully initialized for this workspace',
+                            '- Daemon mode is disabled in settings',
+                            '',
+                            '## Remediation',
+                            '1. Ensure the workspace is initialized (run "Flowbaby: Initialize Workspace")',
+                            '2. Check that `Flowbaby.bridgeMode` is set to `daemon` in settings',
+                            '3. Reload the workspace window',
+                        ].join('\n');
+                        
+                        const doc = await vscode.workspace.openTextDocument({
+                            content: report,
+                            language: 'markdown'
+                        });
+                        await vscode.window.showTextDocument(doc);
+                        return;
+                    }
+                    
+                    const diagnostics = daemonManager.getDiagnostics();
+                    
+                    // Format report as markdown
+                    const report = [
+                        '# Flowbaby Daemon Diagnostic Report',
+                        '',
+                        `**Generated**: ${new Date().toISOString()}`,
+                        '',
+                        '## Current Status',
+                        '',
+                        `| Property | Value |`,
+                        `|----------|-------|`,
+                        `| State | ${diagnostics.state} |`,
+                        `| Healthy | ${diagnostics.healthy ? '✅ Yes' : '❌ No'} |`,
+                        `| Daemon Mode Enabled | ${diagnostics.daemonModeEnabled ? '✅ Yes' : '❌ No'} |`,
+                        `| Daemon Mode Suspended | ${diagnostics.daemonModeSuspended ? '⚠️ Yes' : 'No'} |`,
+                        `| PID | ${diagnostics.runtime.pid ?? 'N/A'} |`,
+                        `| Uptime | ${diagnostics.runtime.uptime ? `${Math.round(diagnostics.runtime.uptime / 1000)}s` : 'N/A'} |`,
+                        `| Pending Requests | ${diagnostics.runtime.pendingRequests} |`,
+                        '',
+                        '## Recovery State',
+                        '',
+                        `| Property | Value |`,
+                        `|----------|-------|`,
+                        `| Active | ${diagnostics.recovery.active ? '🔄 Yes' : 'No'} |`,
+                        `| Attempts | ${diagnostics.recovery.attempts}/${diagnostics.recovery.maxAttempts} |`,
+                        `| Cooldown | ${diagnostics.recovery.cooldownMs}ms |`,
+                        diagnostics.recovery.nextAttemptAt 
+                            ? `| Next Attempt | ${new Date(diagnostics.recovery.nextAttemptAt).toISOString()} |`
+                            : '',
+                        '',
+                        '## Lock State',
+                        '',
+                        `| Property | Value |`,
+                        `|----------|-------|`,
+                        `| Lock Held | ${diagnostics.lock.held ? '🔒 Yes' : 'No'} |`,
+                        `| Lock Path | \`${diagnostics.lock.lockPath}\` |`,
+                    ];
+                    
+                    if (diagnostics.lock.owner) {
+                        report.push(
+                            `| Owner PID | ${diagnostics.lock.owner.pid} |`,
+                            `| Owner Host | ${diagnostics.lock.owner.hostname} |`,
+                            `| Acquired At | ${new Date(diagnostics.lock.owner.acquiredAt).toISOString()} |`
+                        );
+                    }
+                    
+                    report.push('');
+                    
+                    if (diagnostics.lastFailure) {
+                        report.push(
+                            '## Last Failure',
+                            '',
+                            `| Property | Value |`,
+                            `|----------|-------|`,
+                            `| Timestamp | ${new Date(diagnostics.lastFailure.timestamp).toISOString()} |`,
+                            `| Reason | \`${diagnostics.lastFailure.reason}\` |`,
+                            diagnostics.lastFailure.attemptId 
+                                ? `| Attempt ID | \`${diagnostics.lastFailure.attemptId}\` |` 
+                                : '',
+                            diagnostics.lastFailure.recoveryAttempt !== undefined 
+                                ? `| Recovery Attempt | ${diagnostics.lastFailure.recoveryAttempt} |` 
+                                : '',
+                            ''
+                        );
+                        
+                        if (diagnostics.lastFailure.stderrTail) {
+                            report.push(
+                                '### Error Output (stderr)',
+                                '',
+                                '```',
+                                diagnostics.lastFailure.stderrTail.slice(0, 2000), // Truncate for display
+                                '```',
+                                ''
+                            );
+                        }
+                    }
+                    
+                    report.push(
+                        '## Remediation Hints',
+                        '',
+                        ...diagnostics.remediationHints.map(hint => `- ${hint}`),
+                        '',
+                        '## Log Location',
+                        '',
+                        `Daemon logs: \`${diagnostics.logsPath}\``,
+                        '',
+                        '---',
+                        '*Run "Flowbaby: Diagnose Environment" for additional Python environment diagnostics.*'
+                    );
+                    
+                    const reportText = report.filter(line => line !== '').join('\n');
+                    
+                    // Show report in editor
+                    const doc = await vscode.workspace.openTextDocument({
+                        content: reportText,
+                        language: 'markdown'
+                    });
+                    await vscode.window.showTextDocument(doc);
+                    
+                    // Also log to output channel
+                    outputChannel.appendLine('--- Daemon Diagnostics Report ---');
+                    outputChannel.appendLine(reportText);
+                    
+                } catch (error) {
+                    const errorMsg = error instanceof Error ? error.message : String(error);
+                    vscode.window.showErrorMessage(`Failed to diagnose daemon: ${errorMsg}`);
+                    debugLog('Diagnose daemon failed', { error: errorMsg });
+                }
+            });
+        }
+    );
+    context.subscriptions.push(diagnoseDaemonCommand);
 }
 
 /**

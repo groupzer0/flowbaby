@@ -16,6 +16,17 @@ import { spawn, ChildProcess, SpawnOptions } from 'child_process';
 import { debugLog, isDebugLoggingEnabled, stripAnsiCodes } from '../outputChannels';
 import { v4 as uuidv4 } from 'uuid';
 import { BackgroundOperationManager } from '../background/BackgroundOperationManager';
+// Plan 116: Import reliability contract types
+import {
+    DaemonUnavailableReason,
+    DaemonUnavailableError,
+    DaemonState as ContractDaemonState,
+    StartupAttempt,
+    LastFailureRecord,
+    RecoveryState,
+    DAEMON_RELIABILITY_DEFAULTS,
+    DaemonDiagnosticReport
+} from './daemonReliabilityContract';
 // Plan 081: Import Cloud provider for Bedrock credentials
 // Plan 083: Import FlowbabyCloudError to preserve error codes end-to-end
 // Plan 087: Import getReadinessService for user-visible error surfacing
@@ -67,8 +78,9 @@ export interface DaemonHealthStatus {
 
 /**
  * Daemon state for lifecycle management
+ * Plan 116: Added 'failed_startup' and 'degraded' states
  */
-type DaemonState = 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed';
+type DaemonState = 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed' | 'failed_startup' | 'degraded';
 
 /**
  * Pending request tracking
@@ -115,7 +127,19 @@ const RESTART_BACKOFF_MAX_MS = 30000;
  */
 const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 5000;  // Wait for graceful exit after shutdown RPC
 const SIGTERM_TIMEOUT_MS = 3000;            // Wait after SIGTERM before SIGKILL
-const CONSECUTIVE_FORCED_KILLS_THRESHOLD = 3; // Fallback to spawn-per-request after this many forced kills
+const CONSECUTIVE_FORCED_KILLS_THRESHOLD = 3; // Plan 116: enter degraded mode after this many forced kills
+
+/**
+ * Plan 116: Bounded startup deadline constants
+ * 
+ * Single deadline covers: lock acquisition + spawn + readiness handshake.
+ * Startup must always settle within this deadline.
+ */
+const STARTUP_DEADLINE_MS = DAEMON_RELIABILITY_DEFAULTS.STARTUP_DEADLINE_MS;
+const HANDSHAKE_TIMEOUT_MS = DAEMON_RELIABILITY_DEFAULTS.HANDSHAKE_TIMEOUT_MS;
+const MAX_RECOVERY_ATTEMPTS = DAEMON_RELIABILITY_DEFAULTS.MAX_RECOVERY_ATTEMPTS;
+const RECOVERY_BACKOFF_BASE_MS = DAEMON_RELIABILITY_DEFAULTS.RECOVERY_BACKOFF_BASE_MS;
+const RECOVERY_BACKOFF_MAX_MS = DAEMON_RELIABILITY_DEFAULTS.RECOVERY_BACKOFF_MAX_MS;
 
 /**
  * Plan 095: Stale lock recovery constants
@@ -153,7 +177,18 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
 
     // Plan 061: Track consecutive forced kills for operational fallback
     private consecutiveForcedKills: number = 0;
-    private daemonModeSuspended: boolean = false; // Fallback to spawn-per-request
+    private daemonModeSuspended: boolean = false; // Plan 116: memory ops unavailable when suspended
+
+    // Plan 116: Bounded startup and recovery tracking
+    private currentStartupAttempt: StartupAttempt | null = null;
+    private lastFailure: LastFailureRecord | null = null;
+    private recoveryState: RecoveryState = {
+        attempts: 0,
+        maxAttempts: MAX_RECOVERY_ATTEMPTS,
+        active: false,
+        cooldownMs: RECOVERY_BACKOFF_BASE_MS
+    };
+    private startupStderrBuffer: string[] = []; // Capture stderr during startup for diagnostics
 
     // Configuration (initialized in loadConfiguration, called from constructor)
     private idleTimeoutMinutes: number = DEFAULT_IDLE_TIMEOUT_MINUTES;
@@ -320,6 +355,154 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
      */
     public getState(): DaemonState {
         return this.state;
+    }
+
+    /**
+     * Plan 116 M6: Get comprehensive diagnostic report for troubleshooting.
+     * Used by "Flowbaby: Diagnose Daemon" command.
+     */
+    public getDiagnostics(): DaemonDiagnosticReport {
+        // Calculate uptime if daemon is running
+        let uptime: number | undefined;
+        if (this.state === 'running' && this.currentStartupAttempt?.startedAt) {
+            uptime = Date.now() - this.currentStartupAttempt.startedAt;
+        }
+
+        // Try to read lock owner metadata if lock exists
+        let lockOwner: DaemonDiagnosticReport['lock']['owner'] | undefined;
+        const lockPath = this.getLockPath();
+        const ownerPath = path.join(lockPath, 'owner.json');
+        try {
+            if (fs.existsSync(ownerPath)) {
+                const ownerData = JSON.parse(fs.readFileSync(ownerPath, 'utf-8'));
+                lockOwner = {
+                    pid: ownerData.pid,
+                    hostname: ownerData.hostname,
+                    workspacePath: ownerData.workspacePath,
+                    acquiredAt: ownerData.acquiredAt
+                };
+            }
+        } catch {
+            // Ignore errors reading lock owner
+        }
+
+        // Generate remediation hints based on current state
+        const remediationHints = this.generateRemediationHints();
+
+        // Determine logs path (daemon writes to .flowbaby/logs/daemon.log)
+        const logsPath = path.join(this.workspacePath, '.flowbaby', 'logs', 'daemon.log');
+
+        return {
+            state: this.state,
+            healthy: this.isHealthy(),
+            daemonModeEnabled: this.daemonEnabled,
+            daemonModeSuspended: this.daemonModeSuspended,
+            lastFailure: this.lastFailure,
+            recovery: {
+                active: this.recoveryState.active,
+                attempts: this.recoveryState.attempts,
+                maxAttempts: this.recoveryState.maxAttempts,
+                cooldownMs: this.recoveryState.cooldownMs,
+                nextAttemptAt: this.recoveryState.nextAttemptAt
+            },
+            lock: {
+                held: this.lockHeld,
+                lockPath,
+                owner: lockOwner
+            },
+            runtime: {
+                pid: this.daemonProcess?.pid,
+                uptime,
+                pendingRequests: this.pendingRequests.size
+            },
+            logsPath,
+            remediationHints
+        };
+    }
+
+    /**
+     * Plan 116 M6: Generate remediation hints based on current daemon state.
+     */
+    private generateRemediationHints(): string[] {
+        const hints: string[] = [];
+
+        switch (this.state) {
+            case 'stopped':
+                hints.push('Daemon is stopped. Reload the workspace or run a memory operation to start it.');
+                break;
+
+            case 'starting':
+                hints.push('Daemon is currently starting. Please wait for startup to complete.');
+                break;
+
+            case 'failed_startup':
+                hints.push('Daemon failed to start.');
+                if (this.lastFailure) {
+                    switch (this.lastFailure.reason) {
+                        case DaemonUnavailableReason.SPAWN_FAILED:
+                            hints.push('Check that the Python path is correct and Python is installed.');
+                            hints.push('Run "Flowbaby: Diagnose Environment" to check Python setup.');
+                            break;
+                        case DaemonUnavailableReason.STARTUP_TIMEOUT:
+                        case DaemonUnavailableReason.STARTUP_HUNG:
+                            hints.push('The daemon process started but did not become ready.');
+                            hints.push('Check daemon.log for errors. You may need to reinstall dependencies.');
+                            break;
+                        case DaemonUnavailableReason.HANDSHAKE_FAILED:
+                            hints.push('Daemon started but health check failed.');
+                            hints.push('Check daemon.log for Python errors or missing dependencies.');
+                            break;
+                        case DaemonUnavailableReason.STDIO_UNAVAILABLE:
+                            hints.push('Could not communicate with daemon process.');
+                            hints.push('This may indicate a system resource issue. Try restarting VS Code.');
+                            break;
+                        case DaemonUnavailableReason.LOCK_HELD:
+                        case DaemonUnavailableReason.LOCK_ACQUISITION_FAILED:
+                            hints.push('Another process holds the daemon lock.');
+                            hints.push('Close other VS Code windows in this workspace, or restart VS Code.');
+                            break;
+                        default:
+                            hints.push('Check daemon.log for details on the failure.');
+                    }
+                }
+                break;
+
+            case 'degraded':
+                hints.push('Daemon recovery has been exhausted after multiple attempts.');
+                hints.push(`Recovery attempts: ${this.recoveryState.attempts}/${this.recoveryState.maxAttempts}`);
+                hints.push('Restart VS Code or reload the workspace to reset recovery budget.');
+                if (this.lastFailure?.stderrTail) {
+                    hints.push('Last error output may contain useful diagnostic information.');
+                }
+                break;
+
+            case 'crashed':
+                hints.push('Daemon process crashed unexpectedly.');
+                hints.push('Check daemon.log for crash details.');
+                hints.push('The daemon will attempt automatic recovery.');
+                break;
+
+            case 'running':
+                hints.push('Daemon is running normally.');
+                if (this.pendingRequests.size > 0) {
+                    hints.push(`${this.pendingRequests.size} request(s) are currently pending.`);
+                }
+                break;
+
+            case 'stopping':
+                hints.push('Daemon is shutting down. Please wait.');
+                break;
+        }
+
+        // Add general hints
+        if (!this.daemonEnabled) {
+            hints.push('Note: Daemon mode is disabled in settings. Memory operations will be unavailable.');
+        }
+        if (this.daemonModeSuspended) {
+            hints.push('Warning: Daemon mode is temporarily suspended due to repeated failures.');
+        }
+
+        return hints;
     }
 
     /**
@@ -667,11 +850,22 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
 
     /**
      * Start the daemon if not already running
+     * Plan 116: Enhanced with degraded state check and attempt correlation
      */
     public async start(): Promise<void> {
         if (!this.daemonEnabled) {
             this.log('DEBUG', 'Daemon mode disabled, skipping start');
-            return;
+            throw new DaemonUnavailableError(DaemonUnavailableReason.DAEMON_DISABLED);
+        }
+
+        // Plan 116: Check for degraded state - require manual reset
+        if (this.state === 'degraded') {
+            this.log('DEBUG', 'Daemon in degraded state, start blocked');
+            throw new DaemonUnavailableError(
+                DaemonUnavailableReason.RECOVERY_BUDGET_EXHAUSTED,
+                this.currentStartupAttempt?.attemptId,
+                { lastFailure: this.lastFailure }
+            );
         }
 
         if (this.state === 'running') {
@@ -693,22 +887,61 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     }
 
     /**
-     * Internal daemon start logic (Plan 061: Includes startup hygiene)
+     * Internal daemon start logic
+     * Plan 061: Includes startup hygiene
      * Plan 095: Ensures lock is released if startup fails after acquisition
+     * Plan 116: Bounded startup deadline, attempt tracking, reason-coded errors
      */
     private async doStart(): Promise<void> {
         this.state = 'starting';
         const startTime = Date.now();
+        const attemptId = uuidv4();
         let lockWasAcquired = false;
 
+        // Plan 116: Initialize startup attempt tracking
+        this.currentStartupAttempt = {
+            attemptId,
+            startedAt: startTime,
+            deadline: startTime + STARTUP_DEADLINE_MS,
+            phase: 'lock'
+        };
+        this.startupStderrBuffer = []; // Clear stderr buffer for this attempt
+
+        // Plan 116: Create a deadline timer that will abort startup if exceeded
+        let deadlineExceeded = false;
+        const deadlineTimer = setTimeout(() => {
+            deadlineExceeded = true;
+            this.log('ERROR', 'Startup deadline exceeded', {
+                attemptId,
+                elapsed_ms: Date.now() - startTime,
+                deadline_ms: STARTUP_DEADLINE_MS,
+                phase: this.currentStartupAttempt?.phase
+            });
+        }, STARTUP_DEADLINE_MS);
+
         try {
-            // Plan 092 M2.4: Acquire exclusive lock before starting daemon
+            // Plan 116: Check deadline before each phase
+            const checkDeadline = (phase: string) => {
+                if (deadlineExceeded) {
+                    throw new DaemonUnavailableError(
+                        DaemonUnavailableReason.STARTUP_TIMEOUT,
+                        attemptId,
+                        { phase, elapsed_ms: Date.now() - startTime }
+                    );
+                }
+                if (this.currentStartupAttempt) {
+                    this.currentStartupAttempt.phase = phase as StartupAttempt['phase'];
+                }
+            };
+
+            // Phase: Lock acquisition
+            checkDeadline('lock');
             const lockAcquired = await this.acquireLock();
             if (!lockAcquired) {
                 this.state = 'stopped';
-                throw new Error(
-                    'Another VS Code window is already managing this workspace daemon. ' +
-                    'Close other windows with this workspace to use daemon mode, or disable daemon mode in settings.'
+                throw new DaemonUnavailableError(
+                    DaemonUnavailableReason.LOCK_HELD,
+                    attemptId
                 );
             }
             lockWasAcquired = true;
@@ -720,11 +953,18 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
 
             // Verify daemon script exists
             if (!fs.existsSync(daemonScript)) {
-                throw new Error(`Daemon script not found: ${daemonScript}`);
+                throw new DaemonUnavailableError(
+                    DaemonUnavailableReason.SPAWN_FAILED,
+                    attemptId,
+                    { reason: 'Daemon script not found', path: daemonScript }
+                );
             }
 
+            // Phase: Spawn
+            checkDeadline('spawn');
             this.log('INFO', 'Starting bridge daemon', {
-                script: 'bridge/daemon.py'
+                script: 'bridge/daemon.py',
+                attemptId
             });
 
             // Get LLM environment variables
@@ -749,44 +989,119 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
             this.daemonProcess = spawn(pythonForSpawn, [daemonScript], spawnOptions);
 
             if (!this.daemonProcess.stdout || !this.daemonProcess.stderr || !this.daemonProcess.stdin) {
-                throw new Error('Failed to spawn daemon: stdio not available');
+                throw new DaemonUnavailableError(
+                    DaemonUnavailableReason.STDIO_UNAVAILABLE,
+                    attemptId
+                );
             }
 
             // Set up event handlers
             this.setupProcessHandlers();
 
-            // Wait for ready handshake
-            await this.waitForReady();
+            // Phase: Handshake
+            checkDeadline('handshake');
+            await this.waitForReady(HANDSHAKE_TIMEOUT_MS);
+
+            // Success - clear deadline timer
+            clearTimeout(deadlineTimer);
 
             this.state = 'running';
             this.restartAttempts = 0;
+            this.recoveryState.attempts = 0; // Reset recovery counter on success
+            this.recoveryState.active = false;
             this.resetIdleTimer();
 
+            if (this.currentStartupAttempt) {
+                this.currentStartupAttempt.phase = 'complete';
+            }
+
             const startupDuration = Date.now() - startTime;
-            // Plan 115 M1: Add correlation fields to daemon start log
             this.log('INFO', 'Bridge daemon started successfully', {
                 startupDuration_ms: startupDuration,
                 daemonPid: this.daemonProcess.pid,
                 extensionHostPid: process.pid,
                 sessionId: vscode.env.sessionId,
-                platform: process.platform
+                platform: process.platform,
+                attemptId
             });
 
             // Write PID file for crash recovery
             await this.writePidFile();
 
         } catch (error) {
-            this.state = 'crashed';
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.log('ERROR', 'Failed to start bridge daemon', { error: errorMessage });
+            clearTimeout(deadlineTimer);
+            
+            // Plan 116: Determine reason code from error
+            let reason: DaemonUnavailableReason;
+            let details: Record<string, unknown> = {};
+
+            if (error instanceof DaemonUnavailableError) {
+                reason = error.reason;
+                details = error.details || {};
+            } else {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                details = { error: errorMessage };
+                
+                // Map common errors to reason codes
+                if (errorMessage.includes('timeout') || deadlineExceeded) {
+                    reason = DaemonUnavailableReason.STARTUP_TIMEOUT;
+                } else if (errorMessage.includes('Health check failed')) {
+                    reason = DaemonUnavailableReason.HANDSHAKE_FAILED;
+                } else if (errorMessage.includes('spawn') || errorMessage.includes('ENOENT')) {
+                    reason = DaemonUnavailableReason.SPAWN_FAILED;
+                } else if (errorMessage.includes('stdio')) {
+                    reason = DaemonUnavailableReason.STDIO_UNAVAILABLE;
+                } else {
+                    reason = DaemonUnavailableReason.SPAWN_FAILED;
+                }
+            }
+
+            // Plan 116: Record failure for diagnostics
+            this.lastFailure = {
+                timestamp: Date.now(),
+                reason,
+                attemptId,
+                stderrTail: this.startupStderrBuffer.slice(-DAEMON_RELIABILITY_DEFAULTS.MAX_STDERR_LINES).join('\n'),
+                recoveryAttempt: this.recoveryState.attempts,
+                details
+            };
+
+            if (this.currentStartupAttempt) {
+                this.currentStartupAttempt.phase = 'failed';
+                this.currentStartupAttempt.error = reason;
+                this.currentStartupAttempt.errorDetails = details;
+            }
+
+            // Plan 116: Use failed_startup state instead of crashed for startup failures
+            this.state = 'failed_startup';
+            this.log('ERROR', 'Failed to start bridge daemon', {
+                error: reason,
+                attemptId,
+                phase: this.currentStartupAttempt?.phase,
+                details
+            });
+
+            // Clean up any spawned process
+            if (this.daemonProcess) {
+                try {
+                    this.daemonProcess.kill('SIGKILL');
+                } catch {
+                    // Ignore kill errors
+                }
+                this.daemonProcess = null;
+            }
 
             // Plan 095: Release lock if we acquired it but failed to start
             if (lockWasAcquired && this.lockHeld) {
-                this.log('INFO', '[lock] releasing lock after startup failure');
+                this.log('INFO', '[lock] releasing lock after startup failure', { attemptId });
                 await this.releaseLock();
             }
 
-            throw error;
+            // Plan 116: Throw reason-coded error
+            if (error instanceof DaemonUnavailableError) {
+                throw error;
+            }
+            throw new DaemonUnavailableError(reason, attemptId, details);
         }
     }
 
@@ -1067,7 +1382,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
      * 3. If no exit after SIGTERM_TIMEOUT_MS, send SIGKILL (forced - last resort)
      * 
      * Each phase is logged for observability. Consecutive forced kills trigger
-     * operational fallback to spawn-per-request mode.
+     * degraded mode (Plan 116: memory operations unavailable until recovery).
      */
     public async stop(reason: string = 'requested'): Promise<void> {
         // Idempotent: if already stopped or stopping, wait for existing stop
@@ -1218,7 +1533,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
                     this.daemonModeSuspended = true;
                     this.log('WARN', 'Daemon mode suspended: too many forced terminations', {
                         consecutiveForcedKills: this.consecutiveForcedKills,
-                        action: 'Falling back to spawn-per-request mode. Daemon mode will resume on next successful health check.'
+                        action: 'Memory operations unavailable. Daemon mode will resume on next successful health check.'
                     });
                 }
             }

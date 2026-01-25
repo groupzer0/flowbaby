@@ -6,6 +6,8 @@
  * 
  * Plan 061 Hotfix: Routes cognify through the daemon when available to avoid
  * KuzuDB lock contention between daemon and background subprocesses.
+ * 
+ * Plan 116 M5: Cognify is now daemon-only - no independent subprocess spawning.
  */
 
 import * as vscode from 'vscode';
@@ -19,6 +21,8 @@ import { v4 as uuidv4 } from 'uuid';
 // Plan 087: Import getReadinessService for user-visible error surfacing
 // Plan 090: Import getUsageMeter for credit consumption tracking
 import { isProviderInitialized, getFlowbabyCloudEnvironment, isFlowbabyCloudEnabled, FlowbabyCloudError, getReadinessService, getUsageMeter } from '../flowbaby-cloud';
+// Plan 116: Import reliability contract for daemon-only routing errors
+import { DaemonUnavailableReason, DaemonUnavailableError } from '../bridge/daemonReliabilityContract';
 
 /**
  * Interface for daemon manager to avoid circular imports
@@ -99,9 +103,7 @@ export class BackgroundOperationManager {
     private readonly throttleWindowMs = 5 * 60 * 1000; // 5 minutes
     private readonly stubPollIntervalMs = 5000; // 5 seconds
     
-    // Plan 092 M5: Auto-retry constants for daemon cognify failures
-    private readonly AUTO_RETRY_COUNT = 1;
-    private readonly AUTO_RETRY_DELAY_MS = 2000;
+    // Plan 116 M5: Auto-retry via subprocess removed - daemon-only routing
     
     private context: vscode.ExtensionContext;
     private outputChannel: vscode.OutputChannel;
@@ -168,7 +170,8 @@ export class BackgroundOperationManager {
         if (daemonManager) {
             this.outputChannel.appendLine('[BACKGROUND] Daemon manager set - cognify will route through daemon');
         } else {
-            this.outputChannel.appendLine('[BACKGROUND] Daemon manager cleared - cognify will use subprocess');
+            // Plan 116: Daemon-only routing - no subprocess fallback
+            this.outputChannel.appendLine('[BACKGROUND] Daemon manager cleared - cognify will be unavailable until daemon restored');
         }
     }
     
@@ -352,26 +355,26 @@ export class BackgroundOperationManager {
      * contention. The daemon holds the single connection to KuzuDB, so all DB
      * writes must go through it.
      * 
-     * Falls back to subprocess if daemon is not available or unhealthy.
-     * 
      * Plan 032 M3: Removed logFd file descriptor passing to prevent TypeScript from
      * holding the log file open. Python bridge_logger.py handles its own log rotation
      * using RotatingFileHandler. With TS holding the fd open, Python cannot rotate
      * logs properly, resulting in writes to .log.1 or rotation failures.
+     * 
+     * Plan 116 M5: Cognify is now daemon-only. No independent subprocess spawning.
+     * When daemon is unavailable, this method fails with DaemonUnavailableError.
      */
     private async spawnCognifyProcess(
         operationId: string,
         datasetPathOverride?: string,
         pythonPathOverride?: string,
-        bridgeScriptPathOverride?: string,
-        forceSubprocess?: boolean  // Plan 092 M5: Force subprocess path, bypassing daemon
+        bridgeScriptPathOverride?: string
     ): Promise<void> {
         const entry = this.operations.get(operationId);
         if (!entry) {
             throw new Error(`Operation not found: ${operationId}`);
         }
         const workspacePath = datasetPathOverride || entry.datasetPath;
-        let pythonExecutable = pythonPathOverride || entry.pythonPath || this.defaultPythonPath;
+        const pythonExecutable = pythonPathOverride || entry.pythonPath || this.defaultPythonPath;
         const bridgeScriptPath = bridgeScriptPathOverride || entry.bridgeScriptPath || this.defaultBridgeScriptPath;
         if (!pythonExecutable || !bridgeScriptPath) {
             throw new Error('Missing python or bridge script path for background operation');
@@ -380,180 +383,124 @@ export class BackgroundOperationManager {
         entry.bridgeScriptPath = bridgeScriptPath;
         entry.pythonPath = pythonExecutable;
 
-        // Plan 061 Hotfix: Try routing through daemon first to avoid KuzuDB lock contention
-        // Plan 069 Hotfix: Fire-and-forget pattern - don't block on cognify completion
-        // This was causing agents to hang waiting for tool response while cognify ran (30-90s)
-        // Plan 092 M5: Skip daemon if forceSubprocess is true (used for auto-retry after daemon failure)
-        if (!forceSubprocess && this.daemonManager && this.daemonManager.isDaemonEnabled() && this.daemonManager.isHealthy()) {
-            this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Routing cognify through daemon (operationId=${operationId})`);
-            
-            entry.status = 'running';
-            entry.queueIndex = undefined;
-            entry.lastUpdate = new Date().toISOString();
-            await this.saveLedger();
-            
-            // Fire-and-forget: Start daemon cognify but don't block on it
-            // Completion/failure handled asynchronously via .then()/.catch()
-            this.daemonManager.sendRequest('cognify', {
-                operation_id: operationId
-            }, 120000) // 120s timeout for cognify
-                .then(async (response) => {
-                    if (response.error) {
-                        await this.failOperation(operationId, {
-                            code: 'COGNEE_SDK_ERROR',
-                            message: response.error.message || 'Unknown error during cognify',
-                            remediation: 'Check logs for details. Try running Flowbaby: Refresh Environment.'
-                        });
-                    } else {
-                        const result = response.result as { success: boolean; elapsed_ms?: number; entity_count?: number; error?: string };
-                        
-                        if (result.success) {
-                            // Plan 090: Record credit consumption for successful embed operation (async cognify path)
-                            // Fire-and-forget: metering failure does NOT block operation completion
-                            const idempotencyKey = uuidv4();
-                            getUsageMeter().recordOperation('embed', idempotencyKey).then(meteringResult => {
-                                if (meteringResult.success && !meteringResult.skipped) {
-                                    this.outputChannel.appendLine(
-                                        `[BACKGROUND] ${new Date().toISOString()} - Cognify metering recorded: ` +
-                                        `usedCredits=${meteringResult.usedCredits}, remaining=${meteringResult.remaining}`
-                                    );
-                                } else if (!meteringResult.success) {
-                                    this.outputChannel.appendLine(
-                                        `[BACKGROUND] ${new Date().toISOString()} - Cognify metering failed (non-blocking): ${meteringResult.error}`
-                                    );
-                                }
-                            }).catch((err: Error) => {
-                                this.outputChannel.appendLine(
-                                    `[BACKGROUND] ${new Date().toISOString()} - Cognify metering unexpected error: ${err.message}`
-                                );
-                            });
-
-                            await this.completeOperation(operationId, {
-                                elapsedMs: result.elapsed_ms || 0,
-                                entityCount: result.entity_count
-                            });
-                        } else {
-                            await this.failOperation(operationId, {
-                                code: 'COGNEE_SDK_ERROR',
-                                message: result.error || 'Unknown error during cognify',
-                                remediation: 'Check logs for details. Try running Flowbaby: Refresh Environment.'
-                            });
-                        }
-                    }
-                    // Dequeue next after completion
-                    await this.dequeueNext();
-                })
-                .catch(async (daemonError) => {
-                    const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
-                    this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Daemon cognify failed: ${errorMsg}`);
-                    
-                    // Plan 092 M5: Auto-retry via subprocess if retries available
-                    const entry = this.operations.get(operationId);
-                    const currentRetryCount = entry?.retryCount ?? 0;
-                    
-                    if (currentRetryCount < this.AUTO_RETRY_COUNT) {
-                        // Increment retry count
-                        if (entry) {
-                            entry.retryCount = currentRetryCount + 1;
-                            entry.lastUpdate = new Date().toISOString();
-                        }
-                        
-                        this.outputChannel.appendLine(
-                            `[BACKGROUND] ${new Date().toISOString()} - Auto-retrying with subprocess (attempt ${currentRetryCount + 1}) after ${this.AUTO_RETRY_DELAY_MS}ms`
-                        );
-                        
-                        // Wait before retry
-                        await new Promise(resolve => setTimeout(resolve, this.AUTO_RETRY_DELAY_MS));
-                        
-                        // Retry via explicit subprocess path (not daemon)
-                        // This bypasses the daemon check and goes directly to subprocess
-                        await this.spawnCognifyProcess(
-                            operationId,
-                            entry?.datasetPath || workspacePath,
-                            entry?.pythonPath || undefined,
-                            entry?.bridgeScriptPath || undefined,
-                            true // forceSubprocess flag
-                        );
-                    } else {
-                        // Retries exhausted - fail the operation
-                        await this.failOperation(operationId, {
-                            code: 'DAEMON_ERROR',
-                            message: errorMsg,
-                            remediation: 'Check daemon logs. Try running Flowbaby: Refresh Environment.'
-                        });
-                    }
-                    await this.dequeueNext();
-                });
-            
-            // Return immediately - cognify runs in background
-            return;
-        }
-        
-        // Fallback: spawn subprocess (original behavior)
-        // Note: This will likely fail with lock error if daemon is running
-        this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Using subprocess for cognify (operationId=${operationId})`);
-        
-        const args = [
-            bridgeScriptPath,
-            '--mode', 'cognify-only',
-            '--operation-id', operationId,
-            workspacePath
-        ];
-        
-        // Plan 032 M3: Use 'ignore' for stdio instead of opening log file descriptor.
-        // Python bridge_logger.py writes directly to flowbaby.log using RotatingFileHandler.
-        // By not holding the file open from TypeScript, we allow Python to rotate logs properly.
-        const stdio = 'ignore' as const;
-
-        // Use pythonw.exe on Windows to prevent console window from appearing
-        // pythonw.exe is designed for GUI apps and suppresses the console
-        if (process.platform === 'win32' && pythonExecutable.endsWith('python.exe')) {
-            const pythonw = pythonExecutable.replace('python.exe', 'pythonw.exe');
-            if (this.checkFileExists(pythonw)) {
-                pythonExecutable = pythonw;
-            }
+        // Plan 116 M5: Daemon-only routing for background cognify
+        // No subprocess fallback - daemon is the only execution path
+        if (!this.daemonManager) {
+            this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Daemon manager not available (operationId=${operationId})`);
+            await this.failOperation(operationId, {
+                code: 'DAEMON_UNAVAILABLE',
+                message: 'Daemon manager not initialized',
+                remediation: 'Restart VS Code or check extension logs.'
+            });
+            await this.dequeueNext();
+            throw new DaemonUnavailableError(
+                DaemonUnavailableReason.PROCESS_NOT_AVAILABLE,
+                operationId,
+                { operation: 'background_cognify' }
+            );
         }
 
-        entry.pythonPath = pythonExecutable;
+        if (!this.daemonManager.isDaemonEnabled()) {
+            this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Daemon mode disabled (operationId=${operationId})`);
+            await this.failOperation(operationId, {
+                code: 'DAEMON_DISABLED',
+                message: 'Daemon mode is disabled in settings',
+                remediation: 'Enable daemon mode in Flowbaby settings (bridgeMode: daemon).'
+            });
+            await this.dequeueNext();
+            throw new DaemonUnavailableError(
+                DaemonUnavailableReason.DAEMON_DISABLED,
+                operationId
+            );
+        }
 
-        // Get LLM environment variables for the subprocess
-        const llmEnv = await this.getLLMEnvironment(workspacePath);
-        
-        // Merge with process.env but prioritize our resolved values
-        const spawnEnv = {
-            ...process.env,
-            ...llmEnv
-        };
+        if (!this.daemonManager.isHealthy()) {
+            this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Daemon not healthy (operationId=${operationId})`);
+            await this.failOperation(operationId, {
+                code: 'DAEMON_UNHEALTHY',
+                message: 'Daemon is not healthy',
+                remediation: 'Run "Flowbaby: Diagnose Daemon" or restart VS Code.'
+            });
+            await this.dequeueNext();
+            throw new DaemonUnavailableError(
+                DaemonUnavailableReason.PROCESS_NOT_AVAILABLE,
+                operationId,
+                { operation: 'background_cognify', reason: 'daemon_unhealthy' }
+            );
+        }
 
-        const child = spawn(pythonExecutable, args, {
-            detached: true,
-            stdio: stdio,
-            cwd: path.dirname(bridgeScriptPath),
-            env: spawnEnv,
-            windowsHide: true
-        });
+        this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Routing cognify through daemon (operationId=${operationId})`);
         
-        entry.pid = child.pid || null;
         entry.status = 'running';
         entry.queueIndex = undefined;
         entry.lastUpdate = new Date().toISOString();
-        this.runningProcesses.set(operationId, child);
-        
-        // Attach exit listener
-        child.on('exit', (code, signal) => {
-            this.handleProcessExit(operationId, code, signal);
-        });
-        
-        child.on('error', (err) => {
-            this.outputChannel.appendLine(`[ERROR] ${new Date().toISOString()} - Cognify process error (operationId=${operationId}): ${err.message}`);
-            this.handleProcessExit(operationId, 1, null);
-        });
-        
-        // Unref so VS Code doesn't wait for it
-        child.unref();
-        this.monitorStatusStub(operationId, workspacePath);
-        this.reassignQueueIndexes();
         await this.saveLedger();
+        
+        // Fire-and-forget: Start daemon cognify but don't block on it
+        // Completion/failure handled asynchronously via .then()/.catch()
+        this.daemonManager.sendRequest('cognify', {
+            operation_id: operationId
+        }, 120000) // 120s timeout for cognify
+            .then(async (response) => {
+                if (response.error) {
+                    await this.failOperation(operationId, {
+                        code: 'COGNEE_SDK_ERROR',
+                        message: response.error.message || 'Unknown error during cognify',
+                        remediation: 'Check logs for details. Try running Flowbaby: Refresh Environment.'
+                    });
+                } else {
+                    const result = response.result as { success: boolean; elapsed_ms?: number; entity_count?: number; error?: string };
+                    
+                    if (result.success) {
+                        // Plan 090: Record credit consumption for successful embed operation (async cognify path)
+                        // Fire-and-forget: metering failure does NOT block operation completion
+                        const idempotencyKey = uuidv4();
+                        getUsageMeter().recordOperation('embed', idempotencyKey).then(meteringResult => {
+                            if (meteringResult.success && !meteringResult.skipped) {
+                                this.outputChannel.appendLine(
+                                    `[BACKGROUND] ${new Date().toISOString()} - Cognify metering recorded: ` +
+                                    `usedCredits=${meteringResult.usedCredits}, remaining=${meteringResult.remaining}`
+                                );
+                            } else if (!meteringResult.success) {
+                                this.outputChannel.appendLine(
+                                    `[BACKGROUND] ${new Date().toISOString()} - Cognify metering failed (non-blocking): ${meteringResult.error}`
+                                );
+                            }
+                        }).catch((err: Error) => {
+                            this.outputChannel.appendLine(
+                                `[BACKGROUND] ${new Date().toISOString()} - Cognify metering unexpected error: ${err.message}`
+                            );
+                        });
+
+                        await this.completeOperation(operationId, {
+                            elapsedMs: result.elapsed_ms || 0,
+                            entityCount: result.entity_count
+                        });
+                    } else {
+                        await this.failOperation(operationId, {
+                            code: 'COGNEE_SDK_ERROR',
+                            message: result.error || 'Unknown error during cognify',
+                            remediation: 'Check logs for details. Try running Flowbaby: Refresh Environment.'
+                        });
+                    }
+                }
+                // Dequeue next after completion
+                await this.dequeueNext();
+            })
+            .catch(async (daemonError) => {
+                const errorMsg = daemonError instanceof Error ? daemonError.message : String(daemonError);
+                this.outputChannel.appendLine(`[BACKGROUND] ${new Date().toISOString()} - Daemon cognify failed: ${errorMsg}`);
+                
+                // Plan 116 M5: No auto-retry via subprocess - fail fast with reason code
+                await this.failOperation(operationId, {
+                    code: 'DAEMON_ERROR',
+                    message: errorMsg,
+                    remediation: 'Run "Flowbaby: Diagnose Daemon" for details.'
+                });
+                await this.dequeueNext();
+            });
+        
+        // Return immediately - cognify runs in background
     }
     
     /**

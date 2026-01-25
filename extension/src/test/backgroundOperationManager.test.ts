@@ -797,9 +797,10 @@ suite('BackgroundOperationManager - Notification Setting (Plan 043)', () => {
  * Plan 092 M5 - Auto-Retry for Cognify Daemon Failures
  * 
  * Tests for automatic retry of cognify operations when daemon fails,
- * using explicit subprocess path instead of daemon.
+ * Plan 116 M5: Tests for daemon-only routing of background cognify.
+ * Auto-retry via subprocess has been removed - daemon is the only path.
  */
-suite('BackgroundOperationManager - Cognify Daemon Auto-Retry (Plan 092)', () => {
+suite('BackgroundOperationManager - Cognify Daemon-Only Routing (Plan 116)', () => {
     let workspacePath: string;
     let context: vscode.ExtensionContext;
     let output: vscode.OutputChannel;
@@ -818,7 +819,7 @@ suite('BackgroundOperationManager - Cognify Daemon Auto-Retry (Plan 092)', () =>
     setup(async () => {
         sandbox = sinon.createSandbox();
         outputLines = [];
-        workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-retry-'));
+        workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'cognee-daemon-only-'));
         
         // Stub Cloud provider
         cloudProviderStub = sandbox.stub(cloudProvider, 'isProviderInitialized').returns(true);
@@ -864,39 +865,16 @@ suite('BackgroundOperationManager - Cognify Daemon Auto-Retry (Plan 092)', () =>
         }
     });
 
-    test('AUTO_RETRY_COUNT constant is defined', () => {
-        // The constant should be accessible as a private field
+    test('spawnCognifyProcess does not have forceSubprocess parameter', () => {
+        // Plan 116: forceSubprocess parameter removed - daemon-only routing
         const anyManager = manager as any;
-        assert.strictEqual(typeof anyManager.AUTO_RETRY_COUNT, 'number', 'AUTO_RETRY_COUNT should be defined');
-        assert.strictEqual(anyManager.AUTO_RETRY_COUNT, 1, 'AUTO_RETRY_COUNT should be 1');
+        const spawnCognifyProcess = anyManager.spawnCognifyProcess;
+        // The method should have 4 parameters (operationId, datasetPath, pythonPath, bridgeScriptPath)
+        // not 5 (no forceSubprocess)
+        assert.strictEqual(spawnCognifyProcess.length, 4, 'spawnCognifyProcess should have 4 parameters (no forceSubprocess)');
     });
 
-    test('AUTO_RETRY_DELAY_MS constant is defined', () => {
-        const anyManager = manager as any;
-        assert.strictEqual(typeof anyManager.AUTO_RETRY_DELAY_MS, 'number', 'AUTO_RETRY_DELAY_MS should be defined');
-        assert.ok(anyManager.AUTO_RETRY_DELAY_MS >= 1000, 'AUTO_RETRY_DELAY_MS should be at least 1000ms');
-        assert.ok(anyManager.AUTO_RETRY_DELAY_MS <= 5000, 'AUTO_RETRY_DELAY_MS should not exceed 5000ms');
-    });
-
-    test('OperationEntry has retryCount field', async () => {
-        const spawnStub = sandbox.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
-            const operationId = args[0] as string;
-            const entry = manager.getStatus(operationId) as OperationEntry;
-            entry.status = 'running';
-            entry.pid = 12345;
-        });
-
-        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
-        const opId = await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
-        
-        const entry = manager.getStatus(opId) as OperationEntry;
-        assert.strictEqual(typeof (entry as any).retryCount, 'number', 'Entry should have retryCount field');
-        assert.strictEqual((entry as any).retryCount, 0, 'Initial retryCount should be 0');
-        
-        spawnStub.restore();
-    });
-
-    test('daemon failure triggers auto-retry via subprocess', async () => {
+    test('daemon failure fails operation immediately without subprocess retry', async () => {
         // Set up a fake daemon manager that will fail
         const fakeDaemonManager = {
             isDaemonEnabled: () => true,
@@ -905,132 +883,100 @@ suite('BackgroundOperationManager - Cognify Daemon Auto-Retry (Plan 092)', () =>
         };
         manager.setDaemonManager(fakeDaemonManager as any);
 
-        // Stub the spawnCognifyProcess but let it call through for the initial call
-        // then track when it's called with forceSubprocess=true
-        let retryCallCount = 0;
-        const originalSpawnCognify = (manager as any).spawnCognifyProcess.bind(manager);
-        const spawnStub = sandbox.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
-            const operationId = args[0] as string;
-            const forceSubprocess = args[4] as boolean;
-            
-            if (forceSubprocess) {
-                // This is the retry call - mark it
-                retryCallCount++;
-                const entry = manager.getStatus(operationId) as OperationEntry;
-                entry.status = 'completed';
-                entry.lastUpdate = new Date().toISOString();
-                return;
-            }
-            
-            // Let original run for daemon path
-            return originalSpawnCognify(...args);
-        });
-
         const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
         await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
 
-        // Wait for async daemon call to complete and trigger retry
-        await new Promise(resolve => setTimeout(resolve, 4000));
+        // Wait for async daemon call to complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Verify daemon was attempted first
-        assert.ok(fakeDaemonManager.sendRequest.calledOnce, 'Daemon should be attempted first');
+        // Verify daemon was attempted
+        assert.ok(fakeDaemonManager.sendRequest.calledOnce, 'Daemon should be attempted');
         
-        // Verify subprocess was called as retry (with forceSubprocess=true)
-        assert.strictEqual(retryCallCount, 1, 'Subprocess should be spawned after daemon failure with forceSubprocess=true');
+        // Verify no auto-retry log (Plan 116 removed auto-retry)
+        const retryLog = outputLines.find(line => line.includes('Auto-retrying'));
+        assert.ok(!retryLog, 'Should NOT log auto-retry message (Plan 116)');
         
-        // Verify log contains auto-retry message
-        const retryLog = outputLines.find(line => line.includes('Auto-retrying with subprocess'));
-        assert.ok(retryLog, 'Should log auto-retry message');
+        // Verify failure log
+        const failLog = outputLines.find(line => line.includes('Daemon cognify failed'));
+        assert.ok(failLog, 'Should log daemon failure');
     });
 
-    test('auto-retry logs include attempt number', async () => {
+    test('cognify fails fast when daemon not enabled', async () => {
         const fakeDaemonManager = {
-            isDaemonEnabled: () => true,
-            isHealthy: () => true,
-            sendRequest: sandbox.stub().rejects(new Error('Daemon timeout'))
+            isDaemonEnabled: () => false,  // Daemon disabled
+            isHealthy: () => false,
+            sendRequest: sandbox.stub()
         };
         manager.setDaemonManager(fakeDaemonManager as any);
 
-        const originalSpawnCognify = (manager as any).spawnCognifyProcess.bind(manager);
-        const spawnStub = sandbox.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
-            const operationId = args[0] as string;
-            const forceSubprocess = args[4] as boolean;
-            
-            if (forceSubprocess) {
-                const entry = manager.getStatus(operationId) as OperationEntry;
-                entry.status = 'completed';
-                return;
-            }
-            return originalSpawnCognify(...args);
-        });
+        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
+        
+        // This should throw DaemonUnavailableError
+        try {
+            await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+            // Wait for the spawnCognifyProcess to be called
+            await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+            // Expected - DaemonUnavailableError thrown
+        }
+
+        // Verify log indicates daemon disabled
+        const disabledLog = outputLines.find(line => line.includes('Daemon mode disabled'));
+        assert.ok(disabledLog, 'Should log daemon disabled');
+        
+        // Daemon sendRequest should NOT be called
+        assert.ok(!fakeDaemonManager.sendRequest.called, 'Daemon sendRequest should not be called when disabled');
+    });
+
+    test('cognify fails fast when daemon not healthy', async () => {
+        const fakeDaemonManager = {
+            isDaemonEnabled: () => true,
+            isHealthy: () => false,  // Daemon unhealthy
+            sendRequest: sandbox.stub()
+        };
+        manager.setDaemonManager(fakeDaemonManager as any);
+
+        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
+        
+        try {
+            await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
+            await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+            // Expected - DaemonUnavailableError thrown
+        }
+
+        // Verify log indicates daemon unhealthy
+        const unhealthyLog = outputLines.find(line => line.includes('Daemon not healthy'));
+        assert.ok(unhealthyLog, 'Should log daemon unhealthy');
+        
+        // Daemon sendRequest should NOT be called
+        assert.ok(!fakeDaemonManager.sendRequest.called, 'Daemon sendRequest should not be called when unhealthy');
+    });
+
+    test('cognify routes through daemon when healthy', async () => {
+        const fakeDaemonManager = {
+            isDaemonEnabled: () => true,
+            isHealthy: () => true,
+            sendRequest: sandbox.stub().resolves({
+                jsonrpc: '2.0',
+                id: '123',
+                result: { success: true, elapsed_ms: 1000, entity_count: 5 }
+            })
+        };
+        manager.setDaemonManager(fakeDaemonManager as any);
 
         const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
         await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
 
-        await new Promise(resolve => setTimeout(resolve, 4000));
+        // Wait for async daemon call
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Verify log includes attempt number
-        const retryLog = outputLines.find(line => line.includes('attempt 1'));
-        assert.ok(retryLog, 'Auto-retry log should include attempt number');
-    });
-
-    test('auto-retry exhausted shows failure notification', async () => {
-        const fakeDaemonManager = {
-            isDaemonEnabled: () => true,
-            isHealthy: () => true,
-            sendRequest: sandbox.stub().rejects(new Error('Daemon crashed'))
-        };
-        manager.setDaemonManager(fakeDaemonManager as any);
-
-        // Make subprocess also fail
-        const spawnStub = sandbox.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
-            const operationId = args[0] as string;
-            await manager.failOperation(operationId, {
-                code: 'COGNEE_INTERNAL_ERROR',
-                message: 'Subprocess also failed',
-                remediation: 'Check logs'
-            });
-        });
-
-        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
-        await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
-
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-        // Verify warning notification was shown (failure after retry exhausted)
-        assert.ok(warnStub.called, 'Warning should be shown when auto-retry fails');
-    });
-
-    test('retryCount is incremented on auto-retry', async () => {
-        const fakeDaemonManager = {
-            isDaemonEnabled: () => true,
-            isHealthy: () => true,
-            sendRequest: sandbox.stub().rejects(new Error('Daemon error'))
-        };
-        manager.setDaemonManager(fakeDaemonManager as any);
-
-        let capturedEntry: OperationEntry | null = null;
-        const originalSpawnCognify = (manager as any).spawnCognifyProcess.bind(manager);
-        const spawnStub = sandbox.stub(manager as any, 'spawnCognifyProcess').callsFake(async (...args: unknown[]) => {
-            const operationId = args[0] as string;
-            const forceSubprocess = args[4] as boolean;
-            
-            if (forceSubprocess) {
-                // Capture the entry when retry is called
-                capturedEntry = manager.getStatus(operationId) as OperationEntry;
-                capturedEntry.status = 'completed';
-                return;
-            }
-            return originalSpawnCognify(...args);
-        });
-
-        const payload = { type: 'summary' as const, summary: { topic: 'test', context: 'context' } };
-        await manager.startOperation('test summary', workspacePath, '/usr/bin/python3', 'ingest.py', payload);
-
-        await new Promise(resolve => setTimeout(resolve, 4000));
-
-        // Verify retryCount was incremented
-        assert.ok(capturedEntry, 'Entry should be captured');
-        assert.strictEqual((capturedEntry as any).retryCount, 1, 'retryCount should be 1 after auto-retry');
+        // Verify daemon was called
+        assert.ok(fakeDaemonManager.sendRequest.calledOnce, 'Daemon should be called');
+        assert.ok(fakeDaemonManager.sendRequest.calledWith('cognify', sinon.match.any, 120000), 'Should call cognify method');
+        
+        // Verify log indicates daemon routing
+        const daemonLog = outputLines.find(line => line.includes('Routing cognify through daemon'));
+        assert.ok(daemonLog, 'Should log daemon routing');
     });
 });
