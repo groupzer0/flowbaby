@@ -57,7 +57,7 @@ interface FlowbabyResult {
  * Plan 084: Added skipCloudCredentials for bootstrap decoupling.
  */
 interface RunPythonScriptOptions {
-    /** Timeout in milliseconds (default: 10000) */
+    /** Timeout in milliseconds (default: 30000) */
     timeoutMs?: number;
     /** Skip Cloud credential injection for bootstrap operations (default: false) */
     skipCloudCredentials?: boolean;
@@ -2245,7 +2245,7 @@ export class FlowbabyClient {
      * 
      * @param scriptName Script filename (e.g., 'init.py')
      * @param args Command-line arguments
-     * @param timeoutMs Timeout in milliseconds (default: 10000ms, use 30000ms for ingestion)
+     * @param timeoutMs Timeout in milliseconds (default: 30000ms)
      * @returns Promise<FlowbabyResult> - Parsed JSON result
      */
     /**
@@ -2323,7 +2323,7 @@ export class FlowbabyClient {
         const opts: RunPythonScriptOptions = typeof options === 'number' 
             ? { timeoutMs: options } 
             : options;
-        const timeoutMs = opts.timeoutMs ?? 10000;
+        const timeoutMs = opts.timeoutMs ?? 30000;
         const skipCloudCredentials = opts.skipCloudCredentials ?? false;
         
         const scriptPath = path.join(this.bridgePath, scriptName);

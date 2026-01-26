@@ -344,7 +344,7 @@ except Exception as e:
             this.execFile(
                 pythonPath,
                 ['-c', probeScript],
-                { timeout: 10000, cwd: this.workspacePath },
+                { timeout: 30000, cwd: this.workspacePath },
                 (error, stdout, stderr) => {
                     // Plan 115 M2: Log stderr excerpt only when debug logging is enabled
                     if (stderr && stderr.trim() && isDebugLoggingEnabled()) {

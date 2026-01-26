@@ -121,7 +121,7 @@ export class BackgroundOperationManager {
         return this._isPaused;
     }
 
-    public async pause(timeoutMs: number = 10000): Promise<boolean> {
+    public async pause(timeoutMs: number = 30000): Promise<boolean> {
         this._isPaused = true;
         this.outputChannel.appendLine('[BACKGROUND] Pausing operations...');
         

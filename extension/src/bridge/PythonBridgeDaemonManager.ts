@@ -1218,7 +1218,7 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
     /**
      * Wait for the daemon to send ready signal
      */
-    private async waitForReady(timeoutMs: number = 10000): Promise<void> {
+    private async waitForReady(timeoutMs: number = 30000): Promise<void> {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 reject(new Error('Daemon startup timeout - no ready signal received'));
