@@ -35,5 +35,16 @@
   {"query_id": "q012", "canonical_item_id": "memory-retrieval-decision-001", "relevance": 2},
   {"query_id": "q012", "canonical_item_id": "retrieval-design-rationale-002", "relevance": 2},
   {"query_id": "q012", "canonical_item_id": "memory-adr-003", "relevance": 1},
-  {"query_id": "q012", "canonical_item_id": "kg-retrieval-evolution-004", "relevance": 1}
+  {"query_id": "q012", "canonical_item_id": "kg-retrieval-evolution-004", "relevance": 1},
+
+  {"query_id": "q013", "canonical_item_id": "plan-112-benchmark-harness-001", "relevance": 2},
+  {"query_id": "q013", "canonical_item_id": "plan-112-prereq-step0-002", "relevance": 1},
+  {"query_id": "q013", "canonical_item_id": "analysis-112-benchmark-best-practices-003", "relevance": 1},
+
+  {"query_id": "q014", "canonical_item_id": "analysis-104-session-expiry-001", "relevance": 2},
+  {"query_id": "q014", "canonical_item_id": "arch-104-session-expiry-findings-002", "relevance": 1},
+
+  {"query_id": "q015", "canonical_item_id": "bridge-cognee-dependency-001", "relevance": 2},
+  {"query_id": "q015", "canonical_item_id": "bridge-daemon-dependency-002", "relevance": 2},
+  {"query_id": "q015", "canonical_item_id": "bridge-service-architecture-003", "relevance": 1}
 ]

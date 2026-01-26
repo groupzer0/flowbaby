@@ -29,6 +29,8 @@ from benchmark.benchmark_contract import (
     load_topics,
     load_qrels,
     save_run_summary,
+    validate_split_discipline,
+    SplitDisciplineError,
 )
 from benchmark.benchmark_scorer import (
     BenchmarkScorer,
@@ -138,6 +140,8 @@ class BenchmarkCLI:
         markdown_path: Optional[Path] = None,
         summary_path: Optional[Path] = None,
         git_sha: Optional[str] = None,
+        selection_split: Optional[str] = None,
+        evaluation_split: Optional[str] = None,
     ) -> ScoreResult:
         """
         Score a run file and save results.
@@ -148,13 +152,28 @@ class BenchmarkCLI:
             markdown_path: Optional path to save Markdown summary
             summary_path: Optional path to save RunSummary
             git_sha: Optional git commit SHA for provenance
+            selection_split: Split used for tuning/selection (Plan 113 M4)
+            evaluation_split: Split to evaluate on (Plan 113 M4)
 
         Returns:
             ScoreResult with metrics
         """
-        # Load and score run
+        # Plan 113 M4: Validate split discipline if selection_split provided
+        if selection_split is not None:
+            validate_split_discipline(selection_split, evaluation_split or "test")
+        
+        # Load run
         run = load_run(run_path)
-        result = self.scorer.score_run(run)
+        
+        # Filter to evaluation split if specified
+        if evaluation_split is not None:
+            filtered_dataset = self._filter_dataset_to_split(evaluation_split)
+            scorer = BenchmarkScorer(filtered_dataset, self.config)
+        else:
+            scorer = self.scorer
+            filtered_dataset = self.dataset
+        
+        result = scorer.score_run(run)
 
         # Save JSON results
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,13 +185,39 @@ class BenchmarkCLI:
             markdown_path.parent.mkdir(parents=True, exist_ok=True)
             markdown_path.write_text(format_results_markdown(result))
 
-        # Save RunSummary
+        # Save RunSummary with split provenance
         if summary_path:
-            summary = self.scorer.generate_run_summary(run, result, git_sha=git_sha)
+            summary = scorer.generate_run_summary(
+                run, result, git_sha=git_sha,
+                selection_split=selection_split,
+                evaluation_split=evaluation_split,
+            )
             summary_path.parent.mkdir(parents=True, exist_ok=True)
             save_run_summary(summary, summary_path)
 
         return result
+
+    def _filter_dataset_to_split(self, split: str) -> BenchmarkDataset:
+        """
+        Create a filtered dataset containing only topics from the specified split.
+        
+        Args:
+            split: The split to filter to (train/validation/test)
+            
+        Returns:
+            New BenchmarkDataset with only topics from the specified split
+        """
+        filtered_topics = self.dataset.topics_by_split(split)
+        filtered_query_ids = {t.query_id for t in filtered_topics}
+        filtered_qrels = [q for q in self.dataset.qrels if q.query_id in filtered_query_ids]
+        
+        return BenchmarkDataset(
+            dataset_id=self.dataset.dataset_id,
+            version=self.dataset.version,
+            topics=filtered_topics,
+            qrels=filtered_qrels,
+            slice_definitions=self.dataset.slice_definitions,
+        )
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -236,6 +281,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=[5, 10, 20],
         help="K values for @K metrics (default: 5 10 20)",
     )
+    # Plan 113 M4: Split discipline parameters
+    score_parser.add_argument(
+        "--selection-split",
+        type=str,
+        choices=["train", "validation"],
+        help="Split used for tuning/selection (cannot be 'test')",
+    )
+    score_parser.add_argument(
+        "--evaluation-split",
+        type=str,
+        choices=["train", "validation", "test"],
+        help="Split to evaluate on (filters dataset to this split)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -249,11 +307,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                 markdown_path=args.markdown,
                 summary_path=args.summary,
                 git_sha=args.git_sha,
+                selection_split=args.selection_split,
+                evaluation_split=args.evaluation_split,
             )
             print(f"Results saved to {args.output}")
             return 0
         except FileNotFoundError as e:
             print(f"Error: {e}", file=sys.stderr)
+            return 1
+        except SplitDisciplineError as e:
+            print(f"Split discipline error: {e}", file=sys.stderr)
             return 1
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)

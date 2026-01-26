@@ -37,6 +37,48 @@ Bump this when:
 - Fallback hierarchy changes
 """
 
+# Plan 113 M4: Valid split values for leakage discipline
+VALID_SPLITS = frozenset({"train", "validation", "test"})
+"""
+Valid values for Topic.split field.
+- train: For training/development
+- validation: For hyperparameter tuning and model selection
+- test: For final evaluation only (NEVER use for selection)
+"""
+
+
+class SplitDisciplineError(ValueError):
+    """
+    Raised when a workflow violates split discipline (Plan 113 M4).
+    
+    Example: Using test split for threshold tuning or model selection.
+    """
+    pass
+
+
+def validate_split_discipline(
+    selection_split: str,
+    evaluation_split: str,
+) -> None:
+    """
+    Validate that a workflow doesn't leak test data (Plan 113 M4).
+    
+    Enforces the rule: test split MUST NOT be used for selection/tuning.
+    
+    Args:
+        selection_split: Split used for tuning/selection (thresholds, K values, etc.)
+        evaluation_split: Split used for final evaluation
+    
+    Raises:
+        SplitDisciplineError: If selection_split is "test"
+    """
+    if selection_split == "test":
+        raise SplitDisciplineError(
+            f"Split discipline violation: cannot use 'test' split for selection/tuning. "
+            f"Use 'train' or 'validation' for selection, then evaluate on 'test'. "
+            f"Got selection_split='{selection_split}', evaluation_split='{evaluation_split}'."
+        )
+
 
 # ============================================================================
 # Canonicalization
@@ -106,12 +148,14 @@ class Topic:
         slice_ids: List of slice identifiers this query belongs to
         notes: Optional notes about the query
         expected_positive_count: Optional expected number of relevant items
+        split: Optional split assignment (train/validation/test) for leakage discipline (Plan 113 M4)
     """
     query_id: str
     query_text: str
     slice_ids: List[str]
     notes: Optional[str] = None
     expected_positive_count: Optional[int] = None
+    split: Optional[str] = None  # Plan 113 M4: train/validation/test
 
 
 @dataclass
@@ -185,6 +229,9 @@ class RunSummary:
     
     Optional per-slice metrics:
     - per_slice_metrics
+    
+    Optional split provenance (Plan 113 M4 code review fix):
+    - selection_split, evaluation_split
     """
     # Required provenance
     run_id: str
@@ -215,6 +262,10 @@ class RunSummary:
     ontology_version: Optional[str] = None
     llm_model: Optional[str] = None
     retrieval_mode: Optional[str] = None
+    
+    # Plan 113 M4 code review fix: Split provenance for leakage discipline
+    selection_split: Optional[str] = None  # Split used for tuning/selection
+    evaluation_split: Optional[str] = None  # Split used for final evaluation
 
 
 @dataclass
@@ -249,6 +300,34 @@ class BenchmarkDataset:
             for slice_id in topic.slice_ids:
                 result[slice_id].append(topic)
         return dict(result)
+    
+    def topics_by_split(self, split: str) -> List[Topic]:
+        """
+        Filter topics by split assignment (Plan 113 M4).
+        
+        Args:
+            split: One of 'train', 'validation', 'test'
+        
+        Returns:
+            List of topics with the specified split assignment
+        """
+        return [t for t in self.topics if t.split == split]
+    
+    def split_distribution(self) -> Dict[str, int]:
+        """
+        Return distribution of topics across splits (Plan 113 M4).
+        
+        Returns:
+            Dict mapping split name to count of topics.
+            Includes 'unassigned' for topics without a split.
+        """
+        distribution: Dict[str, int] = defaultdict(int)
+        for topic in self.topics:
+            if topic.split:
+                distribution[topic.split] += 1
+            else:
+                distribution["unassigned"] += 1
+        return dict(distribution)
 
 
 # ============================================================================
@@ -277,6 +356,7 @@ def load_topics(filepath: Path) -> List[Topic]:
             slice_ids=t["slice_ids"],
             notes=t.get("notes"),
             expected_positive_count=t.get("expected_positive_count"),
+            split=t.get("split"),  # Plan 113 M4
         )
         for t in data
     ]

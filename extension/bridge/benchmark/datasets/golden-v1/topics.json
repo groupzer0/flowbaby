@@ -82,5 +82,26 @@
     "slice_ids": ["multi-hop", "relationship-heavy"],
     "notes": "Complex query requiring decision chain traversal",
     "expected_positive_count": 4
+  },
+  {
+    "query_id": "q013",
+    "query_text": "Which plan implemented the benchmark harness and what were its dependencies?",
+    "slice_ids": ["relationship-fidelity"],
+    "notes": "Plan 113 M5: Tests relationship fidelity - must correctly identify Plan 112 as implementing benchmark harness AND its prerequisite relationships",
+    "expected_positive_count": 3
+  },
+  {
+    "query_id": "q014",
+    "query_text": "What analysis findings informed the authentication session expiry fix?",
+    "slice_ids": ["relationship-fidelity", "relationship-heavy"],
+    "notes": "Plan 113 M5: Tests edge traversal from analysis to plan to implementation - multiple valid analysis docs may inform a fix",
+    "expected_positive_count": 2
+  },
+  {
+    "query_id": "q015",
+    "query_text": "Which components does the bridge service depend on?",
+    "slice_ids": ["relationship-fidelity", "technical"],
+    "notes": "Plan 113 M5: Tests dependency relationship fidelity - must return correct endpoints (bridge → cognee, bridge → daemon)",
+    "expected_positive_count": 3
   }
 ]

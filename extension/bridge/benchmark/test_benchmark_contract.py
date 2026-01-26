@@ -364,3 +364,242 @@ class TestCanonalizationVersionConstant:
     def test_canonicalization_version_is_v1(self):
         """CANONICALIZATION_VERSION should be 'v1' per Step 0 decision."""
         assert CANONICALIZATION_VERSION == "v1"
+
+# ============================================================================
+# Plan 113 Milestone 4: Split Discipline Tests
+# ============================================================================
+
+class TestPlan113SplitMetadata:
+    """
+    Plan 113 M4: Split discipline enforcement via dataset split metadata.
+    
+    Tests that:
+    - Topics have optional split assignment (train/validation/test)
+    - Dataset metadata includes split configuration
+    - Tooling can validate split discipline
+    """
+
+    def test_topic_has_optional_split_field(self):
+        """Topic should have an optional 'split' field for train/validation/test."""
+        # Without split (backward compatible)
+        topic_no_split = Topic(
+            query_id="q001",
+            query_text="Test query",
+            slice_ids=["test"]
+        )
+        assert topic_no_split.split is None
+        
+        # With split assigned
+        topic_with_split = Topic(
+            query_id="q002",
+            query_text="Test query",
+            slice_ids=["test"],
+            split="train"
+        )
+        assert topic_with_split.split == "train"
+
+    def test_topic_split_values_are_validated(self):
+        """Topic split field should only accept valid values: train, validation, test, or None."""
+        from benchmark.benchmark_contract import VALID_SPLITS
+        assert "train" in VALID_SPLITS
+        assert "validation" in VALID_SPLITS
+        assert "test" in VALID_SPLITS
+
+    def test_dataset_can_filter_by_split(self):
+        """BenchmarkDataset should provide helper to filter topics by split."""
+        topics = [
+            Topic("q001", "Query 1", ["s1"], split="train"),
+            Topic("q002", "Query 2", ["s1"], split="train"),
+            Topic("q003", "Query 3", ["s1"], split="validation"),
+            Topic("q004", "Query 4", ["s1"], split="test"),
+        ]
+        qrels = [
+            Qrel("q001", "d1", 1),
+            Qrel("q002", "d2", 1),
+            Qrel("q003", "d3", 1),
+            Qrel("q004", "d4", 1),
+        ]
+        dataset = BenchmarkDataset(
+            dataset_id="test",
+            version="1.0",
+            topics=topics,
+            qrels=qrels,
+            slice_definitions={"s1": "Test slice"}
+        )
+        
+        train_topics = dataset.topics_by_split("train")
+        assert len(train_topics) == 2
+        
+        test_topics = dataset.topics_by_split("test")
+        assert len(test_topics) == 1
+        assert test_topics[0].query_id == "q004"
+
+    def test_dataset_reports_split_distribution(self):
+        """BenchmarkDataset should report split distribution counts."""
+        topics = [
+            Topic("q001", "Query 1", ["s1"], split="train"),
+            Topic("q002", "Query 2", ["s1"], split="train"),
+            Topic("q003", "Query 3", ["s1"], split="validation"),
+            Topic("q004", "Query 4", ["s1"], split="test"),
+            Topic("q005", "Query 5", ["s1"]),  # No split assigned
+        ]
+        qrels = []
+        dataset = BenchmarkDataset(
+            dataset_id="test",
+            version="1.0",
+            topics=topics,
+            qrels=qrels,
+            slice_definitions={}
+        )
+        
+        distribution = dataset.split_distribution()
+        assert distribution["train"] == 2
+        assert distribution["validation"] == 1
+        assert distribution["test"] == 1
+        assert distribution.get("unassigned", 0) == 1
+
+
+class TestPlan113SplitDisciplineEnforcement:
+    """
+    Plan 113 M4: Tooling must refuse invalid workflows.
+    
+    Tests that scoring/CLI refuses operations that would leak test data.
+    """
+
+    def test_validate_split_discipline_rejects_selection_on_test(self):
+        """
+        Validation helper should reject workflows that use test split for selection.
+        
+        Example invalid workflow: Using test split to tune threshold.
+        """
+        from benchmark.benchmark_contract import validate_split_discipline, SplitDisciplineError
+        
+        # This should raise an error
+        with pytest.raises(SplitDisciplineError) as exc_info:
+            validate_split_discipline(
+                selection_split="test",  # Invalid: cannot use test for selection
+                evaluation_split="test"
+            )
+        assert "selection" in str(exc_info.value).lower()
+
+    def test_validate_split_discipline_allows_valid_workflow(self):
+        """
+        Valid workflow: selection on train/validation, final evaluation on test.
+        """
+        from benchmark.benchmark_contract import validate_split_discipline
+        
+        # This should not raise
+        validate_split_discipline(
+            selection_split="validation",
+            evaluation_split="test"
+        )
+
+    def test_validate_split_discipline_allows_train_for_selection(self):
+        """Selection on train split is valid."""
+        from benchmark.benchmark_contract import validate_split_discipline
+        
+        validate_split_discipline(
+            selection_split="train",
+            evaluation_split="validation"
+        )
+
+
+# ============================================================================
+# Plan 113 Code Review Fix: RunSummary Split Provenance
+# ============================================================================
+
+class TestPlan113RunSummarySplitProvenance:
+    """
+    Code review finding [HIGH]: RunSummary must include split provenance fields.
+    
+    Tests that RunSummary records which splits were used for selection and evaluation,
+    making leakage discipline observable in outputs.
+    """
+
+    def test_run_summary_has_selection_split_field(self):
+        """RunSummary must have selection_split field for provenance."""
+        summary = RunSummary(
+            run_id="test",
+            timestamp="2026-01-26T00:00:00Z",
+            git_sha="abc123",
+            dataset_id="test",
+            dataset_version="1.0.0",
+            topics_version="1.0.0",
+            qrels_version="1.0.0",
+            retrieval_contract_version="2.0.0",
+            canonicalization_version="v1",
+            metrics={},
+            k_values=[5],
+            query_count=10,
+            duration_ms=100,
+            selection_split="validation",  # New field
+        )
+        assert summary.selection_split == "validation"
+
+    def test_run_summary_has_evaluation_split_field(self):
+        """RunSummary must have evaluation_split field for provenance."""
+        summary = RunSummary(
+            run_id="test",
+            timestamp="2026-01-26T00:00:00Z",
+            git_sha="abc123",
+            dataset_id="test",
+            dataset_version="1.0.0",
+            topics_version="1.0.0",
+            qrels_version="1.0.0",
+            retrieval_contract_version="2.0.0",
+            canonicalization_version="v1",
+            metrics={},
+            k_values=[5],
+            query_count=10,
+            duration_ms=100,
+            evaluation_split="test",  # New field
+        )
+        assert summary.evaluation_split == "test"
+
+    def test_run_summary_split_fields_are_optional_for_backward_compat(self):
+        """Split fields should be optional (None) for backward compatibility."""
+        summary = RunSummary(
+            run_id="test",
+            timestamp="2026-01-26T00:00:00Z",
+            git_sha="abc123",
+            dataset_id="test",
+            dataset_version="1.0.0",
+            topics_version="1.0.0",
+            qrels_version="1.0.0",
+            retrieval_contract_version="2.0.0",
+            canonicalization_version="v1",
+            metrics={},
+            k_values=[5],
+            query_count=10,
+            duration_ms=100,
+            # No split fields provided
+        )
+        assert summary.selection_split is None
+        assert summary.evaluation_split is None
+
+    def test_run_summary_split_provenance_saved_to_json(self, tmp_path):
+        """Split provenance fields must be included in saved JSON."""
+        summary = RunSummary(
+            run_id="test",
+            timestamp="2026-01-26T00:00:00Z",
+            git_sha="abc123",
+            dataset_id="test",
+            dataset_version="1.0.0",
+            topics_version="1.0.0",
+            qrels_version="1.0.0",
+            retrieval_contract_version="2.0.0",
+            canonicalization_version="v1",
+            metrics={"recall@5": 0.8},
+            k_values=[5],
+            query_count=10,
+            duration_ms=100,
+            selection_split="validation",
+            evaluation_split="test",
+        )
+        filepath = tmp_path / "summary.json"
+        save_run_summary(summary, filepath)
+        
+        with open(filepath) as f:
+            data = json.load(f)
+        assert data["selection_split"] == "validation"
+        assert data["evaluation_split"] == "test"

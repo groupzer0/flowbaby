@@ -291,5 +291,174 @@ class TestMainEntrypoint(unittest.TestCase):
             self.assertTrue(output_path.exists())
 
 
+# ============================================================================
+# Plan 113 Code Review Fix: CLI Split Discipline Enforcement
+# ============================================================================
+
+class TestCLISplitDiscipline(unittest.TestCase):
+    """
+    Code review finding [HIGH]: CLI must enforce split discipline.
+    
+    Tests that:
+    - CLI accepts --selection-split and --evaluation-split params
+    - CLI calls validate_split_discipline() before scoring
+    - CLI records split provenance in run summary
+    """
+
+    def _create_dataset_with_splits(self, path: Path):
+        """Helper to create dataset with split assignments."""
+        topics = [
+            Topic(query_id="q1", query_text="Train query", slice_ids=["general"], split="train"),
+            Topic(query_id="q2", query_text="Val query", slice_ids=["general"], split="validation"),
+            Topic(query_id="q3", query_text="Test query", slice_ids=["general"], split="test"),
+        ]
+        qrels = [
+            Qrel(query_id="q1", canonical_item_id="doc1", relevance=1),
+            Qrel(query_id="q2", canonical_item_id="doc2", relevance=1),
+            Qrel(query_id="q3", canonical_item_id="doc3", relevance=1),
+        ]
+        save_topics(topics, path / "topics.json")
+        save_qrels(qrels, path / "qrels.json")
+        metadata = {
+            "dataset_id": "test-splits",
+            "version": "1.0",
+            "slice_definitions": {"general": "General"},
+        }
+        with open(path / "metadata.json", "w") as f:
+            json.dump(metadata, f)
+
+    def test_cli_accepts_evaluation_split_param(self):
+        """CLI score command should accept --evaluation-split parameter."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            self._create_dataset_with_splits(tmppath)
+
+            run = Run(
+                run_id="test",
+                entries=[RunEntry(query_id="q3", canonical_item_id="doc3", rank=1, score=0.9)],
+            )
+            save_run(run, tmppath / "run.json")
+
+            # Should not raise with valid split
+            exit_code = main([
+                "score",
+                "--dataset", str(tmppath),
+                "--run", str(tmppath / "run.json"),
+                "--output", str(tmppath / "output.json"),
+                "--evaluation-split", "test",
+            ])
+            self.assertEqual(exit_code, 0)
+
+    def test_cli_accepts_selection_split_param(self):
+        """CLI score command should accept --selection-split parameter."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            self._create_dataset_with_splits(tmppath)
+
+            run = Run(
+                run_id="test",
+                entries=[RunEntry(query_id="q3", canonical_item_id="doc3", rank=1, score=0.9)],
+            )
+            save_run(run, tmppath / "run.json")
+
+            # Should not raise with valid workflow
+            exit_code = main([
+                "score",
+                "--dataset", str(tmppath),
+                "--run", str(tmppath / "run.json"),
+                "--output", str(tmppath / "output.json"),
+                "--selection-split", "validation",
+                "--evaluation-split", "test",
+            ])
+            self.assertEqual(exit_code, 0)
+
+    def test_cli_rejects_test_split_for_selection(self):
+        """CLI must reject using test split for selection (leakage prevention)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            self._create_dataset_with_splits(tmppath)
+
+            run = Run(
+                run_id="test",
+                entries=[RunEntry(query_id="q3", canonical_item_id="doc3", rank=1, score=0.9)],
+            )
+            save_run(run, tmppath / "run.json")
+
+            # argparse should reject 'test' as a choice for --selection-split
+            # This will raise SystemExit(2) from argparse
+            with self.assertRaises(SystemExit) as ctx:
+                main([
+                    "score",
+                    "--dataset", str(tmppath),
+                    "--run", str(tmppath / "run.json"),
+                    "--output", str(tmppath / "output.json"),
+                    "--selection-split", "test",  # Invalid - not in choices
+                    "--evaluation-split", "test",
+                ])
+            # argparse exits with code 2 for invalid arguments
+            self.assertEqual(ctx.exception.code, 2)
+
+    def test_cli_records_split_provenance_in_summary(self):
+        """CLI should record split provenance in run summary."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            self._create_dataset_with_splits(tmppath)
+
+            run = Run(
+                run_id="test",
+                entries=[RunEntry(query_id="q3", canonical_item_id="doc3", rank=1, score=0.9)],
+            )
+            save_run(run, tmppath / "run.json")
+            summary_path = tmppath / "summary.json"
+
+            exit_code = main([
+                "score",
+                "--dataset", str(tmppath),
+                "--run", str(tmppath / "run.json"),
+                "--output", str(tmppath / "output.json"),
+                "--summary", str(summary_path),
+                "--selection-split", "validation",
+                "--evaluation-split", "test",
+            ])
+            self.assertEqual(exit_code, 0)
+
+            # Verify provenance was recorded
+            with open(summary_path) as f:
+                summary = json.load(f)
+            self.assertEqual(summary.get("selection_split"), "validation")
+            self.assertEqual(summary.get("evaluation_split"), "test")
+
+    def test_cli_filters_to_evaluation_split(self):
+        """CLI should only score queries from the evaluation split."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            self._create_dataset_with_splits(tmppath)
+
+            # Run covers all queries
+            run = Run(
+                run_id="test",
+                entries=[
+                    RunEntry(query_id="q1", canonical_item_id="doc1", rank=1, score=0.9),
+                    RunEntry(query_id="q2", canonical_item_id="doc2", rank=1, score=0.9),
+                    RunEntry(query_id="q3", canonical_item_id="doc3", rank=1, score=0.9),
+                ],
+            )
+            save_run(run, tmppath / "run.json")
+
+            exit_code = main([
+                "score",
+                "--dataset", str(tmppath),
+                "--run", str(tmppath / "run.json"),
+                "--output", str(tmppath / "output.json"),
+                "--evaluation-split", "test",
+            ])
+            self.assertEqual(exit_code, 0)
+
+            # Verify only test split query was scored
+            with open(tmppath / "output.json") as f:
+                result = json.load(f)
+            self.assertEqual(result.get("query_count"), 1)  # Only q3
+
+
 if __name__ == "__main__":
     unittest.main()

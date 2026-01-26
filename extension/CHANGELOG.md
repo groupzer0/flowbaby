@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- markdownlint-disable MD022 MD024 MD032 MD007 MD009 -->
 
+## [0.7.5] - 2026-01-26
+
+### Added
+
+- **Evaluation Validity Hardening (Plan 113)**: KG-grounded validity guarantees for the benchmark harness ensuring trustworthy retrieval metrics:
+  - **Multi-Positive Semantics**: Benchmark explicitly uses filtered-style scoring where multiple correct answers per query are first-class—reports label metrics as `relevance_semantics: filtered` to distinguish from exact-match
+  - **Label Shape Statistics**: Score results now include positives-per-query distribution (min/max/mean/median/p95, percentage of 0/1/2+ positive queries) to detect unhealthy dataset characteristics
+  - **Macro + Slice Reporting**: Reports include both aggregate and macro-averaged metrics (per-query equal weighting) to prevent hub-dominance skew; slice breakdowns include query counts for context
+  - **Split Discipline Enforcement**: Dataset format supports train/validation/test splits with tooling that refuses invalid workflows—`validate_split_discipline()` raises `SplitDisciplineError` when test split is used for selection/tuning
+  - **Relationship-Fidelity Queries**: Golden dataset expanded with queries specifically testing relationship extraction (q013-q015), tagged for separate slice tracking
+  - **Benchmark Documentation**: Comprehensive `README.md` covering scorecard interpretation, macro vs aggregate guidance, positives-per-query guidance, and leakage prevention procedures
+
+### Changed
+
+- **Golden Dataset Version**: Bumped to 1.1.0 with new `relationship-fidelity` slice definition and three new multi-positive queries
+- **ScoreResult Contract**: Extended with `relevance_semantics`, `label_shape_stats`, and `macro_metrics` fields using stable field names for diffability
+- **Topic Contract**: Extended with optional `split` field (train/validation/test) for leakage discipline
+
 ## [0.7.4] - 2026-01-24
 
 ### Added

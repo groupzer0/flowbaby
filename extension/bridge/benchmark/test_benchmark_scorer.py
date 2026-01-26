@@ -290,6 +290,296 @@ class TestDefaultKValues(unittest.TestCase):
         self.assertIn(10, DEFAULT_K_VALUES)
 
 
+class TestPlan113MultiPositiveSemantics(unittest.TestCase):
+    """
+    Plan 113 Milestone 1: Explicit multi-positive/filtered-style semantics.
+    
+    Tests that reports clearly label metrics as using filtered/multi-positive
+    semantics where any labeled positive counts as relevant.
+    """
+
+    def setUp(self):
+        """Create dataset with multi-positive qrels."""
+        self.topics = [
+            Topic(query_id="q1", query_text="Query with 3 positives", slice_ids=["multi"]),
+            Topic(query_id="q2", query_text="Query with 1 positive", slice_ids=["single"]),
+            Topic(query_id="q3", query_text="Query with 0 positives", slice_ids=["no-context"]),
+        ]
+        self.qrels = [
+            Qrel(query_id="q1", canonical_item_id="doc1", relevance=2),
+            Qrel(query_id="q1", canonical_item_id="doc2", relevance=1),
+            Qrel(query_id="q1", canonical_item_id="doc3", relevance=1),  # 3 positives
+            Qrel(query_id="q2", canonical_item_id="doc4", relevance=1),  # 1 positive
+            # q3 has no qrels (0 positives)
+        ]
+        self.dataset = BenchmarkDataset(
+            dataset_id="test-multipos",
+            version="1.0",
+            topics=self.topics,
+            qrels=self.qrels,
+            slice_definitions={"multi": "Multi-positive", "single": "Single", "no-context": "No context"},
+        )
+
+    def test_score_result_indicates_multi_positive_mode(self):
+        """ScoreResult must indicate that filtered/multi-positive semantics are used."""
+        from benchmark.benchmark_scorer import BenchmarkScorer, ScorerConfig
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig())
+        run = Run(run_id="test", entries=[
+            RunEntry(query_id="q1", canonical_item_id="doc1", rank=1, score=0.9),
+        ])
+        result = scorer.score_run(run)
+        # ScoreResult should have a relevance_semantics field
+        self.assertEqual(result.relevance_semantics, "filtered")
+
+    def test_markdown_output_labels_filtered_semantics(self):
+        """Markdown report must clearly state filtered/multi-positive semantics."""
+        from benchmark.benchmark_scorer import BenchmarkScorer, ScorerConfig, format_results_markdown
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig())
+        run = Run(run_id="test", entries=[
+            RunEntry(query_id="q1", canonical_item_id="doc1", rank=1, score=0.9),
+        ])
+        result = scorer.score_run(run)
+        md = format_results_markdown(result)
+        # Report must mention multi-positive/filtered semantics
+        self.assertIn("filtered", md.lower())
+
+
+class TestPlan113LabelShapeStatistics(unittest.TestCase):
+    """
+    Plan 113 Milestone 2: Positives-per-query distribution telemetry.
+    
+    Tests that benchmark reports include label-shape statistics:
+    - min/median/p95 positives per query
+    - percentage of queries with 0/1/2+ positives
+    """
+
+    def setUp(self):
+        """Create dataset with varied positives-per-query distribution."""
+        self.topics = [
+            Topic(query_id="q1", query_text="Query 1", slice_ids=["test"]),
+            Topic(query_id="q2", query_text="Query 2", slice_ids=["test"]),
+            Topic(query_id="q3", query_text="Query 3", slice_ids=["test"]),
+            Topic(query_id="q4", query_text="Query 4", slice_ids=["test"]),
+            Topic(query_id="q5", query_text="Query 5", slice_ids=["test"]),
+        ]
+        # q1: 4 positives, q2: 2 positives, q3: 1 positive, q4: 0 positives, q5: 1 positive
+        self.qrels = [
+            Qrel(query_id="q1", canonical_item_id="d1", relevance=1),
+            Qrel(query_id="q1", canonical_item_id="d2", relevance=1),
+            Qrel(query_id="q1", canonical_item_id="d3", relevance=1),
+            Qrel(query_id="q1", canonical_item_id="d4", relevance=1),  # 4
+            Qrel(query_id="q2", canonical_item_id="d5", relevance=1),
+            Qrel(query_id="q2", canonical_item_id="d6", relevance=1),  # 2
+            Qrel(query_id="q3", canonical_item_id="d7", relevance=1),  # 1
+            # q4 has no qrels (0 positives)
+            Qrel(query_id="q5", canonical_item_id="d8", relevance=1),  # 1
+        ]
+        self.dataset = BenchmarkDataset(
+            dataset_id="test-labelshape",
+            version="1.0",
+            topics=self.topics,
+            qrels=self.qrels,
+            slice_definitions={"test": "Test slice"},
+        )
+
+    def test_score_result_includes_label_shape_stats(self):
+        """ScoreResult must include positives-per-query distribution statistics."""
+        from benchmark.benchmark_scorer import BenchmarkScorer, ScorerConfig
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig())
+        run = Run(run_id="test", entries=[])
+        result = scorer.score_run(run)
+        # Must have label_shape_stats field
+        self.assertIsNotNone(result.label_shape_stats)
+        # Must include min/median/p95 as attributes
+        self.assertTrue(hasattr(result.label_shape_stats, "min"))
+        self.assertTrue(hasattr(result.label_shape_stats, "median"))
+        self.assertTrue(hasattr(result.label_shape_stats, "p95"))
+        # Expected: [0, 1, 1, 2, 4] sorted → min=0, median=1, p95=4
+        self.assertEqual(result.label_shape_stats.min, 0)
+        self.assertEqual(result.label_shape_stats.median, 1)
+
+    def test_score_result_includes_positives_distribution_percentages(self):
+        """ScoreResult must include percentage of 0/1/2+ positive queries."""
+        from benchmark.benchmark_scorer import BenchmarkScorer, ScorerConfig
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig())
+        run = Run(run_id="test", entries=[])
+        result = scorer.score_run(run)
+        # Must have distribution percentages as attributes
+        self.assertTrue(hasattr(result.label_shape_stats, "pct_zero_positives"))
+        self.assertTrue(hasattr(result.label_shape_stats, "pct_one_positive"))
+        self.assertTrue(hasattr(result.label_shape_stats, "pct_two_plus_positives"))
+        # 5 queries: 1 with 0, 2 with 1, 1 with 2, 1 with 4
+        # pct_zero = 20%, pct_one = 40%, pct_two_plus = 40%
+        self.assertAlmostEqual(result.label_shape_stats.pct_zero_positives, 20.0)
+        self.assertAlmostEqual(result.label_shape_stats.pct_one_positive, 40.0)
+        self.assertAlmostEqual(result.label_shape_stats.pct_two_plus_positives, 40.0)
+
+    def test_markdown_output_includes_label_shape_section(self):
+        """Markdown report must include label-shape statistics section."""
+        from benchmark.benchmark_scorer import BenchmarkScorer, ScorerConfig, format_results_markdown
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig())
+        run = Run(run_id="test", entries=[])
+        result = scorer.score_run(run)
+        md = format_results_markdown(result)
+        # Must have a label shape section with stable field names
+        self.assertIn("Label Shape", md)
+        self.assertIn("min", md.lower())
+        self.assertIn("median", md.lower())
+
+    def test_label_shape_stats_use_stable_field_names(self):
+        """Label shape stats must use stable field names for diffability."""
+        from benchmark.benchmark_scorer import BenchmarkScorer, ScorerConfig, LabelShapeStats
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig())
+        run = Run(run_id="test", entries=[])
+        result = scorer.score_run(run)
+        # Verify it's a LabelShapeStats dataclass with expected attributes
+        self.assertIsInstance(result.label_shape_stats, LabelShapeStats)
+        # Stable field names (snake_case, predictable) should exist as attributes
+        expected_fields = {
+            "min", "median", "p95", "mean",
+            "pct_zero_positives", "pct_one_positive", "pct_two_plus_positives"
+        }
+        for field_name in expected_fields:
+            self.assertTrue(hasattr(result.label_shape_stats, field_name), f"Missing field: {field_name}")
+
+
+class TestPlan113MacroAveraging(unittest.TestCase):
+    """
+    Plan 113 Milestone 3: Hub dominance mitigation via macro + slice reporting.
+    
+    Tests that reports include macro-averaged metrics (per-query equal weighting)
+    in addition to aggregate metrics, and slice membership counts.
+    """
+
+    def setUp(self):
+        """Create dataset with varied slice membership and qrel counts."""
+        self.topics = [
+            Topic(query_id="q1", query_text="Easy query", slice_ids=["easy"]),
+            Topic(query_id="q2", query_text="Easy query 2", slice_ids=["easy"]),
+            Topic(query_id="q3", query_text="Easy query 3", slice_ids=["easy"]),
+            Topic(query_id="q4", query_text="Hard query", slice_ids=["hard"]),
+        ]
+        # q1-q3 each have 1 qrel, q4 has 5 qrels (hub-like)
+        self.qrels = [
+            Qrel(query_id="q1", canonical_item_id="d1", relevance=1),
+            Qrel(query_id="q2", canonical_item_id="d2", relevance=1),
+            Qrel(query_id="q3", canonical_item_id="d3", relevance=1),
+            Qrel(query_id="q4", canonical_item_id="d4", relevance=1),
+            Qrel(query_id="q4", canonical_item_id="d5", relevance=1),
+            Qrel(query_id="q4", canonical_item_id="d6", relevance=1),
+            Qrel(query_id="q4", canonical_item_id="d7", relevance=1),
+            Qrel(query_id="q4", canonical_item_id="d8", relevance=1),  # 5 positives total
+        ]
+        self.dataset = BenchmarkDataset(
+            dataset_id="test-macro",
+            version="1.0",
+            topics=self.topics,
+            qrels=self.qrels,
+            slice_definitions={"easy": "Easy queries", "hard": "Hard queries"},
+        )
+
+    def test_score_result_includes_macro_metrics(self):
+        """ScoreResult must include macro-averaged metrics separately from aggregate."""
+        from benchmark.benchmark_scorer import BenchmarkScorer, ScorerConfig
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig(k_values=[5]))
+        run = Run(run_id="test", entries=[
+            RunEntry(query_id="q1", canonical_item_id="d1", rank=1, score=0.9),
+            RunEntry(query_id="q2", canonical_item_id="d2", rank=1, score=0.9),
+            RunEntry(query_id="q3", canonical_item_id="d3", rank=1, score=0.9),
+            RunEntry(query_id="q4", canonical_item_id="d4", rank=1, score=0.9),  # only 1 of 5
+        ])
+        result = scorer.score_run(run)
+        # Must have both aggregate and macro metrics
+        self.assertIsNotNone(result.macro_metrics)
+        self.assertIn("recall@5", result.macro_metrics)
+        # Macro should weight each query equally
+        # q1,q2,q3: recall=1.0, q4: recall=0.2 → macro = (1+1+1+0.2)/4 = 0.8
+        self.assertAlmostEqual(result.macro_metrics["recall@5"], 0.8, places=2)
+
+    def test_aggregate_and_macro_differ_with_hub_query(self):
+        """
+        Code review finding [MEDIUM]: Aggregate and macro must differ for hub dominance detection.
+        
+        With qrel-weighted aggregate, hub query (q4 with 5 qrels) will dominate.
+        With macro (per-query equal weight), each query counts the same.
+        """
+        from benchmark.benchmark_scorer import BenchmarkScorer, ScorerConfig
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig(k_values=[5]))
+        # Retrieve 1 of 5 for hub query q4, perfect for others
+        run = Run(run_id="test", entries=[
+            RunEntry(query_id="q1", canonical_item_id="d1", rank=1, score=0.9),
+            RunEntry(query_id="q2", canonical_item_id="d2", rank=1, score=0.9),
+            RunEntry(query_id="q3", canonical_item_id="d3", rank=1, score=0.9),
+            RunEntry(query_id="q4", canonical_item_id="d4", rank=1, score=0.9),  # 1 of 5
+        ])
+        result = scorer.score_run(run)
+        
+        # Aggregate (qrel-weighted): 
+        #   Total qrels = 8, retrieved relevant = 4 (1+1+1+1)
+        #   Pool of per-query: weight each query by its qrel count
+        #   q1: 1 qrel, recall=1.0  → contribution = 1*1.0 = 1.0
+        #   q2: 1 qrel, recall=1.0  → contribution = 1*1.0 = 1.0
+        #   q3: 1 qrel, recall=1.0  → contribution = 1*1.0 = 1.0
+        #   q4: 5 qrels, recall=0.2 → contribution = 5*0.2 = 1.0
+        #   aggregate = (1+1+1+1) / 8 = 4/8 = 0.5
+        # Macro (per-query equal):
+        #   (1.0 + 1.0 + 1.0 + 0.2) / 4 = 0.8
+        
+        # The key test: aggregate and macro MUST differ
+        self.assertNotEqual(
+            result.aggregate_metrics["recall@5"],
+            result.macro_metrics["recall@5"],
+            "Aggregate and macro metrics should differ to detect hub dominance"
+        )
+        # Macro should be higher (small queries helped more)
+        self.assertGreater(
+            result.macro_metrics["recall@5"],
+            result.aggregate_metrics["recall@5"],
+        )
+
+    def test_per_slice_includes_query_counts(self):
+        """Per-slice metrics must include query count for each slice."""
+        from benchmark.benchmark_scorer import BenchmarkScorer, ScorerConfig
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig(k_values=[5]))
+        run = Run(run_id="test", entries=[
+            RunEntry(query_id="q1", canonical_item_id="d1", rank=1, score=0.9),
+            RunEntry(query_id="q2", canonical_item_id="d2", rank=1, score=0.9),
+            RunEntry(query_id="q3", canonical_item_id="d3", rank=1, score=0.9),
+            RunEntry(query_id="q4", canonical_item_id="d4", rank=1, score=0.9),
+        ])
+        result = scorer.score_run(run)
+        # Per-slice should have query_count
+        self.assertIn("query_count", result.per_slice_metrics["easy"])
+        self.assertEqual(result.per_slice_metrics["easy"]["query_count"], 3)
+        self.assertEqual(result.per_slice_metrics["hard"]["query_count"], 1)
+
+    def test_markdown_includes_both_aggregate_and_macro(self):
+        """Markdown report must include both aggregate and macro-averaged sections."""
+        from benchmark.benchmark_scorer import BenchmarkScorer, ScorerConfig, format_results_markdown
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig(k_values=[5]))
+        run = Run(run_id="test", entries=[
+            RunEntry(query_id="q1", canonical_item_id="d1", rank=1, score=0.9),
+        ])
+        result = scorer.score_run(run)
+        md = format_results_markdown(result)
+        # Must have both sections clearly labeled
+        self.assertIn("Aggregate", md)
+        self.assertIn("Macro", md)
+
+    def test_slice_metrics_use_stable_ordering(self):
+        """Slice metrics must use stable field ordering for diffability."""
+        from benchmark.benchmark_scorer import BenchmarkScorer, ScorerConfig
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig(k_values=[5]))
+        run = Run(run_id="test", entries=[])
+        result = scorer.score_run(run)
+        # JSON output should have sorted keys
+        json_output = result.to_json()
+        parsed = json.loads(json_output)
+        # Slices should be sorted alphabetically
+        slice_keys = list(parsed.get("per_slice_metrics", {}).keys())
+        self.assertEqual(slice_keys, sorted(slice_keys))
+
+
 class TestScorerOutputArtifacts(unittest.TestCase):
     """Tests for output artifact generation."""
 
@@ -328,6 +618,67 @@ class TestScorerOutputArtifacts(unittest.TestCase):
         self.assertIsInstance(summary, RunSummary)
         self.assertEqual(summary.run_id, "test-run")
         self.assertEqual(summary.dataset_id, "test")
+
+
+class TestPlan113MultiSliceQueries(unittest.TestCase):
+    """
+    Code review finding [MEDIUM]: Multi-slice queries should count toward all slices.
+    
+    Tests that queries with multiple slice_ids contribute to metrics for each slice,
+    not just the first slice.
+    """
+
+    def setUp(self):
+        """Create dataset with multi-slice queries."""
+        self.topics = [
+            Topic(query_id="q1", query_text="Query in one slice", slice_ids=["slice-a"]),
+            Topic(query_id="q2", query_text="Query in two slices", slice_ids=["slice-a", "slice-b"]),
+            Topic(query_id="q3", query_text="Query in slice B only", slice_ids=["slice-b"]),
+        ]
+        self.qrels = [
+            Qrel(query_id="q1", canonical_item_id="d1", relevance=1),
+            Qrel(query_id="q2", canonical_item_id="d2", relevance=1),
+            Qrel(query_id="q3", canonical_item_id="d3", relevance=1),
+        ]
+        self.dataset = BenchmarkDataset(
+            dataset_id="test-multislice",
+            version="1.0",
+            topics=self.topics,
+            qrels=self.qrels,
+            slice_definitions={"slice-a": "Slice A", "slice-b": "Slice B"},
+        )
+
+    def test_multi_slice_query_counts_toward_all_slices(self):
+        """Query with multiple slice_ids should count in each slice's metrics."""
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig(k_values=[5]))
+        run = Run(run_id="test", entries=[
+            RunEntry(query_id="q1", canonical_item_id="d1", rank=1, score=0.9),
+            RunEntry(query_id="q2", canonical_item_id="d2", rank=1, score=0.9),
+            RunEntry(query_id="q3", canonical_item_id="d3", rank=1, score=0.9),
+        ])
+        result = scorer.score_run(run)
+        
+        # q2 should count in BOTH slice-a AND slice-b
+        # slice-a: q1, q2 → 2 queries
+        # slice-b: q2, q3 → 2 queries
+        self.assertEqual(result.per_slice_metrics["slice-a"]["query_count"], 2)
+        self.assertEqual(result.per_slice_metrics["slice-b"]["query_count"], 2)
+
+    def test_multi_slice_query_metrics_included_in_each_slice(self):
+        """Multi-slice query's metrics should be included in each slice's aggregate."""
+        scorer = BenchmarkScorer(self.dataset, ScorerConfig(k_values=[5]))
+        # q2 gets perfect recall, q3 gets zero recall
+        run = Run(run_id="test", entries=[
+            RunEntry(query_id="q1", canonical_item_id="d1", rank=1, score=0.9),  # recall=1
+            RunEntry(query_id="q2", canonical_item_id="d2", rank=1, score=0.9),  # recall=1
+            # q3 has no results → recall=0
+        ])
+        result = scorer.score_run(run)
+        
+        # slice-a: q1 (recall=1), q2 (recall=1) → avg = 1.0
+        # slice-b: q2 (recall=1), q3 (recall=0) → avg = 0.5
+        self.assertAlmostEqual(result.per_slice_metrics["slice-a"]["recall@5"], 1.0, places=2)
+        self.assertAlmostEqual(result.per_slice_metrics["slice-b"]["recall@5"], 0.5, places=2)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
   "name": "flowbaby",
   "displayName": "Flowbaby",
   "description": "A persistent memory layer for AI coding in VS Code — no drift, no drama.",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "publisher": "Flowbaby",
   "icon": "media/flowbaby-icon-tightcrop.png",
   "engines": {

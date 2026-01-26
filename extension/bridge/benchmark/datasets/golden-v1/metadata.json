@@ -1,8 +1,9 @@
 {
   "dataset_id": "flowbaby-golden-v1",
-  "version": "1.0.0",
-  "description": "Initial golden benchmark dataset for Flowbaby retrieval evaluation (v0.7.4 baseline). Contains 12 representative queries covering required risk slices per Plan 112.",
+  "version": "1.1.0",
+  "description": "Golden benchmark dataset for Flowbaby retrieval evaluation. v1.0.0 baseline (Plan 112) + v1.1.0 relationship-fidelity queries (Plan 113).",
   "created": "2025-01-18",
+  "updated": "2026-01-26",
   "slice_definitions": {
     "template-heavy": "Cases where structure dominates content (templates, placeholders, boilerplate)",
     "edge-sparse": "Cases with minimal/no relationships in the knowledge graph (metadata-only)",
@@ -11,7 +12,8 @@
     "relationship-heavy": "Queries requiring relationship traversal in the KG",
     "no-context": "True negative queries - no relevant context should exist",
     "short-factual": "Simple factual lookups (single-hop)",
-    "multi-hop": "Compound queries requiring multiple reasoning steps"
+    "multi-hop": "Compound queries requiring multiple reasoning steps",
+    "relationship-fidelity": "Plan 113 M5: Queries requiring correct edge endpoints and/or edge types"
   },
   "canonicalization_version": "v1",
   "notes": "Qrels are human-reviewed and stable. Multi-positive handling uses filtered-style (any labeled positive counts as relevant)."
