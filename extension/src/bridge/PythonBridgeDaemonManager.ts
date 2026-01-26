@@ -660,22 +660,9 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         this.log('INFO', '[lock] attempting stale lock recovery', { reason });
 
         try {
-            // Remove owner.json first if it exists
-            const ownerPath = this.getOwnerMetadataPath();
-            try {
-                await fs.promises.unlink(ownerPath);
-            } catch {
-                // Ignore - may not exist
-            }
-
-            // Remove lock directory
-            try {
-                await fs.promises.rmdir(lockPath);
-            } catch (error) {
-                if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-                    throw error;
-                }
-            }
+            // Use recursive rm to handle directory with contents (fixes Windows ENOTEMPTY)
+            // This handles owner.json and any other files that may exist in the lock directory
+            await fs.promises.rm(lockPath, { recursive: true, force: true });
             this.log('INFO', '[lock] stale lock recovered successfully', { reason });
             return true;
         } catch (error) {
@@ -820,22 +807,9 @@ export class PythonBridgeDaemonManager implements vscode.Disposable {
         });
 
         try {
-            // Remove owner.json first
-            const ownerPath = this.getOwnerMetadataPath();
-            try {
-                await fs.promises.unlink(ownerPath);
-            } catch {
-                // Ignore - may not exist
-            }
-
-            // Remove lock directory
-            try {
-                await fs.promises.rmdir(this.getLockPath());
-            } catch (error) {
-                if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-                    throw error;
-                }
-            }
+            // Use recursive rm to handle directory with contents (fixes Windows ENOTEMPTY)
+            // This handles owner.json and any other files that may exist in the lock directory
+            await fs.promises.rm(this.getLockPath(), { recursive: true, force: true });
             this.lockHeld = false;
             this.log('INFO', '[lock] release success');
         } catch (error) {

@@ -1722,5 +1722,86 @@ suite('PythonBridgeDaemonManager', () => {
             manager.dispose();
             await fs.rm(tempDir, { recursive: true, force: true });
         });
+
+        test('recovers stale lock with extra files (ENOTEMPTY scenario)', async () => {
+            // This test verifies the fix for Windows ENOTEMPTY error when lock directory
+            // contains unexpected files (antivirus temp files, journal files, etc.)
+            const os = require('os');
+            const fs = require('fs').promises;
+            const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'flowbaby-test-enotempty-'));
+            const flowbabyDir = path.join(tempDir, '.flowbaby');
+            const lockPath = path.join(flowbabyDir, 'daemon.lock');
+
+            // Create stale lock with owner.json AND an extra unexpected file
+            await fs.mkdir(flowbabyDir, { recursive: true });
+            await fs.mkdir(lockPath);
+            const staleOwner = {
+                createdAt: Date.now() - (15 * 60 * 1000), // 15 minutes old
+                extensionHostPid: 99999999, // Dead PID
+                instanceId: 'stale-instance',
+                workspaceIdentifier: tempDir
+            };
+            await fs.writeFile(path.join(lockPath, 'owner.json'), JSON.stringify(staleOwner), 'utf8');
+            // Add an extra file that would cause ENOTEMPTY with rmdir
+            await fs.writeFile(path.join(lockPath, 'unexpected_file.tmp'), 'extra content', 'utf8');
+
+            const manager = new PythonBridgeDaemonManager(
+                tempDir,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Should successfully acquire lock despite extra file (recursive rm)
+            const result = await manager.acquireLock();
+            assert.strictEqual(result, true, 'Should recover stale lock with extra files');
+
+            // Verify lock is now held
+            assert.strictEqual(manager.isLockHeld(), true, 'Lock should be held after recovery');
+
+            await manager.releaseLock();
+            manager.dispose();
+            await fs.rm(tempDir, { recursive: true, force: true });
+        });
+
+        test('releaseLock handles extra files in lock directory', async () => {
+            // This test verifies releaseLock doesn't fail if lock directory has extra files
+            const os = require('os');
+            const fs = require('fs').promises;
+            const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'flowbaby-test-release-enotempty-'));
+
+            const manager = new PythonBridgeDaemonManager(
+                tempDir,
+                mockPythonPath,
+                mockBridgePath,
+                mockContext,
+                mockOutputChannel
+            );
+
+            // Acquire lock normally
+            await manager.acquireLock();
+            assert.strictEqual(manager.isLockHeld(), true, 'Lock should be held');
+
+            // Add an extra file to lock directory (simulates Windows race condition or antivirus)
+            const lockPath = manager.getLockPath();
+            await fs.writeFile(path.join(lockPath, 'extra_file.tmp'), 'unexpected content', 'utf8');
+
+            // Release should still succeed (recursive rm)
+            await manager.releaseLock();
+            assert.strictEqual(manager.isLockHeld(), false, 'Lock should be released');
+
+            // Verify lock directory is gone
+            try {
+                await fs.access(lockPath);
+                assert.fail('Lock directory should be removed after release');
+            } catch (error) {
+                // Expected - directory should not exist
+                assert.strictEqual((error as NodeJS.ErrnoException).code, 'ENOENT');
+            }
+
+            manager.dispose();
+            await fs.rm(tempDir, { recursive: true, force: true });
+        });
     });
 });
